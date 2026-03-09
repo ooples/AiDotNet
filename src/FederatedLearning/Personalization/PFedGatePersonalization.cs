@@ -83,7 +83,7 @@ public class PFedGatePersonalization<T> : Infrastructure.FederatedLearningCompon
 
         var gates = _gates ?? throw new InvalidOperationException(
             $"{GetType().Name}: Gates were not initialized after calling InitializeGates. " +
-            "Ensure PersonalizeModel is called with valid global parameters.");
+            "Ensure ApplyGates or InitializeGates is called with valid global parameters.");
 
         var mixed = new Dictionary<string, T[]>(globalParams.Count);
         foreach (var layerName in globalParams.Keys)

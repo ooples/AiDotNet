@@ -81,7 +81,7 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
 
         var maskLogits = _maskLogits ?? throw new InvalidOperationException(
             $"{GetType().Name}: Mask logits were not initialized after calling InitializeMasks. " +
-            "Call SelectSharedParameters with valid full parameters first.");
+            "Call ExtractSharedParameters or InitializeMasks with valid full parameters first.");
 
         var shared = new Dictionary<string, T[]>(fullParameters.Count);
         foreach (var kvp in fullParameters)

@@ -450,10 +450,19 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
         // 5. Backward through warping operations
         // Compute gradients w.r.t. frames and flow from warping
+        var cachedFrame1 = _cachedFrame1 ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Cached frame1 not available. Call Forward() before Backward().");
+        var cachedFrame2 = _cachedFrame2 ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Cached frame2 not available. Call Forward() before Backward().");
+        var cachedFlow_t_0 = _cachedFlow_t_0 ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Cached flow_t_0 not available. Call Forward() before Backward().");
+        var cachedFlow_t_1 = _cachedFlow_t_1 ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Cached flow_t_1 not available. Call Forward() before Backward().");
+
         var (frame1Grad, flowGrad1) = WarpBackward(
-            frame1WarpedGrad, _cachedFrame1!, _cachedFlow_t_0!);
+            frame1WarpedGrad, cachedFrame1, cachedFlow_t_0);
         var (frame2Grad, flowGrad2) = WarpBackward(
-            frame2WarpedGrad, _cachedFrame2!, _cachedFlow_t_1!);
+            frame2WarpedGrad, cachedFrame2, cachedFlow_t_1);
 
         // Scale flow gradients by timestep (chain rule for flow scaling)
         var t = NumOps.FromDouble(_cachedTimestep);
