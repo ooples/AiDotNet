@@ -219,8 +219,7 @@ public class KNNEvaluator<T>
 
     private int PredictSingle(Tensor<T> testFeatures, int testIdx)
     {
-        var trainFeatures = _trainFeatures ?? throw new InvalidOperationException(
-            $"{GetType().Name}: Training features not available. Call Fit() before Predict().");
+        var trainFeatures = _trainFeatures ?? throw new InvalidOperationException("Training features have not been initialized. Call Fit() first.");
         var numTrain = trainFeatures.Shape[0];
         var dim = testFeatures.Shape[1];
 
@@ -252,8 +251,7 @@ public class KNNEvaluator<T>
 
     private int VotePrediction((int index, T distance)[] neighbors)
     {
-        var trainLabels = _trainLabels ?? throw new InvalidOperationException(
-            $"{GetType().Name}: Training labels not available. Call Fit() before Predict().");
+        var trainLabels = _trainLabels ?? throw new InvalidOperationException("Training labels have not been initialized. Call Fit() first.");
 
         // Weighted voting based on distance
         var votes = new T[_numClasses];

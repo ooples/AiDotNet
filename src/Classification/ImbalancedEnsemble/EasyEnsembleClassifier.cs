@@ -116,7 +116,7 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Soft voting averages probabilities from all classifiers.
     /// Hard voting counts class votes. Soft voting often gives better results.</para>
     /// </remarks>
-    private readonly bool _softVoting;
+    private bool _softVoting;
 
     /// <summary>
     /// Initializes a new instance of EasyEnsembleClassifier.
@@ -712,7 +712,8 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
             { "NumFeatures", NumFeatures },
             { "TaskType", (int)TaskType },
             { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "SubClassifierCount", _subClassifiers.Count }
+            { "SubClassifierCount", _subClassifiers.Count },
+            { "SoftVoting", _softVoting }
         };
 
         for (int i = 0; i < _subClassifiers.Count; i++)
@@ -761,6 +762,7 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
         NumClasses = dataObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = dataObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(dataObj["TaskType"]?.ToObject<int>() ?? 0);
+        _softVoting = dataObj["SoftVoting"]?.ToObject<bool>() ?? _softVoting;
 
         var classLabelsToken = dataObj["ClassLabels"];
         if (classLabelsToken is not null)

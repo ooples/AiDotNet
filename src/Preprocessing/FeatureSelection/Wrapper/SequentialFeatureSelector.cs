@@ -105,6 +105,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private int[] ForwardSelection(Matrix<T> data, Vector<T> target, int p,
         Func<Matrix<T>, Vector<T>, int[], double> scorer)
     {
+        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been initialized.");
         var selected = new List<int>();
         var remaining = Enumerable.Range(0, p).ToHashSet();
 
@@ -131,7 +132,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
             {
                 selected.Add(bestFeature);
                 remaining.Remove(bestFeature);
-                _featureScores![bestFeature] = bestScore;
+                featureScores[bestFeature] = bestScore;
             }
             else
             {
@@ -145,6 +146,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private int[] BackwardSelection(Matrix<T> data, Vector<T> target, int p,
         Func<Matrix<T>, Vector<T>, int[], double> scorer)
     {
+        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been initialized.");
         var remaining = Enumerable.Range(0, p).ToList();
         int numToRemove = p - Math.Min(_nFeaturesToSelect, p);
 
@@ -167,7 +169,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 
             if (worstFeature >= 0)
             {
-                _featureScores![worstFeature] = -bestScore; // Lower score = worse feature
+                featureScores[worstFeature] = -bestScore; // Lower score = worse feature
                 remaining.Remove(worstFeature);
             }
             else
@@ -179,7 +181,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         // Set positive scores for remaining features
         double finalScore = DefaultScorer(data, target, remaining.ToArray());
         foreach (int idx in remaining)
-            _featureScores![idx] = finalScore;
+            featureScores[idx] = finalScore;
 
         return remaining.OrderBy(x => x).ToArray();
     }

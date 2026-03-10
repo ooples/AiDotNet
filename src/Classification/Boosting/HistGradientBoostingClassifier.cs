@@ -856,6 +856,7 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         clone.NumFeatures = NumFeatures;
         clone.NumClasses = NumClasses;
         clone.TaskType = TaskType;
+        clone.FeatureNames = FeatureNames is not null ? (string[])FeatureNames.Clone() : null;
 
         if (ClassLabels is not null)
         {
@@ -953,6 +954,12 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
 
         if (modelDataObj == null)
             throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+
+        // Clear optional members before rehydrating to avoid stale state
+        ClassLabels = null;
+        _initialPrediction = null;
+        _binBoundaries = null;
+        _trees.Clear();
 
         NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;

@@ -491,6 +491,9 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
             { "NumClasses", NumClasses },
             { "NumFeatures", NumFeatures },
             { "TaskType", (int)TaskType },
+            { "CrossValidationFolds", Options.CrossValidationFolds },
+            { "UseProbabilities", Options.UseProbabilities },
+            { "Passthrough", Options.Passthrough },
             { "EstimatorTypes", estimatorTypes },
             { "EstimatorData", estimatorData },
             { "FinalEstimatorType", finalType },
@@ -506,12 +509,14 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize StackingClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize StackingClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize StackingClassifier: invalid model payload.");
 
         var classLabelsArr = jObj["ClassLabels"]?.ToObject<double[]>();
         if (classLabelsArr is not null)
@@ -523,15 +528,19 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        Options.CrossValidationFolds = jObj["CrossValidationFolds"]?.ToObject<int>() ?? Options.CrossValidationFolds;
+        Options.UseProbabilities = jObj["UseProbabilities"]?.ToObject<bool>() ?? Options.UseProbabilities;
+        Options.Passthrough = jObj["Passthrough"]?.ToObject<bool>() ?? Options.Passthrough;
 
         var types = jObj["EstimatorTypes"]?.ToObject<string[]>();
         var data = jObj["EstimatorData"]?.ToObject<string[]>();
-        if (types is not null && data is not null && types.Length == data.Length)
-        {
-            _estimators = new List<IClassifier<T>>();
-            for (int i = 0; i < types.Length; i++)
-                _estimators.Add(ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]));
-        }
+        if (types is null || data is null || types.Length != data.Length)
+            throw new InvalidOperationException(
+                "Failed to deserialize StackingClassifier: estimator types/data arrays are missing or mismatched.");
+
+        _estimators = new List<IClassifier<T>>();
+        for (int i = 0; i < types.Length; i++)
+            _estimators.Add(ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]));
 
         var finalType = jObj["FinalEstimatorType"]?.ToObject<string>();
         var finalData = jObj["FinalEstimatorData"]?.ToObject<string>();

@@ -43,9 +43,6 @@ public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
     private readonly double _minResponsibility;
     private Dictionary<int, double>? _beliefs;
 
-    private Dictionary<int, double> Beliefs => _beliefs ?? throw new InvalidOperationException(
-        "Client beliefs have not been initialized. Call Aggregate() before accessing beliefs.");
-
     /// <summary>
     /// Initializes a new instance of the <see cref="BobaAggregationStrategy{T}"/> class.
     /// </summary>
@@ -255,7 +252,7 @@ public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
         double piH = 0;
         for (int c = 0; c < n; c++)
         {
-            piH += Beliefs[clientIds[c]];
+            piH += (_beliefs ?? throw new InvalidOperationException("Beliefs not initialized."))[clientIds[c]];
         }
 
         piH /= n;
@@ -286,7 +283,7 @@ public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
                 double logLikB = -d / (2.0 * sigmaBSq) - 0.5 * Math.Log(sigmaBSq);
 
                 // Incorporate cross-round belief as a prior multiplier.
-                double beliefPrior = Beliefs[clientIds[c]];
+                double beliefPrior = (_beliefs ?? throw new InvalidOperationException("Beliefs not initialized."))[clientIds[c]];
                 double logPostH = Math.Log(piH) + logLikH + Math.Log(Math.Max(beliefPrior, 1e-15));
                 double logPostB = Math.Log(piB) + logLikB + Math.Log(Math.Max(1.0 - beliefPrior, 1e-15));
 

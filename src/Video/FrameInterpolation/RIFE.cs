@@ -88,18 +88,6 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
     #region Properties
 
-    private ConvolutionalLayer<T> Fusion => _fusion ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Fusion layer not initialized. Call InitializeLayers() first.");
-
-    private ConvolutionalLayer<T> RifeOutputConv => _outputConv ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Output convolution layer not initialized. Call InitializeLayers() first.");
-
-    private Tensor<T> CachedFlow => _cachedFlow ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Cached flow not available. Call Forward() before Backward().");
-
-    private Tensor<T> CachedContext => _cachedContext ?? throw new InvalidOperationException(
-        $"{GetType().Name}: Cached context not available. Call Forward() before Backward().");
-
     /// <summary>
     /// Gets whether training is supported.
     /// </summary>
@@ -364,7 +352,8 @@ public class RIFE<T> : FrameInterpolationBase<T>
             ConcatenateChannels(_cachedFrame1Warped, _cachedFrame2Warped),
             ConcatenateChannels(_cachedContext, _cachedFlow));
 
-        _cachedFused = Fusion.Forward(_cachedFusionInput);
+        var fusion = _fusion ?? throw new InvalidOperationException("Fusion layer has not been initialized.");
+        _cachedFused = fusion.Forward(_cachedFusionInput);
 
         // Flow blocks with caching
         var fused = _cachedFused;
@@ -376,7 +365,8 @@ public class RIFE<T> : FrameInterpolationBase<T>
             _cachedFlowBlockOutputs.Add(fused);
         }
 
-        return RifeOutputConv.Forward(fused);
+        var rifeOutputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
+        return rifeOutputConv.Forward(fused);
     }
 
     /// <summary>
@@ -395,10 +385,12 @@ public class RIFE<T> : FrameInterpolationBase<T>
     private void BackwardPass(Tensor<T> gradient)
     {
         // 1. Backward through output convolution
-        gradient = RifeOutputConv.Backward(gradient);
+        var rifeOutputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
+        gradient = rifeOutputConv.Backward(gradient);
 
         // 2. Backward through flow blocks with gradient accumulation for flow
-        var flowGradAccumulator = new Tensor<T>(CachedFlow.Shape);
+        var cachedFlow = _cachedFlow ?? throw new InvalidOperationException("Cached flow has not been initialized.");
+        var flowGradAccumulator = new Tensor<T>(cachedFlow.Shape);
         var fusedGradient = gradient;
 
         for (int i = _flowBlocks.Count - 1; i >= 0; i--)
@@ -407,10 +399,12 @@ public class RIFE<T> : FrameInterpolationBase<T>
             var blockGradient = _flowBlocks[i].Backward(fusedGradient);
 
             // Split gradient for fused and flow components
+            // The block input was [fused, flow], so fused channels = blockInput channels - flow channels
+            int fusedChannels = _cachedFlowBlockInputs[i].Shape[1] - cachedFlow.Shape[1];
             var (fusedGrad, flowGrad) = SplitConcatenatedGradient(
                 blockGradient,
-                _cachedFlowBlockOutputs[Math.Max(0, i - 1)].Shape[1],
-                CachedFlow.Shape[1]);
+                fusedChannels,
+                cachedFlow.Shape[1]);
 
             // Accumulate flow gradients
             flowGradAccumulator = AddTensors(flowGradAccumulator, flowGrad);
@@ -420,12 +414,14 @@ public class RIFE<T> : FrameInterpolationBase<T>
         }
 
         // 3. Backward through fusion layer
-        var fusionGradient = Fusion.Backward(fusedGradient);
+        var fusionLayer = _fusion ?? throw new InvalidOperationException("Fusion layer has not been initialized.");
+        var fusionGradient = fusionLayer.Backward(fusedGradient);
 
         // Split fusion gradient: [frame1_warped, frame2_warped, context, flow]
         int warpedChannels = _channels;
-        int contextChannels = CachedContext.Shape[1];
-        int flowChannels = CachedFlow.Shape[1];
+        var cachedContext = _cachedContext ?? throw new InvalidOperationException("Cached context has not been initialized.");
+        int contextChannels = cachedContext.Shape[1];
+        int flowChannels = cachedFlow.Shape[1];
 
         var (warpedGradients, contextFlowGrad) = SplitConcatenatedGradient(
             fusionGradient,
@@ -450,19 +446,14 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
         // 5. Backward through warping operations
         // Compute gradients w.r.t. frames and flow from warping
-        var cachedFrame1 = _cachedFrame1 ?? throw new InvalidOperationException(
-            $"{GetType().Name}: Cached frame1 not available. Call Forward() before Backward().");
-        var cachedFrame2 = _cachedFrame2 ?? throw new InvalidOperationException(
-            $"{GetType().Name}: Cached frame2 not available. Call Forward() before Backward().");
-        var cachedFlow_t_0 = _cachedFlow_t_0 ?? throw new InvalidOperationException(
-            $"{GetType().Name}: Cached flow_t_0 not available. Call Forward() before Backward().");
-        var cachedFlow_t_1 = _cachedFlow_t_1 ?? throw new InvalidOperationException(
-            $"{GetType().Name}: Cached flow_t_1 not available. Call Forward() before Backward().");
-
+        var cachedFrame1 = _cachedFrame1 ?? throw new InvalidOperationException("Cached frame 1 has not been initialized.");
+        var cachedFrame2 = _cachedFrame2 ?? throw new InvalidOperationException("Cached frame 2 has not been initialized.");
+        var cachedFlowT0 = _cachedFlow_t_0 ?? throw new InvalidOperationException("Cached flow t0 has not been initialized.");
+        var cachedFlowT1 = _cachedFlow_t_1 ?? throw new InvalidOperationException("Cached flow t1 has not been initialized.");
         var (frame1Grad, flowGrad1) = WarpBackward(
-            frame1WarpedGrad, cachedFrame1, cachedFlow_t_0);
+            frame1WarpedGrad, cachedFrame1, cachedFlowT0);
         var (frame2Grad, flowGrad2) = WarpBackward(
-            frame2WarpedGrad, cachedFrame2, cachedFlow_t_1);
+            frame2WarpedGrad, cachedFrame2, cachedFlowT1);
 
         // Scale flow gradients by timestep (chain rule for flow scaling)
         var t = NumOps.FromDouble(_cachedTimestep);

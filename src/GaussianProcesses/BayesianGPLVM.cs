@@ -1076,14 +1076,18 @@ public class BayesianGPLVM<T>
     {
         if (!_isFitted)
             throw new InvalidOperationException("Model must be fitted first.");
+        var latentVariance = _latentVariance
+            ?? throw new InvalidOperationException("Latent variance has not been computed. Call Fit() first.");
 
         // Simplified ELBO computation
         // Full ELBO = E_q[log p(Y|X)] - KL(q(X) || p(X))
 
         // Reconstruction term (negative squared error)
         T reconstructionLoss = _numOps.Zero;
-        int n = _latentMean!.Rows;
-        int d = _observedData!.Columns;
+        var latMean = _latentMean ?? throw new InvalidOperationException("Latent mean has not been initialized.");
+        var obsData = _observedData ?? throw new InvalidOperationException("Observed data has not been initialized.");
+        int n = latMean.Rows;
+        int d = obsData.Columns;
 
         for (int i = 0; i < n; i++)
         {
@@ -1106,7 +1110,7 @@ public class BayesianGPLVM<T>
             for (int q = 0; q < _latentDimensions; q++)
             {
                 T mu = _latentMean[i, q];
-                T sigma2 = _latentVariance![i, q];
+                T sigma2 = latentVariance[i, q];
 
                 // KL = 0.5 * (mu^2 + sigma^2 - log(sigma^2) - 1)
                 T muSq = _numOps.Multiply(mu, mu);

@@ -270,7 +270,22 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 $"Number of features ({p}) does not match fitted model ({_nFeaturesIn}).");
         }
 
-        int k = _components!.GetLength(0);
+        if (_components is null)
+        {
+            throw new InvalidOperationException(
+                "Internal state is inconsistent: _components is null after initialization.");
+        }
+
+        // Validate all fitted state upfront to avoid partial gradient corruption
+        var singularValues = _singularValues;
+        var explainedVariance = _explainedVariance;
+        if (singularValues is null && explainedVariance is null)
+        {
+            throw new InvalidOperationException(
+                "Internal state is inconsistent: neither _singularValues nor _explainedVariance is available after initialization.");
+        }
+
+        int k = _components.GetLength(0);
 
         // Convert batch to double and compute batch statistics
         var batchData = new double[nBatch, p];
@@ -334,7 +349,9 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         double oldScale = Math.Sqrt((double)(nOld - 1) / (nTotal - 1));
         for (int i = 0; i < k; i++)
         {
-            double singularValue = _singularValues != null ? _singularValues[i] : Math.Sqrt(_explainedVariance![i] * (nOld - 1));
+            double singularValue = singularValues is not null
+                ? singularValues[i]
+                : Math.Sqrt((explainedVariance ?? throw new InvalidOperationException("Explained variance not available."))[i] * (nOld - 1));
             for (int j = 0; j < p; j++)
             {
                 combinedMatrix[i, j] = oldScale * singularValue * _components[i, j];

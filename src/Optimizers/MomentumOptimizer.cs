@@ -397,15 +397,15 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             string optionsJson = JsonConvert.SerializeObject(_options);
             writer.Write(optionsJson);
 
-            // Serialize velocity vector
-            bool hasVelocity = _velocity is not null;
-            writer.Write(hasVelocity);
-            if (hasVelocity)
+            // Serialize velocity vector (snapshot to avoid re-reading mutable field)
+            var velocitySnapshot = _velocity;
+            writer.Write(velocitySnapshot is not null);
+            if (velocitySnapshot is not null)
             {
-                writer.Write(_velocity!.Length);
-                for (int i = 0; i < _velocity.Length; i++)
+                writer.Write(velocitySnapshot.Length);
+                for (int i = 0; i < velocitySnapshot.Length; i++)
                 {
-                    writer.Write(NumOps.ToDouble(_velocity[i]));
+                    writer.Write(NumOps.ToDouble(velocitySnapshot[i]));
                 }
             }
 

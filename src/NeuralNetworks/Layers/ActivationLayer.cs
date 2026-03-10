@@ -369,7 +369,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
     {
-        return ScalarActivation!.Activate(input);
+        var activation = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
+        return activation.Activate(input);
     }
 
     /// <summary>
@@ -384,7 +385,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyVectorActivation(Tensor<T> input)
     {
-        return VectorActivation!.Activate(input);
+        var activation = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
+        return activation.Activate(input);
     }
 
     /// <summary>
@@ -399,7 +401,9 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
-        return ScalarActivation!.Backward(_lastInput!, outputGradient);
+        var scalarAct = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
+        var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
+        return scalarAct.Backward(lastInput, outputGradient);
     }
 
 
@@ -434,7 +438,9 @@ public class ActivationLayer<T> : LayerBase<T>
     private Tensor<T> BackwardVectorActivation(Tensor<T> outputGradient)
     {
         // Now unified via IVectorActivationFunction.Backward
-        return VectorActivation!.Backward(_lastInput!, outputGradient);
+        var vecAct = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
+        var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
+        return vecAct.Backward(lastInput, outputGradient);
     }
 
     /// <summary>
@@ -730,12 +736,12 @@ public class ActivationLayer<T> : LayerBase<T>
         return fusedType switch
         {
             FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, _lastInputGpu),
-            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, _lastOutputGpu!),
-            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, _lastOutputGpu!),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
             FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(outputGradient, _lastInputGpu),
             FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, _lastInputGpu),
             FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, _lastInputGpu, 0.01f),
-            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(outputGradient, _lastOutputGpu!),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(outputGradient, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
             _ => outputGradient // Fallback: gradient passes through unchanged
         };
     }

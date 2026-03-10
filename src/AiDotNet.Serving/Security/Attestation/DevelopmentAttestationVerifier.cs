@@ -102,44 +102,49 @@ public sealed class DevelopmentAttestationVerifier : IAttestationVerifier
 
         try
         {
-            var principal = _tokenHandler.ValidateToken(evidence.AttestationToken, _jwtParameters!, out _);
+            var jwtParameters = _jwtParameters
+                ?? throw new InvalidOperationException("JWT validation parameters have not been configured.");
+            var jwtOptions = _jwtOptions
+                ?? throw new InvalidOperationException("JWT attestation options have not been configured.");
 
-            if (_jwtOptions!.RequireNonceClaim)
+            var principal = _tokenHandler.ValidateToken(evidence.AttestationToken, jwtParameters, out _);
+
+            if (jwtOptions.RequireNonceClaim)
             {
                 if (string.IsNullOrWhiteSpace(evidence.Nonce))
                 {
                     return new AttestationVerificationResult(false, "Attestation nonce is required.");
                 }
 
-                var nonce = principal.FindFirst(_jwtOptions.NonceClaimType)?.Value;
+                var nonce = principal.FindFirst(jwtOptions.NonceClaimType)?.Value;
                 if (string.IsNullOrWhiteSpace(nonce) || !string.Equals(nonce, evidence.Nonce, StringComparison.Ordinal))
                 {
                     return new AttestationVerificationResult(false, "Attestation nonce claim did not match.");
                 }
             }
 
-            if (_jwtOptions.RequirePlatformClaimMatch)
+            if (jwtOptions.RequirePlatformClaimMatch)
             {
                 if (string.IsNullOrWhiteSpace(evidence.Platform))
                 {
                     return new AttestationVerificationResult(false, "Attestation platform is required.");
                 }
 
-                var platform = principal.FindFirst(_jwtOptions.PlatformClaimType)?.Value;
+                var platform = principal.FindFirst(jwtOptions.PlatformClaimType)?.Value;
                 if (string.IsNullOrWhiteSpace(platform) || !string.Equals(platform, evidence.Platform, StringComparison.OrdinalIgnoreCase))
                 {
                     return new AttestationVerificationResult(false, "Attestation platform claim did not match.");
                 }
             }
 
-            if (_jwtOptions.RequireTeeTypeClaimMatch)
+            if (jwtOptions.RequireTeeTypeClaimMatch)
             {
                 if (string.IsNullOrWhiteSpace(evidence.TeeType))
                 {
                     return new AttestationVerificationResult(false, "Attestation teeType is required.");
                 }
 
-                var teeType = principal.FindFirst(_jwtOptions.TeeTypeClaimType)?.Value;
+                var teeType = principal.FindFirst(jwtOptions.TeeTypeClaimType)?.Value;
                 if (string.IsNullOrWhiteSpace(teeType) || !string.Equals(teeType, evidence.TeeType, StringComparison.OrdinalIgnoreCase))
                 {
                     return new AttestationVerificationResult(false, "Attestation teeType claim did not match.");

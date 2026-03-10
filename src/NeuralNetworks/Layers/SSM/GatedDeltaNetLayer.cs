@@ -503,7 +503,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
         var dGateSwish = Engine.TensorMultiply(dGated, _lastDeltaRuleOutput);
 
         // Gate uses Swish, derivative: swish(x) + sigmoid(x) * (1 - swish(x))
-        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(_lastGateRaw!));
+        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(_lastGateRaw ?? throw new InvalidOperationException("_lastGateRaw has not been initialized.")));
 
         // Gate weight gradients
         var siluFlat = _lastSiluConv.Reshape(batchSize * seqLen, _modelDimension);

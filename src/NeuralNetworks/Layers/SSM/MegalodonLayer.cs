@@ -817,7 +817,7 @@ public class MegalodonLayer<T> : LayerBase<T>
                     mean = NumOps.Add(mean, emaPreNorm[new[] { bi, t, d }]);
                 mean = NumOps.Divide(mean, NumOps.FromDouble(_emaDimension));
 
-                T invStd = _lastEmaStdInv![new[] { bi, t }];
+                T invStd = (_lastEmaStdInv ?? throw new InvalidOperationException("_lastEmaStdInv has not been initialized."))[new[] { bi, t }];
                 T invN = NumOps.FromDouble(1.0 / _emaDimension);
 
                 // Compute normalized values and gradient sums
@@ -836,9 +836,9 @@ public class MegalodonLayer<T> : LayerBase<T>
                     sumDGammaXhat = NumOps.Add(sumDGammaXhat, NumOps.Multiply(gammaDOut, xHat));
 
                     // Accumulate norm parameter gradients
-                    _tsNormGammaGradient![d] = NumOps.Add(_tsNormGammaGradient[d],
+                    (_tsNormGammaGradient ?? throw new InvalidOperationException("_tsNormGammaGradient has not been initialized."))[d] = NumOps.Add(_tsNormGammaGradient[d],
                         NumOps.Multiply(dOut, xHat));
-                    _tsNormBetaGradient![d] = NumOps.Add(_tsNormBetaGradient[d], dOut);
+                    (_tsNormBetaGradient ?? throw new InvalidOperationException("_tsNormBetaGradient has not been initialized."))[d] = NumOps.Add(_tsNormBetaGradient[d], dOut);
                 }
 
                 // Input gradient: invStd * (gamma * dOut - invN * sumDGamma - invN * xHat * sumDGammaXhat)
@@ -889,21 +889,21 @@ public class MegalodonLayer<T> : LayerBase<T>
                     // Output was the real part of state: dStateR += dPreNorm
                     dStateR[d] = NumOps.Add(dStateR[d], dPreNorm[new[] { bi, t, d }]);
 
-                    T hPrevR = _lastEmaStatesReal![new[] { bi, t, d }];
-                    T hPrevI = _lastEmaStatesImag![new[] { bi, t, d }];
+                    T hPrevR = (_lastEmaStatesReal ?? throw new InvalidOperationException("_lastEmaStatesReal has not been initialized."))[new[] { bi, t, d }];
+                    T hPrevI = (_lastEmaStatesImag ?? throw new InvalidOperationException("_lastEmaStatesImag has not been initialized."))[new[] { bi, t, d }];
 
                     // h_t = alpha * h_{t-1} + (1-alpha) * x
                     // dAlphaR += dStateR * hPrevR + dStateI * hPrevI  (partial of complex mult)
                     // Actually: d/dAlphaR of (alphaR*hPrevR - alphaI*hPrevI) = hPrevR for real part
                     // d/dAlphaR of (alphaR*hPrevI + alphaI*hPrevR) = hPrevI for imag part
-                    _emaAlphaRealGradient![d] = NumOps.Add(_emaAlphaRealGradient[d],
+                    (_emaAlphaRealGradient ?? throw new InvalidOperationException("_emaAlphaRealGradient has not been initialized."))[d] = NumOps.Add(_emaAlphaRealGradient[d],
                         NumOps.Add(
                             NumOps.Multiply(dStateR[d], hPrevR),
                             NumOps.Multiply(dStateI[d], hPrevI)));
 
                     // d/dAlphaI of (alphaR*hPrevR - alphaI*hPrevI) = -hPrevI for real part
                     // d/dAlphaI of (alphaR*hPrevI + alphaI*hPrevR) = hPrevR for imag part
-                    _emaAlphaImagGradient![d] = NumOps.Add(_emaAlphaImagGradient[d],
+                    (_emaAlphaImagGradient ?? throw new InvalidOperationException("_emaAlphaImagGradient has not been initialized."))[d] = NumOps.Add(_emaAlphaImagGradient[d],
                         NumOps.Add(
                             NumOps.Multiply(dStateR[d], NumOps.Negate(hPrevI)),
                             NumOps.Multiply(dStateI[d], hPrevR)));

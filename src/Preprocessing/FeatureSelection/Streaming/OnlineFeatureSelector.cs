@@ -70,6 +70,10 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         // Process each sample incrementally
+        var runningMeans = _runningMeans ?? throw new InvalidOperationException("Running means have not been initialized.");
+        var runningVars = _runningVars ?? throw new InvalidOperationException("Running variances have not been initialized.");
+        var runningScores = _runningScores ?? throw new InvalidOperationException("Running scores have not been initialized.");
+
         for (int i = 0; i < n; i++)
         {
             double yi = NumOps.ToDouble(target[i]);
@@ -80,21 +84,21 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double xi = NumOps.ToDouble(data[i, j]);
 
                 // Welford's online algorithm for mean and variance
-                double delta = xi - _runningMeans![j];
-                _runningMeans[j] += delta / _sampleCount;
-                double delta2 = xi - _runningMeans[j];
-                _runningVars![j] += delta * delta2;
+                double delta = xi - runningMeans[j];
+                runningMeans[j] += delta / _sampleCount;
+                double delta2 = xi - runningMeans[j];
+                runningVars[j] += delta * delta2;
 
                 // Update correlation estimate incrementally
-                double correlation = ComputeOnlineCorrelation(xi, yi, j);
-                _runningScores![j] = (1 - _learningRate) * _runningScores[j] + _learningRate * correlation;
+                double correlation = ComputeOnlineCorrelation(xi, yi, j, runningMeans, runningVars);
+                runningScores[j] = (1 - _learningRate) * runningScores[j] + _learningRate * correlation;
             }
         }
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(_runningScores![j]))
+            .OrderByDescending(j => Math.Abs(runningScores[j]))
             .Take(numToSelect)
             .OrderBy(x => x)
             .ToArray();
@@ -106,7 +110,7 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private double _targetVar = 0;
     private double[]? _covariances;
 
-    private double ComputeOnlineCorrelation(double x, double y, int featureIdx)
+    private double ComputeOnlineCorrelation(double x, double y, int featureIdx, double[] runningMeans, double[] runningVars)
     {
         if (_covariances is null)
             _covariances = new double[_nInputFeatures];
@@ -117,10 +121,10 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _targetVar += (y - oldTargetMean) * (y - _targetMean);
 
         // Update covariance
-        _covariances[featureIdx] += (x - _runningMeans![featureIdx]) * (y - _targetMean);
+        _covariances[featureIdx] += (x - runningMeans[featureIdx]) * (y - _targetMean);
 
         // Compute correlation
-        double xVar = _runningVars![featureIdx];
+        double xVar = runningVars[featureIdx];
         double yVar = _targetVar;
 
         if (xVar > 1e-10 && yVar > 1e-10)

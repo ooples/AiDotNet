@@ -243,11 +243,18 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
     /// </summary>
     private Vector<T> FirstOrderUpdate(Vector<T> sample, int stepIndex, int nextStepIndex)
     {
-        T lambda_s = _lambdas![stepIndex];
-        T lambda_t = _lambdas[nextStepIndex];
-        T alpha_t = _alphaTs![nextStepIndex];
-        T sigma_t = _sigmaTs![nextStepIndex];
-        T sigma_s = _sigmaTs[stepIndex];
+        var lambdas = _lambdas
+            ?? throw new InvalidOperationException("Lambda values have not been initialized. Call SetTimesteps() first.");
+        var alphaTs = _alphaTs
+            ?? throw new InvalidOperationException("Alpha values have not been initialized. Call SetTimesteps() first.");
+        var sigmaTs = _sigmaTs
+            ?? throw new InvalidOperationException("Sigma values have not been initialized. Call SetTimesteps() first.");
+
+        T lambda_s = lambdas[stepIndex];
+        T lambda_t = lambdas[nextStepIndex];
+        T alpha_t = alphaTs[nextStepIndex];
+        T sigma_t = sigmaTs[nextStepIndex];
+        T sigma_s = sigmaTs[stepIndex];
 
         // h = lambda_t - lambda_s
         T h = NumOps.Subtract(lambda_t, lambda_s);
@@ -270,11 +277,18 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
         if (_modelOutputHistory.Count < 2)
             return FirstOrderUpdate(sample, stepIndex, nextStepIndex);
 
-        T lambda_s = _lambdas![stepIndex];
-        T lambda_t = _lambdas[nextStepIndex];
-        T alpha_t = _alphaTs![nextStepIndex];
-        T sigma_t = _sigmaTs![nextStepIndex];
-        T sigma_s = _sigmaTs[stepIndex];
+        var lambdas = _lambdas
+            ?? throw new InvalidOperationException("Lambda values have not been initialized. Call SetTimesteps() first.");
+        var alphaTs = _alphaTs
+            ?? throw new InvalidOperationException("Alpha values have not been initialized. Call SetTimesteps() first.");
+        var sigmaTs = _sigmaTs
+            ?? throw new InvalidOperationException("Sigma values have not been initialized. Call SetTimesteps() first.");
+
+        T lambda_s = lambdas[stepIndex];
+        T lambda_t = lambdas[nextStepIndex];
+        T alpha_t = alphaTs[nextStepIndex];
+        T sigma_t = sigmaTs[nextStepIndex];
+        T sigma_s = sigmaTs[stepIndex];
 
         T h = NumOps.Subtract(lambda_t, lambda_s);
 
@@ -305,11 +319,18 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
         if (_modelOutputHistory.Count < 3)
             return SecondOrderUpdate(sample, stepIndex, nextStepIndex);
 
-        T lambda_s = _lambdas![stepIndex];
-        T lambda_t = _lambdas[nextStepIndex];
-        T alpha_t = _alphaTs![nextStepIndex];
-        T sigma_t = _sigmaTs![nextStepIndex];
-        T sigma_s = _sigmaTs[stepIndex];
+        var lambdas = _lambdas
+            ?? throw new InvalidOperationException("Lambda values have not been initialized. Call SetTimesteps() first.");
+        var alphaTs = _alphaTs
+            ?? throw new InvalidOperationException("Alpha values have not been initialized. Call SetTimesteps() first.");
+        var sigmaTs = _sigmaTs
+            ?? throw new InvalidOperationException("Sigma values have not been initialized. Call SetTimesteps() first.");
+
+        T lambda_s = lambdas[stepIndex];
+        T lambda_t = lambdas[nextStepIndex];
+        T alpha_t = alphaTs[nextStepIndex];
+        T sigma_t = sigmaTs[nextStepIndex];
+        T sigma_s = sigmaTs[stepIndex];
 
         T h = NumOps.Subtract(lambda_t, lambda_s);
         double hVal = NumOps.ToDouble(h);

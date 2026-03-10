@@ -711,8 +711,8 @@ public class RetNetLayer<T> : LayerBase<T>
                 for (int h = 0; h < _numHeads; h++)
                 {
                     int dimStart = h * _headDimension;
-                    T mean = _lastGroupNormMean![new[] { bi, t, h }];
-                    T variance = _lastGroupNormVar![new[] { bi, t, h }];
+                    T mean = (_lastGroupNormMean ?? throw new InvalidOperationException("_lastGroupNormMean has not been initialized."))[new[] { bi, t, h }];
+                    T variance = (_lastGroupNormVar ?? throw new InvalidOperationException("_lastGroupNormVar has not been initialized."))[new[] { bi, t, h }];
                     T invStd = NumOps.FromDouble(1.0 / Math.Sqrt(
                         NumOps.ToDouble(NumOps.Add(variance, eps))));
                     T invHD = NumOps.FromDouble(1.0 / _headDimension);
@@ -731,10 +731,10 @@ public class RetNetLayer<T> : LayerBase<T>
                         T scale = _groupNormScale[new[] { h, d }];
 
                         // dScale += dy * xHat, dBias += dy
-                        _groupNormScaleGradient![new[] { h, d }] = NumOps.Add(
+                        (_groupNormScaleGradient ?? throw new InvalidOperationException("_groupNormScaleGradient has not been initialized."))[new[] { h, d }] = NumOps.Add(
                             _groupNormScaleGradient[new[] { h, d }],
                             NumOps.Multiply(dy, xHat));
-                        _groupNormBiasGradient![new[] { h, d }] = NumOps.Add(
+                        (_groupNormBiasGradient ?? throw new InvalidOperationException("_groupNormBiasGradient has not been initialized."))[new[] { h, d }] = NumOps.Add(
                             _groupNormBiasGradient[new[] { h, d }], dy);
 
                         // For input gradient, dy is scaled by the norm scale

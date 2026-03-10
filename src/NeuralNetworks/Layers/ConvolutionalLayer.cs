@@ -1166,7 +1166,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int totalElements = gradOutput.ElementCount;
         var flat2DShape = new[] { totalElements, 1 };
         var flatGrad = gradOutput.CreateView(0, flat2DShape);
-        var flatOutput = _lastOutputGpu!.CreateView(0, flat2DShape);
+        var lastOutputGpu = _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu has not been initialized.");
+        var flatOutput = lastOutputGpu.CreateView(0, flat2DShape);
 
         IGpuTensor<T> flatResult = activation switch
         {

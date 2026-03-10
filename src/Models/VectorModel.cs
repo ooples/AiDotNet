@@ -575,8 +575,16 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </remarks>
     public ModelMetadata<T> GetModelMetadata()
     {
+        if (Coefficients.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot compute model metadata: Coefficients vector is empty.");
+        }
+
         T norm = Coefficients.Norm();
-        norm ??= _numOps.Zero;
+        T mean = Coefficients.Mean();
+        T max = Coefficients.Max();
+        T min = Coefficients.Min();
 
         int nonZeroCount = Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
 
@@ -588,11 +596,11 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
             FeatureImportance = GetFeatureImportance(),
             AdditionalInfo = new Dictionary<string, object>
             {
-                { "CoefficientNorm", norm! },
+                { "CoefficientNorm", (object?)norm ?? (object)0.0 },
                 { "NonZeroCoefficients", nonZeroCount },
-                { "MeanCoefficient", Coefficients.Mean()! },
-                { "MaxCoefficient", Coefficients.Max()! },
-                { "MinCoefficient", Coefficients.Min()! }
+                { "MeanCoefficient", (object?)mean ?? (object)0.0 },
+                { "MaxCoefficient", (object?)max ?? (object)0.0 },
+                { "MinCoefficient", (object?)min ?? (object)0.0 }
             }
         };
     }

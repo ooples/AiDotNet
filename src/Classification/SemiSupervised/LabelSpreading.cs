@@ -49,17 +49,17 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// to nearby points and low similarity to distant points.
     /// </para>
     /// </remarks>
-    private readonly IKernelFunction<T> _kernel;
+    private IKernelFunction<T> _kernel;
 
     /// <summary>
     /// Maximum number of iterations for label spreading.
     /// </summary>
-    private readonly int _maxIterations;
+    private int _maxIterations;
 
     /// <summary>
     /// Convergence tolerance for stopping the spreading early.
     /// </summary>
-    private readonly T _tolerance;
+    private T _tolerance;
 
     /// <summary>
     /// The clamping factor (alpha) that balances original labels vs. propagated information.
@@ -75,7 +75,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// Higher values allow more influence from the graph structure.
     /// </para>
     /// </remarks>
-    private readonly T _alpha;
+    private T _alpha;
 
     /// <summary>
     /// The symmetrically normalized affinity matrix (Laplacian-style normalization).
@@ -843,6 +843,12 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
         return new Kernels.GaussianKernel<T>(1.0);
     }
 
+    private static Dictionary<string, double> ExtractKernelParams(IKernelFunction<T> kernel)
+        => Kernels.KernelSerializationHelper<T>.ExtractKernelParams(kernel);
+
+    private static IKernelFunction<T>? CreateKernelByName(string kernelTypeName, Dictionary<string, double>? kernelParams = null)
+        => Kernels.KernelSerializationHelper<T>.CreateKernelByName(kernelTypeName, kernelParams);
+
     #endregion
 
     #region Serialization
@@ -856,7 +862,12 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
             ["NumClasses"] = NumClasses,
             ["NumFeatures"] = NumFeatures,
             ["TaskType"] = (int)TaskType,
-            ["NumLabeled"] = _numLabeled
+            ["NumLabeled"] = _numLabeled,
+            ["KernelType"] = _kernel.GetType().Name,
+            ["KernelParams"] = ExtractKernelParams(_kernel),
+            ["MaxIterations"] = _maxIterations,
+            ["Tolerance"] = NumOps.ToDouble(_tolerance),
+            ["Alpha"] = NumOps.ToDouble(_alpha)
         };
 
         if (ClassLabels is not null)
@@ -897,21 +908,45 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (modelMetadata?.ModelData is null) return;
+        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: invalid metadata.");
+        if (modelMetadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: invalid model payload.");
 
-        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
-        _numLabeled = jObj["NumLabeled"]?.ToObject<int>() ?? 0;
+        NumClasses = jObj["NumClasses"]?.ToObject<int>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing NumClasses.");
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing NumFeatures.");
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing TaskType."));
+        _numLabeled = jObj["NumLabeled"]?.ToObject<int>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing NumLabeled.");
+        _maxIterations = jObj["MaxIterations"]?.ToObject<int>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing MaxIterations.");
+
+        var kernelType = jObj["KernelType"]?.ToObject<string>();
+        var kernelParams = jObj["KernelParams"]?.ToObject<Dictionary<string, double>>();
+        if (kernelType is not null)
+        {
+            _kernel = CreateKernelByName(kernelType, kernelParams) ?? CreateDefaultKernel();
+        }
+
+        _tolerance = NumOps.FromDouble(jObj["Tolerance"]?.ToObject<double>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing Tolerance."));
+        _alpha = NumOps.FromDouble(jObj["Alpha"]?.ToObject<double>()
+            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing Alpha."));
 
         var labelsToken = jObj["ClassLabels"];
         if (labelsToken is JArray labelsArr)
         {
+            if (labelsArr.Count != NumClasses)
+                throw new InvalidOperationException(
+                    $"Failed to deserialize LabelSpreading: ClassLabels length ({labelsArr.Count}) does not match NumClasses ({NumClasses}).");
+
             ClassLabels = new Vector<T>(labelsArr.Count);
             for (int i = 0; i < labelsArr.Count; i++)
                 ClassLabels[i] = NumOps.FromDouble(labelsArr[i].Value<double>());
@@ -922,6 +957,10 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
         var afToken = jObj["AllFeatures"];
         if (afToken is JArray afArr && afRows > 0 && afCols > 0)
         {
+            if (afArr.Count != afRows * afCols)
+                throw new InvalidOperationException(
+                    $"Failed to deserialize LabelSpreading: AllFeatures array length ({afArr.Count}) does not match {afRows}x{afCols}.");
+
             _allFeatures = new Matrix<T>(afRows, afCols);
             for (int i = 0; i < afRows; i++)
                 for (int j = 0; j < afCols; j++)
@@ -937,11 +976,29 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
         var ldToken = jObj["LabelDistributions"];
         if (ldToken is JArray ldArr && ldRows > 0 && ldCols > 0)
         {
+            if (ldArr.Count != ldRows * ldCols)
+                throw new InvalidOperationException(
+                    $"Failed to deserialize LabelSpreading: LabelDistributions array length ({ldArr.Count}) does not match {ldRows}x{ldCols}.");
+
             _labelDistributions = new Matrix<T>(ldRows, ldCols);
             for (int i = 0; i < ldRows; i++)
                 for (int j = 0; j < ldCols; j++)
                     _labelDistributions[i, j] = NumOps.FromDouble(ldArr[i * ldCols + j].Value<double>());
         }
+
+        // Cross-field consistency checks
+        if (_allFeatures is not null && afCols != NumFeatures)
+            throw new InvalidOperationException(
+                $"Failed to deserialize LabelSpreading: AllFeatures columns ({afCols}) does not match NumFeatures ({NumFeatures}).");
+        if (_labelDistributions is not null && ldCols != NumClasses)
+            throw new InvalidOperationException(
+                $"Failed to deserialize LabelSpreading: LabelDistributions columns ({ldCols}) does not match NumClasses ({NumClasses}).");
+        if (_allFeatures is not null && _labelDistributions is not null && _allFeatures.Rows != _labelDistributions.Rows)
+            throw new InvalidOperationException(
+                $"Failed to deserialize LabelSpreading: AllFeatures rows ({_allFeatures.Rows}) does not match LabelDistributions rows ({_labelDistributions.Rows}).");
+        if (_allFeatures is not null && _numLabeled > _allFeatures.Rows)
+            throw new InvalidOperationException(
+                $"Failed to deserialize LabelSpreading: NumLabeled ({_numLabeled}) exceeds AllFeatures rows ({_allFeatures.Rows}).");
     }
 
     #endregion

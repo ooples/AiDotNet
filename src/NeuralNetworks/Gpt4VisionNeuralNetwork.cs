@@ -954,17 +954,23 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Matrix<T> EncodeImageNative(Tensor<T> image)
     {
+        // Validate required components are initialized
+        var patchEmbedding = _visionPatchEmbedding ?? throw new InvalidOperationException("Vision patch embedding has not been initialized.");
+        var clsToken = _visionClsToken ?? throw new InvalidOperationException("Vision CLS token has not been initialized.");
+        var positionalEmbeddings = _visionPositionalEmbeddings ?? throw new InvalidOperationException("Vision positional embeddings have not been initialized.");
+        var layerNorm = _visionLayerNorm ?? throw new InvalidOperationException("Vision layer norm has not been initialized.");
+
         // Patch embedding
-        var patchEmbeddings = _visionPatchEmbedding!.Forward(image);
+        var patchEmbeddings = patchEmbedding.Forward(image);
         int numPatches = patchEmbeddings.Shape[0];
 
         // Create tensor for transformer processing
         var embeddings = Tensor<T>.CreateDefault([numPatches + 1, _visionEmbeddingDim], NumOps.Zero);
 
         // Add CLS token
-        for (int j = 0; j < _visionEmbeddingDim && j < _visionClsToken!.Columns; j++)
+        for (int j = 0; j < _visionEmbeddingDim && j < clsToken.Columns; j++)
         {
-            embeddings[0, j] = _visionClsToken[0, j];
+            embeddings[0, j] = clsToken[0, j];
         }
 
         // Add patch embeddings
@@ -977,11 +983,11 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         }
 
         // Add positional embeddings
-        for (int i = 0; i < embeddings.Shape[0] && i < _visionPositionalEmbeddings!.Rows; i++)
+        for (int i = 0; i < embeddings.Shape[0] && i < positionalEmbeddings.Rows; i++)
         {
-            for (int j = 0; j < _visionEmbeddingDim && j < _visionPositionalEmbeddings.Columns; j++)
+            for (int j = 0; j < _visionEmbeddingDim && j < positionalEmbeddings.Columns; j++)
             {
-                embeddings[i, j] = NumOps.Add(embeddings[i, j], _visionPositionalEmbeddings[i, j]);
+                embeddings[i, j] = NumOps.Add(embeddings[i, j], positionalEmbeddings[i, j]);
             }
         }
 
@@ -993,7 +999,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         }
 
         // Layer norm
-        current = _visionLayerNorm!.Forward(current);
+        current = layerNorm.Forward(current);
 
         return TensorToMatrix(current);
     }

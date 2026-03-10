@@ -623,19 +623,45 @@ public class AudioTransformTool<T> : ToolBase
             }
             else if (json["audio_data"] != null)
             {
-                // Parse audio data from JSON array [channels, samples] or [samples]
-                var audioDataArray = json["audio_data"]!.ToObject<double[]>();
-                if (audioDataArray == null)
-                {
-                    return "Error: 'audio_data' must be a 1D or 2D array of audio samples.";
-                }
-                int numSamples = audioDataArray.Length;
-                inputAudio = new Tensor<T>(new[] { 1, 1, numSamples });
-                var span = inputAudio.AsWritableSpan();
+                var audioDataToken = json["audio_data"];
                 var numOps = MathHelper.GetNumericOperations<T>();
-                for (int i = 0; i < numSamples; i++)
+
+                // Try 2D array first [channels, samples], then fall back to 1D [samples]
+                var audioData2D = audioDataToken?.ToObject<double[][]>();
+                if (audioData2D != null && audioData2D.Length > 0)
                 {
-                    span[i] = numOps.FromDouble(audioDataArray[i]);
+                    int channels = audioData2D.Length;
+                    int numSamples = audioData2D[0].Length;
+                    inputAudio = new Tensor<T>(new[] { 1, channels, numSamples });
+                    var span = inputAudio.AsWritableSpan();
+                    for (int ch = 0; ch < channels; ch++)
+                    {
+                        for (int s = 0; s < numSamples; s++)
+                        {
+                            span[ch * numSamples + s] = numOps.FromDouble(audioData2D[ch][s]);
+                        }
+                    }
+
+                    // Convert to mono if model expects mono
+                    if (channels > 1)
+                    {
+                        inputAudio = AudioHelper<T>.ToMono(inputAudio);
+                    }
+                }
+                else
+                {
+                    var audioDataArray = audioDataToken?.ToObject<double[]>();
+                    if (audioDataArray == null || audioDataArray.Length == 0)
+                    {
+                        return "Error: 'audio_data' must be a 1D or 2D array of audio samples.";
+                    }
+                    int numSamples = audioDataArray.Length;
+                    inputAudio = new Tensor<T>(new[] { 1, 1, numSamples });
+                    var span = inputAudio.AsWritableSpan();
+                    for (int i = 0; i < numSamples; i++)
+                    {
+                        span[i] = numOps.FromDouble(audioDataArray[i]);
+                    }
                 }
             }
             else
