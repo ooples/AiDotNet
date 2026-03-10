@@ -19,6 +19,11 @@ public class PackageUpgradeValidationTests
     private const double Tolerance = 1e-10;
     private static readonly IEngine Engine = AiDotNetEngine.Current;
 
+    /// <summary>
+    /// net471-compatible replacement for double.IsFinite (available only in .NET Core 2.1+).
+    /// </summary>
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
     #region Tensor Core Operations
 
     [Fact]
@@ -506,7 +511,7 @@ public class PackageUpgradeValidationTests
         // All outputs should be finite (no NaN or Infinity from normalization)
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(double.IsFinite(output[i]), $"BatchNorm output at index {i} should be finite, got {output[i]}");
+            Assert.True(IsFinite(output[i]), $"BatchNorm output at index {i} should be finite, got {output[i]}");
         }
     }
 
@@ -591,14 +596,14 @@ public class PackageUpgradeValidationTests
         var large = ops.FromDouble(1e100);
         var sum = ops.Add(large, large);
         var sumDouble = ops.ToDouble(sum);
-        Assert.True(double.IsFinite(sumDouble), $"Sum of 1e100 + 1e100 should be finite, got {sumDouble}");
+        Assert.True(IsFinite(sumDouble), $"Sum of 1e100 + 1e100 should be finite, got {sumDouble}");
         Assert.Equal(2e100, sumDouble, 1e90); // Expected: 2e100
 
         // Small * large should stay finite and non-zero: 1e-300 * 1e100 = 1e-200
         var small = ops.FromDouble(1e-300);
         var product = ops.Multiply(small, ops.FromDouble(1e100));
         var productDouble = ops.ToDouble(product);
-        Assert.True(double.IsFinite(productDouble), $"Product of 1e-300 * 1e100 should be finite, got {productDouble}");
+        Assert.True(IsFinite(productDouble), $"Product of 1e-300 * 1e100 should be finite, got {productDouble}");
         Assert.True(productDouble > 0.0, $"Product of 1e-300 * 1e100 should be positive, got {productDouble}");
         Assert.Equal(1e-200, productDouble, 1e-210); // Expected: 1e-200
     }
