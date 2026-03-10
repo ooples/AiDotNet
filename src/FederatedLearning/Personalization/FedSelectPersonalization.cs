@@ -82,7 +82,7 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
         var shared = new Dictionary<string, T[]>(fullParameters.Count);
         foreach (var kvp in fullParameters)
         {
-            if (!_maskLogits!.TryGetValue(kvp.Key, out var logits))
+            if (!(_maskLogits ?? throw new InvalidOperationException("Mask logits not initialized.")).TryGetValue(kvp.Key, out var logits))
             {
                 throw new InvalidOperationException(
                     $"No mask logits found for layer '{kvp.Key}'. Model structure may have changed since InitializeMasks was called.");

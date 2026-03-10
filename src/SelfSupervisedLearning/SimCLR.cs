@@ -92,28 +92,37 @@ public class SimCLR<T> : SSLMethodBase<T>
         var h2 = _encoder.ForwardWithMemory(view2);
 
         // Project to contrastive space
-        var z1 = _projector!.Project(h1);
-        var z2 = _projector.Project(h2);
+        var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
+        var z1 = projector.Project(h1);
+        var z2 = projector.Project(h2);
 
         // Compute NT-Xent loss with gradients
         var (loss, gradZ1, gradZ2) = _loss.ComputeLossWithGradients(z1, z2);
 
-        // Backward pass through projector
-        var gradH1 = _projector.Backward(gradZ1);
-        var gradH2 = _projector.Backward(gradZ2);
+        // Replay view1 forward to restore projector caches, then backward for gradZ1
+        // (view2 forward overwrites shared projector caches)
+        projector.Reset();
+        projector.Project(h1);
+        var gradH1 = projector.Backward(gradZ1);
+        // Capture view1 projector gradients before they are cleared by the next Backward()
+        var view1ProjGrads = projector.GetParameterGradients();
+        _encoder.Backpropagate(gradH1);
 
-        // Combine gradients from both views (average)
-        var combinedGrad = CombineGradients(gradH1, gradH2);
+        // Replay view2 forward to restore projector caches, then backward for gradZ2
+        projector.Reset();
+        projector.Project(h2);
+        var gradH2 = projector.Backward(gradZ2);
+        var view2ProjGrads = projector.GetParameterGradients();
+        _encoder.Backpropagate(gradH2);
 
-        // Backward pass through encoder with combined gradients
-        _encoder.Backpropagate(combinedGrad);
+        // Accumulate projector gradients from both views
+        var projectorGradients = Engine.Add(view1ProjGrads, view2ProjGrads);
 
         // Update parameters with learning rate
         var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
         var encoderGradients = _encoder.GetParameterGradients();
-        var projectorGradients = _projector.GetParameterGradients();
 
-        // Simple SGD update (in practice, use optimizer)
+        // Update with accumulated projector gradients
         UpdateWithGradients(learningRate, encoderGradients, projectorGradients);
 
         // Create result
@@ -134,7 +143,7 @@ public class SimCLR<T> : SSLMethodBase<T>
         _encoder.UpdateParameters(Engine.Subtract(encoderParams, Engine.Multiply(encoderGrads, learningRate)));
 
         // SGD update for projector
-        var projectorParams = _projector!.GetParameters();
+        var projectorParams = (_projector ?? throw new InvalidOperationException("Projector has not been initialized.")).GetParameters();
         _projector.SetParameters(Engine.Subtract(projectorParams, Engine.Multiply(projectorGrads, learningRate)));
     }
 

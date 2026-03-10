@@ -143,18 +143,54 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     /// </summary>
     private (Matrix<T> x, Vector<T> y) CreateBootstrapSample(Matrix<T> x, Vector<T> y, int sampleSize)
     {
+        var random = _random ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Random not initialized. Call Fit() first.");
+
+        if (sampleSize > x.Rows && !Options.Bootstrap)
+        {
+            throw new ArgumentException(
+                $"Sample size ({sampleSize}) exceeds data size ({x.Rows}) with Bootstrap=false. " +
+                "Either enable Bootstrap or reduce MaxSamples.",
+                nameof(sampleSize));
+        }
+
         var xSample = new Matrix<T>(sampleSize, NumFeatures);
         var ySample = new Vector<T>(sampleSize);
 
-        for (int i = 0; i < sampleSize; i++)
+        if (Options.Bootstrap)
         {
-            int idx = _random!.Next(x.Rows);
-
-            for (int j = 0; j < NumFeatures; j++)
+            // Sample with replacement
+            for (int i = 0; i < sampleSize; i++)
             {
-                xSample[i, j] = x[idx, j];
+                int idx = random.Next(x.Rows);
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    xSample[i, j] = x[idx, j];
+                }
+                ySample[i] = y[idx];
             }
-            ySample[i] = y[idx];
+        }
+        else
+        {
+            // Sample without replacement using Fisher-Yates partial shuffle (O(sampleSize), unbiased)
+            var pool = Enumerable.Range(0, x.Rows).ToArray();
+            for (int k = 0; k < sampleSize; k++)
+            {
+                int swapIdx = k + random.Next(pool.Length - k);
+                (pool[k], pool[swapIdx]) = (pool[swapIdx], pool[k]);
+            }
+            var indices = new int[sampleSize];
+            Array.Copy(pool, 0, indices, 0, sampleSize);
+
+            for (int i = 0; i < sampleSize; i++)
+            {
+                int idx = indices[i];
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    xSample[i, j] = x[idx, j];
+                }
+                ySample[i] = y[idx];
+            }
         }
 
         return (xSample, ySample);
@@ -246,7 +282,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     /// <inheritdoc/>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_estimators is null || _featureIndicesPerEstimator is null)
+        if (_estimators is null || _featureIndicesPerEstimator is null || ClassLabels is null)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
@@ -271,7 +307,35 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
 
             if (_estimators[e] is IProbabilisticClassifier<T> probClassifier)
             {
-                estProbs = probClassifier.PredictProbabilities(filteredInput);
+                var rawProbs = probClassifier.PredictProbabilities(filteredInput);
+
+                // Align estimator probabilities to ensemble label space
+                if (rawProbs.Columns == NumClasses)
+                {
+                    estProbs = rawProbs;
+                }
+                else
+                {
+                    estProbs = new Matrix<T>(input.Rows, NumClasses);
+                    var estClassLabels = _estimators[e].ClassLabels;
+                    if (estClassLabels is not null)
+                    {
+                        for (int ec = 0; ec < estClassLabels.Length && ec < rawProbs.Columns; ec++)
+                        {
+                            for (int ensC = 0; ensC < NumClasses; ensC++)
+                            {
+                                if (NumOps.Compare(estClassLabels[ec], ClassLabels[ensC]) == 0)
+                                {
+                                    for (int i = 0; i < input.Rows; i++)
+                                    {
+                                        estProbs[i, ensC] = rawProbs[i, ec];
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
             }
             else
             {

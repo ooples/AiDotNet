@@ -162,8 +162,9 @@ public class BallTree<T>
         int splitDim = FindMaxSpreadDimension(indices, start, end);
 
         // Sort indices by split dimension
+        var data = _data ?? throw new InvalidOperationException("BallTree: Data not initialized.");
         Array.Sort(indices, start, count, Comparer<int>.Create((a, b) =>
-            _numOps.ToDouble(_data![a, splitDim]).CompareTo(_numOps.ToDouble(_data[b, splitDim]))));
+            _numOps.ToDouble(data[a, splitDim]).CompareTo(_numOps.ToDouble(data[b, splitDim]))));
 
         int mid = start + count / 2;
 
@@ -193,7 +194,7 @@ public class BallTree<T>
             T sum = _numOps.Zero;
             for (int i = start; i < end; i++)
             {
-                sum = _numOps.Add(sum, _data![indices[i], j]);
+                sum = _numOps.Add(sum, (_data ?? throw new InvalidOperationException("BallTree: Data not initialized."))[indices[i], j]);
             }
             centroid[j] = _numOps.Divide(sum, _numOps.FromDouble(count));
         }
@@ -207,7 +208,7 @@ public class BallTree<T>
 
         for (int i = start; i < end; i++)
         {
-            var point = GetRow(_data!, indices[i]);
+            var point = GetRow((_data ?? throw new InvalidOperationException("BallTree: Data not initialized.")), indices[i]);
             T dist = _distanceMetric.Compute(centroid, point);
             if (_numOps.ToDouble(dist) > _numOps.ToDouble(maxDist))
             {
@@ -230,7 +231,7 @@ public class BallTree<T>
 
             for (int i = start; i < end; i++)
             {
-                double val = _numOps.ToDouble(_data![indices[i], d]);
+                double val = _numOps.ToDouble((_data ?? throw new InvalidOperationException("BallTree: Data not initialized."))[indices[i], d]);
                 min = Math.Min(min, val);
                 max = Math.Max(max, val);
             }
@@ -264,9 +265,9 @@ public class BallTree<T>
 
         if (node.IsLeaf)
         {
-            foreach (int idx in node.Indices!)
+            foreach (int idx in (node.Indices ?? throw new InvalidOperationException("BallTree: Leaf node has null indices.")))
             {
-                var point = GetRow(_data!, idx);
+                var point = GetRow((_data ?? throw new InvalidOperationException("BallTree: Data not initialized.")), idx);
                 T dist = _distanceMetric.Compute(query, point);
                 results.Add((idx, dist));
             }
@@ -281,8 +282,8 @@ public class BallTree<T>
         }
 
         // Visit children (closer one first)
-        T distToLeft = _distanceMetric.Compute(query, node.Left!.Centroid);
-        T distToRight = _distanceMetric.Compute(query, node.Right!.Centroid);
+        T distToLeft = _distanceMetric.Compute(query, (node.Left ?? throw new InvalidOperationException("BallTree: Non-leaf node has null children.")).Centroid);
+        T distToRight = _distanceMetric.Compute(query, (node.Right ?? throw new InvalidOperationException("BallTree: Non-leaf node has null children.")).Centroid);
 
         if (_numOps.ToDouble(distToLeft) <= _numOps.ToDouble(distToRight))
         {
@@ -310,9 +311,9 @@ public class BallTree<T>
 
         if (node.IsLeaf)
         {
-            foreach (int idx in node.Indices!)
+            foreach (int idx in (node.Indices ?? throw new InvalidOperationException("BallTree: Leaf node has null indices.")))
             {
-                var point = GetRow(_data!, idx);
+                var point = GetRow((_data ?? throw new InvalidOperationException("BallTree: Data not initialized.")), idx);
                 T dist = _distanceMetric.Compute(query, point);
                 if (_numOps.ToDouble(dist) <= _numOps.ToDouble(radius))
                 {
@@ -322,8 +323,8 @@ public class BallTree<T>
             return;
         }
 
-        QueryRadiusRecursive(node.Left!, query, radius, results);
-        QueryRadiusRecursive(node.Right!, query, radius, results);
+        QueryRadiusRecursive((node.Left ?? throw new InvalidOperationException("BallTree: Non-leaf node has null children.")), query, radius, results);
+        QueryRadiusRecursive((node.Right ?? throw new InvalidOperationException("BallTree: Non-leaf node has null children.")), query, radius, results);
     }
 
     private Vector<T> GetRow(Matrix<T> matrix, int rowIndex)

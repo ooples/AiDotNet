@@ -161,10 +161,12 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (subset.Count == 0) return 0;
 
+        var featureClassCorrelations = _featureClassCorrelations ?? throw new InvalidOperationException("Feature-class correlations have not been computed.");
+        var featureInterCorrelations = _featureInterCorrelations ?? throw new InvalidOperationException("Feature inter-correlations have not been computed.");
         int k = subset.Count;
 
         // Average feature-class correlation
-        double avgFCCorr = subset.Sum(j => _featureClassCorrelations![j]) / k;
+        double avgFCCorr = subset.Sum(j => featureClassCorrelations[j]) / k;
 
         // Average feature-feature correlation
         double avgFFCorr = 0;
@@ -173,7 +175,7 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             for (int j = i + 1; j < k; j++)
             {
-                avgFFCorr += _featureInterCorrelations![subset[i], subset[j]];
+                avgFFCorr += featureInterCorrelations[subset[i], subset[j]];
                 pairs++;
             }
         }

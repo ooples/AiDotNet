@@ -270,7 +270,6 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
         T lambda_s = _lambdas![stepIndex];
         T lambda_t = _lambdas![nextStepIndex];
         T alpha_t = _alphaTs![nextStepIndex];
-        T alpha_s = _alphaTs[stepIndex];
         T sigma_t = _sigmaTs![nextStepIndex];
         T sigma_s = _sigmaTs[stepIndex];
 

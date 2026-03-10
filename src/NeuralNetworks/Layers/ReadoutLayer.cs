@@ -280,8 +280,8 @@ public class ReadoutLayer<T> : LayerBase<T>
         _lastPreActivation = withBias;
 
         Tensor<T> activated = UsingVectorActivation
-            ? VectorActivation!.Activate(withBias)
-            : ScalarActivation!.Activate(withBias);
+            ? (VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.")).Activate(withBias)
+            : (ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.")).Activate(withBias);
 
         _lastOutput = activated;
 
@@ -366,7 +366,8 @@ public class ReadoutLayer<T> : LayerBase<T>
             {
                 // For other vector activations, fall back to CPU
                 var cpuPreActivation = preActivation.ToTensor();
-                var cpuActivated = VectorActivation!.Activate(cpuPreActivation);
+                var vecAct = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
+                var cpuActivated = vecAct.Activate(cpuPreActivation);
                 result = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
             }
         }
@@ -582,7 +583,8 @@ public class ReadoutLayer<T> : LayerBase<T>
         Tensor<T> activationGradient;
         if (UsingVectorActivation)
         {
-            activationGradient = VectorActivation!.Backward(_lastPreActivation, normalizedOutputGradient);
+            var vecActBw1 = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
+            activationGradient = vecActBw1.Backward(_lastPreActivation, normalizedOutputGradient);
         }
         else if (ScalarActivation != null)
         {
@@ -687,7 +689,8 @@ public class ReadoutLayer<T> : LayerBase<T>
         Tensor<T> preActGradTensor;
         if (UsingVectorActivation)
         {
-            preActGradTensor = VectorActivation!.Backward(_lastPreActivation, normalizedOutputGradient);
+            var vecActBw2 = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
+            preActGradTensor = vecActBw2.Backward(_lastPreActivation, normalizedOutputGradient);
         }
         else if (ScalarActivation != null)
         {

@@ -127,7 +127,12 @@ public class ConcatenateLayer<T> : LayerBase<T>
         // Since axis is now last, Outer = product of all other dims
         long outerSize = 1;
         for (int i = 0; i < rank - 1; i++)
-            outerSize *= (needsPermute ? inputs[0].Shape[permutation![i]] : inputs[0].Shape[i]);
+        {
+            if (needsPermute && permutation is not null)
+                outerSize *= inputs[0].Shape[permutation[i]];
+            else
+                outerSize *= inputs[0].Shape[i];
+        }
         // For inputs[0], dimension at axis index is Shape[axis]. After permute it is Shape[rank-1].
         // But outer dimensions must match across all inputs.
 
@@ -155,9 +160,9 @@ public class ConcatenateLayer<T> : LayerBase<T>
         // 5. Create Output Tensor
         // First as 2D [Outer, TotalAxisDim] or permuted shape
         int[] permutedOutputShape = new int[rank];
-        if (needsPermute)
+        if (needsPermute && permutation is not null)
         {
-            for (int i = 0; i < rank - 1; i++) permutedOutputShape[i] = inputs[0].Shape[permutation![i]];
+            for (int i = 0; i < rank - 1; i++) permutedOutputShape[i] = inputs[0].Shape[permutation[i]];
             permutedOutputShape[rank - 1] = totalAxisDim;
         }
         else
@@ -171,7 +176,10 @@ public class ConcatenateLayer<T> : LayerBase<T>
         // 6. Inverse Permute if needed
         if (needsPermute)
         {
-            result = gpuEngine.PermuteGpu(result, invPermutation!);
+            var invPerm = invPermutation ?? throw new InvalidOperationException("Inverse permutation has not been initialized.");
+            var prePerm = result;
+            result = gpuEngine.PermuteGpu(result, invPerm);
+            prePerm.Dispose();
             // Clean up temporary permuted inputs
             foreach (var pInput in processedInputs) pInput.Dispose();
         }

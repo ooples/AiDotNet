@@ -201,7 +201,10 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        return InferenceMode && _cache != null
+        if (InferenceMode && _cache == null)
+            throw new InvalidOperationException("InferenceMode is enabled but no KV cache has been set. Call SetCache() before running inference.");
+
+        return InferenceMode
             ? ForwardWithCache(input)
             : ForwardStandard(input);
     }
@@ -228,6 +231,8 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         // Reshape K/V: [batch, seq, numKVHeads, headDim] -> [batch, numKVHeads, seq, headDim]
         newKeys = newKeys.Reshape(batchSize, seqLen, _numKVHeads, _headDimension).Transpose([0, 2, 1, 3]);
         newValues = newValues.Reshape(batchSize, seqLen, _numKVHeads, _headDimension).Transpose([0, 2, 1, 3]);
+
+        var cache = _cache ?? throw new InvalidOperationException("KV cache has not been initialized.");
 
         // Apply RoPE with position offset
         if (_ropeLayer != null)

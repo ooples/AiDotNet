@@ -595,14 +595,18 @@ public class S4DLayer<T> : LayerBase<T>
         var dhReal = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
         var dhImag = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
 
+        // Hoist invariant null guards out of the loop
+        var lastHiddenReal = _lastHiddenStatesReal ?? throw new InvalidOperationException("_lastHiddenStatesReal has not been initialized.");
+        var lastHiddenImag = _lastHiddenStatesImag ?? throw new InvalidOperationException("_lastHiddenStatesImag has not been initialized.");
+
         for (int t = seqLen - 1; t >= 0; t--)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);
             var dOut_t = dOutput.GetSliceAlongDimension(t, 1);
-            var hReal_t = _lastHiddenStatesReal!.GetSliceAlongDimension(t + 1, 1);
-            var hImag_t = _lastHiddenStatesImag!.GetSliceAlongDimension(t + 1, 1);
-            var hReal_prev = _lastHiddenStatesReal.GetSliceAlongDimension(t, 1);
-            var hImag_prev = _lastHiddenStatesImag.GetSliceAlongDimension(t, 1);
+            var hReal_t = lastHiddenReal.GetSliceAlongDimension(t + 1, 1);
+            var hImag_t = lastHiddenImag.GetSliceAlongDimension(t + 1, 1);
+            var hReal_prev = lastHiddenReal.GetSliceAlongDimension(t, 1);
+            var hImag_prev = lastHiddenImag.GetSliceAlongDimension(t, 1);
 
             var dOut_t_3D = Engine.TensorExpandDims(dOut_t, 2);
 

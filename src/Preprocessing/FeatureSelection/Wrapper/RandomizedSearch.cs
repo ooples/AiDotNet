@@ -133,9 +133,10 @@ public class RandomizedSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     private double EvaluateSubset(int[] subset)
     {
+        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been computed.");
         double score = 0;
         foreach (int j in subset)
-            score += _featureScores![j];
+            score += featureScores[j];
 
         return score / subset.Length;
     }

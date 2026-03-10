@@ -620,7 +620,11 @@ public class MemoryEstimate
         if (PerDeviceMemory.HasValue)
         {
             sb.AppendLine($"  Per device:            {PerDeviceMemory.Value / (1024.0 * 1024.0):F1} MB");
-            sb.AppendLine($"  Total sharded:         {TotalShardedMemory!.Value / (1024.0 * 1024.0):F1} MB");
+        }
+
+        if (TotalShardedMemory.HasValue)
+        {
+            sb.AppendLine($"  Total sharded:         {TotalShardedMemory.Value / (1024.0 * 1024.0):F1} MB");
         }
 
         return sb.ToString();
