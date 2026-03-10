@@ -485,7 +485,8 @@ public class BidirectionalLayer<T> : LayerBase<T>
 
         if (forwardBackwardGpuMethod is not null)
         {
-            forwardInputGradient = (IGpuTensor<T>)forwardBackwardGpuMethod.Invoke(_forwardLayer, new object[] { forwardGradient })!;
+            forwardInputGradient = (IGpuTensor<T>)(forwardBackwardGpuMethod.Invoke(_forwardLayer, new object[] { forwardGradient })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {
@@ -506,7 +507,8 @@ public class BidirectionalLayer<T> : LayerBase<T>
 
         if (backwardBackwardGpuMethod is not null)
         {
-            backwardInputGradient = (IGpuTensor<T>)backwardBackwardGpuMethod.Invoke(_backwardLayer, new object[] { reversedBackwardGradient })!;
+            backwardInputGradient = (IGpuTensor<T>)(backwardBackwardGpuMethod.Invoke(_backwardLayer, new object[] { reversedBackwardGradient })
+                ?? throw new InvalidOperationException("BackwardGpu returned null."));
         }
         else
         {

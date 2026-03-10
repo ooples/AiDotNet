@@ -325,7 +325,8 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             var backwardGpuMethod = rdbType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
             if (backwardGpuMethod != null)
             {
-                grad = (IGpuTensor<T>)backwardGpuMethod.Invoke(_rdbBlocks[i], new object[] { grad })!;
+                grad = (IGpuTensor<T>)(backwardGpuMethod.Invoke(_rdbBlocks[i], new object[] { grad })
+                    ?? throw new InvalidOperationException("BackwardGpu returned null."));
             }
             else
             {

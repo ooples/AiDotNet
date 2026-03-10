@@ -190,12 +190,15 @@ public abstract class TabDPTBase<T>
         // Add categorical embeddings if present
         if (categoricalIndices != null && _categoricalEmbeddings.Length > 0)
         {
+            var cardinalities = Options.CategoricalCardinalities
+                ?? throw new InvalidOperationException("TabDPTBase: CategoricalCardinalities not configured.");
+
             for (int catIdx = 0; catIdx < _categoricalEmbeddings.Length; catIdx++)
             {
                 var oneHot = CreateOneHotEncoding(
                     categoricalIndices,
                     catIdx,
-                    (Options.CategoricalCardinalities ?? throw new InvalidOperationException("CategoricalCardinalities has not been initialized."))[catIdx]);
+                    cardinalities[catIdx]);
                 var catEmb = _categoricalEmbeddings[catIdx].Forward(oneHot);
 
                 // Add to embeddings

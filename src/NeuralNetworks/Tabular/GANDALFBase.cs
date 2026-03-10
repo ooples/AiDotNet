@@ -390,19 +390,25 @@ public abstract class GANDALFBase<T>
         // Initialize gradients
         for (int t = 0; t < Options.NumTrees; t++)
         {
-            _treeSplitWeightsGrad[t] = new Tensor<T>(_treeSplitWeights[t].Shape);
-            _treeSplitWeightsGrad[t]!.Fill(NumOps.Zero);
-            _treeSplitBiasesGrad[t] = new Tensor<T>(_treeSplitBiases[t].Shape);
-            _treeSplitBiasesGrad[t]!.Fill(NumOps.Zero);
-            _treeLeafValuesGrad[t] = new Tensor<T>(_treeLeafValues[t].Shape);
-            _treeLeafValuesGrad[t]!.Fill(NumOps.Zero);
+            var splitWeightsGrad = new Tensor<T>(_treeSplitWeights[t].Shape);
+            splitWeightsGrad.Fill(NumOps.Zero);
+            _treeSplitWeightsGrad[t] = splitWeightsGrad;
+
+            var splitBiasesGrad = new Tensor<T>(_treeSplitBiases[t].Shape);
+            splitBiasesGrad.Fill(NumOps.Zero);
+            _treeSplitBiasesGrad[t] = splitBiasesGrad;
+
+            var leafValuesGrad = new Tensor<T>(_treeLeafValues[t].Shape);
+            leafValuesGrad.Fill(NumOps.Zero);
+            _treeLeafValuesGrad[t] = leafValuesGrad;
         }
 
         // Gradient w.r.t. leaf values for each tree
         for (int t = 0; t < Options.NumTrees; t++)
         {
             var leafProbs = _routingProbsCache[t];
-            var leafValuesGrad = _treeLeafValuesGrad[t]!;
+            var leafValuesGrad = _treeLeafValuesGrad[t]
+                ?? throw new InvalidOperationException("Tree leaf values gradient was not initialized.");
 
             for (int b = 0; b < batchSize; b++)
             {

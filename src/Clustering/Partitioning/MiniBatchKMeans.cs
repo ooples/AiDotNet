@@ -161,7 +161,10 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         ValidateIsTrained();
         ValidatePredictInput(x);
 
-        return AssignLabels(x, ClusterCenters!);
+        if (ClusterCenters is null)
+            throw new InvalidOperationException("MiniBatchKMeans: ClusterCenters not initialized. Call Train() first.");
+
+        return AssignLabels(x, ClusterCenters);
     }
 
     /// <inheritdoc />
@@ -170,14 +173,17 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         ValidateIsTrained();
         ValidatePredictInput(x);
 
-        return ComputeDistancesToCenters(x, ClusterCenters!);
+        if (ClusterCenters is null)
+            throw new InvalidOperationException("MiniBatchKMeans: ClusterCenters not initialized. Call Train() first.");
+
+        return ComputeDistancesToCenters(x, ClusterCenters);
     }
 
     /// <inheritdoc />
     public override Vector<T> FitPredict(Matrix<T> x)
     {
         Train(x);
-        return Labels!;
+        return Labels ?? throw new InvalidOperationException("Training failed to produce cluster labels.");
     }
 
     private (Matrix<T> Centers, Vector<T> Labels, T Inertia, int Iterations) FitSingle(Matrix<T> x)
@@ -232,7 +238,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
 
     private void UpdateCentersWithBatch(Matrix<T> batch, Matrix<T>? centers = null)
     {
-        centers ??= ClusterCenters!;
+        centers ??= ClusterCenters ?? throw new InvalidOperationException("Cluster centers not initialized.");
         var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Assign each point in the batch to its nearest center

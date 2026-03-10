@@ -308,8 +308,21 @@ public class FeatureTokenizer<T>
 
         for (int i = 0; i < _categoricalEmbeddingsGrad.Count; i++)
         {
-            _categoricalEmbeddingsGrad[i] = new Tensor<T>(_categoricalEmbeddings[i].Shape);
-            _categoricalEmbeddingsGrad[i]!.Fill(_numOps.Zero);
+            var catEmbGrad = new Tensor<T>(_categoricalEmbeddings[i].Shape);
+            catEmbGrad.Fill(_numOps.Zero);
+            _categoricalEmbeddingsGrad[i] = catEmbGrad;
+        }
+
+        // Hoist categorical gradient tensor lookups outside the batch loop since they only depend on feature index
+        Tensor<T>[]? catEmbGrads = null;
+        if (_numCategoricalFeatures > 0)
+        {
+            catEmbGrads = new Tensor<T>[_numCategoricalFeatures];
+            for (int f = 0; f < _numCategoricalFeatures; f++)
+            {
+                catEmbGrads[f] = _categoricalEmbeddingsGrad[f]
+                    ?? throw new InvalidOperationException($"Categorical embedding gradient for feature {f} not initialized.");
+            }
         }
 
         for (int b = 0; b < batchSize; b++)
@@ -353,14 +366,14 @@ public class FeatureTokenizer<T>
                 inputGrad[b * _numNumericalFeatures + f] = inputGradAccum;
             }
 
-            // Categorical embedding gradients
-            if (_categoricalIndicesCache != null && _numCategoricalFeatures > 0)
+            // Categorical embedding gradients (uses hoisted catEmbGrads array)
+            if (_categoricalIndicesCache != null && _numCategoricalFeatures > 0 && catEmbGrads != null)
             {
                 for (int f = 0; f < _numCategoricalFeatures; f++)
                 {
                     int catIndex = _categoricalIndicesCache[b, f];
                     int outputPos = 1 + _numNumericalFeatures + f;
-                    var embGrad = _categoricalEmbeddingsGrad[f]!;
+                    var embGrad = catEmbGrads[f];
 
                     for (int d = 0; d < _embeddingDimension; d++)
                     {

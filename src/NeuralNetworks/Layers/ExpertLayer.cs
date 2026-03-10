@@ -302,7 +302,8 @@ public class ExpertLayer<T> : LayerBase<T>
                 var backwardGpuMethod = layerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
                 if (backwardGpuMethod != null)
                 {
-                    grad = (IGpuTensor<T>)backwardGpuMethod.Invoke(layerBase, new object[] { grad })!;
+                    grad = (IGpuTensor<T>)(backwardGpuMethod.Invoke(layerBase, new object[] { grad })
+                        ?? throw new InvalidOperationException("BackwardGpu returned null."));
                 }
                 else
                 {

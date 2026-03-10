@@ -235,12 +235,15 @@ public abstract class TabPFNBase<T>
         // Add categorical embeddings if present
         if (categoricalIndices != null && _categoricalEncoders.Length > 0)
         {
+            var cardinalities = Options.CategoricalCardinalities
+                ?? throw new InvalidOperationException("TabPFNBase: CategoricalCardinalities not configured.");
+
             for (int catIdx = 0; catIdx < _categoricalEncoders.Length; catIdx++)
             {
                 var oneHot = CreateOneHotEncoding(
                     categoricalIndices,
                     catIdx,
-                    (Options.CategoricalCardinalities ?? throw new InvalidOperationException("CategoricalCardinalities has not been initialized."))[catIdx]);
+                    cardinalities[catIdx]);
                 var catEmb = _categoricalEncoders[catIdx].Forward(oneHot);
 
                 queryEncoded = Engine.TensorAdd(queryEncoded, catEmb);
