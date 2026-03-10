@@ -299,6 +299,10 @@ public class RAFT<T> : OpticalFlowBase<T>
     {
         ThrowIfNotInitialized();
 
+        var correlationConv = _correlationConv ?? throw new InvalidOperationException("Correlation conv not initialized.");
+        var flowHead = _flowHead ?? throw new InvalidOperationException("Flow head not initialized.");
+        var deltaFlowHead = _deltaFlowHead ?? throw new InvalidOperationException("Delta flow head not initialized.");
+
         int batchSize = frame1.Shape[0];
         int featHeight = _height / 8;
         int featWidth = _width / 8;
@@ -315,7 +319,7 @@ public class RAFT<T> : OpticalFlowBase<T>
         for (int iter = 0; iter < NumIterations; iter++)
         {
             var correlation = ComputeCorrelation(fmap1, fmap2, flow);
-            var corrFeatures = _correlationConv!.Forward(correlation);
+            var corrFeatures = correlationConv.Forward(correlation);
 
             var gruInput = ConcatenateChannels(
                 ConcatenateChannels(context, corrFeatures),
@@ -323,8 +327,8 @@ public class RAFT<T> : OpticalFlowBase<T>
 
             hiddenState = GRUUpdate(hiddenState, gruInput);
 
-            var flowFeatures = _flowHead!.Forward(hiddenState);
-            var deltaFlow = _deltaFlowHead!.Forward(flowFeatures);
+            var flowFeatures = flowHead.Forward(hiddenState);
+            var deltaFlow = deltaFlowHead.Forward(flowFeatures);
 
             flow = AddTensors(flow, deltaFlow);
 
@@ -412,9 +416,13 @@ public class RAFT<T> : OpticalFlowBase<T>
     {
         ThrowIfNotInitialized();
 
-        var z = Engine.Sigmoid(_gruConvZ!.Forward(gruInput));
-        var r = Engine.Sigmoid(_gruConvR!.Forward(gruInput));
-        var hNew = ApplyTanh(_gruConvH!.Forward(gruInput));
+        var gruConvZ = _gruConvZ ?? throw new InvalidOperationException("GRU conv Z not initialized.");
+        var gruConvR = _gruConvR ?? throw new InvalidOperationException("GRU conv R not initialized.");
+        var gruConvH = _gruConvH ?? throw new InvalidOperationException("GRU conv H not initialized.");
+
+        var z = Engine.Sigmoid(gruConvZ.Forward(gruInput));
+        var r = Engine.Sigmoid(gruConvR.Forward(gruInput));
+        var hNew = ApplyTanh(gruConvH.Forward(gruInput));
 
         var ones = Tensor<T>.CreateDefault(z.Shape, NumOps.One);
         var oneMinusZ = Engine.TensorSubtract(ones, z);
@@ -561,13 +569,21 @@ public class RAFT<T> : OpticalFlowBase<T>
     {
         ThrowIfNotInitialized();
 
-        gradient = _upsampleConv!.Backward(gradient);
-        gradient = _deltaFlowHead!.Backward(gradient);
-        gradient = _flowHead!.Backward(gradient);
-        gradient = _gruConvH!.Backward(gradient);
-        gradient = _gruConvR!.Backward(gradient);
-        gradient = _gruConvZ!.Backward(gradient);
-        gradient = _correlationConv!.Backward(gradient);
+        var upsampleConv = _upsampleConv ?? throw new InvalidOperationException("Upsample conv not initialized.");
+        var deltaFlowHead = _deltaFlowHead ?? throw new InvalidOperationException("Delta flow head not initialized.");
+        var flowHead = _flowHead ?? throw new InvalidOperationException("Flow head not initialized.");
+        var gruConvH = _gruConvH ?? throw new InvalidOperationException("GRU conv H not initialized.");
+        var gruConvR = _gruConvR ?? throw new InvalidOperationException("GRU conv R not initialized.");
+        var gruConvZ = _gruConvZ ?? throw new InvalidOperationException("GRU conv Z not initialized.");
+        var correlationConv = _correlationConv ?? throw new InvalidOperationException("Correlation conv not initialized.");
+
+        gradient = upsampleConv.Backward(gradient);
+        gradient = deltaFlowHead.Backward(gradient);
+        gradient = flowHead.Backward(gradient);
+        gradient = gruConvH.Backward(gradient);
+        gradient = gruConvR.Backward(gradient);
+        gradient = gruConvZ.Backward(gradient);
+        gradient = correlationConv.Backward(gradient);
 
         for (int i = _contextEncoder.Count - 1; i >= 0; i--)
         {

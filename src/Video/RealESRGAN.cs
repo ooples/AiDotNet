@@ -213,6 +213,18 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     public UNetDiscriminator<T>? Discriminator { get; private set; }
 
     /// <summary>
+    /// Gets the generator, throwing if not initialized (native mode only).
+    /// </summary>
+    private RRDBNetGenerator<T> GeneratorRequired =>
+        Generator ?? throw new InvalidOperationException("Generator is not initialized. Ensure native mode is active.");
+
+    /// <summary>
+    /// Gets the discriminator, throwing if not initialized (native mode only).
+    /// </summary>
+    private UNetDiscriminator<T> DiscriminatorRequired =>
+        Discriminator ?? throw new InvalidOperationException("Discriminator is not initialized. Ensure native mode is active.");
+
+    /// <summary>
     /// Gets the upscaling factor for this model.
     /// </summary>
     public int UpscaleFactor => _scaleFactor;
@@ -556,7 +568,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         Tensor<T> fakeOutput = ProcessThroughDiscriminator(generatedImages);
 
         // Calculate discriminator loss
-        T discriminatorLoss = _realESRGANLoss!.CalculateDiscriminatorLoss(
+        var realESRGANLoss = _realESRGANLoss ?? throw new InvalidOperationException("RealESRGAN loss not initialized.");
+        T discriminatorLoss = realESRGANLoss.CalculateDiscriminatorLoss(
             realOutput.ToVector(), fakeOutput.ToVector());
         _lastDiscriminatorLoss = discriminatorLoss;
 
@@ -572,7 +585,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         Tensor<T> newFakeOutput = ProcessThroughDiscriminator(newGeneratedImages);
 
         // Calculate generator loss (reconstruction + GAN)
-        T generatorLoss = _realESRGANLoss.CalculateCombinedLoss(
+        T generatorLoss = realESRGANLoss.CalculateCombinedLoss(
             newGeneratedImages.ToVector(),
             highResTargets.ToVector(),
             newFakeOutput.ToVector());
@@ -605,27 +618,27 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var fakeLabels = CreateLabelTensor(fakeOutput.Shape[0], NumOps.Zero);
 
         // Calculate gradients for real images
-        var realGradient = Discriminator!.Backward(
+        var realGradient = DiscriminatorRequired.Backward(
             CalculateBCEGradient(realOutput, realLabels));
 
         // Calculate gradients for fake images
-        var fakeGradient = Discriminator.Backward(
+        var fakeGradient = DiscriminatorRequired.Backward(
             CalculateBCEGradient(fakeOutput, fakeLabels));
 
         // Update discriminator parameters using optimizer or fallback to default learning rate
         if (_discriminatorOptimizer != null)
         {
             // Use configured optimizer
-            var currentParams = Discriminator.GetParameters();
-            var gradients = Discriminator.GetParameterGradients();
+            var currentParams = DiscriminatorRequired.GetParameters();
+            var gradients = DiscriminatorRequired.GetParameterGradients();
             var updatedParams = _discriminatorOptimizer.UpdateParameters(currentParams, gradients);
-            Discriminator.SetParameters(updatedParams);
+            DiscriminatorRequired.SetParameters(updatedParams);
         }
         else
         {
             // Fallback to simple SGD with default learning rate
             T learningRate = NumOps.FromDouble(0.0001);
-            Discriminator.UpdateParameters(learningRate);
+            DiscriminatorRequired.UpdateParameters(learningRate);
         }
     }
 
@@ -652,22 +665,22 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
         // Backpropagate through generator
         ThrowIfNativeModeUnavailable();
-        Generator!.Backward(combinedGradient);
+        GeneratorRequired.Backward(combinedGradient);
 
         // Update generator parameters using optimizer or fallback to default learning rate
         if (_generatorOptimizer != null)
         {
             // Use configured optimizer
-            var currentParams = Generator.GetParameters();
-            var gradients = Generator.GetParameterGradients();
+            var currentParams = GeneratorRequired.GetParameters();
+            var gradients = GeneratorRequired.GetParameterGradients();
             var updatedParams = _generatorOptimizer.UpdateParameters(currentParams, gradients);
-            Generator.SetParameters(updatedParams);
+            GeneratorRequired.SetParameters(updatedParams);
         }
         else
         {
             // Fallback to simple SGD with default learning rate
             T learningRate = NumOps.FromDouble(0.0001);
-            Generator.UpdateParameters(learningRate);
+            GeneratorRequired.UpdateParameters(learningRate);
         }
     }
 
@@ -787,12 +800,12 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     private Tensor<T> ProcessThroughGenerator(Tensor<T> input)
     {
         ThrowIfNativeModeUnavailable();
-        var expectedShape = Generator!.GetInputShape();
+        var expectedShape = GeneratorRequired.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
         if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape, expectedShape))
         {
-            return Generator.Forward(input);
+            return GeneratorRequired.Forward(input);
         }
 
         // Handle batched input: input has more dimensions than expected
@@ -827,7 +840,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
                 var element = new Tensor<T>(spatialShape, new Vector<T>(elementData));
 
                 // Process through generator
-                var output = Generator.Forward(element);
+                var output = GeneratorRequired.Forward(element);
                 outputs.Add(output);
             }
 
@@ -875,10 +888,10 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
             // Reshape the tensor (reuse the data from input)
             var expandedInput = new Tensor<T>(expandedShape, new Vector<T>(input.Data.ToArray()));
-            return Generator.Forward(expandedInput);
+            return GeneratorRequired.Forward(expandedInput);
         }
 
-        return Generator.Forward(input);
+        return GeneratorRequired.Forward(input);
     }
 
     /// <summary>
@@ -887,12 +900,12 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     private Tensor<T> ProcessThroughDiscriminator(Tensor<T> input)
     {
         ThrowIfNativeModeUnavailable();
-        var expectedShape = Discriminator!.GetInputShape();
+        var expectedShape = DiscriminatorRequired.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
         if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape, expectedShape))
         {
-            return Discriminator.Forward(input);
+            return DiscriminatorRequired.Forward(input);
         }
 
         // Handle batched input
@@ -921,7 +934,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
                 var elementData = new T[elementsPerBatch];
                 Array.Copy(input.Data.ToArray(), b * elementsPerBatch, elementData, 0, elementsPerBatch);
                 var element = new Tensor<T>(spatialShape, new Vector<T>(elementData));
-                var output = Discriminator.Forward(element);
+                var output = DiscriminatorRequired.Forward(element);
                 outputs.Add(output);
             }
 
@@ -938,7 +951,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             return new Tensor<T>(outputShape, new Vector<T>(combinedData));
         }
 
-        return Discriminator.Forward(input);
+        return DiscriminatorRequired.Forward(input);
     }
 
     /// <summary>
@@ -1035,8 +1048,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         ThrowIfNativeModeUnavailable();
 
         // Split parameters between generator and discriminator
-        int generatorParams = Generator!.GetParameters().Length;
-        int discriminatorParams = Discriminator!.GetParameters().Length;
+        int generatorParams = GeneratorRequired.GetParameters().Length;
+        int discriminatorParams = DiscriminatorRequired.GetParameters().Length;
 
         if (parameters.Length != generatorParams + discriminatorParams)
         {
@@ -1047,8 +1060,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var genParams = parameters.Slice(0, generatorParams);
         var discParams = parameters.Slice(generatorParams, discriminatorParams);
 
-        Generator.SetParameters(genParams);
-        Discriminator.SetParameters(discParams);
+        GeneratorRequired.SetParameters(genParams);
+        DiscriminatorRequired.SetParameters(discParams);
     }
 
     /// <inheritdoc/>
@@ -1069,8 +1082,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
         if (_useNativeMode && Generator != null && Discriminator != null)
         {
-            additionalInfo["GeneratorParameters"] = Generator.GetParameters().Length;
-            additionalInfo["DiscriminatorParameters"] = Discriminator.GetParameters().Length;
+            additionalInfo["GeneratorParameters"] = GeneratorRequired.GetParameters().Length;
+            additionalInfo["DiscriminatorParameters"] = DiscriminatorRequired.GetParameters().Length;
         }
 
         if (!_useNativeMode && _onnxModelPath != null)
@@ -1100,7 +1113,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         writer.Write(_ganLambda);
 
         // Serialize generator parameters
-        var generatorParams = Generator!.GetParameters();
+        var generatorParams = GeneratorRequired.GetParameters();
         writer.Write(generatorParams.Length);
         for (int i = 0; i < generatorParams.Length; i++)
         {
@@ -1108,7 +1121,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         }
 
         // Serialize discriminator parameters
-        var discriminatorParams = Discriminator!.GetParameters();
+        var discriminatorParams = DiscriminatorRequired.GetParameters();
         writer.Write(discriminatorParams.Length);
         for (int i = 0; i < discriminatorParams.Length; i++)
         {
@@ -1137,7 +1150,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         {
             generatorParams[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        Generator!.SetParameters(new Vector<T>(generatorParams));
+        GeneratorRequired.SetParameters(new Vector<T>(generatorParams));
 
         // Load discriminator parameters
         int discriminatorParamCount = reader.ReadInt32();
@@ -1146,7 +1159,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         {
             discriminatorParams[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        Discriminator!.SetParameters(new Vector<T>(discriminatorParams));
+        DiscriminatorRequired.SetParameters(new Vector<T>(discriminatorParams));
     }
 
     /// <inheritdoc/>
