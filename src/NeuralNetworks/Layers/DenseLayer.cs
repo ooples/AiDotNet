@@ -1115,26 +1115,15 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Determine activation type and apply appropriate backward
         var fusedActivation = GetFusedActivationType();
 
-        if (fusedActivation is not FusedActivationType.None)
-        {
-            if (_lastPreActivationGpu is null && fusedActivation is FusedActivationType.ReLU or FusedActivationType.GELU or FusedActivationType.Swish or FusedActivationType.LeakyReLU)
-                throw new InvalidOperationException("DenseLayer: Cached GPU pre-activation not available for backward pass.");
-            if (_lastOutputGpu is null && fusedActivation is FusedActivationType.Sigmoid or FusedActivationType.Tanh or FusedActivationType.Softmax)
-                throw new InvalidOperationException("DenseLayer: Cached GPU output not available for backward pass.");
-        }
-
-        var preAct = _lastPreActivationGpu;
-        var lastOut = _lastOutputGpu;
-
         return fusedActivation switch
         {
-            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, preAct ?? throw new InvalidOperationException("Cached GPU pre-activation not available.")),
-            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, lastOut ?? throw new InvalidOperationException("Cached GPU output not available.")),
-            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, lastOut ?? throw new InvalidOperationException("Cached GPU output not available.")),
-            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(gradOutput, preAct ?? throw new InvalidOperationException("Cached GPU pre-activation not available.")),
-            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, preAct ?? throw new InvalidOperationException("Cached GPU pre-activation not available.")),
-            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, preAct ?? throw new InvalidOperationException("Cached GPU pre-activation not available."), 0.01f),
-            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(gradOutput, lastOut ?? throw new InvalidOperationException("Cached GPU output not available.")),
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!, 0.01f),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
             FusedActivationType.None => gradOutput, // Identity activation - gradient passes through unchanged
             _ => gradOutput // Fallback for unsupported activations
         };

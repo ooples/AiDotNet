@@ -169,9 +169,8 @@ public class PaddingLayer<T> : LayerBase<T>
             // 3. Inverse Permute
             if (needsPermute)
             {
-                if (invPermutation is null)
-                    throw new InvalidOperationException("PaddingLayer: Inverse permutation not computed.");
-                currentTensor = gpuEngine.PermuteGpu(paddedPermuted, invPermutation);
+                var invPerm = invPermutation ?? throw new InvalidOperationException("Inverse permutation has not been initialized.");
+                currentTensor = gpuEngine.PermuteGpu(paddedPermuted, invPerm);
                 paddedPermuted.Dispose();
             }
             else

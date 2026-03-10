@@ -75,6 +75,10 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         }
 
         // Process samples with exponential decay
+        var ewmaMeans = _ewmaMeans ?? throw new InvalidOperationException("EWMA means have not been initialized.");
+        var ewmaVars = _ewmaVars ?? throw new InvalidOperationException("EWMA variances have not been initialized.");
+        var ewmaCovariances = _ewmaCovariances ?? throw new InvalidOperationException("EWMA covariances have not been initialized.");
+
         for (int i = 0; i < n; i++)
         {
             double yi = NumOps.ToDouble(target[i]);
@@ -92,13 +96,13 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             {
                 double xij = NumOps.ToDouble(data[i, j]);
 
-                double oldMean = _ewmaMeans![j];
-                _ewmaMeans[j] = _decayFactor * _ewmaMeans[j] + (1 - _decayFactor) * xij;
-                _ewmaVars![j] = _decayFactor * _ewmaVars[j] +
-                    (1 - _decayFactor) * (xij - oldMean) * (xij - _ewmaMeans[j]);
+                double oldMean = ewmaMeans[j];
+                ewmaMeans[j] = _decayFactor * ewmaMeans[j] + (1 - _decayFactor) * xij;
+                ewmaVars[j] = _decayFactor * ewmaVars[j] +
+                    (1 - _decayFactor) * (xij - oldMean) * (xij - ewmaMeans[j]);
 
-                _ewmaCovariances![j] = _decayFactor * _ewmaCovariances[j] +
-                    (1 - _decayFactor) * (xij - _ewmaMeans[j]) * (yi - _ewmaTargetMean);
+                ewmaCovariances[j] = _decayFactor * ewmaCovariances[j] +
+                    (1 - _decayFactor) * (xij - ewmaMeans[j]) * (yi - _ewmaTargetMean);
             }
         }
 
@@ -106,10 +110,10 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _featureScores = new double[p];
         for (int j = 0; j < p; j++)
         {
-            double xVar = _ewmaVars![j];
+            double xVar = ewmaVars[j];
             double yVar = _ewmaTargetVar;
             if (xVar > 1e-10 && yVar > 1e-10)
-                _featureScores[j] = Math.Abs(_ewmaCovariances![j] / Math.Sqrt(xVar * yVar));
+                _featureScores[j] = Math.Abs(ewmaCovariances[j] / Math.Sqrt(xVar * yVar));
         }
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

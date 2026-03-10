@@ -47,7 +47,7 @@ public abstract class FederatedTrainerBase<TModel, TData, TMetadata, T> :
             throw new InvalidOperationException("Federated trainer is not initialized.");
         }
 
-        return _globalModel!;
+        return _globalModel ?? throw new InvalidOperationException("Global model has not been set.");
     }
 
     public void SetAggregationStrategy(IAggregationStrategy<TModel> strategy)

@@ -203,12 +203,14 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
         var result = new Matrix<T>(numSubjects, times.Length);
         double shape = 1.0 / NumOps.ToDouble(Scale);
 
+        var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
+
         for (int i = 0; i < numSubjects; i++)
         {
             // Compute linear predictor
             double eta = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < Coefficients!.Length; j++)
-                eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
+            for (int j = 0; j < coefficients.Length; j++)
+                eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
             double scale = Math.Exp(eta);
 
@@ -231,14 +233,15 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
+        var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
         var result = new Vector<T>(x.Rows);
         double shape = 1.0 / NumOps.ToDouble(Scale);
 
         for (int i = 0; i < x.Rows; i++)
         {
             double eta = 0;
-            for (int j = 0; j < Coefficients!.Length; j++)
-                eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
+            for (int j = 0; j < coefficients.Length; j++)
+                eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
             // AFT acceleration factor: exp(-κ * Σβⱼxⱼ)
             // This is equivalent to hazard ratio for Weibull
@@ -276,14 +279,15 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
+        var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
         var result = new Vector<T>(input.Rows);
         double shape = 1.0 / NumOps.ToDouble(Scale);
 
         for (int i = 0; i < input.Rows; i++)
         {
             double eta = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < Coefficients!.Length; j++)
-                eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(input[i, j]);
+            for (int j = 0; j < coefficients.Length; j++)
+                eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(input[i, j]);
 
             double scale = Math.Exp(eta);
             // Median survival time: t_median = scale * (ln(2))^(1/shape)

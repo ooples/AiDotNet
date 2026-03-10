@@ -1164,9 +1164,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
 
         if (hasVectorActivation)
         {
-            if (_vectorActivation is null)
-                throw new InvalidOperationException("RestrictedBoltzmannMachine: Vector activation is null despite hasVectorActivation flag.");
-            writer.Write(_vectorActivation.GetType().FullName ?? "Unknown");
+            writer.Write((_vectorActivation ?? throw new InvalidOperationException("Vector activation not initialized.")).GetType().FullName ?? "Unknown");
         }
         else if (_scalarActivation != null)
         {

@@ -63,6 +63,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         public Tensor<T>? CachedH1Bn;
         public Tensor<T>? CachedH1Relu;
         public Tensor<T>? CachedProjection;
+        public Tensor<T>? CachedPredictorInput; // The actual input passed to Predict (post-BN2)
         public Tensor<T>? CachedPredH1;
         public Tensor<T>? CachedPredH1Bn;
         public Tensor<T>? CachedPredH1Relu;
@@ -97,6 +98,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             CachedH1Bn = null;
             CachedH1Relu = null;
             CachedProjection = null;
+            CachedPredictorInput = null;
             CachedPredH1 = null;
             CachedPredH1Bn = null;
             CachedPredH1Relu = null;
@@ -255,13 +257,23 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         if (branchIndex >= 0)
         {
             if (branchIndex > 1)
-                throw new ArgumentOutOfRangeException(nameof(branchIndex), "Branch index must be 0 or 1.");
+            {
+                throw new ArgumentOutOfRangeException(nameof(branchIndex),
+                    "Branch index must be -1, 0, or 1.");
+            }
             ctx = branchIndex == 0 ? _branch1 : _branch2;
         }
-        else
+        else if (branchIndex == -1)
         {
             ctx = _nextBranch == 0 ? _branch2 : _branch1;
         }
+        else
+        {
+            throw new ArgumentOutOfRangeException(nameof(branchIndex),
+                "Branch index must be -1, 0, or 1.");
+        }
+
+        ctx.CachedPredictorInput = projection;
 
         // Predictor: Linear -> BN -> ReLU -> Linear
         ctx.CachedPredH1 = Linear(projection, PredWeight1, PredBias1, _projectionDim, _predictorHiddenDim);
@@ -611,7 +623,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             }
 
             // PredWeight1/PredBias1 gradients
-            if (ctx.CachedProjection is not null)
+            if (ctx.CachedPredictorInput is not null)
             {
                 var gradBeforePredBn1 = LinearBackward(originalGradOutput, PredWeight2, _predictorHiddenDim, _projectionDim);
                 if (ctx.CachedPredH1Bn is not null)
@@ -628,7 +640,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
                         T sum = NumOps.Zero;
                         for (int b = 0; b < batchSize; b++)
                         {
-                            sum = NumOps.Add(sum, NumOps.Multiply(ctx.CachedProjection[b, i], gradAtPredH1[b, j]));
+                            sum = NumOps.Add(sum, NumOps.Multiply(ctx.CachedPredictorInput[b, i], gradAtPredH1[b, j]));
                         }
                         grads[predWeight1Offset + i * _predictorHiddenDim + j] = NumOps.Multiply(sum, invBatchSize);
                     }

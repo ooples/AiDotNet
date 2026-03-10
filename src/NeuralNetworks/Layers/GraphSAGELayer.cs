@@ -591,8 +591,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T> BackpropThroughAggregation(Tensor<T> aggGradient, int batchSize, int numNodes)
     {
         // Use the stored batched adjacency matrix for backward pass
-        var adjBatched = _adjForBatch ?? _adjacencyMatrix
-            ?? throw new InvalidOperationException("Adjacency matrix not set. Call Forward before Backward.");
+        var adjBatched = _adjForBatch ?? _adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix has not been initialized.");
 
         switch (_aggregatorType)
         {

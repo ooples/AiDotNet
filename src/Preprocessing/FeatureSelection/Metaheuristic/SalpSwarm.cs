@@ -199,6 +199,7 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     private double EvaluateFitness(double[,] positions, int idx, int p)
     {
+        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been computed.");
         double fitness = 0;
         double selected = 0;
 
@@ -206,7 +207,7 @@ public class SalpSwarm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             if (positions[idx, j] > 0.5)
             {
-                fitness += _featureScores![j];
+                fitness += featureScores[j];
                 selected++;
             }
         }

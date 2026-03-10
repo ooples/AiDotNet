@@ -2447,14 +2447,13 @@ public class LSTMLayer<T> : LayerBase<T>
                 {
                     velocity = new Tensor<T>(param.Shape);
                     velocity.Fill(NumOps.Zero);
-                    if (gpuEngine is null)
-                        throw new InvalidOperationException("LSTMLayer: GPU engine is null despite useGpu being true.");
-                    gpuEngine.RegisterPersistentTensor(velocity, PersistentTensorRole.OptimizerState);
+                    var gpu1 = gpuEngine ?? throw new InvalidOperationException("GPU engine is not available.");
+                    gpu1.RegisterPersistentTensor(velocity, PersistentTensorRole.OptimizerState);
                     _velocities[paramName] = velocity;
                 }
 
-                (gpuEngine ?? throw new InvalidOperationException("LSTMLayer: GPU engine is null despite useGpu being true."))
-                    .SgdMomentumUpdateGpu(param, gradient, velocity, lr, 0.0f, 0.0f);
+                var gpu2 = gpuEngine ?? throw new InvalidOperationException("GPU engine is not available.");
+                gpu2.SgdMomentumUpdateGpu(param, gradient, velocity, lr, 0.0f, 0.0f);
             }
             else
             {

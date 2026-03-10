@@ -244,12 +244,14 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
         var result = new Matrix<T>(numSubjects, times.Length);
         double sigma = NumOps.ToDouble(Scale);
 
+        var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
+
         for (int i = 0; i < numSubjects; i++)
         {
             // Compute linear predictor (μ_i)
             double mu = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < Coefficients!.Length; j++)
-                mu += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
+            for (int j = 0; j < coefficients.Length; j++)
+                mu += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
             for (int t = 0; t < times.Length; t++)
             {
@@ -270,13 +272,14 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
+        var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
         var result = new Vector<T>(x.Rows);
 
         for (int i = 0; i < x.Rows; i++)
         {
             double eta = 0;
-            for (int j = 0; j < Coefficients!.Length; j++)
-                eta += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(x[i, j]);
+            for (int j = 0; j < coefficients.Length; j++)
+                eta += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(x[i, j]);
 
             // For log-normal, the acceleration factor is exp(-η)
             result[i] = NumOps.FromDouble(Math.Exp(-eta));
@@ -316,11 +319,13 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
 
         var result = new Vector<T>(input.Rows);
 
+        var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
+
         for (int i = 0; i < input.Rows; i++)
         {
             double mu = NumOps.ToDouble(Intercept);
-            for (int j = 0; j < Coefficients!.Length; j++)
-                mu += NumOps.ToDouble(Coefficients[j]) * NumOps.ToDouble(input[i, j]);
+            for (int j = 0; j < coefficients.Length; j++)
+                mu += NumOps.ToDouble(coefficients[j]) * NumOps.ToDouble(input[i, j]);
 
             // Median survival time for log-normal: exp(μ)
             double median = Math.Exp(mu);

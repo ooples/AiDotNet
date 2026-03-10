@@ -369,10 +369,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyScalarActivation(Tensor<T> input)
     {
-        if (ScalarActivation is null)
-            throw new InvalidOperationException("ActivationLayer: ScalarActivation not configured.");
-
-        return ScalarActivation.Activate(input);
+        var activation = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
+        return activation.Activate(input);
     }
 
     /// <summary>
@@ -387,10 +385,8 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyVectorActivation(Tensor<T> input)
     {
-        if (VectorActivation is null)
-            throw new InvalidOperationException("ActivationLayer: VectorActivation not configured.");
-
-        return VectorActivation.Activate(input);
+        var activation = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
+        return activation.Activate(input);
     }
 
     /// <summary>
@@ -405,12 +401,9 @@ public class ActivationLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardScalarActivation(Tensor<T> outputGradient)
     {
-        if (ScalarActivation is null)
-            throw new InvalidOperationException("ActivationLayer: ScalarActivation not configured.");
-        if (_lastInput is null)
-            throw new InvalidOperationException("ActivationLayer: No cached input. Call Forward() before Backward().");
-
-        return ScalarActivation.Backward(_lastInput, outputGradient);
+        var scalarAct = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
+        var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
+        return scalarAct.Backward(lastInput, outputGradient);
     }
 
 
@@ -445,12 +438,9 @@ public class ActivationLayer<T> : LayerBase<T>
     private Tensor<T> BackwardVectorActivation(Tensor<T> outputGradient)
     {
         // Now unified via IVectorActivationFunction.Backward
-        if (VectorActivation is null)
-            throw new InvalidOperationException("ActivationLayer: VectorActivation not configured.");
-        if (_lastInput is null)
-            throw new InvalidOperationException("ActivationLayer: No cached input. Call Forward() before Backward().");
-
-        return VectorActivation.Backward(_lastInput, outputGradient);
+        var vecAct = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
+        var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
+        return vecAct.Backward(lastInput, outputGradient);
     }
 
     /// <summary>
@@ -735,29 +725,23 @@ public class ActivationLayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
 
-        if (_lastInputGpu is null)
+        if (_lastInputGpu == null)
             throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
 
         if (!TryGetFusedActivationType(out var fusedType))
             throw new InvalidOperationException(
                 $"Activation function '{GetActivationTypeName()}' does not support GPU backward pass.");
 
-        if (_lastOutputGpu is null && fusedType is FusedActivationType.Sigmoid or FusedActivationType.Tanh or FusedActivationType.Softmax)
-            throw new InvalidOperationException("ActivationLayer: Cached GPU output not available for backward pass.");
-
         // Apply appropriate activation backward based on type
-        var cachedInput = _lastInputGpu;
-        var cachedOutput = _lastOutputGpu;
-
         return fusedType switch
         {
-            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, cachedInput ?? throw new InvalidOperationException("Cached GPU input not available.")),
-            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, cachedOutput ?? throw new InvalidOperationException("Cached GPU output not available.")),
-            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, cachedOutput ?? throw new InvalidOperationException("Cached GPU output not available.")),
-            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(outputGradient, cachedInput ?? throw new InvalidOperationException("Cached GPU input not available.")),
-            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, cachedInput ?? throw new InvalidOperationException("Cached GPU input not available.")),
-            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, cachedInput ?? throw new InvalidOperationException("Cached GPU input not available."), 0.01f),
-            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(outputGradient, cachedOutput ?? throw new InvalidOperationException("Cached GPU output not available.")),
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, _lastInputGpu),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(outputGradient, _lastInputGpu),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, _lastInputGpu),
+            FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, _lastInputGpu, 0.01f),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(outputGradient, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
             _ => outputGradient // Fallback: gradient passes through unchanged
         };
     }

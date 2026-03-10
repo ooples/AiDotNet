@@ -38,7 +38,7 @@ namespace AiDotNet.Video.ActionRecognition;
 /// <b>Technical Details:</b>
 /// - Two-pathway design with lateral connections
 /// - Slow pathway: T frames, C channels
-/// - Fast pathway: αT frames, βC channels (α=8, β=1/8 typically)
+/// - Fast pathway: alphaT frames, betaC channels (alpha=8, beta=1/8 typically)
 /// - Lateral connections fuse information between pathways
 /// </para>
 /// <para>
@@ -693,9 +693,9 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         // Training component type names for restoration
         writer.Write(_lossFunction.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
-            "Cannot resolve AssemblyQualifiedName for loss function type."));
+            $"Cannot resolve AssemblyQualifiedName for loss function type '{_lossFunction.GetType().FullName}'."));
         writer.Write(_probabilityActivation.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
-            "Cannot resolve AssemblyQualifiedName for activation function type."));
+            $"Cannot resolve AssemblyQualifiedName for activation function type '{_probabilityActivation.GetType().FullName}'."));
 
         // Optimizer type (can be null for ONNX mode or after certain operations)
         writer.Write(_optimizer is not null);
@@ -763,10 +763,8 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             string optimizerTypeName = reader.ReadString();
             var optimizerType = Type.GetType(optimizerTypeName);
 
-            // Optimizer requires 'this' network instance, so we need to handle construction specially
             if (optimizerType != null)
             {
-                // Try to find constructor that takes IFullModel parameter (used by optimizers)
                 var constructor = optimizerType.GetConstructor([typeof(IFullModel<T, Tensor<T>, Tensor<T>>)]);
                 if (constructor != null)
                 {

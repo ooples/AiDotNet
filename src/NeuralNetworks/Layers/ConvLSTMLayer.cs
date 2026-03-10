@@ -1674,9 +1674,6 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        if (_lastInput is null || _lastHiddenState is null || _lastCellState is null)
-            throw new InvalidOperationException("ConvLSTMLayer: No cached state. Call Forward() before Backward().");
-
         // Normalize outputGradient to 5D to match canonical _lastInput shape
         var outGrad5D = outputGradient;
         if (_originalInputShape != null && _originalInputShape.Length == 4)
@@ -1693,10 +1690,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             outGrad5D = outputGradient.Reshape([flatBatch, outputGradient.Shape[_originalInputShape.Length - 4], outputGradient.Shape[_originalInputShape.Length - 3], outputGradient.Shape[_originalInputShape.Length - 2], outputGradient.Shape[_originalInputShape.Length - 1]]);
         }
 
-        int batchSize = _lastInput.Shape[0];
-        int timeSteps = _lastInput.Shape[1];
+        var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
+        int batchSize = lastInput.Shape[0];
+        int timeSteps = lastInput.Shape[1];
 
-        var dInput = new Tensor<T>(_lastInput.Shape);
+        var dInput = new Tensor<T>(lastInput.Shape);
         var dWeightsFi = new Tensor<T>(_weightsFi.Shape);
         var dWeightsIi = new Tensor<T>(_weightsIi.Shape);
         var dWeightsCi = new Tensor<T>(_weightsCi.Shape);
@@ -1710,15 +1708,17 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var dBiasC = new Tensor<T>(_biasC.Shape);
         var dBiasO = new Tensor<T>(_biasO.Shape);
 
-        var dNextH = new Tensor<T>(_lastHiddenState.Shape);
-        var dNextC = new Tensor<T>(_lastCellState.Shape);
+        var lastHiddenState = _lastHiddenState ?? throw new InvalidOperationException("_lastHiddenState has not been initialized.");
+        var dNextH = new Tensor<T>(lastHiddenState.Shape);
+        var lastCellState = _lastCellState ?? throw new InvalidOperationException("_lastCellState has not been initialized.");
+        var dNextC = new Tensor<T>(lastCellState.Shape);
 
         for (int t = timeSteps - 1; t >= 0; t--)
         {
             var currentDh = outGrad5D.GetSlice(t).Add(dNextH);
-            var xt = _lastInput.GetSlice(t);
-            var prevH = t > 0 ? _lastHiddenState.GetSlice(t - 1) : new Tensor<T>(_lastHiddenState.Shape);
-            var prevC = t > 0 ? _lastCellState.GetSlice(t - 1) : new Tensor<T>(_lastCellState.Shape);
+            var xt = lastInput.GetSlice(t);
+            var prevH = t > 0 ? lastHiddenState.GetSlice(t - 1) : new Tensor<T>(lastHiddenState.Shape);
+            var prevC = t > 0 ? lastCellState.GetSlice(t - 1) : new Tensor<T>(lastCellState.Shape);
 
             var (dxt, dprevH, dprevC, cellGrads) = BackwardStep(xt, prevH, prevC, currentDh, dNextC);
 
@@ -1795,15 +1795,13 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     {
         if (UsingVectorActivation)
         {
-            if (VectorActivation is null)
-                throw new InvalidOperationException("ConvLSTMLayer: VectorActivation not configured.");
-            return VectorActivation.Derivative(input);
+            var vecActivation = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
+            return vecActivation.Derivative(input);
         }
         else
         {
-            if (ScalarActivation is null)
-                throw new InvalidOperationException("ConvLSTMLayer: ScalarActivation not configured.");
-            return input.Transform((x, _) => ScalarActivation.Derivative(x));
+            var scalarActivation = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
+            return input.Transform((x, _) => scalarActivation.Derivative(x));
         }
     }
 

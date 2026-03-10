@@ -292,11 +292,12 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var hidden1 = BatchedMatMul3Dx2D(_lastAggregated, _mlpWeights1, batchSize, numNodes, _inputFeatures, _mlpHiddenDim);
         var bias1Broadcast = BroadcastBias(_mlpBias1, batchSize, numNodes);
         _lastMlpHiddenPreRelu = Engine.TensorAdd(hidden1, bias1Broadcast);
+        var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu;
 
         // Apply ReLU activation using Engine operations
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
         zeroTensor.Fill(NumOps.Zero);
-        _lastMlpHidden = Engine.TensorMax(_lastMlpHiddenPreRelu, zeroTensor);
+        _lastMlpHidden = Engine.TensorMax(lastMlpHiddenPreRelu, zeroTensor);
 
         // Step 4: Apply MLP - Second layer (3D @ 2D requires reshape pattern)
         var hidden2 = BatchedMatMul3Dx2D(_lastMlpHidden, _mlpWeights2, batchSize, numNodes, _mlpHiddenDim, _outputFeatures);
@@ -390,10 +391,11 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var hiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
 
         // Gradient through ReLU: element-wise vectorized
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu;
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
         Engine.TensorFill(zeroTensor, NumOps.Zero);
-        var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        var reluMask = Engine.TensorGreaterThan(lastMlpHiddenPreRelu, zeroTensor);
+        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
         Engine.TensorFill(oneTensor, NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var hiddenGrad = Engine.TensorMultiply(hiddenGradPre, reluDeriv);
@@ -611,12 +613,11 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var hiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
 
         // Gradient through ReLU: fully vectorized element-wise operations
-        if (_lastMlpHiddenPreRelu is null)
-            throw new InvalidOperationException("GraphIsomorphismLayer: No cached state. Call Forward() before Backward().");
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu ?? throw new InvalidOperationException("_lastMlpHiddenPreRelu has not been initialized.");
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
         Engine.TensorFill(zeroTensor, NumOps.Zero);
-        var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        var reluMask = Engine.TensorGreaterThan(lastMlpHiddenPreRelu, zeroTensor);
+        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
         Engine.TensorFill(oneTensor, NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var hiddenGrad = Engine.TensorMultiply(hiddenGradPre, reluDeriv);

@@ -159,7 +159,8 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 if (selected.Contains(j))
                     continue;
 
-                double tau = Math.Pow(_pheromones![j], _alpha);
+                var pheromonesLocal = _pheromones ?? throw new InvalidOperationException("Pheromones have not been initialized.");
+                double tau = Math.Pow(pheromonesLocal[j], _alpha);
                 double eta = Math.Pow(heuristic[j], _beta);
                 probabilities[j] = tau * eta;
                 sum += probabilities[j];

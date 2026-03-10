@@ -588,6 +588,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     /// </summary>
     private string GenerateCaptionAutoregressive(Vector<T> videoContext, int maxLength)
     {
+        var captionHead = _captionHead ?? throw new InvalidOperationException("Caption head has not been initialized.");
         var generatedTokens = new List<int>();
         const int BOS_TOKEN = 49406; // CLIP tokenizer BOS
         const int EOS_TOKEN = 49407; // CLIP tokenizer EOS
@@ -611,7 +612,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             var combinedContext = CombineVideoTextContext(contextTensor, sequenceEmbedding);
 
             // Project to vocabulary logits through caption head
-            var logits = (_captionHead ?? throw new InvalidOperationException("VideoCLIPNeuralNetwork: Caption head not initialized.")).Forward(combinedContext);
+            var logits = captionHead.Forward(combinedContext);
 
             // Get logits for the last position
             int vocabSize = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Shape[0];
@@ -819,6 +820,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         string question,
         int maxLength)
     {
+        var captionHead = _captionHead ?? throw new InvalidOperationException("Caption head has not been initialized.");
         var generatedTokens = new List<int>();
         const int BOS_TOKEN = 49406;
         const int EOS_TOKEN = 49407;
@@ -866,7 +868,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             var decoderInput = CombineVideoTextContext(combinedContextTensor, sequenceEmbedding);
 
             // Project to vocabulary logits
-            var logits = (_captionHead ?? throw new InvalidOperationException("VideoCLIPNeuralNetwork: Caption head not initialized.")).Forward(decoderInput);
+            var logits = captionHead.Forward(decoderInput);
 
             // Get logits for the last position
             int vocabSize = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Shape[0];

@@ -111,6 +111,13 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     /// </summary>
     public void TrainOnSequences(Tensor<T> sequences, Vector<T> labels)
     {
+        if (_options.NumTrees <= 0)
+        {
+            throw new ArgumentException(
+                $"NumTrees must be greater than 0, but was {_options.NumTrees}.",
+                nameof(_options));
+        }
+
         ValidateSequenceInput(sequences, labels);
 
         int numSamples = sequences.Shape[0];
@@ -361,12 +368,14 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize TimeSeriesForestClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize TimeSeriesForestClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize TimeSeriesForestClassifier: invalid model payload.");
 
         SequenceLength = jObj["SequenceLength"]?.ToObject<int>() ?? 0;
         NumChannels = jObj["NumChannels"]?.ToObject<int>() ?? 1;
@@ -399,11 +408,11 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
                 };
 
                 var rootToken = jObj[$"Tree_{i}_Root"];
-                if (rootToken is JObject rootObj)
-                {
-                    tree.Root = DeserializeTreeNode(rootObj);
-                }
+                if (rootToken is not JObject rootObj)
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize TimeSeriesForestClassifier: Tree_{i} has no root node.");
 
+                tree.Root = DeserializeTreeNode(rootObj);
                 _trees.Add(tree);
             }
         }

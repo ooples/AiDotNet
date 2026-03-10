@@ -554,10 +554,6 @@ public class S4DLayer<T> : LayerBase<T>
     private Tensor<T> ComplexRecurrentScanBackward(
         Tensor<T> dOutput, Tensor<T> x, int batchSize, int seqLen)
     {
-        var hiddenStatesReal = _lastHiddenStatesReal
-            ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var hiddenStatesImag = _lastHiddenStatesImag
-            ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
         var dX = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
 
         // Initialize gradient accumulators
@@ -599,14 +595,18 @@ public class S4DLayer<T> : LayerBase<T>
         var dhReal = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
         var dhImag = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
 
+        // Hoist invariant null guards out of the loop
+        var lastHiddenReal = _lastHiddenStatesReal ?? throw new InvalidOperationException("_lastHiddenStatesReal has not been initialized.");
+        var lastHiddenImag = _lastHiddenStatesImag ?? throw new InvalidOperationException("_lastHiddenStatesImag has not been initialized.");
+
         for (int t = seqLen - 1; t >= 0; t--)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);
             var dOut_t = dOutput.GetSliceAlongDimension(t, 1);
-            var hReal_t = hiddenStatesReal.GetSliceAlongDimension(t + 1, 1);
-            var hImag_t = hiddenStatesImag.GetSliceAlongDimension(t + 1, 1);
-            var hReal_prev = hiddenStatesReal.GetSliceAlongDimension(t, 1);
-            var hImag_prev = hiddenStatesImag.GetSliceAlongDimension(t, 1);
+            var hReal_t = lastHiddenReal.GetSliceAlongDimension(t + 1, 1);
+            var hImag_t = lastHiddenImag.GetSliceAlongDimension(t + 1, 1);
+            var hReal_prev = lastHiddenReal.GetSliceAlongDimension(t, 1);
+            var hImag_prev = lastHiddenImag.GetSliceAlongDimension(t, 1);
 
             var dOut_t_3D = Engine.TensorExpandDims(dOut_t, 2);
 

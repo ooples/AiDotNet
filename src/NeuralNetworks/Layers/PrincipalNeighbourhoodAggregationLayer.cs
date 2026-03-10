@@ -749,11 +749,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         {
             case PNAAggregator.Sum:
                 // Sum aggregation: A @ X (message passing via adjacency matrix)
-                return Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")), transformed);
+                return Engine.TensorMatMul(_adjacencyMatrix!, transformed);
 
             case PNAAggregator.Mean:
                 // Mean aggregation: (A @ X) / degree
-                var sumAgg = Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")), transformed);
+                var sumAgg = Engine.TensorMatMul(_adjacencyMatrix!, transformed);
                 // Expand degrees for broadcasting: [batch, nodes] -> [batch, nodes, 1]
                 var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
                 return Engine.TensorBroadcastDivide(sumAgg, degreesExpanded);
@@ -771,7 +771,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                 return ComputeStdDevAggregation(transformed, safeDegrees, numNodes);
 
             default:
-                return Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")), transformed);
+                return Engine.TensorMatMul(_adjacencyMatrix!, transformed);
         }
     }
 
@@ -790,7 +790,8 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var tiled = Engine.TensorTile(expanded, [1, numNodes, 1, 1]);
 
         // Create mask from adjacency: [batch, nodes, nodes, 1]
-        var adjExpanded = (_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")).Reshape([batchSize, numNodes, numNodes, 1]);
+        var adjacencyMatrix = _adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix has not been initialized.");
+        var adjExpanded = adjacencyMatrix.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with -inf
         var negInf = new Tensor<T>(tiled.Shape);
@@ -824,7 +825,8 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var tiled = Engine.TensorTile(expanded, [1, numNodes, 1, 1]);
 
         // Create mask from adjacency: [batch, nodes, nodes, 1]
-        var adjExpanded = (_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")).Reshape([batchSize, numNodes, numNodes, 1]);
+        var adjacencyMatrix = _adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix has not been initialized.");
+        var adjExpanded = adjacencyMatrix.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with +inf
         var posInf = new Tensor<T>(tiled.Shape);
@@ -853,13 +855,13 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         int batchSize = transformed.Shape[0];
 
         // Mean: E[X] = (A @ X) / degree
-        var sumAgg = Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")), transformed);
+        var sumAgg = Engine.TensorMatMul(_adjacencyMatrix!, transformed);
         var degreesExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
         var mean = Engine.TensorBroadcastDivide(sumAgg, degreesExpanded);
 
         // E[X^2] = (A @ X^2) / degree
         var transformedSquared = Engine.TensorMultiply(transformed, transformed);
-        var sumSquared = Engine.TensorMatMul((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")), transformedSquared);
+        var sumSquared = Engine.TensorMatMul(_adjacencyMatrix!, transformedSquared);
         var meanSquared = Engine.TensorBroadcastDivide(sumSquared, degreesExpanded);
 
         // Variance = E[X^2] - E[X]^2
@@ -1072,6 +1074,13 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var transformedGrad = new Tensor<T>([batchSize, numNodes, _inputFeatures]);
         transformedGrad.Fill(NumOps.Zero);
 
+        // Hoist loop-invariant computations
+        var adjMatrix = _adjacencyMatrix ?? throw new InvalidOperationException("_adjacencyMatrix has not been initialized.");
+        var adjT = SwapLastTwoAxes(adjMatrix);
+        var lastDegrees = _lastDegrees ?? throw new InvalidOperationException("_lastDegrees has not been initialized.");
+        var safeDegrees = Engine.TensorMax(lastDegrees, NumOps.One);
+        var degExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
+
         // Split aggregatedGrad by aggregator-scaler combinations
         int featureIdx = 0;
 
@@ -1089,14 +1098,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
                 // Backprop through aggregation
                 // For mean/sum: gradient flows back through adjacency transpose
-                var adjT = SwapLastTwoAxes((_adjacencyMatrix ?? throw new InvalidOperationException("PNALayer: Adjacency matrix not set.")));
                 var aggGrad = Engine.TensorMatMul(adjT, scalerGrad);
 
                 // For mean, also divide by degree
                 if (_aggregators[aggIdx] == PNAAggregator.Mean)
                 {
-                    var safeDegrees = Engine.TensorMax(_lastDegrees!, NumOps.One);
-                    var degExpanded = safeDegrees.Reshape([batchSize, numNodes, 1]);
                     aggGrad = Engine.TensorBroadcastDivide(aggGrad, degExpanded);
                 }
 
@@ -1342,13 +1348,16 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
     /// </summary>
     private void ComputeGradientsViaEngine(Tensor<T> activationGradient, int batchSize, int numNodes)
     {
+        var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
+        var lastAggregated = _lastAggregated ?? throw new InvalidOperationException("_lastAggregated has not been initialized.");
+
         // Gradient through self-loop
         _selfWeightsGradient = new Tensor<T>([_inputFeatures, _outputFeatures]);
         _selfWeightsGradient.Fill(NumOps.Zero);
 
         for (int b = 0; b < batchSize; b++)
         {
-            var inputSlice = Engine.TensorSlice(_lastInput!, [b, 0, 0], [1, numNodes, _inputFeatures])
+            var inputSlice = Engine.TensorSlice(lastInput, [b, 0, 0], [1, numNodes, _inputFeatures])
                 .Reshape([numNodes, _inputFeatures]);
             var gradSlice = Engine.TensorSlice(activationGradient, [b, 0, 0], [1, numNodes, _outputFeatures])
                 .Reshape([numNodes, _outputFeatures]);
@@ -1381,10 +1390,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var mlpHiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
 
         // ReLU derivative
-        var zeroTensor = new Tensor<T>((_lastMlpHiddenPreRelu ?? throw new InvalidOperationException("PNALayer: No cached state. Call Forward() before Backward().")).Shape);
+        var mlpHiddenPreRelu = _lastMlpHiddenPreRelu ?? throw new InvalidOperationException("_lastMlpHiddenPreRelu has not been initialized.");
+        var zeroTensor = new Tensor<T>(mlpHiddenPreRelu.Shape);
         zeroTensor.Fill(NumOps.Zero);
-        var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape);
+        var reluMask = Engine.TensorGreaterThan(mlpHiddenPreRelu, zeroTensor);
+        var oneTensor = new Tensor<T>(mlpHiddenPreRelu.Shape);
         oneTensor.Fill(NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var mlpHiddenGrad = Engine.TensorMultiply(mlpHiddenGradPre, reluDeriv);
@@ -1397,7 +1407,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         for (int b = 0; b < batchSize; b++)
         {
-            var aggSlice = Engine.TensorSlice(_lastAggregated!, [b, 0, 0], [1, numNodes, _combinedFeatures])
+            var aggSlice = Engine.TensorSlice(lastAggregated, [b, 0, 0], [1, numNodes, _combinedFeatures])
                 .Reshape([numNodes, _combinedFeatures]);
             var gradSlice = Engine.TensorSlice(mlpHiddenGrad, [b, 0, 0], [1, numNodes, _hiddenDim])
                 .Reshape([numNodes, _hiddenDim]);

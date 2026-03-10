@@ -701,15 +701,6 @@ public class RetNetLayer<T> : LayerBase<T>
         Tensor<T> dNormed, Tensor<T> retentionInput,
         int batchSize, int seqLen)
     {
-        if (_lastGroupNormMean is null || _lastGroupNormVar is null ||
-            _groupNormScaleGradient is null || _groupNormBiasGradient is null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass. Cached group norm state is not available.");
-
-        var gnMean = _lastGroupNormMean;
-        var gnVar = _lastGroupNormVar;
-        var gnScaleGrad = _groupNormScaleGradient;
-        var gnBiasGrad = _groupNormBiasGradient;
-
         var dInput = new Tensor<T>(retentionInput.Shape);
         T eps = NumOps.FromDouble(1e-6);
 
@@ -720,8 +711,8 @@ public class RetNetLayer<T> : LayerBase<T>
                 for (int h = 0; h < _numHeads; h++)
                 {
                     int dimStart = h * _headDimension;
-                    T mean = gnMean[new[] { bi, t, h }];
-                    T variance = gnVar[new[] { bi, t, h }];
+                    T mean = (_lastGroupNormMean ?? throw new InvalidOperationException("_lastGroupNormMean has not been initialized."))[new[] { bi, t, h }];
+                    T variance = (_lastGroupNormVar ?? throw new InvalidOperationException("_lastGroupNormVar has not been initialized."))[new[] { bi, t, h }];
                     T invStd = NumOps.FromDouble(1.0 / Math.Sqrt(
                         NumOps.ToDouble(NumOps.Add(variance, eps))));
                     T invHD = NumOps.FromDouble(1.0 / _headDimension);
@@ -740,10 +731,10 @@ public class RetNetLayer<T> : LayerBase<T>
                         T scale = _groupNormScale[new[] { h, d }];
 
                         // dScale += dy * xHat, dBias += dy
-                        gnScaleGrad[new[] { h, d }] = NumOps.Add(
+                        (_groupNormScaleGradient ?? throw new InvalidOperationException("_groupNormScaleGradient has not been initialized."))[new[] { h, d }] = NumOps.Add(
                             _groupNormScaleGradient[new[] { h, d }],
                             NumOps.Multiply(dy, xHat));
-                        gnBiasGrad[new[] { h, d }] = NumOps.Add(
+                        (_groupNormBiasGradient ?? throw new InvalidOperationException("_groupNormBiasGradient has not been initialized."))[new[] { h, d }] = NumOps.Add(
                             _groupNormBiasGradient[new[] { h, d }], dy);
 
                         // For input gradient, dy is scaled by the norm scale
@@ -800,33 +791,19 @@ public class RetNetLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
-
-        var qBGrad = _queryBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var kWGrad = _keyWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var kBGrad = _keyBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var vWGrad = _valueWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var vBGrad = _valueBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var gammasGrad = _gammasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var outGateWGrad = _outputGateWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var outGateBGrad = _outputGateBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var outProjWGrad = _outputProjectionWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var outProjBGrad = _outputProjectionBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var gnScaleGradient = _groupNormScaleGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var gnBiasGradient = _groupNormBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-
         _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
-        _queryBias = Engine.TensorAdd(_queryBias, Engine.TensorMultiplyScalar(qBGrad, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(kWGrad, negLR));
-        _keyBias = Engine.TensorAdd(_keyBias, Engine.TensorMultiplyScalar(kBGrad, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(vWGrad, negLR));
-        _valueBias = Engine.TensorAdd(_valueBias, Engine.TensorMultiplyScalar(vBGrad, negLR));
-        _gammas = Engine.TensorAdd(_gammas, Engine.TensorMultiplyScalar(gammasGrad, negLR));
-        _outputGateWeights = Engine.TensorAdd(_outputGateWeights, Engine.TensorMultiplyScalar(outGateWGrad, negLR));
-        _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(outGateBGrad, negLR));
-        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(outProjWGrad, negLR));
-        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(outProjBGrad, negLR));
-        _groupNormScale = Engine.TensorAdd(_groupNormScale, Engine.TensorMultiplyScalar(gnScaleGradient, negLR));
-        _groupNormBias = Engine.TensorAdd(_groupNormBias, Engine.TensorMultiplyScalar(gnBiasGradient, negLR));
+        _queryBias = Engine.TensorAdd(_queryBias, Engine.TensorMultiplyScalar(_queryBiasGradient!, negLR));
+        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
+        _keyBias = Engine.TensorAdd(_keyBias, Engine.TensorMultiplyScalar(_keyBiasGradient!, negLR));
+        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
+        _valueBias = Engine.TensorAdd(_valueBias, Engine.TensorMultiplyScalar(_valueBiasGradient!, negLR));
+        _gammas = Engine.TensorAdd(_gammas, Engine.TensorMultiplyScalar(_gammasGradient!, negLR));
+        _outputGateWeights = Engine.TensorAdd(_outputGateWeights, Engine.TensorMultiplyScalar(_outputGateWeightsGradient!, negLR));
+        _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
+        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        _groupNormScale = Engine.TensorAdd(_groupNormScale, Engine.TensorMultiplyScalar(_groupNormScaleGradient!, negLR));
+        _groupNormBias = Engine.TensorAdd(_groupNormBias, Engine.TensorMultiplyScalar(_groupNormBiasGradient!, negLR));
 
         // Clamp gammas to (0, 1) after update to maintain valid decay rates
         for (int h = 0; h < _numHeads; h++)

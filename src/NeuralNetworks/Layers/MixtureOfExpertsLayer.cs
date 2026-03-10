@@ -2155,10 +2155,12 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
         }
 
-        if (output is null)
-            throw new InvalidOperationException("MixtureOfExpertsLayer: No expert output computed. Ensure at least one expert is configured.");
-
         // Apply layer activation
+        if (output is null)
+        {
+            throw new InvalidOperationException("No expert outputs were generated. Ensure at least one expert is configured.");
+        }
+
         output = ApplyActivationToGraph(output);
 
         return output;

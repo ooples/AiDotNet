@@ -402,12 +402,14 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize LabelPowerset: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize LabelPowerset: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize LabelPowerset: invalid model payload.");
 
         NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
@@ -431,10 +433,11 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
 
         var classifierType = jObj["ClassifierType"]?.ToObject<string>();
         var classifierDataVal = jObj["ClassifierData"]?.ToObject<string>();
-        if (classifierType is not null && classifierDataVal is not null)
-        {
-            _classifier = ClassifierRegistry<T>.DeserializeClassifier(classifierType, classifierDataVal);
-        }
+        if (classifierType is null || classifierDataVal is null)
+            throw new InvalidOperationException(
+                "Failed to deserialize LabelPowerset: classifier type/data is missing.");
+
+        _classifier = ClassifierRegistry<T>.DeserializeClassifier(classifierType, classifierDataVal);
     }
 
     #endregion

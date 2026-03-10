@@ -46,10 +46,10 @@ namespace AiDotNet.Classification.SemiSupervised;
 public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
 {
     private IClassifier<T> _baseClassifier;
-    private readonly double _confidenceThreshold;
-    private readonly int _maxIterations;
-    private readonly int _maxSamplesPerIteration;
-    private readonly SelectionCriterion _selectionCriterion;
+    private double _confidenceThreshold;
+    private int _maxIterations;
+    private int _maxSamplesPerIteration;
+    private SelectionCriterion _selectionCriterion;
 
     /// <summary>
     /// Initializes a new instance with default settings using Gaussian Naive Bayes as the base classifier.
@@ -538,12 +538,14 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize SelfTrainingClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize SelfTrainingClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize SelfTrainingClassifier: invalid model payload.");
 
         // Restore base class state
         var classLabelsArr = jObj["ClassLabels"]?.ToObject<double[]>();
@@ -558,16 +560,21 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        _confidenceThreshold = jObj["ConfidenceThreshold"]?.ToObject<double>() ?? _confidenceThreshold;
+        _maxIterations = jObj["MaxIterations"]?.ToObject<int>() ?? _maxIterations;
+        _maxSamplesPerIteration = jObj["MaxSamplesPerIteration"]?.ToObject<int>() ?? _maxSamplesPerIteration;
+        _selectionCriterion = (SelectionCriterion)(jObj["SelectionCriterion"]?.ToObject<int>() ?? (int)_selectionCriterion);
         IterationsPerformed = jObj["IterationsPerformed"]?.ToObject<int>() ?? 0;
         SamplesAdded = jObj["SamplesAdded"]?.ToObject<int>() ?? 0;
 
         // Restore wrapped base classifier via registry
         var baseTypeName = jObj["BaseClassifierType"]?.ToObject<string>();
         var baseData = jObj["BaseClassifierData"]?.ToObject<string>();
-        if (baseTypeName is not null && baseData is not null)
-        {
-            _baseClassifier = ClassifierRegistry<T>.DeserializeClassifier(baseTypeName, baseData);
-        }
+        if (baseTypeName is null || baseData is null)
+            throw new InvalidOperationException(
+                "Failed to deserialize SelfTrainingClassifier: base classifier type/data is missing.");
+
+        _baseClassifier = ClassifierRegistry<T>.DeserializeClassifier(baseTypeName, baseData);
     }
 
     /// <summary>

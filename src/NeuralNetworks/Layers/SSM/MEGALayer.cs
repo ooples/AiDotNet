@@ -670,13 +670,6 @@ public class MEGALayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> EmaBackward(Tensor<T> dOutput, int batchSize, int seqLen)
     {
-        if (_lastEmaStates is null || _lastEmaInput is null || _emaAlphaLogitGradient is null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass. Cached EMA state is not available.");
-
-        var lastEmaStates = _lastEmaStates;
-        var lastEmaInput = _lastEmaInput;
-        var emaAlphaLogitGrad = _emaAlphaLogitGradient;
-
         var dInput = new Tensor<T>(new[] { batchSize, seqLen, _emaDimension });
 
         for (int d = 0; d < _emaDimension; d++)
@@ -703,12 +696,12 @@ public class MEGALayer<T> : LayerBase<T>
                     dInput[new[] { bi, t, d }] = NumOps.Multiply(dH, oneMinusAlpha);
 
                     // dAlpha += dH * (h_{t-1} - x_t)
-                    T prevState = lastEmaStates[new[] { bi, t, d }];
-                    T xVal = lastEmaInput[new[] { bi, t, d }];
+                    T prevState = (_lastEmaStates ?? throw new InvalidOperationException("_lastEmaStates has not been initialized."))[new[] { bi, t, d }];
+                    T xVal = (_lastEmaInput ?? throw new InvalidOperationException("_lastEmaInput has not been initialized."))[new[] { bi, t, d }];
                     T dAlphaContrib = NumOps.Multiply(dH,
                         NumOps.Multiply(NumOps.Subtract(prevState, xVal), alphaDeriv));
-                    emaAlphaLogitGrad[d] = NumOps.Add(
-                        emaAlphaLogitGrad[d], dAlphaContrib);
+                    (_emaAlphaLogitGradient ?? throw new InvalidOperationException("_emaAlphaLogitGradient has not been initialized."))[d] = NumOps.Add(
+                        _emaAlphaLogitGradient[d], dAlphaContrib);
 
                     // Propagate to previous timestep
                     dState = NumOps.Multiply(alpha, dH);
@@ -735,37 +728,21 @@ public class MEGALayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
-
-        var emaAlphaGrad = _emaAlphaLogitGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var emaProjInWGrad = _emaProjectInWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var emaProjInBGrad = _emaProjectInBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var emaProjOutWGrad = _emaProjectOutWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var emaProjOutBGrad = _emaProjectOutBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var qBGrad = _queryBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var kWGrad = _keyWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var kBGrad = _keyBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var vWGrad = _valueWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var vBGrad = _valueBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var outGateWGrad = _outputGateWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var outGateBGrad = _outputGateBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var outProjWGrad = _outputProjectionWeightsGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-        var outProjBGrad = _outputProjectionBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-
-        _emaAlphaLogit = Engine.TensorAdd(_emaAlphaLogit, Engine.TensorMultiplyScalar(emaAlphaGrad, negLR));
-        _emaProjectInWeights = Engine.TensorAdd(_emaProjectInWeights, Engine.TensorMultiplyScalar(emaProjInWGrad, negLR));
-        _emaProjectInBias = Engine.TensorAdd(_emaProjectInBias, Engine.TensorMultiplyScalar(emaProjInBGrad, negLR));
-        _emaProjectOutWeights = Engine.TensorAdd(_emaProjectOutWeights, Engine.TensorMultiplyScalar(emaProjOutWGrad, negLR));
-        _emaProjectOutBias = Engine.TensorAdd(_emaProjectOutBias, Engine.TensorMultiplyScalar(emaProjOutBGrad, negLR));
+        _emaAlphaLogit = Engine.TensorAdd(_emaAlphaLogit, Engine.TensorMultiplyScalar(_emaAlphaLogitGradient!, negLR));
+        _emaProjectInWeights = Engine.TensorAdd(_emaProjectInWeights, Engine.TensorMultiplyScalar(_emaProjectInWeightsGradient!, negLR));
+        _emaProjectInBias = Engine.TensorAdd(_emaProjectInBias, Engine.TensorMultiplyScalar(_emaProjectInBiasGradient!, negLR));
+        _emaProjectOutWeights = Engine.TensorAdd(_emaProjectOutWeights, Engine.TensorMultiplyScalar(_emaProjectOutWeightsGradient!, negLR));
+        _emaProjectOutBias = Engine.TensorAdd(_emaProjectOutBias, Engine.TensorMultiplyScalar(_emaProjectOutBiasGradient!, negLR));
         _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
-        _queryBias = Engine.TensorAdd(_queryBias, Engine.TensorMultiplyScalar(qBGrad, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(kWGrad, negLR));
-        _keyBias = Engine.TensorAdd(_keyBias, Engine.TensorMultiplyScalar(kBGrad, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(vWGrad, negLR));
-        _valueBias = Engine.TensorAdd(_valueBias, Engine.TensorMultiplyScalar(vBGrad, negLR));
-        _outputGateWeights = Engine.TensorAdd(_outputGateWeights, Engine.TensorMultiplyScalar(outGateWGrad, negLR));
-        _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(outGateBGrad, negLR));
-        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(outProjWGrad, negLR));
-        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(outProjBGrad, negLR));
+        _queryBias = Engine.TensorAdd(_queryBias, Engine.TensorMultiplyScalar(_queryBiasGradient!, negLR));
+        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
+        _keyBias = Engine.TensorAdd(_keyBias, Engine.TensorMultiplyScalar(_keyBiasGradient!, negLR));
+        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
+        _valueBias = Engine.TensorAdd(_valueBias, Engine.TensorMultiplyScalar(_valueBiasGradient!, negLR));
+        _outputGateWeights = Engine.TensorAdd(_outputGateWeights, Engine.TensorMultiplyScalar(_outputGateWeightsGradient!, negLR));
+        _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(_outputGateBiasGradient!, negLR));
+        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
     }
 
     /// <inheritdoc />
