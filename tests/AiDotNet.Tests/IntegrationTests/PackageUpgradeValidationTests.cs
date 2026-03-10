@@ -374,10 +374,17 @@ public class PackageUpgradeValidationTests
         var sum = Engine.Add(a, b);
         Assert.Equal(5.0, sum[0], Tolerance);
         Assert.Equal(7.0, sum[1], Tolerance);
+        Assert.Equal(9.0, sum[2], Tolerance);
 
         var diff = Engine.Subtract(b, a);
         Assert.Equal(3.0, diff[0], Tolerance);
         Assert.Equal(3.0, diff[1], Tolerance);
+        Assert.Equal(3.0, diff[2], Tolerance);
+
+        var product = Engine.Multiply(a, b);
+        Assert.Equal(4.0, product[0], Tolerance);  // 1*4
+        Assert.Equal(10.0, product[1], Tolerance); // 2*5
+        Assert.Equal(18.0, product[2], Tolerance); // 3*6
     }
 
     [Fact]
@@ -404,11 +411,35 @@ public class PackageUpgradeValidationTests
 
         Assert.Equal(3, output.Length);
 
-        // Backward should not throw
+        // Verify weights are applied: output = W*input + bias, so at least one value should be non-zero
+        // (random init with non-zero input guarantees this)
+        bool hasNonZeroOutput = false;
+        for (int i = 0; i < output.Length; i++)
+        {
+            if (Math.Abs(output[i]) > 1e-15)
+            {
+                hasNonZeroOutput = true;
+                break;
+            }
+        }
+        Assert.True(hasNonZeroOutput, "FCL forward should produce non-zero output with non-zero input and random weights");
+
+        // Backward should produce non-zero gradients when output gradient is non-zero
         var grad = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 0.1, 0.2, 0.3 }));
         var inputGrad = layer.Backward(grad);
 
         Assert.Equal(4, inputGrad.Length);
+
+        bool hasNonZeroGrad = false;
+        for (int i = 0; i < inputGrad.Length; i++)
+        {
+            if (Math.Abs(inputGrad[i]) > 1e-15)
+            {
+                hasNonZeroGrad = true;
+                break;
+            }
+        }
+        Assert.True(hasNonZeroGrad, "FCL backward should produce non-zero input gradients with non-zero output gradient");
     }
 
     [Fact]
@@ -421,14 +452,37 @@ public class PackageUpgradeValidationTests
 
         Assert.Equal(3, output.Length);
 
+        // Verify weights are applied: non-zero input should produce non-zero output
+        bool hasNonZeroOutput = false;
+        for (int i = 0; i < output.Length; i++)
+        {
+            if (Math.Abs(output[i]) > 1e-15)
+            {
+                hasNonZeroOutput = true;
+                break;
+            }
+        }
+        Assert.True(hasNonZeroOutput, "DenseLayer forward should produce non-zero output with non-zero input");
+
         var grad = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 0.1, 0.2, 0.3 }));
         var inputGrad = layer.Backward(grad);
 
         Assert.Equal(4, inputGrad.Length);
+
+        bool hasNonZeroGrad = false;
+        for (int i = 0; i < inputGrad.Length; i++)
+        {
+            if (Math.Abs(inputGrad[i]) > 1e-15)
+            {
+                hasNonZeroGrad = true;
+                break;
+            }
+        }
+        Assert.True(hasNonZeroGrad, "DenseLayer backward should produce non-zero input gradients");
     }
 
     [Fact]
-    public void BatchNormLayer_Forward_PreservesLength()
+    public void BatchNormLayer_Forward_NormalizesValues()
     {
         var layer = new BatchNormalizationLayer<double>(4);
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new[] { 10.0, 20.0, 30.0, 40.0 }));
@@ -436,6 +490,24 @@ public class PackageUpgradeValidationTests
         var output = layer.Forward(input);
 
         Assert.Equal(input.Length, output.Length);
+
+        // BatchNorm should transform the input - output should differ from input
+        bool outputDiffers = false;
+        for (int i = 0; i < output.Length; i++)
+        {
+            if (Math.Abs(output[i] - input[i]) > 1e-15)
+            {
+                outputDiffers = true;
+                break;
+            }
+        }
+        Assert.True(outputDiffers, "BatchNorm should transform input values, not pass them through unchanged");
+
+        // All outputs should be finite (no NaN or Infinity from normalization)
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.True(double.IsFinite(output[i]), $"BatchNorm output at index {i} should be finite, got {output[i]}");
+        }
     }
 
     [Fact]
@@ -515,15 +587,20 @@ public class PackageUpgradeValidationTests
     {
         var ops = MathHelper.GetNumericOperations<double>();
 
-        // Large values should not produce NaN
+        // Large values: 1e100 + 1e100 = 2e100 (should be finite, not NaN or Infinity)
         var large = ops.FromDouble(1e100);
-        var result = ops.Add(large, large);
-        Assert.False(double.IsNaN(ops.ToDouble(result)));
+        var sum = ops.Add(large, large);
+        var sumDouble = ops.ToDouble(sum);
+        Assert.True(double.IsFinite(sumDouble), $"Sum of 1e100 + 1e100 should be finite, got {sumDouble}");
+        Assert.Equal(2e100, sumDouble, 1e90); // Expected: 2e100
 
-        // Small values should not underflow to exactly zero incorrectly
+        // Small * large should stay finite and non-zero: 1e-300 * 1e100 = 1e-200
         var small = ops.FromDouble(1e-300);
         var product = ops.Multiply(small, ops.FromDouble(1e100));
-        Assert.False(double.IsNaN(ops.ToDouble(product)));
+        var productDouble = ops.ToDouble(product);
+        Assert.True(double.IsFinite(productDouble), $"Product of 1e-300 * 1e100 should be finite, got {productDouble}");
+        Assert.True(productDouble > 0.0, $"Product of 1e-300 * 1e100 should be positive, got {productDouble}");
+        Assert.Equal(1e-200, productDouble, 1e-210); // Expected: 1e-200
     }
 
     [Fact]
@@ -545,23 +622,38 @@ public class PackageUpgradeValidationTests
     }
 
     [Fact]
-    public void MathHelper_GetNumericOperations_MultipleTypes_DoNotThrow()
+    public void MathHelper_NumericOperations_CrossTypeConsistency()
     {
-        // Verify that NumericOperations can be retrieved for all supported types
+        // Verify that double and float NumericOperations produce consistent results
         var doubleOps = MathHelper.GetNumericOperations<double>();
         var floatOps = MathHelper.GetNumericOperations<float>();
 
-        Assert.NotNull(doubleOps);
-        Assert.NotNull(floatOps);
-        Assert.Equal(0.0, doubleOps.Zero);
-        Assert.Equal(0.0f, floatOps.Zero);
+        // Both should compute 2+3=5 and 2*3=6
+        Assert.Equal(5.0, doubleOps.Add(2.0, 3.0));
+        Assert.Equal(5.0f, floatOps.Add(2.0f, 3.0f));
+        Assert.Equal(6.0, doubleOps.Multiply(2.0, 3.0));
+        Assert.Equal(6.0f, floatOps.Multiply(2.0f, 3.0f));
+
+        // Sqrt should be consistent across types
+        Assert.Equal(4.0, doubleOps.Sqrt(16.0), 1e-10);
+        Assert.Equal(4.0f, floatOps.Sqrt(16.0f), 1e-5f);
+
+        // Conversions: FromDouble on float should truncate correctly
+        Assert.Equal(3.14f, floatOps.FromDouble(3.14), 1e-5f);
     }
 
     [Fact]
-    public void Engine_Current_IsNotNull()
+    public void Engine_VectorScalarMultiply_Correct()
     {
         var engine = AiDotNetEngine.Current;
-        Assert.NotNull(engine);
+        var v = new Vector<double>(new[] { 2.0, 4.0, 6.0 });
+
+        var scaled = engine.Multiply(v, 0.5);
+
+        Assert.Equal(3, scaled.Length);
+        Assert.Equal(1.0, scaled[0], Tolerance);
+        Assert.Equal(2.0, scaled[1], Tolerance);
+        Assert.Equal(3.0, scaled[2], Tolerance);
     }
 
     #endregion
