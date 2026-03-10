@@ -151,7 +151,7 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
             var expectedOutput = currentQ.ToVector().Clone();
             expectedOutput[actionIdx] = target;
 
-            T loss = TradingOptions.LossFunction!.CalculateLoss(currentQ.ToVector(), expectedOutput);
+            T loss = (TradingOptions.LossFunction ?? throw new InvalidOperationException("LossFunction has not been initialized.")).CalculateLoss(currentQ.ToVector(), expectedOutput);
             totalLoss = NumOps.Add(totalLoss, loss);
 
             _qNetwork.Train(Tensor<T>.FromVector(exp.State), Tensor<T>.FromVector(expectedOutput));

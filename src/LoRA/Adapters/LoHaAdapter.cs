@@ -376,8 +376,9 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
     /// <returns>Input gradient from LoHa path.</returns>
     private Tensor<T> ComputeLoHaGradients(Tensor<T> outputGradient)
     {
-        int batchSize = _lastInput!.Shape[0];
-        int inputSize = _lastInput!.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
+        var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
+        int batchSize = lastInput.Shape[0];
+        int inputSize = lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
         int outputSize = GetOutputShape()[0];
 
         // Convert to matrices

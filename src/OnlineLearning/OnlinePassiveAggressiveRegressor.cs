@@ -267,7 +267,7 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
         double prediction = NumOps.ToDouble(_bias);
         for (int i = 0; i < NumFeatures; i++)
         {
-            prediction += NumOps.ToDouble(_weights![i]) * NumOps.ToDouble(x[i]);
+            prediction += NumOps.ToDouble((_weights ?? throw new InvalidOperationException("_weights has not been initialized."))[i]) * NumOps.ToDouble(x[i]);
         }
         return prediction;
     }

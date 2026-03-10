@@ -1837,10 +1837,12 @@ scaler.Fit(features);
 var scaled = scaler.Transform(features);
 
 Console.WriteLine(""StandardScaler transforms to mean=0, std=1:"");
-Console.WriteLine($""  Feature 1 mean: {scaler.Mean![0]:F4}"");
-Console.WriteLine($""  Feature 1 std:  {scaler.StandardDeviation![0]:F4}"");
-Console.WriteLine($""  Feature 2 mean: {scaler.Mean![1]:F6}"");
-Console.WriteLine($""  Feature 2 std:  {scaler.StandardDeviation![1]:F6}"");
+var mean = scaler.Mean ?? throw new InvalidOperationException(""Mean has not been initialized."");
+var std = scaler.StandardDeviation ?? throw new InvalidOperationException(""StandardDeviation has not been initialized."");
+Console.WriteLine($""  Feature 1 mean: {mean[0]:F4}"");
+Console.WriteLine($""  Feature 1 std:  {std[0]:F4}"");
+Console.WriteLine($""  Feature 2 mean: {mean[1]:F6}"");
+Console.WriteLine($""  Feature 2 std:  {std[1]:F6}"");
 Console.WriteLine();
 Console.WriteLine(""After scaling, both features are comparable."");
 Console.WriteLine(""This helps algorithms converge faster and work better!"");

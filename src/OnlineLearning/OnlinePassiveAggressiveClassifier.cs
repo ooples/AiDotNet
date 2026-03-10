@@ -233,7 +233,7 @@ public class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelBase<T>
         double score = NumOps.ToDouble(_bias);
         for (int i = 0; i < NumFeatures; i++)
         {
-            score += NumOps.ToDouble(_weights![i]) * NumOps.ToDouble(x[i]);
+            score += NumOps.ToDouble((_weights ?? throw new InvalidOperationException("_weights has not been initialized."))[i]) * NumOps.ToDouble(x[i]);
         }
         return score;
     }

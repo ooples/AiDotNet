@@ -173,7 +173,7 @@ namespace AiDotNet.Serialization
 
                     for (int i = 0; i < length; i++)
                     {
-                        indexer!.SetValue(vector, array.GetValue(i), new object[] { i });
+                        (indexer ?? throw new InvalidOperationException("indexer has not been initialized.")).SetValue(vector, array.GetValue(i), new object[] { i });
                     }
 
                     return vector;

@@ -144,13 +144,13 @@ public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < X.Columns; j++)
             {
                 // Skip features with zero std
-                if (NumOps.Equals(_stds![j], NumOps.Zero))
+                if (NumOps.Equals((_stds ?? throw new InvalidOperationException("_stds has not been initialized."))[j], NumOps.Zero))
                 {
                     continue;
                 }
 
                 // G = |x - mean| / std
-                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], _means![j]));
+                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], (_means ?? throw new InvalidOperationException("_means has not been initialized."))[j]));
                 T grubbsStatistic = NumOps.Divide(deviation, _stds[j]);
 
                 if (NumOps.GreaterThan(grubbsStatistic, maxGrubbsStatistic))

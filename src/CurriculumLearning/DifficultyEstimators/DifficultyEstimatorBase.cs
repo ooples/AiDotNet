@@ -72,9 +72,9 @@ public abstract class DifficultyEstimatorBase<T, TInput, TOutput> : IDifficultyE
         }
 
         // Return cached scores if available
-        if (CacheScores && HasCachedScores && CachedScores!.Length == dataset.Count)
+        if (CacheScores && CachedScores is { } cachedScores && cachedScores.Length == dataset.Count)
         {
-            return CachedScores;
+            return cachedScores;
         }
 
         var difficulties = new T[dataset.Count];

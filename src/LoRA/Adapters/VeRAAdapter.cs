@@ -500,7 +500,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Propagate through shared B: grad_afterB = gradAfterSharedB * B^T
-        Matrix<T> gradAfterB = gradAfterSharedB.Multiply(_sharedMatrixB!.Transpose());
+        Matrix<T> gradAfterB = gradAfterSharedB.Multiply((_sharedMatrixB ?? throw new InvalidOperationException("_sharedMatrixB has not been initialized.")).Transpose());
 
         // Convert input to matrix for gradient computation
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -539,7 +539,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Propagate through shared A: grad_input_vera = gradAfterA * A^T
-        Matrix<T> veraInputGrad = gradAfterA.Multiply(_sharedMatrixA!.Transpose());
+        Matrix<T> veraInputGrad = gradAfterA.Multiply((_sharedMatrixA ?? throw new InvalidOperationException("_sharedMatrixA has not been initialized.")).Transpose());
 
         // Backward through base layer
         Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);

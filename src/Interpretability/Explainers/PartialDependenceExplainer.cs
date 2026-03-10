@@ -220,7 +220,7 @@ public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependen
         result.PartialDependence[featureIndex] = pdValues;
 
         if (iceValues != null)
-            result.IceCurves![featureIndex] = iceValues;
+            (result.IceCurves ?? throw new InvalidOperationException("IceCurves has not been initialized."))[featureIndex] = iceValues;
     }
 
     /// <summary>

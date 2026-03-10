@@ -221,7 +221,7 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             var state = _trajectory.States[t];
             var action = _trajectory.Actions[t];
-            var returnVal = _trajectory.Returns![t];
+            var returnVal = (_trajectory.Returns ?? throw new InvalidOperationException("Returns has not been initialized."))[t];
 
             var logProb = ComputeLogProb(state, action);
 

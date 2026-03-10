@@ -1029,7 +1029,7 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write(hasLinearModel);
         if (hasLinearModel)
         {
-            var coefficients = node.LinearModel!.Coefficients;
+            var coefficients = (node.LinearModel ?? throw new InvalidOperationException("LinearModel has not been initialized.")).Coefficients;
             writer.Write(coefficients.Length);
             for (int i = 0; i < coefficients.Length; i++)
             {

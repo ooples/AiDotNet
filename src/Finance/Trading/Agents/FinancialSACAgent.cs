@@ -128,7 +128,7 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
         foreach (var exp in batch)
         {
             // Simplified SAC update logic - computing manual loss for tracking
-            T loss = TradingOptions.LossFunction!.CalculateLoss(
+            T loss = (TradingOptions.LossFunction ?? throw new InvalidOperationException("LossFunction has not been initialized.")).CalculateLoss(
                 _actor.Predict(Tensor<T>.FromVector(exp.State)).ToVector(),
                 exp.Action);
 

@@ -173,7 +173,7 @@ public class MultiOutputClassifier<T> : MetaClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels![bestClass];
+            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized."))[bestClass];
         }
 
         return predictions;

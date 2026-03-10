@@ -150,7 +150,7 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
 
         foreach (var exp in batch)
         {
-            T loss = TradingOptions.LossFunction!.CalculateLoss(
+            T loss = (TradingOptions.LossFunction ?? throw new InvalidOperationException("LossFunction has not been initialized.")).CalculateLoss(
                 _policyNetwork.Predict(Tensor<T>.FromVector(exp.State)).ToVector(),
                 exp.Action);
 

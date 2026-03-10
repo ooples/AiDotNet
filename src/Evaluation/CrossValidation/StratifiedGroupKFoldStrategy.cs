@@ -74,7 +74,8 @@ public class StratifiedGroupKFoldStrategy<T> : ICrossValidationStrategy<T>
             : RandomHelper.CreateSecureRandom();
 
         // Get unique groups and their class distributions
-        var uniqueGroups = _groups!.Distinct().ToList();
+        var groups = _groups ?? throw new InvalidOperationException("_groups has not been initialized.");
+        var uniqueGroups = groups.Distinct().ToList();
         var groupClasses = new Dictionary<int, int>();
         var groupSamples = new Dictionary<int, List<int>>();
 
@@ -85,7 +86,7 @@ public class StratifiedGroupKFoldStrategy<T> : ICrossValidationStrategy<T>
 
         for (int i = 0; i < dataSize; i++)
         {
-            int group = _groups![i];
+            int group = groups[i];
             groupSamples[group].Add(i);
         }
 

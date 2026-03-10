@@ -219,7 +219,7 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
             double value = NumOps.ToDouble(X[i, 0]);
 
             // Remove seasonal component
-            double seasonal = _seasonalPattern![i % _seasonLength];
+            double seasonal = (_seasonalPattern ?? throw new InvalidOperationException("_seasonalPattern has not been initialized."))[i % _seasonLength];
             double deseasonalized = value - seasonal - _trend;
 
             // Score is the standardized residual

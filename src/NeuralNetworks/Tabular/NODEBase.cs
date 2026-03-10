@@ -185,6 +185,8 @@ public abstract class NODEBase<T>
 
     private Tensor<T> ForwardTree(int treeIdx, Tensor<T> features, int batchSize)
     {
+        var splitProbabilitiesCache = _splitProbabilitiesCache ?? throw new InvalidOperationException("_splitProbabilitiesCache has not been initialized.");
+
         // Compute leaf weights for each sample
         var leafWeights = new Tensor<T>(new[] { batchSize, Options.NumLeaves });
 
@@ -218,7 +220,7 @@ public abstract class NODEBase<T>
                 splitProbs[d] = Sigmoid(scaledDiff);
             }
 
-            _splitProbabilitiesCache!.Add(splitProbs);
+            splitProbabilitiesCache.Add(splitProbs);
 
             // Compute leaf weights using the product of split probabilities
             // Each leaf corresponds to a binary path through the tree
@@ -246,7 +248,7 @@ public abstract class NODEBase<T>
             }
         }
 
-        _leafWeightsCache!.Add(leafWeights);
+        (_leafWeightsCache ?? throw new InvalidOperationException("_leafWeightsCache has not been initialized.")).Add(leafWeights);
 
         // Compute tree output as weighted sum of leaf values
         var output = new Tensor<T>(new[] { batchSize, Options.TreeOutputDimension });

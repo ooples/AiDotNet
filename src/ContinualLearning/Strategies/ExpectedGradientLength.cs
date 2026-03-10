@@ -292,13 +292,13 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
         // Online update: Ω = γ * Ω_old + Ω_new
         // Parameters: θ* = (γ * Ω_old * θ*_old + Ω_new * θ_new) / (γ * Ω_old + Ω_new)
 
-        for (int i = 0; i < _importance!.Length; i++)
+        for (int i = 0; i < (_importance ?? throw new InvalidOperationException("_importance has not been initialized.")).Length; i++)
         {
             var decayedOldImportance = NumOps.Multiply(_decayFactor, _importance[i]);
             var newTotalImportance = NumOps.Add(decayedOldImportance, taskImportance[i]);
 
             // Weighted average of parameters
-            var weightedOld = NumOps.Multiply(decayedOldImportance, _previousParameters![i]);
+            var weightedOld = NumOps.Multiply(decayedOldImportance, (_previousParameters ?? throw new InvalidOperationException("_previousParameters has not been initialized."))[i]);
             var weightedNew = NumOps.Multiply(taskImportance[i], currentParams[i]);
             var numerator = NumOps.Add(weightedOld, weightedNew);
 

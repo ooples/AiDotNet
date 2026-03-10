@@ -514,7 +514,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         // Gradient flow (backward): V_r * R^T * Σ_r * U_r^T
 
         // Step 1: grad_x3 = U_r^T * scaledGrad [rank × batchSize]
-        Tensor<T> gradX3 = MatrixVectorMultiply(_frozenU!.Transpose(), scaledGrad);
+        Tensor<T> gradX3 = MatrixVectorMultiply((_frozenU ?? throw new InvalidOperationException("_frozenU has not been initialized.")).Transpose(), scaledGrad);
 
         // Step 2: grad_x2 = Σ_r * grad_x3 (diagonal multiplication) [rank × batchSize]
         Tensor<T> gradX2 = ApplySigmaScaling(_frozenSigma!, gradX3);
@@ -526,7 +526,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> gradX1 = MatrixVectorMultiply(_trainableR.Transpose(), gradX2);
 
         // Step 5: input_grad_lora = V_r^T^T * grad_x1 = V_r * grad_x1 [inputSize × batchSize]
-        Tensor<T> loraInputGrad = MatrixVectorMultiply(_frozenVt!.Transpose(), gradX1);
+        Tensor<T> loraInputGrad = MatrixVectorMultiply((_frozenVt ?? throw new InvalidOperationException("_frozenVt has not been initialized.")).Transpose(), gradX1);
 
         // Sum input gradients from base and LoRA paths
         Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape);
