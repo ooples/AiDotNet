@@ -139,7 +139,7 @@ public class ModelPredictiveTaskSampler<T, TInput, TOutput> : ITaskSampler<T, TI
             }
         }
 
-        bestEpisode!.Difficulty = bestUcb == double.MaxValue ? 1.0 : Math.Max(0, Math.Min(1, bestUcb));
+        (bestEpisode ?? throw new InvalidOperationException("bestEpisode has not been initialized.")).Difficulty = bestUcb == double.MaxValue ? 1.0 : Math.Max(0, Math.Min(1, bestUcb));
         _totalPulls++;
         return bestEpisode;
     }

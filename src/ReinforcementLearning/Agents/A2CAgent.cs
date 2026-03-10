@@ -252,8 +252,8 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             var state = _trajectory.States[i];
             var action = _trajectory.Actions[i];
-            var advantage = _trajectory.Advantages![i];
-            var targetReturn = _trajectory.Returns![i];
+            var advantage = (_trajectory.Advantages ?? throw new InvalidOperationException("Advantages has not been initialized."))[i];
+            var targetReturn = (_trajectory.Returns ?? throw new InvalidOperationException("Returns has not been initialized."))[i];
 
             // Policy loss: -log_prob * advantage
             var logProb = ComputeLogProb(state, action);
@@ -292,8 +292,8 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             var state = _trajectory.States[i];
             var action = _trajectory.Actions[i];
-            var advantage = _trajectory.Advantages![i];
-            var targetReturn = _trajectory.Returns![i];
+            var advantage = (_trajectory.Advantages ?? throw new InvalidOperationException("Advantages has not been initialized."))[i];
+            var targetReturn = (_trajectory.Returns ?? throw new InvalidOperationException("Returns has not been initialized."))[i];
 
             // Policy gradient: compute ∇ loss w.r.t. policy output
             var stateTensor1 = Tensor<T>.FromVector(state);

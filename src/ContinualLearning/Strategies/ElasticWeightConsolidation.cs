@@ -352,7 +352,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
                 var newTotalFisher = NumOps.Add(decayedOldFisher, newFisher[i]);
 
                 // Weighted average of parameters
-                var weightedOld = NumOps.Multiply(decayedOldFisher, _consolidatedParameters![i]);
+                var weightedOld = NumOps.Multiply(decayedOldFisher, (_consolidatedParameters ?? throw new InvalidOperationException("_consolidatedParameters has not been initialized."))[i]);
                 var weightedNew = NumOps.Multiply(newFisher[i], currentParams[i]);
                 var numerator = NumOps.Add(weightedOld, weightedNew);
 

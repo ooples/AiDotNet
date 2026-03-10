@@ -1129,11 +1129,12 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
 
         for (int i = 0; i < graphs.Count; i++)
         {
-            if (graphs[i].GraphLabel is not null && graphs[i].GraphLabel!.Shape[1] >= numClasses)
+            var graphLabel = graphs[i].GraphLabel;
+            if (graphLabel is not null && graphLabel.Shape[1] >= numClasses)
             {
                 for (int j = 0; j < numClasses; j++)
                 {
-                    labels[i, j] = graphs[i].GraphLabel![0, j];
+                    labels[i, j] = graphLabel[0, j];
                 }
             }
             else

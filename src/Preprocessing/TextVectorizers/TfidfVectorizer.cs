@@ -143,7 +143,7 @@ public class TfidfVectorizer<T> : TextVectorizerBase<T>
         BuildVocabulary(dfCounts, allTokenCounts);
 
         // Compute IDF weights
-        _idfWeights = new double[_featureNames!.Length];
+        _idfWeights = new double[(_featureNames ?? throw new InvalidOperationException("_featureNames has not been initialized.")).Length];
         for (int i = 0; i < _featureNames.Length; i++)
         {
             string term = _featureNames[i];

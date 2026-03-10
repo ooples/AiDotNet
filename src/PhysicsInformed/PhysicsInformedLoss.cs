@@ -269,7 +269,7 @@ namespace AiDotNet.PhysicsInformed
             }
 
             return ComputeResidualGradientFallback(
-                _pdeSpecification!.ComputeResidual,
+                (_pdeSpecification ?? throw new InvalidOperationException("_pdeSpecification has not been initialized.")).ComputeResidual,
                 inputs,
                 predictions,
                 derivatives);
@@ -327,7 +327,7 @@ namespace AiDotNet.PhysicsInformed
                 {
                     for (int dim = 0; dim < inputDim; dim++)
                     {
-                        T original = derivativesCopy.FirstDerivatives![outIdx, dim];
+                        T original = (derivativesCopy.FirstDerivatives ?? throw new InvalidOperationException("FirstDerivatives has not been initialized."))[outIdx, dim];
                         derivativesCopy.FirstDerivatives[outIdx, dim] = NumOps.Add(original, eps);
                         T plus = residualFunction(inputs, predictions, derivativesCopy);
                         derivativesCopy.FirstDerivatives[outIdx, dim] = NumOps.Subtract(original, eps);
@@ -347,7 +347,7 @@ namespace AiDotNet.PhysicsInformed
                     {
                         for (int col = 0; col < inputDim; col++)
                         {
-                            T original = derivativesCopy.SecondDerivatives![outIdx, row, col];
+                            T original = (derivativesCopy.SecondDerivatives ?? throw new InvalidOperationException("SecondDerivatives has not been initialized."))[outIdx, row, col];
                             derivativesCopy.SecondDerivatives[outIdx, row, col] = NumOps.Add(original, eps);
                             T plus = residualFunction(inputs, predictions, derivativesCopy);
                             derivativesCopy.SecondDerivatives[outIdx, row, col] = NumOps.Subtract(original, eps);

@@ -446,7 +446,7 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
                 foreach (var f in features)
                 {
                     for (int d = 0; d < featureDim; d++)
-                        classMean[d] += f![d];
+                        classMean[d] += (f ?? throw new InvalidOperationException("f has not been initialized."))[d];
                 }
                 for (int d = 0; d < featureDim; d++)
                     classMean[d] /= features.Count;

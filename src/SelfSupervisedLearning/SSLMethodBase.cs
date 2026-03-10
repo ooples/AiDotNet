@@ -44,6 +44,12 @@ public abstract class SSLMethodBase<T> : ISSLMethod<T>
     protected readonly IProjectorHead<T>? _projector;
 
     /// <summary>
+    /// Gets the projector, throwing if not initialized.
+    /// </summary>
+    protected IProjectorHead<T> Projector => _projector ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Projector head not initialized. Ensure a projector was provided during construction.");
+
+    /// <summary>
     /// The SSL configuration.
     /// </summary>
     protected readonly SSLConfig _config;

@@ -436,7 +436,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             writer.Write(hasAccumulatedGradients);
             if (hasAccumulatedGradients)
             {
-                writer.Write(_accumulatedSquaredGradients!.Length);
+                writer.Write((_accumulatedSquaredGradients ?? throw new InvalidOperationException("_accumulatedSquaredGradients has not been initialized.")).Length);
                 for (int i = 0; i < _accumulatedSquaredGradients.Length; i++)
                 {
                     writer.Write(NumOps.ToDouble(_accumulatedSquaredGradients[i]));

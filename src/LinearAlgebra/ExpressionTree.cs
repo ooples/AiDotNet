@@ -39,12 +39,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public ExpressionTree<T, TInput, TOutput>? Right { get; private set; }
 
-    private ExpressionTree<T, TInput, TOutput> EnsureLeft() =>
-        Left ?? throw new InvalidOperationException("Binary expression node requires a left operand.");
-
-    private ExpressionTree<T, TInput, TOutput> EnsureRight() =>
-        Right ?? throw new InvalidOperationException("Binary expression node requires a right operand.");
-
     /// <summary>
     /// Gets the parent node of this node.
     /// </summary>
@@ -121,7 +115,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             ExpressionNodeType.Subtract => $"({Left} - {Right})",
             ExpressionNodeType.Multiply => $"({Left} * {Right})",
             ExpressionNodeType.Divide => $"({Left} / {Right})",
-            _ => throw new ArgumentException("Invalid node type"),
+            _ => throw new ArgumentException($"Unknown expression node type '{Type}'."),
         } ?? string.Empty;
     }
 
@@ -140,7 +134,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     private static readonly ThreadLocal<Random> _random = new ThreadLocal<Random>(() => RandomHelper.CreateSecureRandom());
 
-    private static Random Rng => _random.Value ?? throw new InvalidOperationException("Thread-local Random not initialized.");
+    private static Random Rng => _random.Value ?? throw new InvalidOperationException("Thread-local Random has not been initialized.");
 
     /// <summary>
     /// Creates a new expression tree node with the specified properties.
@@ -367,15 +361,19 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public T Evaluate(Vector<T> input)
     {
+        if (Type == ExpressionNodeType.Constant) return Value;
+        if (Type == ExpressionNodeType.Variable) return input[_numOps.ToInt32(Value)];
+
+        var left = Left ?? throw new InvalidOperationException("Left has not been initialized.");
+        var right = Right ?? throw new InvalidOperationException("Right has not been initialized.");
+
         return Type switch
         {
-            ExpressionNodeType.Constant => Value,
-            ExpressionNodeType.Variable => input[_numOps.ToInt32(Value)],
-            ExpressionNodeType.Add => _numOps.Add(EnsureLeft().Evaluate(input), EnsureRight().Evaluate(input)),
-            ExpressionNodeType.Subtract => _numOps.Subtract(EnsureLeft().Evaluate(input), EnsureRight().Evaluate(input)),
-            ExpressionNodeType.Multiply => _numOps.Multiply(EnsureLeft().Evaluate(input), EnsureRight().Evaluate(input)),
-            ExpressionNodeType.Divide => _numOps.Divide(EnsureLeft().Evaluate(input), EnsureRight().Evaluate(input)),
-            _ => throw new ArgumentException("Invalid node type"),
+            ExpressionNodeType.Add => _numOps.Add(left.Evaluate(input), right.Evaluate(input)),
+            ExpressionNodeType.Subtract => _numOps.Subtract(left.Evaluate(input), right.Evaluate(input)),
+            ExpressionNodeType.Multiply => _numOps.Multiply(left.Evaluate(input), right.Evaluate(input)),
+            ExpressionNodeType.Divide => _numOps.Divide(left.Evaluate(input), right.Evaluate(input)),
+            _ => throw new ArgumentException($"Unknown expression node type '{Type}'."),
         };
     }
 
@@ -580,9 +578,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             }
             else
             {
-                if (tree.Right is null)
-                    throw new InvalidOperationException("ExpressionTree: Expected right subtree to be non-null.");
-                return SelectRandomSubtree(tree.Right);
+                return SelectRandomSubtree(tree.Right!);
             }
         }
     }

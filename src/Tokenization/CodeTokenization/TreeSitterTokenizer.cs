@@ -141,7 +141,7 @@ namespace AiDotNet.Tokenization.CodeTokenization
 
             try
             {
-                using var tree = _parser!.Parse(text);
+                using var tree = (_parser ?? throw new InvalidOperationException("_parser has not been initialized.")).Parse(text);
                 if (tree is not null)
                 {
                     var rootNode = tree.RootNode;

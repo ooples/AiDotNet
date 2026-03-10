@@ -228,7 +228,7 @@ public class ClassifierChain<T> : MetaClassifierBase<T>
             // Add previous labels as features
             for (int p = 0; p < numPrevLabels; p++)
             {
-                int prevLabelIdx = _order![p];
+                int prevLabelIdx = (_order ?? throw new InvalidOperationException("_order has not been initialized."))[p];
                 xAugmented[i, NumFeatures + p] = yPrevious[i, prevLabelIdx];
             }
         }
@@ -257,7 +257,7 @@ public class ClassifierChain<T> : MetaClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels![bestClass];
+            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized."))[bestClass];
         }
 
         return predictions;

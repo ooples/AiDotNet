@@ -161,7 +161,7 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
 
             // Update Actor
             // Calculate loss manually
-            T actorLoss = TradingOptions.LossFunction!.CalculateLoss(
+            T actorLoss = (TradingOptions.LossFunction ?? throw new InvalidOperationException("LossFunction has not been initialized.")).CalculateLoss(
                 _actor.Predict(Tensor<T>.FromVector(exp.State)).ToVector(), 
                 exp.Action);
             

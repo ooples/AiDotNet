@@ -156,19 +156,19 @@ public class IQRDetector<T> : AnomalyDetectorBase<T>
                 T score = NumOps.Zero;
 
                 // Skip features with zero IQR (constant features)
-                if (NumOps.Equals(_iqr![j], NumOps.Zero))
+                if (NumOps.Equals((_iqr ?? throw new InvalidOperationException("_iqr has not been initialized."))[j], NumOps.Zero))
                 {
                     continue;
                 }
 
-                if (NumOps.LessThan(value, _lowerBounds![j]))
+                if (NumOps.LessThan(value, (_lowerBounds ?? throw new InvalidOperationException("_lowerBounds has not been initialized."))[j]))
                 {
                     // How far below lower bound, normalized by IQR
                     score = NumOps.Divide(
                         NumOps.Subtract(_lowerBounds[j], value),
                         _iqr[j]);
                 }
-                else if (NumOps.GreaterThan(value, _upperBounds![j]))
+                else if (NumOps.GreaterThan(value, (_upperBounds ?? throw new InvalidOperationException("_upperBounds has not been initialized."))[j]))
                 {
                     // How far above upper bound, normalized by IQR
                     score = NumOps.Divide(

@@ -161,7 +161,7 @@ public class SpectralSubtractionEnhancer<T> : AudioEnhancerBase<T>
             double enhancedMag = Math.Sqrt(subtracted);
 
             // Temporal smoothing to reduce musical noise
-            double prevMag = NumOps.ToDouble(_previousMagnitudes![i]);
+            double prevMag = NumOps.ToDouble((_previousMagnitudes ?? throw new InvalidOperationException("_previousMagnitudes has not been initialized."))[i]);
             enhancedMag = 0.3 * prevMag + 0.7 * enhancedMag;
 
             enhanced[i] = NumOps.FromDouble(enhancedMag);

@@ -262,8 +262,9 @@ public class LayerGradCAMExplainer<T> : ILocalExplainer<T, LayerGradCAMExplanati
     /// </summary>
     private Tensor<T> UpsampleGradCAM(Matrix<T> gradcam)
     {
-        int targetH = _inputShape![^2];
-        int targetW = _inputShape![^1];
+        var inputShape = _inputShape ?? throw new InvalidOperationException("_inputShape has not been initialized.");
+        int targetH = inputShape[^2];
+        int targetW = inputShape[^1];
 
         var upsampled = new Tensor<T>(new[] { targetH, targetW });
 

@@ -442,11 +442,10 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
     private void SerializeVector(BinaryWriter writer, Vector<T>? vector)
     {
-        bool hasVector = vector is not null;
-        writer.Write(hasVector);
-        if (hasVector)
+        writer.Write(vector is not null);
+        if (vector is not null)
         {
-            writer.Write(vector!.Length);
+            writer.Write(vector.Length);
             for (int i = 0; i < vector.Length; i++)
             {
                 writer.Write(NumOps.ToDouble(vector[i]));

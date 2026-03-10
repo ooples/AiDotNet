@@ -140,8 +140,6 @@ public class RetrievalModule<T>
 
     private Vector<T> ComputeDistances(Tensor<T> queryKeys, int batchIdx)
     {
-        if (_trainingKeys is null)
-            throw new InvalidOperationException("Training data not set. Call StoreTrainingData before retrieval.");
         var distances = new Vector<T>(_numTrainingSamples);
 
         for (int t = 0; t < _numTrainingSamples; t++)
@@ -151,7 +149,7 @@ public class RetrievalModule<T>
             {
                 var diff = NumOps.Subtract(
                     queryKeys[batchIdx * _embeddingDim + d],
-                    _trainingKeys[t * _embeddingDim + d]);
+                    (_trainingKeys ?? throw new InvalidOperationException("_trainingKeys has not been initialized."))[t * _embeddingDim + d]);
                 dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
             }
             distances[t] = dist;

@@ -180,6 +180,15 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
     #region Properties
 
+    private ConvolutionalLayer<T> FeatExtract => _featExtract ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Native BasicVSR++ layers are not initialized. This member is only available in native mode after successful construction.");
+
+    private ConvolutionalLayer<T> OutputConv => _outputConv ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Native BasicVSR++ layers are not initialized. This member is only available in native mode after successful construction.");
+
+    private SpyNetLayer<T> FlowEstimator => _flowEstimator ?? throw new InvalidOperationException(
+        $"{GetType().Name}: Flow estimator is only available in native mode after successful native-layer initialization.");
+
     /// <summary>
     /// Gets whether this model uses native mode (true) or ONNX mode (false).
     /// </summary>
@@ -503,7 +512,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         for (int i = 0; i < numFrames; i++)
         {
             var frame = ExtractFrameBatch(frames, i);
-            var feat = _featExtract!.Forward(frame);
+            var feat = FeatExtract.Forward(frame);
             frameFeatures.Add(feat);
             _cachedInitialFeatures.Add(feat);
         }
@@ -545,7 +554,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             _cachedOutputConvInputs.Add(feat);
 
             // Final output convolution
-            var output = _outputConv!.Forward(feat);
+            var output = OutputConv.Forward(feat);
 
             // Store in output tensor
             StoreFrameBatch(outputFrames, output, i);
@@ -586,10 +595,10 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             var frame2 = ExtractFrameBatch(frames, i + 1);
 
             // Forward flow: frame i -> frame i+1
-            var forwardFlow = _flowEstimator!.EstimateFlow(frame1, frame2);
+            var forwardFlow = FlowEstimator.EstimateFlow(frame1, frame2);
 
             // Backward flow: frame i+1 -> frame i
-            var backwardFlow = _flowEstimator.EstimateFlow(frame2, frame1);
+            var backwardFlow = FlowEstimator.EstimateFlow(frame2, frame1);
 
             flows.Add((forwardFlow, backwardFlow));
         }
@@ -1028,7 +1037,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             var frameGrad = ExtractFrameBatch(gradient, f);
 
             // Backward through output convolution
-            var grad = _outputConv!.Backward(frameGrad);
+            var grad = OutputConv.Backward(frameGrad);
 
             // Backward through upsampling layers (in reverse order)
             for (int i = _upsampleLayers.Count - 1; i >= 0; i--)
@@ -1052,7 +1061,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         // Backward through initial feature extraction for each frame
         for (int f = 0; f < numFrames; f++)
         {
-            _featExtract!.Backward(propagationGradients[f]);
+            FeatExtract.Backward(propagationGradients[f]);
         }
     }
 
@@ -1364,8 +1373,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     {
         T lr = NumOps.FromDouble(_learningRate);
 
-        _featExtract!.UpdateParameters(lr);
-        _outputConv!.UpdateParameters(lr);
+        FeatExtract.UpdateParameters(lr);
+        OutputConv.UpdateParameters(lr);
 
         foreach (var block in _residualBlocks)
         {
@@ -1581,8 +1590,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         writer.Write(_learningRate);
 
         // Serialize layer parameters
-        SerializeLayerParameters(writer, _featExtract!.GetParameters());
-        SerializeLayerParameters(writer, _outputConv!.GetParameters());
+        SerializeLayerParameters(writer, FeatExtract.GetParameters());
+        SerializeLayerParameters(writer, OutputConv.GetParameters());
 
         foreach (var block in _residualBlocks)
         {
@@ -1613,8 +1622,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         _ = reader.ReadDouble(); // learningRate
 
         // Load layer parameters
-        _featExtract!.SetParameters(DeserializeLayerParameters(reader));
-        _outputConv!.SetParameters(DeserializeLayerParameters(reader));
+        FeatExtract.SetParameters(DeserializeLayerParameters(reader));
+        OutputConv.SetParameters(DeserializeLayerParameters(reader));
 
         foreach (var block in _residualBlocks)
         {

@@ -296,7 +296,7 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
 
         for (int i = 0; i < Options.MaxFeatures.Value; i++)
         {
-            int idx = _random!.Next(allFeatures.Count);
+            int idx = (_random ?? throw new InvalidOperationException("_random has not been initialized.")).Next(allFeatures.Count);
             selectedFeatures[i] = allFeatures[idx];
             allFeatures.RemoveAt(idx);
         }
@@ -394,7 +394,7 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
     private void UpdateFeatureImportances(int feature, T gain, int numSamples)
     {
         T weightedGain = NumOps.Multiply(gain, NumOps.FromDouble(numSamples));
-        FeatureImportances![feature] = NumOps.Add(FeatureImportances[feature], weightedGain);
+        (FeatureImportances ?? throw new InvalidOperationException("FeatureImportances has not been initialized."))[feature] = NumOps.Add(FeatureImportances[feature], weightedGain);
     }
 
     /// <summary>
@@ -463,7 +463,7 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
 
             for (int c = 0; c < NumClasses; c++)
             {
-                probabilities[i, c] = leafNode.ClassProbabilities![c];
+                probabilities[i, c] = (leafNode.ClassProbabilities ?? throw new InvalidOperationException("ClassProbabilities has not been initialized."))[c];
             }
         }
 
