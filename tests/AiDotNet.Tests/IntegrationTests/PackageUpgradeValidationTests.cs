@@ -409,7 +409,10 @@ public class PackageUpgradeValidationTests
     [Fact]
     public void FullyConnectedLayer_ForwardBackward_RoundTrip()
     {
-        var layer = new FullyConnectedLayer<double>(4, 3, (IActivationFunction<double>?)null);
+        // Use IdentityActivation to avoid ReLU zeroing out negative pre-activations
+        // which could cause intermittent test failures with random Xavier init.
+        // Explicit cast needed because IdentityActivation implements both IActivationFunction and IVectorActivationFunction.
+        var layer = new FullyConnectedLayer<double>(4, 3, (IActivationFunction<double>)new IdentityActivation<double>());
         var input = new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
 
         var output = layer.Forward(input);
