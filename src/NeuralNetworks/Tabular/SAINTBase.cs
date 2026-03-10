@@ -287,7 +287,7 @@ public abstract class SAINTBase<T>
         // Validate and hoist layer norms upfront to avoid repeated null checks inside the loop
         var norms = Options.UseLayerNorm
             ? _layerNorms ?? throw new InvalidOperationException("Layer norms not initialized when UseLayerNorm is true.")
-            : [];
+            : (IReadOnlyList<LayerNormalizationLayer<T>>)Array.Empty<LayerNormalizationLayer<T>>();
         int normIdx = 0;
         for (int layer = 0; layer < Options.NumLayers; layer++)
         {

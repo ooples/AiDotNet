@@ -361,8 +361,16 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var bnBackwardGpu = bnType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
         if (bnBackwardGpu != null)
         {
-            grad = (IGpuTensor<T>)(bnBackwardGpu.Invoke(_bn, new object[] { grad })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
+            var bnResult = bnBackwardGpu.Invoke(_bn, new object[] { grad });
+            if (bnResult is IGpuTensor<T> bnGrad)
+            {
+                grad = bnGrad;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"BackwardGpu on BN returned {bnResult?.GetType().Name ?? "null"}, expected IGpuTensor<{typeof(T).Name}>.");
+            }
         }
         else
         {

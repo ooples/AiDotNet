@@ -422,13 +422,20 @@ public abstract class TabTransformerBase<T>
                 _columnEmbeddingsGrad.Fill(NumOps.Zero);
             }
 
+            // Hoist gradient tensor lookups outside the batch loop since they only depend on feature index
+            var catEmbGrads = new Tensor<T>[NumCategoricalFeatures];
+            for (int c = 0; c < NumCategoricalFeatures; c++)
+            {
+                catEmbGrads[c] = _categoricalEmbeddingsGrad[c]
+                    ?? throw new InvalidOperationException($"Categorical embedding gradient for feature {c} not initialized.");
+            }
+
             for (int b = 0; b < batchSize; b++)
             {
                 for (int c = 0; c < NumCategoricalFeatures; c++)
                 {
                     int catIdx = _categoricalIndicesCache[b, c];
-                    var embGrad = _categoricalEmbeddingsGrad[c]
-                        ?? throw new InvalidOperationException("Categorical embedding gradient not initialized.");
+                    var embGrad = catEmbGrads[c];
                     for (int d = 0; d < Options.EmbeddingDimension; d++)
                     {
                         var g = catGrad[b * NumCategoricalFeatures * Options.EmbeddingDimension + c * Options.EmbeddingDimension + d];
