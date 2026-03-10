@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
 using AiDotNet.Serving.ContinuousBatching;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Serving;
 

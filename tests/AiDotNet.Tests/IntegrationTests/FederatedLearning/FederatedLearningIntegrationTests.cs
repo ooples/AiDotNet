@@ -171,8 +171,16 @@ public class FederatedLearningIntegrationTests
             CandidateClientIds = new List<int> { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 },
             ClientWeights = new Dictionary<int, double>
             {
-                [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0,
-                [5] = 1.0, [6] = 1.0, [7] = 1.0, [8] = 1.0, [9] = 1.0
+                [0] = 1.0,
+                [1] = 1.0,
+                [2] = 1.0,
+                [3] = 1.0,
+                [4] = 1.0,
+                [5] = 1.0,
+                [6] = 1.0,
+                [7] = 1.0,
+                [8] = 1.0,
+                [9] = 1.0
             },
             Random = random
         };
@@ -249,9 +257,12 @@ public class FederatedLearningIntegrationTests
 
         var groupKeys = new Dictionary<int, string>
         {
-            [0] = "GroupA", [1] = "GroupA",
-            [2] = "GroupB", [3] = "GroupB",
-            [4] = "GroupC", [5] = "GroupC"
+            [0] = "GroupA",
+            [1] = "GroupA",
+            [2] = "GroupB",
+            [3] = "GroupB",
+            [4] = "GroupC",
+            [5] = "GroupC"
         };
 
         var request = new ClientSelectionRequest
@@ -261,7 +272,12 @@ public class FederatedLearningIntegrationTests
             CandidateClientIds = new List<int> { 0, 1, 2, 3, 4, 5 },
             ClientWeights = new Dictionary<int, double>
             {
-                [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0, [5] = 1.0
+                [0] = 1.0,
+                [1] = 1.0,
+                [2] = 1.0,
+                [3] = 1.0,
+                [4] = 1.0,
+                [5] = 1.0
             },
             ClientGroupKeys = groupKeys,
             Random = random
@@ -304,7 +320,11 @@ public class FederatedLearningIntegrationTests
             CandidateClientIds = new List<int> { 0, 1, 2, 3, 4 },
             ClientWeights = new Dictionary<int, double>
             {
-                [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0
+                [0] = 1.0,
+                [1] = 1.0,
+                [2] = 1.0,
+                [3] = 1.0,
+                [4] = 1.0
             },
             ClientAvailabilityProbabilities = availabilities,
             Random = random
@@ -346,7 +366,11 @@ public class FederatedLearningIntegrationTests
             CandidateClientIds = new List<int> { 0, 1, 2, 3, 4 },
             ClientWeights = new Dictionary<int, double>
             {
-                [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0
+                [0] = 1.0,
+                [1] = 1.0,
+                [2] = 1.0,
+                [3] = 1.0,
+                [4] = 1.0
             },
             ClientPerformanceScores = performanceScores,
             Random = random
@@ -381,9 +405,12 @@ public class FederatedLearningIntegrationTests
         // Create embeddings that naturally cluster
         var embeddings = new Dictionary<int, double[]>
         {
-            [0] = new[] { 0.0, 0.0 }, [1] = new[] { 0.1, 0.1 },
-            [2] = new[] { 5.0, 5.0 }, [3] = new[] { 5.1, 5.1 },
-            [4] = new[] { 10.0, 10.0 }, [5] = new[] { 10.1, 10.1 }
+            [0] = new[] { 0.0, 0.0 },
+            [1] = new[] { 0.1, 0.1 },
+            [2] = new[] { 5.0, 5.0 },
+            [3] = new[] { 5.1, 5.1 },
+            [4] = new[] { 10.0, 10.0 },
+            [5] = new[] { 10.1, 10.1 }
         };
 
         var request = new ClientSelectionRequest
@@ -393,7 +420,12 @@ public class FederatedLearningIntegrationTests
             CandidateClientIds = new List<int> { 0, 1, 2, 3, 4, 5 },
             ClientWeights = new Dictionary<int, double>
             {
-                [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0, [5] = 1.0
+                [0] = 1.0,
+                [1] = 1.0,
+                [2] = 1.0,
+                [3] = 1.0,
+                [4] = 1.0,
+                [5] = 1.0
             },
             ClientEmbeddings = embeddings,
             Random = random
@@ -945,7 +977,11 @@ public class FederatedLearningIntegrationTests
 
         var clientWeights = new Dictionary<int, double>
         {
-            [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0
+            [0] = 1.0,
+            [1] = 1.0,
+            [2] = 1.0,
+            [3] = 1.0,
+            [4] = 1.0
         };
 
         // Only 3 clients upload (clients 0, 1, 2 - simulating dropouts of 3, 4)
@@ -958,7 +994,9 @@ public class FederatedLearningIntegrationTests
 
         var uploaderWeights = new Dictionary<int, double>
         {
-            [0] = 1.0, [1] = 1.0, [2] = 1.0
+            [0] = 1.0,
+            [1] = 1.0,
+            [2] = 1.0
         };
 
         var aggregated = secureAgg.AggregateSecurely(maskedUpdates, uploaderWeights);

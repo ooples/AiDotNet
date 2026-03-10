@@ -1,8 +1,8 @@
-using Xunit;
 using AiDotNet.Configuration;
-using AiDotNet.Enums;
-using AiDotNet.CurriculumLearning.Schedulers;
 using AiDotNet.CurriculumLearning.Interfaces;
+using AiDotNet.CurriculumLearning.Schedulers;
+using AiDotNet.Enums;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Configuration;
 

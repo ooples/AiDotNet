@@ -680,7 +680,7 @@ public class ComputerVisionIntegrationTests
 
         Assert.Equal(4, gradient.Length);
         // Gradient should not be all zeros when boxes differ
-        Assert.True(gradient.Any(g => Math.Abs(g) > 1e-10));
+        Assert.Contains(gradient, g => Math.Abs(g) > 1e-10);
     }
 
     [Fact]
