@@ -124,9 +124,9 @@ public sealed class LeafTokenSequenceFederatedDatasetLoader
         var train = LoadSplitFromFile(trainFilePath, options);
         LeafFederatedSplit<string[][], string[]>? test = null;
 
-        if (testFilePath is not null && !string.IsNullOrWhiteSpace(testFilePath))
+        if (!string.IsNullOrWhiteSpace(testFilePath))
         {
-            test = LoadSplitFromFile(testFilePath, options);
+            test = LoadSplitFromFile(testFilePath ?? throw new InvalidOperationException("Test file path is null."), options);
         }
 
         return new LeafFederatedDataset<string[][], string[]>(train, test);
@@ -234,7 +234,7 @@ public sealed class LeafTokenSequenceFederatedDatasetLoader
                 throw new InvalidDataException("LEAF split JSON property 'users' cannot contain empty user IDs.");
             }
 
-            result.Add(value!);
+            result.Add(value ?? throw new InvalidDataException("LEAF user ID value is unexpectedly null."));
         }
 
         return result;

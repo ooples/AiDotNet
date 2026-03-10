@@ -252,12 +252,14 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize BinaryRelevance: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize BinaryRelevance: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize BinaryRelevance: invalid model payload.");
 
         NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
@@ -267,13 +269,14 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
 
         var types = jObj["ClassifierTypes"]?.ToObject<string[]>();
         var data = jObj["ClassifierData"]?.ToObject<string[]>();
-        if (types is not null && data is not null && types.Length == data.Length)
+        if (types is null || data is null || types.Length != data.Length)
+            throw new InvalidOperationException(
+                "Failed to deserialize BinaryRelevance: classifier types/data arrays are missing or mismatched.");
+
+        _labelClassifiers = new IClassifier<T>[types.Length];
+        for (int i = 0; i < types.Length; i++)
         {
-            _labelClassifiers = new IClassifier<T>[types.Length];
-            for (int i = 0; i < types.Length; i++)
-            {
-                _labelClassifiers[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
-            }
+            _labelClassifiers[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
         }
     }
 

@@ -229,6 +229,38 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
     #endregion
 
+    #region Guards
+
+    /// <summary>
+    /// Throws if the model is running in ONNX mode where native operations are not supported.
+    /// </summary>
+    private void ThrowIfOnnxMode()
+    {
+        if (!_useNativeMode)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(RealESRGAN<T>)} does not support this operation in ONNX inference mode. " +
+                "Use native mode for training, serialization, and parameter updates.");
+        }
+    }
+
+    /// <summary>
+    /// Throws if the native-mode components (Generator, Discriminator, loss) have not been initialized.
+    /// </summary>
+    private void ThrowIfNativeModeUnavailable()
+    {
+        ThrowIfOnnxMode();
+
+        if (Generator is null || Discriminator is null || _realESRGANLoss is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(RealESRGAN<T>)} native-mode components are not initialized. " +
+                "Ensure the model was constructed in native mode with valid generator and discriminator architectures.");
+        }
+    }
+
+    #endregion
+
     #region Constructors
 
     /// <summary>
@@ -506,8 +538,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     public (T discriminatorLoss, T generatorLoss) TrainStep(Tensor<T> lowResImages, Tensor<T> highResTargets)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode for training.");
+        ThrowIfNativeModeUnavailable();
         if (lowResImages is null)
             throw new ArgumentNullException(nameof(lowResImages));
         if (highResTargets is null)
@@ -567,6 +598,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         Tensor<T> realOutput,
         Tensor<T> fakeOutput)
     {
+        ThrowIfNativeModeUnavailable();
+
         // Create target labels
         var realLabels = CreateLabelTensor(realOutput.Shape[0], NumOps.One);
         var fakeLabels = CreateLabelTensor(fakeOutput.Shape[0], NumOps.Zero);
@@ -618,6 +651,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var combinedGradient = CombineGradients(reconstructionGradient, ganGradient);
 
         // Backpropagate through generator
+        ThrowIfNativeModeUnavailable();
         Generator!.Backward(combinedGradient);
 
         // Update generator parameters using optimizer or fallback to default learning rate
@@ -752,6 +786,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     private Tensor<T> ProcessThroughGenerator(Tensor<T> input)
     {
+        ThrowIfNativeModeUnavailable();
         var expectedShape = Generator!.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
@@ -851,6 +886,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> ProcessThroughDiscriminator(Tensor<T> input)
     {
+        ThrowIfNativeModeUnavailable();
         var expectedShape = Discriminator!.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
@@ -996,8 +1032,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Parameter updates are not supported in ONNX mode.");
+        ThrowIfNativeModeUnavailable();
 
         // Split parameters between generator and discriminator
         int generatorParams = Generator!.GetParameters().Length;
@@ -1054,8 +1089,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
+        ThrowIfNativeModeUnavailable();
 
         writer.Write(_scaleFactor);
         writer.Write(_numRRDBBlocks);
@@ -1085,8 +1119,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
+        ThrowIfNativeModeUnavailable();
 
         // Read configuration (already set in constructor, just advance reader)
         _ = reader.ReadInt32(); // scaleFactor

@@ -1,8 +1,12 @@
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.Calibration;
 
@@ -47,7 +51,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// The base classifier being calibrated.
     /// </summary>
-    private readonly IProbabilisticClassifier<T> _baseClassifier;
+    private IProbabilisticClassifier<T> _baseClassifier;
 
     /// <summary>
     /// Configuration options.
@@ -870,6 +874,106 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     {
         // Calibration wrappers don't use gradient-based optimization
         // This is a no-op for compatibility
+    }
+
+    /// <inheritdoc/>
+    public override byte[] Serialize()
+    {
+        var (baseTypeName, baseData) = ClassifierRegistry<T>.SerializeClassifier((IClassifier<T>)_baseClassifier);
+
+        var modelDict = new Dictionary<string, object?>
+        {
+            { "ClassLabels", ClassLabels?.ToArray().Select(NumOps.ToDouble).ToArray() },
+            { "NumClasses", NumClasses },
+            { "NumFeatures", NumFeatures },
+            { "TaskType", (int)TaskType },
+            { "CalibrationMethod", (int)_options.CalibrationMethod },
+            { "PlattA", _plattA },
+            { "PlattB", _plattB },
+            { "BetaA", _betaA },
+            { "BetaB", _betaB },
+            { "BetaC", _betaC },
+            { "Temperature", _temperature },
+            { "IsotonicMapping", _isotonicMapping?.Select(m => new[] { m.prob, m.calibrated }).ToArray() },
+            { "IsTrained", _isTrained },
+            { "BaseClassifierType", baseTypeName },
+            { "BaseClassifierData", baseData }
+        };
+
+        var metadata = GetModelMetadata();
+        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
+        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
+    }
+
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] modelData)
+    {
+        var jsonString = Encoding.UTF8.GetString(modelData);
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
+        if (metadata?.ModelData is null)
+            throw new InvalidOperationException("Invalid serialized data: missing model metadata.");
+
+        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
+        if (jObj is null)
+            throw new InvalidOperationException("Invalid serialized data: model data is not a valid JSON object.");
+
+        var classLabelsArr = jObj["ClassLabels"]?.ToObject<double[]>();
+        if (classLabelsArr is not null)
+        {
+            ClassLabels = new Vector<T>(classLabelsArr.Length);
+            for (int i = 0; i < classLabelsArr.Length; i++)
+                ClassLabels[i] = NumOps.FromDouble(classLabelsArr[i]);
+        }
+        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
+        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
+        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
+        _options.CalibrationMethod = (ProbabilityCalibrationMethod)(jObj["CalibrationMethod"]?.ToObject<int>()
+            ?? (int)ProbabilityCalibrationMethod.PlattScaling);
+        _plattA = DeserializeValue(jObj["PlattA"], NumOps.One);
+        _plattB = DeserializeValue(jObj["PlattB"], NumOps.Zero);
+        _betaA = DeserializeValue(jObj["BetaA"], NumOps.One);
+        _betaB = DeserializeValue(jObj["BetaB"], NumOps.One);
+        _betaC = DeserializeValue(jObj["BetaC"], NumOps.Zero);
+        _temperature = DeserializeValue(jObj["Temperature"], NumOps.One);
+        _isTrained = jObj["IsTrained"]?.ToObject<bool>() ?? false;
+
+        var isoArr = jObj["IsotonicMapping"] is JToken isoToken ? isoToken.ToObject<T[][]>() : null;
+        if (isoArr is not null)
+        {
+            _isotonicMapping = isoArr
+                .Where(m => m is not null && m.Length >= 2)
+                .Select(m => (m[0], m[1]))
+                .ToArray();
+        }
+        else
+        {
+            // Clear stale isotonic calibration state when not present in the payload
+            _isotonicMapping = null;
+        }
+
+        // Restore wrapped base classifier
+        var baseType = jObj["BaseClassifierType"]?.ToObject<string>();
+        var baseData = jObj["BaseClassifierData"]?.ToObject<string>();
+        if (baseType is null || baseData is null)
+            throw new InvalidOperationException(
+                "Invalid serialized data: missing BaseClassifierType or BaseClassifierData for CalibratedClassifier.");
+
+        var restoredBase = ClassifierRegistry<T>.DeserializeClassifier(baseType, baseData);
+        if (restoredBase is not IProbabilisticClassifier<T> probClassifier)
+            throw new InvalidOperationException(
+                $"Deserialized base classifier of type '{baseType}' does not implement IProbabilisticClassifier<T>.");
+
+        _baseClassifier = probClassifier;
+    }
+
+    private static T DeserializeValue(JToken? token, T defaultValue)
+    {
+        if (token is null || token.Type == JTokenType.Null)
+            return defaultValue;
+
+        var result = token.ToObject<T>();
+        return result is not null ? result : defaultValue;
     }
 
     /// <inheritdoc/>

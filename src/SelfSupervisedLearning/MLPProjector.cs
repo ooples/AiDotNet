@@ -195,17 +195,21 @@ public class MLPProjector<T> : IProjectorHead<T>
         // Backward through optional BatchNorm 2
         if (_useBatchNormOnOutput && _preActivation2 is not null)
         {
-            (grad, _gradGamma2, _gradBeta2) = BatchNormBackward(grad, _preActivation2, _gamma2!);
+            var gamma2 = _gamma2 ?? throw new InvalidOperationException("Gamma2 has not been initialized.");
+            (grad, _gradGamma2, _gradBeta2) = BatchNormBackward(grad, _preActivation2, gamma2);
         }
 
         // Backward through Layer 2
-        (grad, _gradWeight2, _gradBias2) = LinearBackward(grad, _postRelu1!, _weight2);
+        var postRelu1 = _postRelu1 ?? throw new InvalidOperationException("Post-ReLU activations not available. Forward must be called before Backward.");
+        (grad, _gradWeight2, _gradBias2) = LinearBackward(grad, postRelu1, _weight2);
 
         // Backward through ReLU
-        grad = ReLUBackward(grad, _postBatchNorm1!);
+        var postBatchNorm1 = _postBatchNorm1 ?? throw new InvalidOperationException("Post-BatchNorm activations not available. Forward must be called before Backward.");
+        grad = ReLUBackward(grad, postBatchNorm1);
 
         // Backward through BatchNorm 1
-        (grad, _gradGamma1, _gradBeta1) = BatchNormBackward(grad, _preActivation1!, _gamma1);
+        var preActivation1 = _preActivation1 ?? throw new InvalidOperationException("Pre-activation values not available. Forward must be called before Backward.");
+        (grad, _gradGamma1, _gradBeta1) = BatchNormBackward(grad, preActivation1, _gamma1);
 
         // Backward through Layer 1
         (grad, _gradWeight1, _gradBias1) = LinearBackward(grad, _lastInput, _weight1);
@@ -230,8 +234,10 @@ public class MLPProjector<T> : IProjectorHead<T>
 
         if (_useBatchNormOnOutput)
         {
-            AddTensorToList(paramList, _gamma2!);
-            AddTensorToList(paramList, _beta2!);
+            var g2 = _gamma2 ?? throw new InvalidOperationException("Gamma2 has not been initialized.");
+            AddTensorToList(paramList, g2);
+            var b2 = _beta2 ?? throw new InvalidOperationException("Beta2 has not been initialized.");
+            AddTensorToList(paramList, b2);
         }
 
         return new Vector<T>([.. paramList]);

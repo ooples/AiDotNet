@@ -171,9 +171,10 @@ public class SBFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (subset.Count == 0) return 0;
 
         // Use sum of individual feature scores as a simple evaluation
+        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been computed.");
         double score = 0;
         foreach (int j in subset)
-            score += (_featureScores ?? throw new InvalidOperationException("_featureScores has not been initialized."))[j];
+            score += featureScores[j];
 
         // Bonus for having the right number of features
         int diff = Math.Abs(subset.Count - _nFeaturesToSelect);

@@ -391,10 +391,20 @@ public class AestheticScore<T> where T : struct
         var imageEmbedding = _clipModel.EncodeImage(imageData);
 
         // Linear projection: score = weights^T * embedding
-        T score = _numOps.Zero;
-        for (int i = 0; i < Math.Min((_aestheticWeights ?? throw new InvalidOperationException("_aestheticWeights has not been initialized.")).Length, imageEmbedding.Length); i++)
+        var aestheticWeights = _aestheticWeights ?? throw new InvalidOperationException(
+            "Aesthetic weights have not been initialized.");
+
+        if (aestheticWeights.Length != imageEmbedding.Length)
         {
-            score = _numOps.Add(score, _numOps.Multiply(_aestheticWeights[i], imageEmbedding[i]));
+            throw new InvalidOperationException(
+                $"Embedding dimension mismatch: aesthetic weights have {aestheticWeights.Length} dimensions " +
+                $"but image embedding has {imageEmbedding.Length} dimensions.");
+        }
+
+        T score = _numOps.Zero;
+        for (int i = 0; i < aestheticWeights.Length; i++)
+        {
+            score = _numOps.Add(score, _numOps.Multiply(aestheticWeights[i], imageEmbedding[i]));
         }
 
         // Sigmoid to map to [0, 1] then scale to [1, 10]

@@ -162,12 +162,19 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // === Vectorized BFGS Update using IEngine (Phase B: US-GPU-015) ===
 
         var parameters = currentSolution.GetParameters();
+
+        if (_inverseHessian is null)
+        {
+            throw new InvalidOperationException(
+                "Inverse Hessian matrix has not been initialized. Ensure Initialize() is called before UpdateSolution().");
+        }
+
         if (_previousGradient != null && _previousParameters != null)
         {
             UpdateInverseHessian(parameters, gradient);
         }
 
-        var direction = (_inverseHessian ?? throw new InvalidOperationException("_inverseHessian has not been initialized.")).Multiply(gradient);
+        var direction = _inverseHessian.Multiply(gradient);
         // Vectorized negation
         direction = (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
 
@@ -195,17 +202,30 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // s = current_params - previous_params
         // y = current_grad - previous_grad
 
-        var s = (Vector<T>)Engine.Subtract(currentParameters, _previousParameters!);
-        var y = (Vector<T>)Engine.Subtract(currentGradient, _previousGradient!);
+        var previousParams = _previousParameters ?? throw new InvalidOperationException("Previous parameters have not been initialized.");
+        var previousGrad = _previousGradient ?? throw new InvalidOperationException("Previous gradient has not been initialized.");
+        var inverseHessian = _inverseHessian ?? throw new InvalidOperationException("Inverse Hessian has not been initialized.");
 
-        var rho = NumOps.Divide(NumOps.FromDouble(1), y.DotProduct(s));
+        var s = (Vector<T>)Engine.Subtract(currentParameters, previousParams);
+        var y = (Vector<T>)Engine.Subtract(currentGradient, previousGrad);
+
+        // Curvature condition: only update when y·s > 0 (positive definiteness)
+        var ys = y.DotProduct(s);
+        double ysDouble = Convert.ToDouble(ys);
+        if (ysDouble <= 1e-10)
+        {
+            // Skip update — curvature condition not satisfied
+            return;
+        }
+
+        var rho = NumOps.Divide(NumOps.FromDouble(1), ys);
         var I = Matrix<T>.CreateIdentity(currentParameters.Length);
 
         var term1 = I.Subtract(s.OuterProduct(y).Multiply(rho));
         var term2 = I.Subtract(y.OuterProduct(s).Multiply(rho));
         var term3 = s.OuterProduct(s).Multiply(rho);
 
-        _inverseHessian = term1.Multiply(_inverseHessian!).Multiply(term2).Add(term3);
+        _inverseHessian = term1.Multiply(inverseHessian).Multiply(term2).Add(term3);
     }
 
     /// <summary>

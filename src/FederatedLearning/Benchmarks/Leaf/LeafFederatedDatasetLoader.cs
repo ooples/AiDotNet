@@ -132,9 +132,9 @@ public sealed class LeafFederatedDatasetLoader<T> : FederatedLearningComponentBa
         var train = LoadSplitFromFile(trainFilePath, options);
         LeafFederatedSplit<Matrix<T>, Vector<T>>? test = null;
 
-        if (testFilePath is not null && !string.IsNullOrWhiteSpace(testFilePath))
+        if (!string.IsNullOrWhiteSpace(testFilePath))
         {
-            test = LoadSplitFromFile(testFilePath, options);
+            test = LoadSplitFromFile(testFilePath ?? throw new InvalidOperationException("Test file path is null."), options);
         }
 
         return new LeafFederatedDataset<Matrix<T>, Vector<T>>(train, test);

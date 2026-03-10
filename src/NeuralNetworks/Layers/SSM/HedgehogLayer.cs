@@ -744,6 +744,12 @@ public class HedgehogLayer<T> : LayerBase<T>
         Tensor<T> dPhi, Tensor<T> inputQK, Tensor<T> hidden, Tensor<T> preActivation,
         Tensor<T> dInput, int bi, int t, int hi, int dimStart)
     {
+        // Validate all gradient tensors upfront
+        var w2Grad = _featureMapW2Gradient ?? throw new InvalidOperationException("_featureMapW2Gradient has not been initialized.");
+        var b2Grad = _featureMapB2Gradient ?? throw new InvalidOperationException("_featureMapB2Gradient has not been initialized.");
+        var w1Grad = _featureMapW1Gradient ?? throw new InvalidOperationException("_featureMapW1Gradient has not been initialized.");
+        var b1Grad = _featureMapB1Gradient ?? throw new InvalidOperationException("_featureMapB1Gradient has not been initialized.");
+
         // dPhi -> W2 backward: dHidden = W2^T * dPhi, dW2 += dPhi * hidden^T
         var dHidden = new T[_featureMapHiddenDim];
 
@@ -756,13 +762,13 @@ public class HedgehogLayer<T> : LayerBase<T>
                 T hVal = hidden[new[] { bi, t, hi, fi }];
 
                 // dW2[hi, fi, di] += dPhiVal * hVal
-                (_featureMapW2Gradient ?? throw new InvalidOperationException("_featureMapW2Gradient has not been initialized."))[new[] { hi, fi, di }] = NumOps.Add(
-                    _featureMapW2Gradient[new[] { hi, fi, di }],
+                w2Grad[new[] { hi, fi, di }] = NumOps.Add(
+                    w2Grad[new[] { hi, fi, di }],
                     NumOps.Multiply(dPhiVal, hVal));
 
                 // dB2[hi, di] += dPhiVal
-                (_featureMapB2Gradient ?? throw new InvalidOperationException("_featureMapB2Gradient has not been initialized."))[new[] { hi, di }] = NumOps.Add(
-                    _featureMapB2Gradient[new[] { hi, di }], dPhiVal);
+                b2Grad[new[] { hi, di }] = NumOps.Add(
+                    b2Grad[new[] { hi, di }], dPhiVal);
 
                 dH = NumOps.Add(dH,
                     NumOps.Multiply(dPhiVal, _featureMapW2[new[] { hi, fi, di }]));
@@ -784,8 +790,8 @@ public class HedgehogLayer<T> : LayerBase<T>
             dPreAct[fi] = NumOps.Multiply(dHidden[fi], geluDeriv);
 
             // dB1[hi, fi] += dPreAct
-            (_featureMapB1Gradient ?? throw new InvalidOperationException("_featureMapB1Gradient has not been initialized."))[new[] { hi, fi }] = NumOps.Add(
-                _featureMapB1Gradient[new[] { hi, fi }], dPreAct[fi]);
+            b1Grad[new[] { hi, fi }] = NumOps.Add(
+                b1Grad[new[] { hi, fi }], dPreAct[fi]);
         }
 
         // W1 backward: dInput += W1^T * dPreAct, dW1 += dPreAct * input^T
@@ -797,8 +803,8 @@ public class HedgehogLayer<T> : LayerBase<T>
             for (int fi = 0; fi < _featureMapHiddenDim; fi++)
             {
                 // dW1[hi, di, fi] += dPreAct[fi] * input[di]
-                (_featureMapW1Gradient ?? throw new InvalidOperationException("_featureMapW1Gradient has not been initialized."))[new[] { hi, di, fi }] = NumOps.Add(
-                    _featureMapW1Gradient[new[] { hi, di, fi }],
+                w1Grad[new[] { hi, di, fi }] = NumOps.Add(
+                    w1Grad[new[] { hi, di, fi }],
                     NumOps.Multiply(dPreAct[fi], inputVal));
 
                 dIn = NumOps.Add(dIn,

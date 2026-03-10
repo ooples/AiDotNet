@@ -143,18 +143,54 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     /// </summary>
     private (Matrix<T> x, Vector<T> y) CreateBootstrapSample(Matrix<T> x, Vector<T> y, int sampleSize)
     {
+        var random = _random ?? throw new InvalidOperationException(
+            $"{GetType().Name}: Random not initialized. Call Fit() first.");
+
+        if (sampleSize > x.Rows && !Options.Bootstrap)
+        {
+            throw new ArgumentException(
+                $"Sample size ({sampleSize}) exceeds data size ({x.Rows}) with Bootstrap=false. " +
+                "Either enable Bootstrap or reduce MaxSamples.",
+                nameof(sampleSize));
+        }
+
         var xSample = new Matrix<T>(sampleSize, NumFeatures);
         var ySample = new Vector<T>(sampleSize);
 
-        for (int i = 0; i < sampleSize; i++)
+        if (Options.Bootstrap)
         {
-            int idx = _random!.Next(x.Rows);
-
-            for (int j = 0; j < NumFeatures; j++)
+            // Sample with replacement
+            for (int i = 0; i < sampleSize; i++)
             {
-                xSample[i, j] = x[idx, j];
+                int idx = random.Next(x.Rows);
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    xSample[i, j] = x[idx, j];
+                }
+                ySample[i] = y[idx];
             }
-            ySample[i] = y[idx];
+        }
+        else
+        {
+            // Sample without replacement using Fisher-Yates partial shuffle (O(sampleSize), unbiased)
+            var pool = Enumerable.Range(0, x.Rows).ToArray();
+            for (int k = 0; k < sampleSize; k++)
+            {
+                int swapIdx = k + random.Next(pool.Length - k);
+                (pool[k], pool[swapIdx]) = (pool[swapIdx], pool[k]);
+            }
+            var indices = new int[sampleSize];
+            Array.Copy(pool, 0, indices, 0, sampleSize);
+
+            for (int i = 0; i < sampleSize; i++)
+            {
+                int idx = indices[i];
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    xSample[i, j] = x[idx, j];
+                }
+                ySample[i] = y[idx];
+            }
         }
 
         return (xSample, ySample);
@@ -246,7 +282,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     /// <inheritdoc/>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_estimators is null || _featureIndicesPerEstimator is null)
+        if (_estimators is null || _featureIndicesPerEstimator is null || ClassLabels is null)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
@@ -271,7 +307,35 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
 
             if (_estimators[e] is IProbabilisticClassifier<T> probClassifier)
             {
-                estProbs = probClassifier.PredictProbabilities(filteredInput);
+                var rawProbs = probClassifier.PredictProbabilities(filteredInput);
+
+                // Align estimator probabilities to ensemble label space
+                if (rawProbs.Columns == NumClasses)
+                {
+                    estProbs = rawProbs;
+                }
+                else
+                {
+                    estProbs = new Matrix<T>(input.Rows, NumClasses);
+                    var estClassLabels = _estimators[e].ClassLabels;
+                    if (estClassLabels is not null)
+                    {
+                        for (int ec = 0; ec < estClassLabels.Length && ec < rawProbs.Columns; ec++)
+                        {
+                            for (int ensC = 0; ensC < NumClasses; ensC++)
+                            {
+                                if (NumOps.Compare(estClassLabels[ec], ClassLabels[ensC]) == 0)
+                                {
+                                    for (int i = 0; i < input.Rows; i++)
+                                    {
+                                        estProbs[i, ensC] = rawProbs[i, ec];
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
             }
             else
             {
@@ -372,12 +436,14 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     public override void Deserialize(byte[] modelData)
     {
         var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (metadata?.ModelData is null) return;
+        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
+            ?? throw new InvalidOperationException("Failed to deserialize BaggingClassifier: invalid metadata.");
+        if (metadata.ModelData is null)
+            throw new InvalidOperationException("Failed to deserialize BaggingClassifier: missing model data.");
 
         var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (jObj is null) return;
+        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
+            ?? throw new InvalidOperationException("Failed to deserialize BaggingClassifier: invalid model payload.");
 
         var classLabelsArr = jObj["ClassLabels"]?.ToObject<double[]>();
         if (classLabelsArr is not null)
@@ -393,12 +459,13 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
 
         var types = jObj["EstimatorTypes"]?.ToObject<string[]>();
         var data = jObj["EstimatorData"]?.ToObject<string[]>();
-        if (types is not null && data is not null && types.Length == data.Length)
-        {
-            _estimators = new IClassifier<T>[types.Length];
-            for (int i = 0; i < types.Length; i++)
-                _estimators[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
-        }
+        if (types is null || data is null || types.Length != data.Length)
+            throw new InvalidOperationException(
+                "Failed to deserialize BaggingClassifier: estimator types/data arrays are missing or mismatched.");
+
+        _estimators = new IClassifier<T>[types.Length];
+        for (int i = 0; i < types.Length; i++)
+            _estimators[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
     }
 
     /// <inheritdoc/>

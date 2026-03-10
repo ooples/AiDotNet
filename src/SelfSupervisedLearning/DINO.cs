@@ -112,7 +112,8 @@ public class DINO<T> : TeacherStudentSSL<T>
                 var (_, gradStudent) = _loss.ComputeLossWithGradients(
                     studentOutputs[s], teacherOutputs[t]);
 
-                var gradH = (_projector ?? throw new InvalidOperationException("_projector has not been initialized.")).Backward(gradStudent);
+                var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
+                var gradH = projector.Backward(gradStudent);
                 _encoder.Backpropagate(gradH);
             }
         }

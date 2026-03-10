@@ -172,6 +172,8 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 classVars[label][j] /= classCounts[label];
         }
 
+        var classWeights = _classWeights ?? throw new InvalidOperationException("Class weights have not been computed.");
+
         // Compute weighted Fisher score for each feature
         for (int j = 0; j < p; j++)
         {
@@ -180,7 +182,7 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             foreach (int label in classCounts.Keys)
             {
-                double weight = _classWeights![label];
+                double weight = classWeights[label];
                 overallMean += weight * classCounts[label] * classMeans[label][j];
                 totalWeight += weight * classCounts[label];
             }
@@ -190,7 +192,7 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             foreach (int label in classCounts.Keys)
             {
-                double weight = _classWeights![label];
+                double weight = classWeights[label];
                 double meanDiff = classMeans[label][j] - overallMean;
                 betweenVar += weight * classCounts[label] * meanDiff * meanDiff;
                 withinVar += weight * classCounts[label] * classVars[label][j];

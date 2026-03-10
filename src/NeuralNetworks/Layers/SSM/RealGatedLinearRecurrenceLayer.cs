@@ -333,6 +333,13 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Validate all cached tensors upfront before allocating any gradients
+        var lastRecurrenceOutput = _lastRecurrenceOutput ?? throw new InvalidOperationException("_lastRecurrenceOutput has not been initialized.");
+        var lastProjectedInput = _lastProjectedInput ?? throw new InvalidOperationException("_lastProjectedInput has not been initialized.");
+        var lastRecurrenceGate = _lastRecurrenceGate ?? throw new InvalidOperationException("_lastRecurrenceGate has not been initialized.");
+        var lastInputGate = _lastInputGate ?? throw new InvalidOperationException("_lastInputGate has not been initialized.");
+        var lastHiddenStates = _lastHiddenStates ?? throw new InvalidOperationException("_lastHiddenStates has not been initialized.");
+
         int batchSize = _lastInput.Shape[0];
         int seqLen = _lastInput.Shape[1];
 
@@ -346,7 +353,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
         _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
 
-        var recOutFlat = (_lastRecurrenceOutput ?? throw new InvalidOperationException("_lastRecurrenceOutput has not been initialized.")).Reshape(batchSize * seqLen, _recurrenceDimension);
+        var recOutFlat = lastRecurrenceOutput.Reshape(batchSize * seqLen, _recurrenceDimension);
         _outputProjectionWeightsGradient = Engine.TensorMatMul(recOutFlat.Transpose([1, 0]), gradFlat);
 
         var dRecurrence = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
@@ -372,9 +379,9 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             var dOut_t = dRecurrence.GetSliceAlongDimension(t, 1);
             dh = Engine.TensorAdd(dh, dOut_t);
 
-            var p_t = (_lastProjectedInput ?? throw new InvalidOperationException("_lastProjectedInput has not been initialized.")).GetSliceAlongDimension(t, 1);
-            var r_t = (_lastRecurrenceGate ?? throw new InvalidOperationException("_lastRecurrenceGate has not been initialized.")).GetSliceAlongDimension(t, 1);
-            var i_t = (_lastInputGate ?? throw new InvalidOperationException("_lastInputGate has not been initialized.")).GetSliceAlongDimension(t, 1);
+            var p_t = lastProjectedInput.GetSliceAlongDimension(t, 1);
+            var r_t = lastRecurrenceGate.GetSliceAlongDimension(t, 1);
+            var i_t = lastInputGate.GetSliceAlongDimension(t, 1);
             var v_t = Engine.TensorMatMul(p_t, _valueProjectionWeights);
 
             var dRGate = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
@@ -395,7 +402,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
                     double sqrtFactor = Math.Sqrt(Math.Max(0, 1.0 - aVal * aVal));
                     double iVal = NumOps.ToDouble(i_t[new[] { bi, d }]);
                     double vVal = NumOps.ToDouble(v_t[new[] { bi, d }]);
-                    double hPrev = NumOps.ToDouble((_lastHiddenStates ?? throw new InvalidOperationException("_lastHiddenStates has not been initialized."))[new[] { bi, t, d }]);
+                    double hPrev = NumOps.ToDouble(lastHiddenStates[new[] { bi, t, d }]);
 
                     // dh/dh_prev = a_t
                     dhPrev[new[] { bi, d }] = NumOps.FromDouble(dhVal * aVal);

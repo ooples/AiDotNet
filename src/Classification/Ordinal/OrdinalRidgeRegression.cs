@@ -79,7 +79,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> Higher values make the model simpler by shrinking coefficients
     /// toward zero. This prevents overfitting but may underfit if too high.</para>
     /// </remarks>
-    private readonly double _alpha;
+    private double _alpha;
 
     /// <summary>
     /// Whether to fit an intercept term.
@@ -88,7 +88,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> The intercept allows the prediction line to not pass through
     /// the origin. Almost always set to true unless your data is already centered.</para>
     /// </remarks>
-    private readonly bool _fitIntercept;
+    private bool _fitIntercept;
 
     /// <summary>
     /// Initializes a new instance of OrdinalRidgeRegression.
@@ -662,7 +662,9 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
             { "NumFeatures", NumFeatures },
             { "TaskType", (int)TaskType },
             { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "Bias", NumOps.ToDouble(_bias) }
+            { "Bias", NumOps.ToDouble(_bias) },
+            { "Alpha", _alpha },
+            { "FitIntercept", _fitIntercept }
         };
 
         if (_coefficients is not null)
@@ -718,6 +720,8 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
         }
 
         _bias = NumOps.FromDouble(modelDataObj["Bias"]?.ToObject<double>() ?? 0.0);
+        _alpha = modelDataObj["Alpha"]?.ToObject<double>() ?? _alpha;
+        _fitIntercept = modelDataObj["FitIntercept"]?.ToObject<bool>() ?? _fitIntercept;
 
         var coefToken = modelDataObj["Coefficients"];
         if (coefToken is not null)

@@ -405,7 +405,7 @@ public class InterpretabilityDashboard : IDisposable
                 SysConsole.WriteLine("Global Feature Importance (Mean |Attribution|):");
                 SysConsole.WriteLine(new string('-', 50));
 
-                var featureNames = attributions[0].FeatureNames!;
+                var featureNames = attributions[0].FeatureNames ?? throw new InvalidOperationException("Feature names are null despite being filtered.");
                 var meanAbsAttr = new double[featureNames.Length];
 
                 foreach (var exp in attributions)
@@ -469,20 +469,32 @@ public class InterpretabilityDashboard : IDisposable
 
             if (attributions.Count > 0)
             {
-                var featureNames = attributions[0].FeatureNames!;
+                var featureNames = attributions[0].FeatureNames ?? throw new InvalidOperationException("Feature names are null despite being filtered.");
                 var meanAttr = new double[featureNames.Length];
 
+                var validAttributions = new List<Explanation>();
                 foreach (var exp in attributions)
                 {
-                    for (int i = 0; i < featureNames.Length && i < (exp.Attributions ?? throw new InvalidOperationException("Attributions has not been initialized.")).Length; i++)
+                    if (exp.Attributions is not { Length: > 0 } expAttributions)
                     {
-                        meanAttr[i] += exp.Attributions[i];
+                        continue;
+                    }
+
+                    validAttributions.Add(exp);
+                    for (int i = 0; i < featureNames.Length && i < expAttributions.Length; i++)
+                    {
+                        meanAttr[i] += expAttributions[i];
                     }
                 }
 
-                for (int i = 0; i < meanAttr.Length; i++)
+                int validCount = validAttributions.Count;
+
+                if (validCount > 0)
                 {
-                    meanAttr[i] /= attributions.Count;
+                    for (int i = 0; i < meanAttr.Length; i++)
+                    {
+                        meanAttr[i] /= validCount;
+                    }
                 }
 
                 if (format == "all" || format == "json")
@@ -509,7 +521,8 @@ public class InterpretabilityDashboard : IDisposable
                 if (attributions.Count > 1)
                 {
                     var batchData = attributions
-                        .Select(e => (e.InstanceId, e.Attributions!))
+                        .Where(e => e.Attributions is not null)
+                        .Select(e => (e.InstanceId, Attributions: e.Attributions ?? Array.Empty<double>()))
                         .ToList();
 
                     results["batch_json"] = _exporter.ExportBatchToJson(batchData, featureNames, metadata, baseFilename + "_batch");

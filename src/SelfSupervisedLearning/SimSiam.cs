@@ -43,7 +43,7 @@ public class SimSiam<T> : SSLMethodBase<T>
     /// <summary>
     /// Gets the typed symmetric projector.
     /// </summary>
-    private SymmetricProjector<T> SymmetricProjector => (SymmetricProjector<T>)_projector!;
+    private SymmetricProjector<T> SymmetricProjector => (SymmetricProjector<T>)(_projector ?? throw new InvalidOperationException("Projector has not been initialized."));
 
     /// <inheritdoc />
     public override string Name => "SimSiam";

@@ -203,10 +203,22 @@ Provide your critique:";
             var root = JObject.Parse(jsonContent);
 
             // Parse score
-            if (root["score"] != null)
+            var scoreToken = root["score"];
+            if (scoreToken != null)
             {
-                double score = root["score"]!.Value<double>();
-                result.Score = _numOps.FromDouble(MathHelper.Clamp(score, 0.0, 1.0));
+                try
+                {
+                    double score = scoreToken.Value<double>();
+                    result.Score = _numOps.FromDouble(MathHelper.Clamp(score, 0.0, 1.0));
+                }
+                catch (FormatException)
+                {
+                    // Token is not a valid numeric value - keep default score
+                }
+                catch (InvalidCastException)
+                {
+                    // Token is an incompatible type (e.g., object/array) - keep default score
+                }
             }
 
             // Parse feedback

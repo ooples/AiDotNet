@@ -6,6 +6,7 @@ using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.Memory;
 using AiDotNet.JitCompiler.Optimizations;
 using IOptimizationPass = AiDotNet.JitCompiler.Optimizations.IOptimizationPass;
+using TensorPool = AiDotNet.JitCompiler.Memory.TensorPool;
 
 namespace AiDotNet.JitCompiler;
 

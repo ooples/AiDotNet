@@ -1117,13 +1117,13 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         return fusedActivation switch
         {
-            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!),
-            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, _lastOutputGpu!),
-            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, _lastOutputGpu!),
-            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!),
-            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, _lastPreActivationGpu!),
+            FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
+            FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
+            FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
+            FusedActivationType.GELU => gpuEngine.GeluBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
+            FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradOutput, _lastPreActivationGpu ?? throw new InvalidOperationException("_lastPreActivationGpu not initialized.")),
             FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradOutput, _lastPreActivationGpu!, 0.01f),
-            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(gradOutput, _lastOutputGpu!),
+            FusedActivationType.Softmax => gpuEngine.SoftmaxBackwardGpu<T>(gradOutput, _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu not initialized.")),
             FusedActivationType.None => gradOutput, // Identity activation - gradient passes through unchanged
             _ => gradOutput // Fallback for unsupported activations
         };

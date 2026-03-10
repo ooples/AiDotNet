@@ -90,7 +90,8 @@ public class MoCoV2<T> : MoCo<T>
         var momentumEncoder = new MomentumEncoder<T>(encoderCopy, 0.999);
 
         var config = CreateMoCoV2Config();
-        (config.MoCo ?? throw new InvalidOperationException("MoCo has not been initialized.")).QueueSize = queueSize;
+        var mocoConfig = config.MoCo ?? throw new InvalidOperationException("MoCo config has not been initialized.");
+        mocoConfig.QueueSize = queueSize;
 
         return new MoCoV2<T>(encoder, momentumEncoder, projector, momentumProjector, projectionDim, config);
     }

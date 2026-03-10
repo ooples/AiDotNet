@@ -967,6 +967,9 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         _bottleneckDim = reader.ReadInt32();
         EnhancementStrength = reader.ReadDouble();
 
+        // Rebuild streaming buffers after FFT/hop size may have changed
+        InitializeStreamingBuffers();
+
         // Reinitialize layers if needed for native mode
         if (_useNativeMode && (_encoderLayers is null || _encoderLayers.Count == 0))
         {

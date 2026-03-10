@@ -775,23 +775,30 @@ public class FILM<T> : FrameInterpolationBase<T>
 
     private void BackwardPass(Tensor<T> gradient)
     {
-        if (_cachedFeatures1 == null || _cachedFeatures2 == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        var cachedFeatures1 = _cachedFeatures1
+            ?? throw new InvalidOperationException("Cached features 1 have not been initialized. Forward pass must be called before backward pass.");
+        var cachedFeatures2 = _cachedFeatures2
+            ?? throw new InvalidOperationException("Cached features 2 have not been initialized. Forward pass must be called before backward pass.");
+
+        // Fail fast on all required backward-pass caches
+        var cachedFusionActivations = _cachedFusionActivations
+            ?? throw new InvalidOperationException("Cached fusion activations have not been initialized. Forward pass must populate all caches.");
+        var cachedFlowEstimatorActivations = _cachedFlowEstimatorActivations
+            ?? throw new InvalidOperationException("Cached flow estimator activations have not been initialized. Forward pass must populate all caches.");
 
         // 1. Backpropagate through synthesis head
         gradient = _synthesisHead.Backward(gradient);
 
         // 2. Backpropagate through fusion layers (reverse order)
         // Apply LeakyReLU gradient for each layer
-        if (_cachedFusionActivations != null)
         {
-            int actIdx = _cachedFusionActivations.Count - 1;
+            int actIdx = cachedFusionActivations.Count - 1;
             for (int i = _fusionLayers.Count - 1; i >= 0; i--)
             {
                 // LeakyReLU gradient
                 if (actIdx >= 1)
                 {
-                    var preActivation = _cachedFusionActivations[actIdx - 1];
+                    var preActivation = cachedFusionActivations[actIdx - 1];
                     gradient = ApplyLeakyReLUGradient(gradient, preActivation, 0.2);
                     actIdx--;
                 }
@@ -802,15 +809,23 @@ public class FILM<T> : FrameInterpolationBase<T>
 
         // 3. At this point, gradient is for the fused (blended) tensor
         // Split gradient to warped1, warped2, occ1, occ2 based on blending formula
+        var cachedWarped1 = _cachedWarped1 ?? throw new InvalidOperationException("Cached warped frame 1 has not been initialized.");
+        var cachedWarped2 = _cachedWarped2 ?? throw new InvalidOperationException("Cached warped frame 2 has not been initialized.");
+        var cachedOcc1 = _cachedOcc1 ?? throw new InvalidOperationException("Cached occlusion 1 has not been initialized.");
+        var cachedOcc2 = _cachedOcc2 ?? throw new InvalidOperationException("Cached occlusion 2 has not been initialized.");
+        var cachedFlowToT1 = _cachedFlowToT1 ?? throw new InvalidOperationException("Cached flow to T1 has not been initialized.");
+        var cachedFlowToT2 = _cachedFlowToT2 ?? throw new InvalidOperationException("Cached flow to T2 has not been initialized.");
+        var cachedFeatExt1Acts = _cachedFeatureExtractor1Activations ?? throw new InvalidOperationException("Cached feature extractor 1 activations have not been initialized.");
+        var cachedFeatExt2Acts = _cachedFeatureExtractor2Activations ?? throw new InvalidOperationException("Cached feature extractor 2 activations have not been initialized.");
         var (gradWarped1, gradWarped2, gradOcc1, gradOcc2) = ComputeFusionGradients(
-            gradient, _cachedWarped1!, _cachedWarped2!, _cachedOcc1!, _cachedOcc2!, _cachedTimestep);
+            gradient, cachedWarped1, cachedWarped2, cachedOcc1, cachedOcc2, _cachedTimestep);
 
         // 4. Backpropagate warping gradients
         // Warp backward: gradient w.r.t. features and flow
         var (gradFeatures1FromWarp, gradFlowToT1) = WarpFeaturesBackward(
-            gradWarped1, _cachedFeatures1, _cachedFlowToT1!);
+            gradWarped1, cachedFeatures1, cachedFlowToT1);
         var (gradFeatures2FromWarp, gradFlowToT2) = WarpFeaturesBackward(
-            gradWarped2, _cachedFeatures2, _cachedFlowToT2!);
+            gradWarped2, cachedFeatures2, cachedFlowToT2);
 
         // 5. Scale flow gradients back (reverse of ScaleFlow)
         var gradFlow2to1 = ScaleFlow(gradFlowToT1, _cachedTimestep);
@@ -818,13 +833,13 @@ public class FILM<T> : FrameInterpolationBase<T>
 
         // 6. Backpropagate through occlusion estimator
         // Combine occlusion gradients and apply sigmoid gradient
-        var gradOccCombined = CombineOcclusionGradients(gradOcc1, gradOcc2, _cachedOcc1!, _cachedOcc2!);
-        gradOccCombined = ApplySigmoidGradient(gradOccCombined, _cachedOcc1!, _cachedOcc2!);
+        var gradOccCombined = CombineOcclusionGradients(gradOcc1, gradOcc2, cachedOcc1, cachedOcc2);
+        gradOccCombined = ApplySigmoidGradient(gradOccCombined, cachedOcc1, cachedOcc2);
         var gradOccInput = _occlusionEstimator.Backward(gradOccCombined);
 
         // Split occlusion input gradient to features and flows
-        int feat1Channels = _cachedFeatures1.Shape[1];
-        int feat2Channels = _cachedFeatures2.Shape[1];
+        int feat1Channels = cachedFeatures1.Shape[1];
+        int feat2Channels = cachedFeatures2.Shape[1];
         var (gradFeaturesFromOcc1, gradFeaturesFromOcc2, gradFlowFromOcc1, gradFlowFromOcc2) =
             SplitOcclusionGradient(gradOccInput, feat1Channels, feat2Channels);
 
@@ -835,15 +850,14 @@ public class FILM<T> : FrameInterpolationBase<T>
         // 7. Backpropagate through flow estimator
         var gradFlowCombined = CombineFlowGradients(gradFlow1to2, gradFlow2to1);
 
-        if (_cachedFlowEstimatorActivations != null)
         {
-            int actIdx = _cachedFlowEstimatorActivations.Count - 1;
+            int actIdx = cachedFlowEstimatorActivations.Count - 1;
             for (int i = _flowEstimator.Count - 1; i >= 0; i--)
             {
                 // Apply LeakyReLU gradient for non-final layers
                 if (i < _flowEstimator.Count - 1 && actIdx >= 1)
                 {
-                    var preActivation = _cachedFlowEstimatorActivations[actIdx - 1];
+                    var preActivation = cachedFlowEstimatorActivations[actIdx - 1];
                     gradFlowCombined = ApplyLeakyReLUGradient(gradFlowCombined, preActivation, 0.2);
                     actIdx--;
                 }
@@ -854,7 +868,7 @@ public class FILM<T> : FrameInterpolationBase<T>
 
         // Split flow input gradient to features1 and features2
         var (gradFeaturesFromFlow1, gradFeaturesFromFlow2) = SplitConcatenatedGradient(
-            gradFlowCombined, _cachedFeatures1.Shape[1], _cachedFeatures2.Shape[1]);
+            gradFlowCombined, cachedFeatures1.Shape[1], cachedFeatures2.Shape[1]);
 
         // 8. Accumulate all gradients going to features1 and features2
         var gradFeatures1 = AddTensors(gradFeatures1FromWarp, gradFeaturesFromOcc1);
@@ -864,8 +878,8 @@ public class FILM<T> : FrameInterpolationBase<T>
         gradFeatures2 = AddTensors(gradFeatures2, gradFeaturesFromFlow2);
 
         // 9. Backpropagate through feature extractors
-        BackwardThroughFeatureExtractor(gradFeatures1, _cachedFeatureExtractor1Activations!);
-        BackwardThroughFeatureExtractor(gradFeatures2, _cachedFeatureExtractor2Activations!);
+        BackwardThroughFeatureExtractor(gradFeatures1, cachedFeatExt1Acts);
+        BackwardThroughFeatureExtractor(gradFeatures2, cachedFeatExt2Acts);
 
         // Clear cached activations
         ClearActivationCache();
