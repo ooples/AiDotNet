@@ -392,7 +392,12 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
             { "TaskType", (int)TaskType },
             { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
             { "RegularizationOptions", Regularization.GetOptions() },
-            { "FitIntercept", Options.FitIntercept }
+            { "FitIntercept", Options.FitIntercept },
+            { "LearningRate", Options.LearningRate },
+            { "MaxIterations", Options.MaxIterations },
+            { "Penalty", (int)Options.Penalty },
+            { "Loss", (int)Options.Loss },
+            { "Alpha", Options.Alpha }
         };
 
         // Serialize Weights
@@ -446,12 +451,20 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
         NumFeatures = numFeaturesToken.ToObject<int>();
         TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
 
-        // Restore FitIntercept
+        // Restore options
         var fitInterceptToken = modelDataObj["FitIntercept"];
         if (fitInterceptToken is not null)
-        {
             Options.FitIntercept = fitInterceptToken.ToObject<bool>();
-        }
+        if (modelDataObj["LearningRate"] is not null)
+            Options.LearningRate = modelDataObj["LearningRate"]?.ToObject<double>() ?? Options.LearningRate;
+        if (modelDataObj["MaxIterations"] is not null)
+            Options.MaxIterations = modelDataObj["MaxIterations"]?.ToObject<int>() ?? Options.MaxIterations;
+        if (modelDataObj["Penalty"] is not null)
+            Options.Penalty = (LinearPenalty)(modelDataObj["Penalty"]?.ToObject<int>() ?? (int)Options.Penalty);
+        if (modelDataObj["Loss"] is not null)
+            Options.Loss = (LinearLoss)(modelDataObj["Loss"]?.ToObject<int>() ?? (int)Options.Loss);
+        if (modelDataObj["Alpha"] is not null)
+            Options.Alpha = modelDataObj["Alpha"]?.ToObject<double>() ?? Options.Alpha;
 
         var classLabelsToken = modelDataObj["ClassLabels"];
         if (classLabelsToken is not null)

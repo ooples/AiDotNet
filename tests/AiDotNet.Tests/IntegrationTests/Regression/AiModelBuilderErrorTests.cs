@@ -97,6 +97,7 @@ public class AiModelBuilderErrorTests
         var loader = DataLoaders.FromMatrixVector(x, y);
 
         // Act/Assert: Should throw a meaningful error about insufficient data
+        // Must be an ArgumentException or InvalidOperationException (not NullReferenceException etc.)
         var ex = Assert.ThrowsAny<Exception>(() =>
         {
             new AiModelBuilder<double, Matrix<double>, Vector<double>>()
@@ -109,7 +110,21 @@ public class AiModelBuilderErrorTests
 
         Assert.True(
             ex is InvalidOperationException or ArgumentException or ArgumentOutOfRangeException,
-            $"Expected a data-size error, got {ex.GetType().Name}: {ex.Message}");
+            $"Expected a data-size error (InvalidOperationException or ArgumentException), " +
+            $"got {ex.GetType().Name}: {ex.Message}");
         Assert.NotEmpty(ex.Message);
+        // The error message should mention the data issue, not be a generic crash
+        Assert.True(
+            ex.Message.Contains("sample", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("data", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("row", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("size", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("split", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("insufficient", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("empty", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("length", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("count", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("must", StringComparison.OrdinalIgnoreCase),
+            $"Error message should mention the data issue, got: {ex.Message}");
     }
 }
