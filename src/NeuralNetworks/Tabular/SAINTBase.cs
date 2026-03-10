@@ -284,20 +284,10 @@ public abstract class SAINTBase<T>
         var current = embedded;
 
         // Process through transformer layers
-        // Validate layer norms once upfront; norms is only indexed inside UseLayerNorm guards
-        List<LayerNormalizationLayer<T>> norms;
-        if (Options.UseLayerNorm)
-        {
-            if (_layerNorms is null)
-            {
-                throw new InvalidOperationException("Layer norms not initialized when UseLayerNorm is true.");
-            }
-            norms = _layerNorms;
-        }
-        else
-        {
-            norms = new List<LayerNormalizationLayer<T>>();
-        }
+        // Validate and hoist layer norms upfront to avoid repeated null checks inside the loop
+        var norms = Options.UseLayerNorm
+            ? _layerNorms ?? throw new InvalidOperationException("Layer norms not initialized when UseLayerNorm is true.")
+            : [];
         int normIdx = 0;
         for (int layer = 0; layer < Options.NumLayers; layer++)
         {

@@ -192,14 +192,15 @@ public abstract class AutoIntBase<T>
         // Embed categorical features (lookup embedding)
         if (categoricalIndices != null && _categoricalEmbeddings != null)
         {
+            var cardinalities = Options.CategoricalCardinalities
+                ?? throw new InvalidOperationException("AutoIntBase: CategoricalCardinalities not configured.");
+
             for (int b = 0; b < batchSize; b++)
             {
                 for (int f = 0; f < NumCategoricalFeatures; f++)
                 {
                     int catIdx = categoricalIndices[b, f];
-                    if (Options.CategoricalCardinalities is null)
-                        throw new InvalidOperationException("AutoIntBase: CategoricalCardinalities not configured.");
-                    int cardinality = Options.CategoricalCardinalities[f];
+                    int cardinality = cardinalities[f];
                     if ((uint)catIdx >= (uint)cardinality)
                     {
                         throw new ArgumentOutOfRangeException(
