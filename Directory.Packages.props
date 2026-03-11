@@ -5,11 +5,11 @@
 
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
-    <PackageVersion Include="AiDotNet" Version="0.67.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.9.1" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.9.1" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.9.1" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.9.1" />
+    <PackageVersion Include="AiDotNet" Version="0.113.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.9.3" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.9.3" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.9.3" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.9.3" />
 
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
