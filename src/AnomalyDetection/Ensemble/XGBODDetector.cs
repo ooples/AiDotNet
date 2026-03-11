@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -38,6 +40,13 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 /// Detection with Unsupervised Representation Learning." IJCNN.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("XGBOD: Improving Supervised Outlier Detection with Unsupervised Representation Learning", "https://doi.org/10.1109/IJCNN.2018.8489605", Year = 2018, Authors = "Yue Zhao, Maciej K. Hryniewicki")]
 public class XGBODDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nEstimators;

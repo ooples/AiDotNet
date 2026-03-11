@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -38,6 +40,12 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 /// Outlier Ensembles." SDM.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("LSCP: Locally Selective Combination in Parallel Outlier Ensembles", "https://doi.org/10.1137/1.9781611975673.17", Year = 2019, Authors = "Yue Zhao, Zain Nasrullah, Maciej K. Hryniewicki, Zheng Li")]
 public class LSCPDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nEstimators;

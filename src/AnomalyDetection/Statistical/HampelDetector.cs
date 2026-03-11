@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -37,6 +39,11 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 /// Reference: Hampel, F.R. (1974). "The Influence Curve and its Role in Robust Estimation."
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class HampelDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _windowSize;

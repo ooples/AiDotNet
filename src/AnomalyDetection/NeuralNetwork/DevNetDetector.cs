@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -39,6 +41,12 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 /// "Deep Anomaly Detection with Deviation Networks." KDD.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Deep Anomaly Detection with Deviation Networks", "https://doi.org/10.1145/3292500.3330871", Year = 2019, Authors = "Guansong Pang, Chunhua Shen, Anton van den Hengel")]
 public class DevNetDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _hiddenDim;

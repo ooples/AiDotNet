@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -34,6 +36,12 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 /// - Contamination: 0.1 (10%)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Clustering)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class GMMDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nComponents;

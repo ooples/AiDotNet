@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -26,6 +28,11 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 /// - Contamination: 0.1 (10%) - used for automatic threshold tuning
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class ZScoreDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _zThreshold;

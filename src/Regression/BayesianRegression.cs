@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -44,6 +47,11 @@ namespace AiDotNet.Regression;
 /// - You need to incorporate prior knowledge about the problem
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class BayesianRegression<T> : RegressionBase<T>
 {
     /// <summary>

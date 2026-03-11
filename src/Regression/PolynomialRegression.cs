@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -8,10 +11,15 @@ namespace AiDotNet.Regression;
 /// Polynomial regression is useful when the relationship between variables is not linear.
 /// It works by creating new features that are powers of the original features (x, x², x³, etc.),
 /// then applying linear regression techniques to these expanded features.
-/// 
+///
 /// <b>For Beginners:</b> While linear regression fits a straight line to your data,
 /// polynomial regression can fit curves, allowing it to capture more complex patterns.
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class PolynomialRegression<T> : RegressionBase<T>
 {
     private readonly PolynomialRegressionOptions<T> _polyOptions;

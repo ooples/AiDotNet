@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -36,6 +38,11 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 /// Reference: Janssens, J.H.M., et al. (2012). "Stochastic Outlier Selection." Technical Report.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class SOSDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _perplexity;

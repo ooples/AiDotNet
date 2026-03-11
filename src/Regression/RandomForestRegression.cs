@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
@@ -24,6 +26,13 @@ namespace AiDotNet.Regression;
 /// than any single tree. It's like asking multiple experts for their opinion and taking the average.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Random Forests", "https://doi.org/10.1023/A:1010933404324", Year = 2001, Authors = "Leo Breiman")]
 public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>

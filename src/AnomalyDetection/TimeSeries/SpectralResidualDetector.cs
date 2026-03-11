@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -38,6 +40,14 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 /// Originally from Hou, X., Zhang, L. (2007). "Saliency Detection: A Spectral Residual Approach."
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Saliency Detection: A Spectral Residual Approach", "https://doi.org/10.1109/CVPR.2007.383267", Year = 2007, Authors = "Xiaodi Hou, Liqing Zhang")]
 public class SpectralResidualDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _windowSize;

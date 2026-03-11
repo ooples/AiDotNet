@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -41,6 +43,14 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 /// "N-BEATS: Neural Basis Expansion Analysis for Interpretable Time Series Forecasting." ICLR.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("N-BEATS: Neural Basis Expansion Analysis for Interpretable Time Series Forecasting", "https://doi.org/10.48550/arXiv.1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
 public class NBEATSDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numStacks;

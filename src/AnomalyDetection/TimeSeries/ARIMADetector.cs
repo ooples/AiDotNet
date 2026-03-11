@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -37,6 +39,14 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 /// Reference: Box, G.E.P., Jenkins, G.M. (1970). "Time Series Analysis: Forecasting and Control."
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
 public class ARIMADetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _p;

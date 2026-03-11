@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -36,6 +38,12 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 /// Heterogeneous Outlier Detection." MLSys.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection", "https://doi.org/10.48550/arXiv.2003.05731", Year = 2021, Authors = "Yue Zhao, Xiyang Hu, Cheng Cheng, Cong Wang, Changlin Wan, Wen Wang, Jianing Yang, Haoping Bai, Zheng Li, Cao Xiao, Yunlong Wang, Zhi Qiao, Jiashu Sun, Leman Akoglu")]
 public class SUODDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly bool _useRandomProjection;

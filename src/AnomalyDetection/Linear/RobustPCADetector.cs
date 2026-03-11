@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -39,6 +41,12 @@ namespace AiDotNet.AnomalyDetection.Linear;
 /// Reference: Candès, E.J., et al. (2011). "Robust Principal Component Analysis?" JACM.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Robust Principal Component Analysis?", "https://doi.org/10.1145/1970392.1970395", Year = 2011, Authors = "Emmanuel J. Candes, Xiaodong Li, Yi Ma, John Wright")]
 public class RobustPCADetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _lambda;

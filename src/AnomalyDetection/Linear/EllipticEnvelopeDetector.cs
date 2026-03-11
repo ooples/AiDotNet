@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -37,6 +39,11 @@ namespace AiDotNet.AnomalyDetection.Linear;
 /// Covariance Determinant Estimator." Technometrics.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _supportFraction;

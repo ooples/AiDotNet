@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -35,6 +37,12 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 /// Reference: Li, Z., et al. (2020). "COPOD: Copula-Based Outlier Detection." ICDM.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("COPOD: Copula-Based Outlier Detection", "https://doi.org/10.1109/ICDM50108.2020.00135", Year = 2020, Authors = "Zheng Li, Yue Zhao, Nicola Botta, Cezar Ionescu, Xiyang Hu")]
 public class COPODDetector<T> : AnomalyDetectorBase<T>
 {
     private double[][]? _sortedFeatureValues;

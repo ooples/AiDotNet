@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -38,6 +40,13 @@ namespace AiDotNet.AnomalyDetection.TreeBased;
 /// In: ICDM '08. Eighth IEEE International Conference on Data Mining.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Isolation Forest", "https://doi.org/10.1109/ICDM.2008.17", Year = 2008, Authors = "Fei Tony Liu, Kai Ming Ting, Zhi-Hua Zhou")]
 public class IsolationForest<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numTrees;

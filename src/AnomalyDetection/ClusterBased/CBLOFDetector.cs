@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -38,6 +40,12 @@ namespace AiDotNet.AnomalyDetection.ClusterBased;
 /// Reference: He, Z., et al. (2003). "Discovering Cluster-Based Local Outliers." Pattern Recognition Letters.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Clustering)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Discovering Cluster-Based Local Outliers", "https://doi.org/10.1016/S0167-8655(03)00003-5", Year = 2003, Authors = "Zengyou He, Xiaofei Xu, Shengchun Deng")]
 public class CBLOFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nClusters;

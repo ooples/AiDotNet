@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -37,6 +39,12 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 /// Empirical Cumulative Distribution Functions." IEEE TKDE.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("ECOD: Unsupervised Outlier Detection Using Empirical Cumulative Distribution Functions", "https://doi.org/10.1109/TKDE.2022.3159580", Year = 2022, Authors = "Zheng Li, Yue Zhao, Xiyang Hu, Nicola Botta, Cezar Ionescu, George H. Chen")]
 public class ECODDetector<T> : AnomalyDetectorBase<T>
 {
     private double[][]? _sortedFeatureValues;

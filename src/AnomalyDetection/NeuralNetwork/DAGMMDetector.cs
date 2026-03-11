@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -40,6 +42,14 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 /// "Deep Autoencoding Gaussian Mixture Model for Unsupervised Anomaly Detection." ICLR.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Autoencoder)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Deep Autoencoding Gaussian Mixture Model for Unsupervised Anomaly Detection", "https://doi.org/10.48550/arXiv.1804.00921", Year = 2018, Authors = "Bo Zong, Qi Song, Martin Renqiang Min, Wei Cheng, Cristian Lumezanu, Daeki Cho, Haifeng Chen")]
 public class DAGMMDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _latentDim;

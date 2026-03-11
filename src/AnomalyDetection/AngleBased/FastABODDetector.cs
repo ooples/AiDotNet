@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -35,6 +37,12 @@ namespace AiDotNet.AnomalyDetection.AngleBased;
 /// Reference: Kriegel, H., et al. (2008). "Angle-Based Outlier Detection in High-dimensional Data." KDD.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Angle-Based Outlier Detection in High-dimensional Data", "https://doi.org/10.1145/1401890.1401946", Year = 2008, Authors = "Hans-Peter Kriegel, Matthias Schubert, Arthur Zimek")]
 public class FastABODDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;

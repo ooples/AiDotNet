@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -31,6 +34,13 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Greedy Function Approximation: A Gradient Boosting Machine", "https://doi.org/10.1214/aos/1013203451", Year = 2001, Authors = "Jerome H. Friedman")]
 public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>

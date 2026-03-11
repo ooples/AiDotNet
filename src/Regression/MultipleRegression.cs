@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -11,19 +14,24 @@ namespace AiDotNet.Regression;
 /// can be calculated as a weighted sum of the input features plus a constant term (intercept).
 /// </para>
 /// <para><b>For Beginners:</b> Multiple regression is like a formula that predicts one value based on several inputs.
-/// 
+///
 /// Think of it like a house price calculator:
 /// - You provide information like square footage, number of bedrooms, neighborhood rating, etc.
 /// - Each feature has a certain importance (called a coefficient)
 /// - The model combines all these factors with their importances to make a prediction
-/// 
+///
 /// For example, the formula might be:
 /// House Price = $50,000 + ($100 × Square Footage) + ($15,000 × Number of Bedrooms) + ($25,000 × Neighborhood Rating)
-/// 
+///
 /// The model learns the best values for these coefficients from your training data to make accurate predictions.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class MultipleRegression<T> : RegressionBase<T>
 {
     /// <summary>
