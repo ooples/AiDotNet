@@ -296,8 +296,8 @@ public class ModelRegistryGenerator : IIncrementalGenerator
 
     private static string ExtractBeginnerRemarks(string xml)
     {
-        // Look for "For Beginners" content within <remarks>
-        var remarksContent = ExtractXmlElement(xml, "remarks");
+        // Extract raw remarks content (before CleanXmlText) to preserve XML tags for parsing
+        var remarksContent = ExtractRawXmlElement(xml, "remarks");
         if (string.IsNullOrWhiteSpace(remarksContent))
             return string.Empty;
 
@@ -305,9 +305,9 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         if (beginnerIdx < 0)
             return string.Empty;
 
-        // Take text after "For Beginners:" or "For Beginners</b>" marker
-        var colonIdx = remarksContent.IndexOf(":", beginnerIdx, System.StringComparison.Ordinal);
+        // Take text after "For Beginners:</b>" or "For Beginners:" marker
         var closeBIdx = remarksContent.IndexOf("</b>", beginnerIdx, System.StringComparison.Ordinal);
+        var colonIdx = remarksContent.IndexOf(":", beginnerIdx, System.StringComparison.Ordinal);
 
         int contentStart;
         if (closeBIdx >= 0 && (colonIdx < 0 || closeBIdx < colonIdx))
@@ -323,13 +323,29 @@ public class ModelRegistryGenerator : IIncrementalGenerator
             contentStart = beginnerIdx + "For Beginners".Length;
         }
 
-        // Take until end of remarks or next </para>
+        // Take until the closing </para> of the beginner paragraph only
         var endIdx = remarksContent.IndexOf("</para>", contentStart, System.StringComparison.Ordinal);
         if (endIdx < 0)
             endIdx = remarksContent.Length;
 
         var text = remarksContent.Substring(contentStart, endIdx - contentStart);
         return CleanXmlText(text);
+    }
+
+    private static string ExtractRawXmlElement(string xml, string elementName)
+    {
+        var startTag = "<" + elementName + ">";
+        var endTag = "</" + elementName + ">";
+        var startIdx = xml.IndexOf(startTag, System.StringComparison.Ordinal);
+        if (startIdx < 0)
+            return string.Empty;
+
+        startIdx += startTag.Length;
+        var endIdx = xml.IndexOf(endTag, startIdx, System.StringComparison.Ordinal);
+        if (endIdx < 0)
+            return string.Empty;
+
+        return xml.Substring(startIdx, endIdx - startIdx);
     }
 
     private static string CleanXmlText(string text)
