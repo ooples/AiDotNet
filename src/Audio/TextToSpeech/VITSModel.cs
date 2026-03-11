@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -55,6 +56,16 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelCategory(ModelCategory.Autoencoder)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.TextToSpeech)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech", "https://arxiv.org/abs/2106.06103", Year = 2021, Authors = "Jaehyeon Kim, Jungil Kong, Juhee Son")]
 public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     private readonly VITSModelOptions _options;

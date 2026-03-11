@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Classification;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -38,6 +39,12 @@ namespace AiDotNet.Classification.SVM;
 /// - High-dimensional bioinformatics data
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.SVM)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class LinearSupportVectorClassifier<T> : SVMBase<T>
 {
     /// <summary>

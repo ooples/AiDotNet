@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Classification.NaiveBayes;
@@ -31,6 +33,12 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// - Weather prediction based on sensor readings
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class GaussianNaiveBayes<T> : NaiveBayesBase<T>
 {
     /// <summary>

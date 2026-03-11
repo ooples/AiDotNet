@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Classification.Linear;
@@ -32,6 +34,13 @@ namespace AiDotNet.Classification.Linear;
 /// and was one of the first machine learning algorithms ever created!
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("The Perceptron: A Probabilistic Model for Information Storage and Organization in the Brain", "https://doi.org/10.1037/h0042519", Year = 1958, Authors = "Frank Rosenblatt")]
 public class PerceptronClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>

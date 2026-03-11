@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Classification.Linear;
@@ -28,6 +30,12 @@ namespace AiDotNet.Classification.Linear;
 /// - Lower C: More passive (may underfit)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Online Passive-Aggressive Algorithms", "https://jmlr.org/papers/v7/crammer06a.html", Year = 2006, Authors = "Koby Crammer, Ofer Dekel, Joseph Keshet, Shai Shalev-Shwartz, Yoram Singer")]
 public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>

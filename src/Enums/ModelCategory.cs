@@ -173,5 +173,53 @@ public enum ModelCategory
     /// A classical signal processing method that uses mathematical transforms and filters.
     /// Examples: spectral subtraction, Wiener filtering, beamforming, parametric EQ.
     /// </summary>
-    SignalProcessing
+    SignalProcessing,
+
+    /// <summary>
+    /// A support vector machine that finds optimal separating hyperplanes.
+    /// Examples: SVC, SVR, nu-SVM, one-class SVM.
+    /// </summary>
+    SVM,
+
+    /// <summary>
+    /// A kernel-based method that maps data into higher-dimensional spaces.
+    /// Examples: kernel SVM, kernel PCA, Gaussian processes.
+    /// </summary>
+    Kernel,
+
+    /// <summary>
+    /// An instance-based (lazy) learning method that stores training data for prediction.
+    /// Examples: k-nearest neighbors, radius neighbors, locally weighted regression.
+    /// </summary>
+    InstanceBased,
+
+    /// <summary>
+    /// A linear model that learns a linear relationship between features and targets.
+    /// Examples: linear regression, logistic regression, perceptron, ridge.
+    /// </summary>
+    Linear,
+
+    /// <summary>
+    /// A decision tree model that makes predictions by learning hierarchical decision rules.
+    /// Examples: CART, C4.5, random forest trees, gradient boosting trees.
+    /// </summary>
+    DecisionTree,
+
+    /// <summary>
+    /// A statistical model based on classical statistical theory and distributions.
+    /// Examples: discriminant analysis, naive Bayes, mixture models.
+    /// </summary>
+    Statistical,
+
+    /// <summary>
+    /// A model with built-in regularization to prevent overfitting.
+    /// Examples: ridge regression, LASSO, elastic net.
+    /// </summary>
+    Regularization,
+
+    /// <summary>
+    /// A model designed for interpretability and explainability.
+    /// Examples: EBM, LIME-compatible models, rule-based models.
+    /// </summary>
+    Interpretable
 }

@@ -1,5 +1,7 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Classification;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -37,6 +39,12 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// - Features are not counts (otherwise use Multinomial)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
 {
     /// <summary>

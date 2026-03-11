@@ -1,4 +1,6 @@
 using System.Numerics;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Audio.VoiceActivity;
 
@@ -42,6 +44,11 @@ namespace AiDotNet.Audio.VoiceActivity;
 /// For better noise robustness, use neural network-based VAD like SileroVad.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class EnergyBasedVad<T> : VoiceActivityDetectorBase<T>
 {
     #region Configuration

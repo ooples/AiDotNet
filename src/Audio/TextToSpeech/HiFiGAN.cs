@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -38,6 +40,14 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToSpeech)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("HiFi-GAN: Generative Adversarial Networks for Efficient and High Fidelity Speech Synthesis", "https://arxiv.org/abs/2010.05646", Year = 2020, Authors = "Jungil Kong, Jaehyeon Kim, Jaekyoung Bae")]
 public class HiFiGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     #region Fields

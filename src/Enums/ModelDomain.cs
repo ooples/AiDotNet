@@ -112,5 +112,11 @@ public enum ModelDomain
     /// Models designed for causal reasoning and intervention analysis.
     /// Examples: treatment effect estimation, causal discovery, counterfactual analysis.
     /// </summary>
-    Causal
+    Causal,
+
+    /// <summary>
+    /// Traditional machine learning models for general-purpose prediction tasks.
+    /// Examples: classification, regression, clustering on structured/tabular data.
+    /// </summary>
+    MachineLearning
 }

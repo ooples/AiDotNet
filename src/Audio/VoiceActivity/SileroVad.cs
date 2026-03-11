@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -64,6 +65,11 @@ namespace AiDotNet.Audio.VoiceActivity;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
     private readonly SileroVadOptions _options;

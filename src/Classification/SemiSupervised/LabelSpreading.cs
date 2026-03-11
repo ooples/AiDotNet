@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Kernels;
@@ -35,6 +36,13 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// have unequal sizes.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelCategory(ModelCategory.Kernel)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Learning with Local and Global Consistency", "https://proceedings.neurips.cc/paper/2003/hash/87682805257e619d49b8e0dfdc14affa-Abstract.html", Year = 2003, Authors = "Dengyong Zhou, Olivier Bousquet, Thomas N. Lal, Jason Weston, Bernhard Scholkopf")]
 public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
 {
     #region Fields

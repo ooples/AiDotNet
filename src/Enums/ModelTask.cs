@@ -233,5 +233,11 @@ public enum ModelTask
     /// Processes, analyzes, or transforms raw signals (audio, radio, sensor data).
     /// Example: applying parametric EQ or spectral analysis to audio signals.
     /// </summary>
-    SignalProcessing
+    SignalProcessing,
+
+    /// <summary>
+    /// Reduces the number of features or dimensions in data while preserving structure.
+    /// Example: projecting high-dimensional data to 2D for visualization using PCA or t-SNE.
+    /// </summary>
+    DimensionalityReduction
 }

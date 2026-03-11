@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -42,6 +43,11 @@ namespace AiDotNet.Classification.MultiLabel;
 /// For problems where labels are correlated, consider using Classifier Chains or Label Powerset instead.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
 {
     #region Fields

@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -40,6 +41,15 @@ namespace AiDotNet.Classification.TimeSeries;
 /// for Time Series Classification" (2021)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Vector<>))]
+[ModelPaper("MiniRocket: A Very Fast (Almost) Deterministic Transform for Time Series Classification", "https://arxiv.org/abs/2012.08791", Year = 2021, Authors = "Angus Dempster, Daniel F. Schmidt, Geoffrey I. Webb")]
 public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
 {
     private readonly MiniRocketOptions<T> _options;

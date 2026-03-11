@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Classification.Linear;
@@ -31,6 +33,11 @@ namespace AiDotNet.Classification.Linear;
 /// - May oscillate near optimal solution
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class SGDClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>
