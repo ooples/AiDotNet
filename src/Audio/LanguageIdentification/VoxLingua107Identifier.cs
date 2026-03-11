@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -57,6 +59,14 @@ namespace AiDotNet.Audio.LanguageIdentification;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VoxLingua107: A Dataset for Spoken Language Recognition", "https://arxiv.org/abs/2011.12998", Year = 2021, Authors = "Jörgen Valk, Tanel Alumäe")]
 public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {
     #region Constants

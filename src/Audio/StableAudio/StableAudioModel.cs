@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -58,6 +59,14 @@ namespace AiDotNet.Audio.StableAudio;
 /// Reference: "Stable Audio: Fast Timing-Conditioned Latent Audio Diffusion" by Evans et al., 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Stable Audio: Fast Timing-Conditioned Latent Audio Diffusion", "https://arxiv.org/abs/2402.04825", Year = 2024, Authors = "Zach Evans, CJ Carr, Josiah Taylor, Scott H. Hawley, Jordi Pons")]
 public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     #region Fields

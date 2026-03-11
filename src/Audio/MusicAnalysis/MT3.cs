@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -33,6 +35,13 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Multi-Track Music Transcription with a New General-Purpose Pretrained Model", "https://arxiv.org/abs/2111.03017", Year = 2022, Authors = "Josh Gardner, Ian Simon, Ethan Manilow, Curtis Hawthorne, Jesse Engel")]
 public class MT3<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
     #region Fields

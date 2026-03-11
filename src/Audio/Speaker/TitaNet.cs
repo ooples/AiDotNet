@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -33,6 +35,14 @@ namespace AiDotNet.Audio.Speaker;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TitaNet: Neural Model for Speaker Representation with 1D Depth-wise Separable Convolutions and Global Context", "https://arxiv.org/abs/2110.04410", Year = 2022, Authors = "Nithin Rao Koluguri, Taejin Park, Boris Ginsburg")]
 public class TitaNet<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Fields
