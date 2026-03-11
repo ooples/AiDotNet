@@ -24,15 +24,6 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Causal)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelCategory(ModelCategory.Autoencoder)]
-[ModelTask(ModelTask.CausalInference)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("CausalVAE: Disentangled Representation Learning via Neural Structural Causal Models", "https://doi.org/10.1109/CVPR46437.2021.00947", Year = 2021, Authors = "Mengyue Yang, Furui Liu, Zuozhu Chen, Xiaojian Shen, Jianye Hao, Jun Wang")]
 public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>

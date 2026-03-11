@@ -24,15 +24,6 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Causal)]
-[ModelDomain(ModelDomain.TimeSeries)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.CausalInference)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Detecting Causality in Complex Ecosystems", "https://doi.org/10.1126/science.1227079", Year = 2012, Authors = "George Sugihara, Robert May, Hao Ye, Chih-hao Hsieh, Ethan Deyle, Michael Fogarty, Stephan Munch")]
 public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <inheritdoc/>

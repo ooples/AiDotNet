@@ -24,13 +24,6 @@ namespace AiDotNet.CausalDiscovery.Bayesian;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Causal)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.Bayesian)]
-[ModelTask(ModelTask.CausalInference)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
 {
     /// <inheritdoc/>

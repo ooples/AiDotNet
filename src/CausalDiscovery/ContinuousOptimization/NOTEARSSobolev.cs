@@ -23,15 +23,6 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Causal)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelCategory(ModelCategory.Regularization)]
-[ModelTask(ModelTask.CausalInference)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Learning Sparse Nonparametric DAGs", "https://proceedings.mlr.press/v108/zheng20a.html", Year = 2020, Authors = "Xun Zheng, Chen Dan, Bryon Aragam, Pradeep Ravikumar, Eric Xing")]
 public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
 {
     /// <inheritdoc/>

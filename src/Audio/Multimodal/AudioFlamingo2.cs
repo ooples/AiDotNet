@@ -35,17 +35,6 @@ namespace AiDotNet.Audio.Multimodal;
 /// </code>
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Audio)]
-[ModelDomain(ModelDomain.Language)]
-[ModelDomain(ModelDomain.Multimodal)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Classification)]
-[ModelTask(ModelTask.Generation)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Audio Flamingo: A Novel Audio Language Model with Few-Shot Learning and Dialogue Abilities", "https://arxiv.org/abs/2402.01831", Year = 2024, Authors = "Zhifeng Kong, Arushi Goel, Rohan Badlani, Wei Ping, Rafael Valle, Bryan Catanzaro")]
 public class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
     #region Fields

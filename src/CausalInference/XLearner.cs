@@ -52,9 +52,9 @@ namespace AiDotNet.CausalInference;
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.CausalModel)]
 [ModelCategory(ModelCategory.MetaLearning)]
-[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Metalearners for estimating heterogeneous treatment effects using machine learning", "https://doi.org/10.1073/pnas.1804597116", Year = 2019, Authors = "Sören R. Künzel, Jasjeet S. Sekhon, Peter J. Bickel, Bin Yu")]
 public class XLearner<T> : CausalModelBase<T>
 {
