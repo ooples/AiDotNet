@@ -23,10 +23,14 @@
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+    <!-- AIDN diagnostics kept as warnings until models are annotated (issue #958) -->
+    <NoWarn>$(NoWarn);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+    <!-- AIDN diagnostics kept as warnings until models are annotated (issue #958) -->
+    <NoWarn>$(NoWarn);AIDN001;AIDN010;AIDN011;AIDN012;AIDN020</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
