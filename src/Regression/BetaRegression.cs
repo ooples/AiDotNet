@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Distributions;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
@@ -37,6 +39,12 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Beta Regression for Modelling Rates and Proportions", "https://doi.org/10.1080/0266476042000214501", Year = 2004, Authors = "Silvia L. P. Ferrari, Francisco Cribari-Neto")]
 public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     private const double MuFloor = 1e-10;

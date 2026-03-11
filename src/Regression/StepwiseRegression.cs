@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -28,6 +31,12 @@ namespace AiDotNet.Regression;
 /// features are most important for accurate predictions and discard the rest.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class StepwiseRegression<T> : RegressionBase<T>
 {
     /// <summary>

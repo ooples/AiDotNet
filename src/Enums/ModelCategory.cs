@@ -221,5 +221,11 @@ public enum ModelCategory
     /// A model designed for interpretability and explainability.
     /// Examples: EBM, LIME-compatible models, rule-based models.
     /// </summary>
-    Interpretable
+    Interpretable,
+
+    /// <summary>
+    /// A model that uses optimization algorithms to find optimal parameters.
+    /// Examples: genetic algorithm regression, evolutionary strategies, simulated annealing.
+    /// </summary>
+    Optimization
 }

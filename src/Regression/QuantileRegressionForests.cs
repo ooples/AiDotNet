@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -24,6 +27,13 @@ namespace AiDotNet.Regression;
 /// varies across different parts of the distribution.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Quantile Regression Forests", "https://jmlr.org/papers/v7/meinshausen06a.html", Year = 2006, Authors = "Nicolai Meinshausen")]
 public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>

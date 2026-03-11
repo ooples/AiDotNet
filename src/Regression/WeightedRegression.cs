@@ -1,4 +1,6 @@
 global using AiDotNet.Extensions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Regression;
 
@@ -29,6 +31,11 @@ namespace AiDotNet.Regression;
 /// This helps you build models that focus more on the data points you trust or care about most.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class WeightedRegression<T> : RegressionBase<T>
 {
     /// <summary>

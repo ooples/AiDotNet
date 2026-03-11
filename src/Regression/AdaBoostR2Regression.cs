@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Regression;
@@ -38,6 +40,13 @@ namespace AiDotNet.Regression;
 /// to build multiple models.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Improving Regressors using Boosting Techniques", "https://doi.org/10.1145/3321386.3322519", Year = 1997, Authors = "Harris Drucker")]
 public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>

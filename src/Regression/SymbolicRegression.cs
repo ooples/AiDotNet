@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Preprocessing;
 
 namespace AiDotNet.Regression;
@@ -34,6 +36,12 @@ namespace AiDotNet.Regression;
 /// "growth = sunlight² × water / (1 + temperature)".
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.Interpretable)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class SymbolicRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

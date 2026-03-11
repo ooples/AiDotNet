@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
@@ -39,6 +41,14 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.SurvivalModel)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("DeepSurv: Personalized Treatment Recommender System Using a Cox Proportional Hazards Deep Neural Network", "https://doi.org/10.1186/s12874-018-0482-1", Year = 2018, Authors = "Jared L. Katzman, Uri Shaham, Alexander Cloninger, Jonathan Bates, Tingting Jiang, Yuval Kluger")]
 public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>

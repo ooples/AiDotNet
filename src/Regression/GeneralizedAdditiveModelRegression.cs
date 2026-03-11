@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -32,6 +35,13 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelCategory(ModelCategory.Interpretable)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Generalized Additive Models", "https://doi.org/10.1214/ss/1177013604", Year = 1986, Authors = "Trevor Hastie, Robert Tibshirani")]
 public class GeneralizedAdditiveModel<T> : RegressionBase<T>
 {
     /// <summary>

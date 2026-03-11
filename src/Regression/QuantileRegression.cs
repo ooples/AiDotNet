@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -23,6 +26,13 @@ namespace AiDotNet.Regression;
 /// ranges of the outcome.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Regression Quantiles", "https://doi.org/10.2307/1913643", Year = 1978, Authors = "Roger Koenker, Gilbert Bassett Jr.")]
 public class QuantileRegression<T> : RegressionBase<T>
 {
     /// <summary>
