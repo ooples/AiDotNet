@@ -204,7 +204,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
             for (int j = 0; j < d; j++)
                 AA[i, j] = NumOps.Multiply(A[i, j], A[i, j]);
 
-        // e^M ≈ I + M + M^2/2 + M^3/6
+        // e^M ≈ I + M + M^2/2 + M^3/6 using Engine-accelerated MatMul
         var power = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++) power[i, i] = NumOps.One;
         var expM = new Matrix<T>(d, d);
@@ -212,11 +212,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
 
         for (int p = 1; p <= 5; p++)
         {
-            var next = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    for (int k = 0; k < d; k++)
-                        next[i, j] = NumOps.Add(next[i, j], NumOps.Multiply(power[i, k], AA[k, j]));
+            var next = MatMul(power, AA);
             T fact = NumOps.FromDouble(1.0 / Factorial(p));
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
@@ -235,14 +231,13 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
 
     private (T h, Matrix<T> grad) ComputeExpGradient(Matrix<T> A, int d)
     {
-        // Gradient: dh/dA[i,j] = 2 * A[i,j] * [e^(A*A)]_jj + 2 * A[i,j] * [e^(A*A)]_ii
-        // Simplified: use 2 * A[i,j] * (e^(A*A)[i,j] + e^(A*A)[j,i])
+        // Gradient: dh/dA[i,j] = 2 * A[i,j] * (e^(A*A))^T[i,j]
         var AA = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
                 AA[i, j] = NumOps.Multiply(A[i, j], A[i, j]);
 
-        // Compute e^(AA) via power series
+        // Compute e^(AA) via power series with Engine-accelerated MatMul
         var expM = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++) expM[i, i] = NumOps.One;
         var power = new Matrix<T>(d, d);
@@ -250,11 +245,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
 
         for (int p = 1; p <= 5; p++)
         {
-            var next = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    for (int k = 0; k < d; k++)
-                        next[i, j] = NumOps.Add(next[i, j], NumOps.Multiply(power[i, k], AA[k, j]));
+            var next = MatMul(power, AA);
             T fact = NumOps.FromDouble(1.0 / Factorial(p));
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
@@ -270,7 +261,6 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
             trace = NumOps.Add(trace, expM[i, i]);
         T h = NumOps.Subtract(trace, NumOps.FromDouble(d));
 
-        // Gradient: dh/dA[i,j] = 2 * A[i,j] * (e^(A*A))^T[i,j]
         var grad = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)

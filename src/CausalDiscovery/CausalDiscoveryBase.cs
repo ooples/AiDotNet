@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.CausalDiscovery;
 
@@ -27,6 +28,11 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// Numeric operations helper for generic math on type T.
     /// </summary>
     protected readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Gets the global execution engine for accelerated vector/matrix operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <inheritdoc/>
     public abstract string Name { get; }
@@ -456,6 +462,104 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
         double result = t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
 
         return p < 0.5 ? -result : result;
+    }
+
+    /// <summary>
+    /// Accelerated matrix-matrix multiplication: C = A * B using Engine when available.
+    /// </summary>
+    /// <param name="a">Left matrix [m x k].</param>
+    /// <param name="b">Right matrix [k x n].</param>
+    /// <returns>Result matrix [m x n].</returns>
+    protected Matrix<T> MatMul(Matrix<T> a, Matrix<T> b)
+    {
+        int m = a.Rows;
+        int k = a.Columns;
+        int n = b.Columns;
+        var result = new Matrix<T>(m, n);
+
+        // Use Engine.MatrixVectorMultiply for each column of B
+        for (int j = 0; j < n; j++)
+        {
+            var colB = new Vector<T>(k);
+            for (int r = 0; r < k; r++)
+                colB[r] = b[r, j];
+
+            var colResult = Engine.MatrixVectorMultiply(a, colB);
+            for (int r = 0; r < m; r++)
+                result[r, j] = colResult[r];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Accelerated dot product between a row of matrix A and a row of matrix B.
+    /// </summary>
+    protected T RowDotProduct(Matrix<T> a, int rowA, Matrix<T> b, int rowB, int length)
+    {
+        var va = new Vector<T>(length);
+        var vb = new Vector<T>(length);
+        for (int k = 0; k < length; k++)
+        {
+            va[k] = a[rowA, k];
+            vb[k] = b[rowB, k];
+        }
+
+        return Engine.DotProduct(va, vb);
+    }
+
+    /// <summary>
+    /// Accelerated element-wise addition of two vectors.
+    /// </summary>
+    protected Vector<T> VectorAdd(Vector<T> a, Vector<T> b)
+    {
+        return (Vector<T>)Engine.Add<T>(a, b);
+    }
+
+    /// <summary>
+    /// Accelerated element-wise subtraction: a - b.
+    /// </summary>
+    protected Vector<T> VectorSubtract(Vector<T> a, Vector<T> b)
+    {
+        return (Vector<T>)Engine.Subtract<T>(a, b);
+    }
+
+    /// <summary>
+    /// Accelerated scalar multiplication: a * scalar.
+    /// </summary>
+    protected Vector<T> VectorScale(Vector<T> a, T scalar)
+    {
+        return (Vector<T>)Engine.Multiply(a, scalar);
+    }
+
+    /// <summary>
+    /// Extract a row from a matrix as a Vector for accelerated operations.
+    /// </summary>
+    protected Vector<T> GetRow(Matrix<T> matrix, int row)
+    {
+        var v = new Vector<T>(matrix.Columns);
+        for (int j = 0; j < matrix.Columns; j++)
+            v[j] = matrix[row, j];
+        return v;
+    }
+
+    /// <summary>
+    /// Extract a column from a matrix as a Vector for accelerated operations.
+    /// </summary>
+    protected Vector<T> GetColumn(Matrix<T> matrix, int col)
+    {
+        var v = new Vector<T>(matrix.Rows);
+        for (int i = 0; i < matrix.Rows; i++)
+            v[i] = matrix[i, col];
+        return v;
+    }
+
+    /// <summary>
+    /// Accelerated matrix-vector multiplication: result = M * v.
+    /// </summary>
+    protected Vector<T> MatVecMul(Matrix<T> m, Vector<T> v)
+    {
+        return Engine.MatrixVectorMultiply(m, v);
     }
 
     /// <summary>
