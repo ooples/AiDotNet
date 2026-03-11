@@ -141,8 +141,8 @@ public class ModelRegistryGenerator : IIncrementalGenerator
                 domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
                 complexityAttrSymbol, inputAttrSymbol, paperAttrSymbol);
 
-            // Only include models that have at least one metadata attribute
-            if (entry.HasAnyMetadata)
+            // Only include fully-annotated models to avoid default enum values
+            if (entry.HasAllRequiredMetadata)
             {
                 entries.Add(entry);
                 annotatedNames.Add(fullName);
@@ -494,87 +494,119 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    };");
         sb.AppendLine();
 
-        // Lookup dictionaries (lazily built from All)
-        sb.AppendLine("    private static Dictionary<ModelDomain, List<ModelMetadataEntry>>? _byDomain;");
-        sb.AppendLine("    private static Dictionary<ModelCategory, List<ModelMetadataEntry>>? _byCategory;");
-        sb.AppendLine("    private static Dictionary<ModelTask, List<ModelMetadataEntry>>? _byTask;");
-        sb.AppendLine("    private static Dictionary<ModelComplexity, List<ModelMetadataEntry>>? _byComplexity;");
-        sb.AppendLine("    private static Dictionary<string, ModelMetadataEntry>? _byTypeName;");
+        // Lookup dictionaries (lazily built from All, thread-safe via Lazy<T>)
+        sb.AppendLine("    private static readonly Lazy<Dictionary<ModelDomain, List<ModelMetadataEntry>>> _byDomain =");
+        sb.AppendLine("        new Lazy<Dictionary<ModelDomain, List<ModelMetadataEntry>>>(BuildByDomain);");
+        sb.AppendLine("    private static readonly Lazy<Dictionary<ModelCategory, List<ModelMetadataEntry>>> _byCategory =");
+        sb.AppendLine("        new Lazy<Dictionary<ModelCategory, List<ModelMetadataEntry>>>(BuildByCategory);");
+        sb.AppendLine("    private static readonly Lazy<Dictionary<ModelTask, List<ModelMetadataEntry>>> _byTask =");
+        sb.AppendLine("        new Lazy<Dictionary<ModelTask, List<ModelMetadataEntry>>>(BuildByTask);");
+        sb.AppendLine("    private static readonly Lazy<Dictionary<ModelComplexity, List<ModelMetadataEntry>>> _byComplexity =");
+        sb.AppendLine("        new Lazy<Dictionary<ModelComplexity, List<ModelMetadataEntry>>>(BuildByComplexity);");
+        sb.AppendLine("    private static readonly Lazy<Dictionary<string, ModelMetadataEntry>> _byTypeName =");
+        sb.AppendLine("        new Lazy<Dictionary<string, ModelMetadataEntry>>(BuildByTypeName);");
         sb.AppendLine();
 
-        // BuildLookups method
-        sb.AppendLine("    private static void BuildLookups()");
+        // BuildByDomain
+        sb.AppendLine("    private static Dictionary<ModelDomain, List<ModelMetadataEntry>> BuildByDomain()");
         sb.AppendLine("    {");
-        sb.AppendLine("        if (_byDomain is not null) return;");
-        sb.AppendLine();
-        sb.AppendLine("        var byDomain = new Dictionary<ModelDomain, List<ModelMetadataEntry>>();");
-        sb.AppendLine("        var byCategory = new Dictionary<ModelCategory, List<ModelMetadataEntry>>();");
-        sb.AppendLine("        var byTask = new Dictionary<ModelTask, List<ModelMetadataEntry>>();");
-        sb.AppendLine("        var byComplexity = new Dictionary<ModelComplexity, List<ModelMetadataEntry>>();");
-        sb.AppendLine("        var byTypeName = new Dictionary<string, ModelMetadataEntry>(StringComparer.Ordinal);");
-        sb.AppendLine();
+        sb.AppendLine("        var dict = new Dictionary<ModelDomain, List<ModelMetadataEntry>>();");
         sb.AppendLine("        foreach (var entry in All)");
         sb.AppendLine("        {");
         sb.AppendLine("            foreach (var domain in entry.Domains)");
         sb.AppendLine("            {");
-        sb.AppendLine("                if (!byDomain.TryGetValue(domain, out var domainList))");
+        sb.AppendLine("                if (!dict.TryGetValue(domain, out var list))");
         sb.AppendLine("                {");
-        sb.AppendLine("                    domainList = new List<ModelMetadataEntry>();");
-        sb.AppendLine("                    byDomain[domain] = domainList;");
+        sb.AppendLine("                    list = new List<ModelMetadataEntry>();");
+        sb.AppendLine("                    dict[domain] = list;");
         sb.AppendLine("                }");
-        sb.AppendLine("                domainList.Add(entry);");
+        sb.AppendLine("                list.Add(entry);");
         sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine("        return dict;");
+        sb.AppendLine("    }");
         sb.AppendLine();
+
+        // BuildByCategory
+        sb.AppendLine("    private static Dictionary<ModelCategory, List<ModelMetadataEntry>> BuildByCategory()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var dict = new Dictionary<ModelCategory, List<ModelMetadataEntry>>();");
+        sb.AppendLine("        foreach (var entry in All)");
+        sb.AppendLine("        {");
         sb.AppendLine("            foreach (var category in entry.Categories)");
         sb.AppendLine("            {");
-        sb.AppendLine("                if (!byCategory.TryGetValue(category, out var catList))");
+        sb.AppendLine("                if (!dict.TryGetValue(category, out var list))");
         sb.AppendLine("                {");
-        sb.AppendLine("                    catList = new List<ModelMetadataEntry>();");
-        sb.AppendLine("                    byCategory[category] = catList;");
+        sb.AppendLine("                    list = new List<ModelMetadataEntry>();");
+        sb.AppendLine("                    dict[category] = list;");
         sb.AppendLine("                }");
-        sb.AppendLine("                catList.Add(entry);");
+        sb.AppendLine("                list.Add(entry);");
         sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine("        return dict;");
+        sb.AppendLine("    }");
         sb.AppendLine();
+
+        // BuildByTask
+        sb.AppendLine("    private static Dictionary<ModelTask, List<ModelMetadataEntry>> BuildByTask()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var dict = new Dictionary<ModelTask, List<ModelMetadataEntry>>();");
+        sb.AppendLine("        foreach (var entry in All)");
+        sb.AppendLine("        {");
         sb.AppendLine("            foreach (var task in entry.Tasks)");
         sb.AppendLine("            {");
-        sb.AppendLine("                if (!byTask.TryGetValue(task, out var taskList))");
+        sb.AppendLine("                if (!dict.TryGetValue(task, out var list))");
         sb.AppendLine("                {");
-        sb.AppendLine("                    taskList = new List<ModelMetadataEntry>();");
-        sb.AppendLine("                    byTask[task] = taskList;");
+        sb.AppendLine("                    list = new List<ModelMetadataEntry>();");
+        sb.AppendLine("                    dict[task] = list;");
         sb.AppendLine("                }");
-        sb.AppendLine("                taskList.Add(entry);");
+        sb.AppendLine("                list.Add(entry);");
         sb.AppendLine("            }");
-        sb.AppendLine();
-        sb.AppendLine("            if (!byComplexity.TryGetValue(entry.Complexity, out var compList))");
-        sb.AppendLine("            {");
-        sb.AppendLine("                compList = new List<ModelMetadataEntry>();");
-        sb.AppendLine("                byComplexity[entry.Complexity] = compList;");
-        sb.AppendLine("            }");
-        sb.AppendLine("            compList.Add(entry);");
-        sb.AppendLine();
-        sb.AppendLine("            byTypeName[entry.TypeName] = entry;");
         sb.AppendLine("        }");
+        sb.AppendLine("        return dict;");
+        sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("        _byDomain = byDomain;");
-        sb.AppendLine("        _byCategory = byCategory;");
-        sb.AppendLine("        _byTask = byTask;");
-        sb.AppendLine("        _byComplexity = byComplexity;");
-        sb.AppendLine("        _byTypeName = byTypeName;");
+
+        // BuildByComplexity
+        sb.AppendLine("    private static Dictionary<ModelComplexity, List<ModelMetadataEntry>> BuildByComplexity()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var dict = new Dictionary<ModelComplexity, List<ModelMetadataEntry>>();");
+        sb.AppendLine("        foreach (var entry in All)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (!dict.TryGetValue(entry.Complexity, out var list))");
+        sb.AppendLine("            {");
+        sb.AppendLine("                list = new List<ModelMetadataEntry>();");
+        sb.AppendLine("                dict[entry.Complexity] = list;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            list.Add(entry);");
+        sb.AppendLine("        }");
+        sb.AppendLine("        return dict;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // BuildByTypeName
+        sb.AppendLine("    private static Dictionary<string, ModelMetadataEntry> BuildByTypeName()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var dict = new Dictionary<string, ModelMetadataEntry>(StringComparer.Ordinal);");
+        sb.AppendLine("        foreach (var entry in All)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            dict[entry.TypeName] = entry;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        return dict;");
         sb.AppendLine("    }");
         sb.AppendLine();
 
         // Query methods
-        EmitQueryMethod(sb, "GetByDomain", "ModelDomain", "domain", "_byDomain");
-        EmitQueryMethod(sb, "GetByCategory", "ModelCategory", "category", "_byCategory");
-        EmitQueryMethod(sb, "GetByTask", "ModelTask", "task", "_byTask");
-        EmitQueryMethod(sb, "GetByComplexity", "ModelComplexity", "complexity", "_byComplexity");
+        EmitLazyQueryMethod(sb, "GetByDomain", "ModelDomain", "domain", "_byDomain");
+        EmitLazyQueryMethod(sb, "GetByCategory", "ModelCategory", "category", "_byCategory");
+        EmitLazyQueryMethod(sb, "GetByTask", "ModelTask", "task", "_byTask");
+        EmitLazyQueryMethod(sb, "GetByComplexity", "ModelComplexity", "complexity", "_byComplexity");
 
         // GetByTypeName
         sb.AppendLine("    /// <summary>Gets the metadata entry for a specific model type name.</summary>");
         sb.AppendLine("    public static ModelMetadataEntry? GetByTypeName(string typeName)");
         sb.AppendLine("    {");
-        sb.AppendLine("        BuildLookups();");
-        sb.AppendLine("        if (_byTypeName is not null && _byTypeName.TryGetValue(typeName, out var entry))");
+        sb.AppendLine("        if (_byTypeName.Value.TryGetValue(typeName, out var entry))");
         sb.AppendLine("            return entry;");
         sb.AppendLine("        return null;");
         sb.AppendLine("    }");
@@ -598,13 +630,12 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         context.AddSource("ModelMetadataRegistry.g.cs", sb.ToString());
     }
 
-    private static void EmitQueryMethod(StringBuilder sb, string methodName, string enumType, string paramName, string fieldName)
+    private static void EmitLazyQueryMethod(StringBuilder sb, string methodName, string enumType, string paramName, string fieldName)
     {
         sb.AppendLine($"    /// <summary>Gets all model entries for the specified {paramName}.</summary>");
         sb.AppendLine($"    public static IReadOnlyList<ModelMetadataEntry> {methodName}({enumType} {paramName})");
         sb.AppendLine("    {");
-        sb.AppendLine("        BuildLookups();");
-        sb.AppendLine($"        if ({fieldName} is not null && {fieldName}.TryGetValue({paramName}, out var list))");
+        sb.AppendLine($"        if ({fieldName}.Value.TryGetValue({paramName}, out var list))");
         sb.AppendLine("            return list;");
         sb.AppendLine($"        return System.Array.Empty<ModelMetadataEntry>();");
         sb.AppendLine("    }");
@@ -717,6 +748,10 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         public bool HasAnyMetadata =>
             Domains.Count > 0 || Categories.Count > 0 || Tasks.Count > 0 || HasComplexity ||
             !string.IsNullOrEmpty(InputTypeName) || Papers.Count > 0;
+
+        public bool HasAllRequiredMetadata =>
+            Domains.Count > 0 && Categories.Count > 0 && Tasks.Count > 0 && HasComplexity &&
+            !string.IsNullOrEmpty(InputTypeName);
     }
 
     private class PaperData
