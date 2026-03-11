@@ -53,9 +53,9 @@ namespace AiDotNet.CausalInference;
 [ModelCategory(ModelCategory.CausalModel)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.InstanceBased)]
-[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class PropensityScoreMatching<T> : CausalModelBase<T>
 {
     /// <summary>

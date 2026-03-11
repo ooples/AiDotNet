@@ -39,7 +39,6 @@ namespace AiDotNet.Audio.Generation;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Generation)]
-[ModelTask(ModelTask.TextToSpeech)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("YuE: Open Music Foundation Models for Full-Song Generation", "https://arxiv.org/abs/2503.08638", Year = 2025, Authors = "Ruibin Yuan, Hanfeng Lin, Ge Zhang, Jiahao Pan, Jiatong Shi, Tian Yuan, Yinghao Ma, Xingjian Du, Haohe Liu, Yiming Liang, Ziyang Ma, Siqi Zheng, Zuoxian Liang, Ziyu Wang, Chenghua Lin, Tianyu Zheng, Yizhi Li, Yifei Yuan, Shangda Wu, Yifu Sun, Peng Li, Wenye Ma, Jie Fu, Roger Dannenberg, Xie Chen, Emmanouil Benetos, Wenwu Wang, Wei Xue, Yike Guo")]

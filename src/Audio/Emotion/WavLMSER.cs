@@ -37,9 +37,7 @@ namespace AiDotNet.Audio.Emotion;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
-[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
-[ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Classification)]
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]

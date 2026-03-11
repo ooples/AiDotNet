@@ -15,14 +15,6 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// <para>Reference: Janzing et al. (2012), "Information-Geometric Approach to Inferring
 /// Causal Directions", Artificial Intelligence.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Causal)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.CausalInference)]
-[ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Information-Geometric Approach to Inferring Causal Directions", "https://doi.org/10.1016/j.artint.2012.01.002", Year = 2012, Authors = "Dominik Janzing, Joris Mooij, Kun Zhang, Jan Lemeire, Jakob Zscheischler, Povilas Daniusis, Bastian Steudel, Bernhard Scholkopf")]
 public class IGCIAlgorithm<T> : FunctionalBase<T>
 {
     private readonly CausalDiscoveryOptions? _options;

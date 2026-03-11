@@ -38,12 +38,6 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 /// Technometrics.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.AnomalyDetection)]
-[ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Percentage Points for a Generalized ESD Many-Outlier Procedure", "https://doi.org/10.2307/1268549", Year = 1983, Authors = "Bernard Rosner")]
 public class ESDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;

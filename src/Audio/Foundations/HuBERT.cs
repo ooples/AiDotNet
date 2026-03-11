@@ -35,7 +35,6 @@ namespace AiDotNet.Audio.Foundations;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
-[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.FeatureExtraction)]

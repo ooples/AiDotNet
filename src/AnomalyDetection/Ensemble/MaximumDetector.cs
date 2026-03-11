@@ -30,11 +30,6 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 /// - When false negatives are costly
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.Ensemble)]
-[ModelTask(ModelTask.AnomalyDetection)]
-[ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class MaximumDetector<T> : AnomalyDetectorBase<T>
 {
     private List<IAnomalyDetector<T>>? _baseDetectors;

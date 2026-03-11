@@ -38,14 +38,6 @@ namespace AiDotNet.Audio.Effects;
 /// </code>
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelCategory(ModelCategory.RecurrentNetwork)]
-[ModelTask(ModelTask.Denoising)]
-[ModelTask(ModelTask.SourceSeparation)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Real Time Speech Enhancement in the Waveform Domain", "https://arxiv.org/abs/2006.12847", Year = 2020, Authors = "Alexandre Defossez, Gabriel Synnaeve, Yossi Adi")]
 public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

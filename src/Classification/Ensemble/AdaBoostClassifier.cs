@@ -34,13 +34,6 @@ namespace AiDotNet.Classification.Ensemble;
 /// This creates a powerful classifier from many weak ones.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.Ensemble)]
-[ModelCategory(ModelCategory.DecisionTree)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("A Decision-Theoretic Generalization of On-Line Learning and an Application to Boosting", "https://doi.org/10.1006/jcss.1997.1504", Year = 1997, Authors = "Yoav Freund, Robert E. Schapire")]
 public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
 {
     /// <summary>

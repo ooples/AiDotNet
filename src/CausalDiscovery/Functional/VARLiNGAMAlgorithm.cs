@@ -36,7 +36,6 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelTask(ModelTask.CausalInference)]
-[ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ModelPaper("Estimation of a Structural Vector Autoregression Model Using Non-Gaussianity", "https://jmlr.org/papers/v11/hyvarinen10a.html", Year = 2010, Authors = "Aapo Hyvarinen, Kun Zhang, Shohei Shimizu, Patrik O. Hoyer")]

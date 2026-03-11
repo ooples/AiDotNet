@@ -39,7 +39,6 @@ namespace AiDotNet.Audio.Generation;
 [ModelCategory(ModelCategory.Autoencoder)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Compression)]
-[ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("High Fidelity Neural Audio Compression", "https://arxiv.org/abs/2210.13438", Year = 2022, Authors = "Alexandre Defossez, Jade Copet, Gabriel Synnaeve, Yossi Adi")]

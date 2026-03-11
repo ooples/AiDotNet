@@ -50,7 +50,6 @@ namespace AiDotNet.Agents;
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Agent)]
-[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(string), typeof(string))]

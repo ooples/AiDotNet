@@ -24,15 +24,6 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Causal)]
-[ModelDomain(ModelDomain.TimeSeries)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.CausalInference)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("On Causal Discovery from Time Series Data using FCI", "https://pgm10.cs.helsinki.fi/papers/entner_hoyer.pdf", Year = 2010, Authors = "Doris Entner, Patrik O. Hoyer")]
 public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <inheritdoc/>
