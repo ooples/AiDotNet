@@ -37,7 +37,7 @@ public sealed class ModelInputAttribute : Attribute
     /// <param name="outputType">The expected output type (e.g., typeof(Vector&lt;&gt;)).</param>
     public ModelInputAttribute(Type inputType, Type outputType)
     {
-        InputType = inputType;
-        OutputType = outputType;
+        InputType = inputType ?? throw new ArgumentNullException(nameof(inputType));
+        OutputType = outputType ?? throw new ArgumentNullException(nameof(outputType));
     }
 }

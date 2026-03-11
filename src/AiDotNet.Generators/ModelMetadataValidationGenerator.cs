@@ -172,9 +172,13 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             return;
         }
 
+        var seen = new System.Collections.Generic.HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
         foreach (var modelClass in candidates)
         {
             if (modelClass is null)
+                continue;
+
+            if (!seen.Add(modelClass))
                 continue;
 
             ValidateRequiredAttributes(context, modelClass, domainAttr, categoryAttr, taskAttr, complexityAttr, inputAttr);
@@ -283,7 +287,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             context.ReportDiagnostic(Diagnostic.Create(MissingBeginnerRemarks, location, className));
         }
 
-        if (!xmlDoc.Contains("<example>"))
+        if (!xmlDoc.Contains("<example>") && !xmlDoc.Contains("<code>"))
         {
             context.ReportDiagnostic(Diagnostic.Create(MissingExample, location, className));
         }

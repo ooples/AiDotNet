@@ -411,7 +411,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Represents an academic paper reference for a model.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine("public sealed class ModelPaperEntry");
+        sb.AppendLine("internal sealed class ModelPaperEntry");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>Gets the paper title.</summary>");
         sb.AppendLine("    public string Title { get; }");
@@ -437,7 +437,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Contains all metadata for a single model class, collected from attributes at compile time.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine("public sealed class ModelMetadataEntry");
+        sb.AppendLine("internal sealed class ModelMetadataEntry");
         sb.AppendLine("{");
         sb.AppendLine("    /// <summary>Gets the fully-qualified type name of the model class.</summary>");
         sb.AppendLine("    public string TypeName { get; }");
@@ -491,7 +491,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Auto-generated static registry of all model metadata. Zero runtime reflection.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine("public static class ModelMetadataRegistry");
+        sb.AppendLine("internal static class ModelMetadataRegistry");
         sb.AppendLine("{");
         sb.AppendLine($"    /// <summary>Total number of annotated model classes.</summary>");
         sb.AppendLine($"    public const int ModelCount = {entries.Count};");
@@ -797,7 +797,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("/// Auto-generated manifest of all discovered concrete IFullModel implementations.");
         sb.AppendLine("/// Use this to track annotation progress for issue #958.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine("public static class ModelDiscoveryManifest");
+        sb.AppendLine("internal static class ModelDiscoveryManifest");
         sb.AppendLine("{");
 
         var manifestEntries = new List<(string className, string fullName, string filePath, bool hasAttributes)>();
