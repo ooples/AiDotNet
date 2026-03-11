@@ -91,7 +91,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(collected, static (spc, source) =>
         {
             var (candidates, compilation) = source;
-            Execute(spc, candidates!, compilation);
+            Execute(spc, candidates, compilation);
         });
     }
 
