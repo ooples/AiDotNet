@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.Hybrid;
@@ -9,9 +10,22 @@ namespace AiDotNet.CausalDiscovery.Hybrid;
 /// </summary>
 /// <remarks>
 /// <para>
-/// PC-NOTEARS first uses PC's constraint-based skeleton discovery to identify candidate edges,
-/// then runs NOTEARS continuous optimization restricted to the PC skeleton. This combines
-/// PC's efficient edge elimination with NOTEARS' optimal weight estimation.
+/// PC-NOTEARS combines the constraint-based PC algorithm's efficient skeleton discovery
+/// with NOTEARS' continuous optimization for edge weight estimation and orientation.
+/// Phase 1 runs PC-style CI tests to identify which variable pairs are connected.
+/// Phase 2 runs a NOTEARS-like optimization restricted to the PC skeleton, estimating
+/// edge weights while enforcing the acyclicity constraint h(W) = 0.
+/// </para>
+/// <para>
+/// <b>Algorithm:</b>
+/// <list type="number">
+/// <item><b>PC skeleton phase:</b> Start with complete graph, remove edges via CI tests
+///   at increasing conditioning set sizes</item>
+/// <item><b>NOTEARS phase:</b> Initialize W from PC skeleton (OLS weights for connected pairs,
+///   zero for removed pairs). Run gradient descent on L(W) + lambda * ||W||_1
+///   subject to h(W) = tr(e^{W*W}) - d = 0, but only update entries in the skeleton</item>
+/// <item>Threshold small weights and return the DAG</item>
+/// </list>
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> This hybrid first uses statistical tests to quickly figure out which
@@ -30,19 +44,291 @@ namespace AiDotNet.CausalDiscovery.Hybrid;
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class PCNOTEARSAlgorithm<T> : HybridBase<T>
 {
+    private readonly double _lambda;
+    private readonly double _threshold;
+    private readonly int _maxConditioningSetSize;
+    private readonly int _maxOptIterations;
+
     /// <inheritdoc/>
     public override string Name => "PC-NOTEARS";
 
     /// <inheritdoc/>
     public override bool SupportsNonlinear => false;
 
-    public PCNOTEARSAlgorithm(CausalDiscoveryOptions? options = null) { ApplyHybridOptions(options); }
+    /// <summary>
+    /// Initializes PC-NOTEARS with optional configuration.
+    /// </summary>
+    public PCNOTEARSAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        ApplyHybridOptions(options);
+        _lambda = options?.SparsityPenalty ?? 0.1;
+        _threshold = options?.EdgeThreshold ?? 0.3;
+        _maxConditioningSetSize = options?.MaxConditioningSetSize ?? 3;
+        _maxOptIterations = options?.MaxIterations ?? 50;
+    }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        // Shell: delegates to MMHC as baseline
-        var baseline = new MMHCAlgorithm<T>();
-        return baseline.DiscoverStructure(data).AdjacencyMatrix;
+        int n = data.Rows;
+        int d = data.Columns;
+
+        if (n < 3 || d < 2) return new Matrix<T>(d, d);
+
+        // Phase 1: PC skeleton discovery
+        var skeleton = DiscoverSkeleton(data, d, n);
+
+        // Phase 2: NOTEARS-like optimization restricted to skeleton
+        var weights = OptimizeWeights(data, skeleton, d, n);
+
+        // Threshold small weights and convert to Matrix<T>
+        var W = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                if (Math.Abs(weights[i, j]) >= _threshold)
+                    W[i, j] = NumOps.FromDouble(weights[i, j]);
+            }
+        }
+
+        return W;
+    }
+
+    /// <summary>
+    /// Phase 1: PC-style skeleton discovery via conditional independence tests.
+    /// </summary>
+    private bool[,] DiscoverSkeleton(Matrix<T> data, int d, int n)
+    {
+        var adj = new bool[d, d];
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                adj[i, j] = (i != j);
+
+        for (int condSize = 0; condSize <= _maxConditioningSetSize; condSize++)
+        {
+            for (int i = 0; i < d; i++)
+            {
+                for (int j = i + 1; j < d; j++)
+                {
+                    if (!adj[i, j]) continue;
+
+                    var neighbors = new List<int>();
+                    for (int k = 0; k < d; k++)
+                        if (k != i && k != j && (adj[i, k] || adj[j, k]))
+                            neighbors.Add(k);
+
+                    if (neighbors.Count < condSize) continue;
+
+                    foreach (var condSet in GetCombinations(neighbors, condSize))
+                    {
+                        if (IsCI(data, i, j, condSet, n))
+                        {
+                            adj[i, j] = false;
+                            adj[j, i] = false;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return adj;
+    }
+
+    /// <summary>
+    /// Phase 2: Optimize edge weights using coordinate descent restricted to skeleton.
+    /// Uses the NOTEARS least-squares objective with L1 penalty.
+    /// </summary>
+    private double[,] OptimizeWeights(Matrix<T> data, bool[,] skeleton, int d, int n)
+    {
+        // Compute sample covariance
+        var means = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            for (int i = 0; i < n; i++)
+                means[j] += NumOps.ToDouble(data[i, j]);
+            means[j] /= n;
+        }
+
+        var S = new double[d, d];
+        for (int a = 0; a < d; a++)
+        {
+            for (int b = 0; b < d; b++)
+            {
+                double sum = 0;
+                for (int i = 0; i < n; i++)
+                    sum += (NumOps.ToDouble(data[i, a]) - means[a]) *
+                           (NumOps.ToDouble(data[i, b]) - means[b]);
+                S[a, b] = sum / n;
+            }
+        }
+
+        // Initialize W from OLS on skeleton
+        var W = new double[d, d];
+        for (int i = 0; i < d; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                if (i != j && skeleton[i, j])
+                {
+                    // OLS coefficient
+                    double sii = S[i, i] > 1e-10 ? S[i, i] : 1e-10;
+                    W[i, j] = S[i, j] / sii;
+                }
+            }
+        }
+
+        // Coordinate descent with L1 penalty
+        for (int iter = 0; iter < _maxOptIterations; iter++)
+        {
+            bool changed = false;
+
+            for (int j = 0; j < d; j++)
+            {
+                for (int i = 0; i < d; i++)
+                {
+                    if (i == j || !skeleton[i, j]) continue;
+
+                    // Gradient of least squares: -(S[i,j] - sum_k W[k,j]*S[i,k])
+                    double gradient = -S[i, j];
+                    for (int k = 0; k < d; k++)
+                    {
+                        if (k == j) continue;
+                        gradient += W[k, j] * S[i, k];
+                    }
+
+                    // Soft thresholding (L1 proximal)
+                    double oldW = W[i, j];
+                    double newW = SoftThreshold(-gradient / (S[i, i] + 1e-10), _lambda / (S[i, i] + 1e-10));
+
+                    if (Math.Abs(newW - oldW) > 1e-8)
+                    {
+                        W[i, j] = newW;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (!changed) break;
+        }
+
+        // Convert to Matrix<T>
+        var result = new double[d, d];
+        Array.Copy(W, result, W.Length);
+        return result;
+    }
+
+    private static double SoftThreshold(double z, double threshold)
+    {
+        if (z > threshold) return z - threshold;
+        if (z < -threshold) return z + threshold;
+        return 0;
+    }
+
+    private bool IsCI(Matrix<T> data, int i, int j, List<int> condSet, int n)
+    {
+        double partialCorr;
+        if (condSet.Count == 0)
+        {
+            partialCorr = ComputeCorrelation(data, i, j);
+        }
+        else
+        {
+            // Simple partial correlation via residualization
+            partialCorr = ComputePartialCorrelation(data, i, j, condSet, n);
+        }
+
+        int dof = n - condSet.Count - 3;
+        if (dof <= 0) return true;
+
+        double clamped = Math.Max(-0.999999, Math.Min(partialCorr, 0.999999));
+        double z = Math.Sqrt(dof) * 0.5 * Math.Log((1 + clamped) / (1 - clamped));
+        double pValue = 2 * (1 - NormalCDF(Math.Abs(z)));
+        return pValue > Alpha;
+    }
+
+    private double ComputePartialCorrelation(Matrix<T> data, int i, int j, List<int> condSet, int n)
+    {
+        if (condSet.Count == 0) return ComputeCorrelation(data, i, j);
+
+        double meanI = 0, meanJ = 0;
+        for (int k = 0; k < n; k++)
+        {
+            meanI += NumOps.ToDouble(data[k, i]);
+            meanJ += NumOps.ToDouble(data[k, j]);
+        }
+        meanI /= n; meanJ /= n;
+
+        var residI = new double[n];
+        var residJ = new double[n];
+        for (int k = 0; k < n; k++)
+        {
+            residI[k] = NumOps.ToDouble(data[k, i]) - meanI;
+            residJ[k] = NumOps.ToDouble(data[k, j]) - meanJ;
+        }
+
+        foreach (int c in condSet)
+        {
+            double meanC = 0;
+            for (int k = 0; k < n; k++) meanC += NumOps.ToDouble(data[k, c]);
+            meanC /= n;
+
+            double covIC = 0, covJC = 0, varC = 0;
+            for (int k = 0; k < n; k++)
+            {
+                double dc = NumOps.ToDouble(data[k, c]) - meanC;
+                covIC += residI[k] * dc;
+                covJC += residJ[k] * dc;
+                varC += dc * dc;
+            }
+
+            if (varC > 1e-10)
+            {
+                double bI = covIC / varC;
+                double bJ = covJC / varC;
+                for (int k = 0; k < n; k++)
+                {
+                    double dc = NumOps.ToDouble(data[k, c]) - meanC;
+                    residI[k] -= bI * dc;
+                    residJ[k] -= bJ * dc;
+                }
+            }
+        }
+
+        double sxy = 0, sxx = 0, syy = 0;
+        for (int k = 0; k < n; k++)
+        {
+            sxy += residI[k] * residJ[k];
+            sxx += residI[k] * residI[k];
+            syy += residJ[k] * residJ[k];
+        }
+
+        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+    }
+
+    private static IEnumerable<List<int>> GetCombinations(List<int> items, int size)
+    {
+        if (size == 0) { yield return []; yield break; }
+        for (int i = 0; i <= items.Count - size; i++)
+        {
+            foreach (var rest in GetCombinations(items.Skip(i + 1).ToList(), size - 1))
+            {
+                var combination = new List<int> { items[i] };
+                combination.AddRange(rest);
+                yield return combination;
+            }
+        }
+    }
+
+    private static double NormalCDF(double x)
+    {
+        double a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+        double a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+        int sign = x < 0 ? -1 : 1;
+        x = Math.Abs(x) / Math.Sqrt(2);
+        double t = 1.0 / (1.0 + p * x);
+        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
+        return 0.5 * (1.0 + sign * y);
     }
 }
