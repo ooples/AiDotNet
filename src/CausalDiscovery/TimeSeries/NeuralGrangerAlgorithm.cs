@@ -23,15 +23,6 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Causal)]
-[ModelDomain(ModelDomain.TimeSeries)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.CausalInference)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Neural Granger Causality", "https://doi.org/10.1109/TPAMI.2021.3065601", Year = 2021, Authors = "Alex Tank, Ian Covert, Nicholas Foti, Ali Shojaie, Emily B. Fox")]
 public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <inheritdoc/>

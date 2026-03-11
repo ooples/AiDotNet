@@ -44,14 +44,6 @@ namespace AiDotNet.Audio.Effects;
 /// </code>
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.Autoencoder)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Compression)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("High-Fidelity Audio Compression with Improved RVQGAN", "https://arxiv.org/abs/2306.06546", Year = 2024, Authors = "Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar")]
 public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
     #region Fields

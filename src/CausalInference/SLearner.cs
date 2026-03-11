@@ -42,13 +42,6 @@ namespace AiDotNet.CausalInference;
 /// <para><b>Reference:</b> Künzel et al., "Metalearners for Estimating Heterogeneous Treatment Effects" (2019)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Healthcare)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.MetaLearning)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class SLearner<T> : CausalModelBase<T>
 {
     /// <summary>

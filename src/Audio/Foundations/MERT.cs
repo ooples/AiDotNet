@@ -34,15 +34,6 @@ namespace AiDotNet.Audio.Foundations;
 /// </code>
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelTask(ModelTask.Embedding)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MERT: Acoustic Music Understanding Model with Large-Scale Self-Supervised Training", "https://arxiv.org/abs/2306.00107", Year = 2024, Authors = "Yizhi Li, Ruibin Yuan, Ge Zhang, Yinghao Ma, Xingran Chen, Hanzhi Yin, Chenghao Xiao, Chenghua Lin, Anton Ragni, Emmanouil Benetos, Norbert Gyenge, Roger Sherba, Jie Fu")]
 public class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
     #region Fields

@@ -23,16 +23,6 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Causal)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelCategory(ModelCategory.Autoencoder)]
-[ModelCategory(ModelCategory.GraphNetwork)]
-[ModelTask(ModelTask.CausalInference)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Variational Graph Auto-Encoders", "https://arxiv.org/abs/1611.07308", Year = 2016, Authors = "Thomas N. Kipf, Max Welling")]
 public class GAEAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>

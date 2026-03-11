@@ -23,13 +23,6 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Causal)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelTask(ModelTask.CausalInference)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class GRaSPAlgorithm<T> : ScoreBasedBase<T>
 {
     /// <inheritdoc/>

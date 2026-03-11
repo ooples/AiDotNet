@@ -49,17 +49,6 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// with Feature Fusion and Keyword-to-Caption Augmentation.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Audio)]
-[ModelDomain(ModelDomain.Language)]
-[ModelDomain(ModelDomain.Multimodal)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelCategory(ModelCategory.EmbeddingModel)]
-[ModelTask(ModelTask.Embedding)]
-[ModelTask(ModelTask.Classification)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Large-Scale Contrastive Language-Audio Pretraining with Feature Fusion and Keyword-to-Caption Augmentation", "https://arxiv.org/abs/2211.06687", Year = 2023, Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
 public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     private readonly CLAPModelOptions _options;

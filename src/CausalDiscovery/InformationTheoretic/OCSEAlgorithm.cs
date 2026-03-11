@@ -24,14 +24,6 @@ namespace AiDotNet.CausalDiscovery.InformationTheoretic;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.Causal)]
-[ModelCategory(ModelCategory.CausalModel)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.CausalInference)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Causal Network Inference by Optimal Causation Entropy", "https://doi.org/10.1137/140956166", Year = 2015, Authors = "Jie Sun, Dane Taylor, Erik M. Bollt")]
 public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
 {
     /// <inheritdoc/>

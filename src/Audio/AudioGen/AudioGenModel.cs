@@ -60,14 +60,6 @@ namespace AiDotNet.Audio.AudioGen;
 /// Reference: "AudioGen: Textually Guided Audio Generation" by Kreuk et al., 2022
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Audio)]
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("AudioGen: Textually Guided Audio Generation", "https://arxiv.org/abs/2209.15352", Year = 2022, Authors = "Felix Kreuk, Gabriel Synnaeve, Adam Polyak, Uriel Singer, Alexandre Defossez, Jade Copet, Devi Parikh, Yaniv Taigman, Yossi Adi")]
 public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     private readonly AudioGenOptions _options;
