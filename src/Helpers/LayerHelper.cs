@@ -28622,6 +28622,18 @@ public static class LayerHelper<T>
     #region VisionMamba Layers
 
     /// <summary>
+    /// Creates MambaBlock layers for the Vision Mamba classifier model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVisionMambaClassifierLayers(
+        int numPatches, int mambaInputDim, int numLayers, int stateDimension)
+    {
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MambaBlock<T>(numPatches, mambaInputDim, stateDimension);
+        }
+    }
+
+    /// <summary>
     /// Creates encoder layers for the VisionMamba model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateVisionMambaEncoderLayers(

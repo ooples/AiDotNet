@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
@@ -128,7 +129,7 @@ public class MambaLanguageModelTests
         var output = model.Forward(input);
         var grad = CreateRandomTensor(output.Shape);
         model.Backward(grad);
-        model.UpdateParameters(0.001f);
+        model.UpdateParametersFromGradients(0.001f);
 
         // Verify model still produces valid output after parameter update
         model.ResetState();
@@ -213,18 +214,19 @@ public class MambaLanguageModelTests
     }
 
     [Fact]
-    public void GetMetadata_ContainsExpectedKeys()
+    public void GetModelMetadata_ContainsExpectedKeys()
     {
         var model = new MambaLanguageModel<float>(100, 64, 4, 16, maxSeqLength: 32);
-        var metadata = model.GetMetadata();
+        var metadata = model.GetModelMetadata();
 
-        Assert.True(metadata.ContainsKey("VocabSize"));
-        Assert.True(metadata.ContainsKey("ModelDimension"));
-        Assert.True(metadata.ContainsKey("NumLayers"));
-        Assert.True(metadata.ContainsKey("StateDimension"));
-        Assert.Equal("100", metadata["VocabSize"]);
-        Assert.Equal("64", metadata["ModelDimension"]);
-        Assert.Equal("4", metadata["NumLayers"]);
+        Assert.Equal(ModelType.NeuralNetwork, metadata.ModelType);
+        Assert.True(metadata.AdditionalInfo.ContainsKey("VocabSize"));
+        Assert.True(metadata.AdditionalInfo.ContainsKey("ModelDimension"));
+        Assert.True(metadata.AdditionalInfo.ContainsKey("NumLayers"));
+        Assert.True(metadata.AdditionalInfo.ContainsKey("StateDimension"));
+        Assert.Equal(100, metadata.AdditionalInfo["VocabSize"]);
+        Assert.Equal(64, metadata.AdditionalInfo["ModelDimension"]);
+        Assert.Equal(4, metadata.AdditionalInfo["NumLayers"]);
     }
 
     [Fact]
