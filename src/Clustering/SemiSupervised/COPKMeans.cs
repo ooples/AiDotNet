@@ -45,7 +45,7 @@ namespace AiDotNet.Clustering.SemiSupervised;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Constrained K-means Clustering with Background Knowledge", "https://doi.org/10.1145/944919.944935", Year = 2001, Authors = "Kiri Wagstaff, Claire Cardie, Seth Rogers, Stefan Schroedl")]
 public class COPKMeans<T> : ClusteringBase<T>
 {

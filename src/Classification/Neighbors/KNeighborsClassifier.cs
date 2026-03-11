@@ -38,7 +38,7 @@ namespace AiDotNet.Classification.Neighbors;
 [ModelCategory(ModelCategory.InstanceBased)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
 {
     /// <summary>

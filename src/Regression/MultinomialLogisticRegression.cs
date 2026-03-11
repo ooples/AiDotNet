@@ -31,7 +31,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class MultinomialLogisticRegression<T> : RegressionBase<T>
 {
     /// <summary>

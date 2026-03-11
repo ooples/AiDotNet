@@ -49,7 +49,7 @@ namespace AiDotNet.Clustering.Streaming;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Web-Scale K-Means Clustering", "https://doi.org/10.1145/1772690.1772862", Year = 2010, Authors = "David Sculley")]
 public class MiniBatchKMeans<T> : ClusteringBase<T>
 {

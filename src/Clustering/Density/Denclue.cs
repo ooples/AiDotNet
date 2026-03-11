@@ -48,7 +48,7 @@ namespace AiDotNet.Clustering.Density;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("DENCLUE: A New Approach for Discovering Density-Based Clusters in Large Spatial Databases", "https://link.springer.com/chapter/10.1007/978-1-4615-5669-5_7", Year = 1998, Authors = "Alexander Hinneburg, Daniel A. Keim")]
 public class Denclue<T> : ClusteringBase<T>
 {

@@ -41,7 +41,7 @@ namespace AiDotNet.AnomalyDetection.AngleBased;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Angle-Based Outlier Detection in High-dimensional Data", "https://doi.org/10.1145/1401890.1401946", Year = 2008, Authors = "Hans-Peter Kriegel, Matthias Schubert, Arthur Zimek")]
 public class FastABODDetector<T> : AnomalyDetectorBase<T>
 {

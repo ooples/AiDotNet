@@ -32,7 +32,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Learning with Continuous Classes", "https://doi.org/10.1007/BF00153760", Year = 1992, Authors = "J. Ross Quinlan")]
 public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
 {

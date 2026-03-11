@@ -47,7 +47,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelCategory(ModelCategory.GAN)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("GANomaly: Semi-Supervised Anomaly Detection via Adversarial Training", "https://doi.org/10.1007/978-3-030-20893-6_39", Year = 2018, Authors = "Samet Akcay, Amir Atapour-Abarghouei, Toby P. Breckon")]
 public class GANomalyDetector<T> : AnomalyDetectorBase<T>
 {

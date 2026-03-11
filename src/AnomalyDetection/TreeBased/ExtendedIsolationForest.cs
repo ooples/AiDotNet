@@ -44,7 +44,7 @@ namespace AiDotNet.AnomalyDetection.TreeBased;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Extended Isolation Forest", "https://doi.org/10.1109/TKDE.2019.2947676", Year = 2019, Authors = "Sahand Hariri, Matias Carrasco Kind, Robert J. Brunner")]
 public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
 {

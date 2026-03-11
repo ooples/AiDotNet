@@ -42,7 +42,7 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("SUOD: Accelerating Large-Scale Unsupervised Heterogeneous Outlier Detection", "https://doi.org/10.48550/arXiv.2003.05731", Year = 2021, Authors = "Yue Zhao, Xiyang Hu, Cheng Cheng, Cong Wang, Changlin Wan, Wen Wang, Jianing Yang, Haoping Bai, Zheng Li, Cao Xiao, Yunlong Wang, Zhi Qiao, Jiashu Sun, Leman Akoglu")]
 public class SUODDetector<T> : AnomalyDetectorBase<T>
 {

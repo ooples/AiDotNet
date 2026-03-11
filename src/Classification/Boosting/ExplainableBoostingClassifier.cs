@@ -45,7 +45,7 @@ namespace AiDotNet.Classification.Boosting;
 [ModelCategory(ModelCategory.Interpretable)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("InterpretML: A Unified Framework for Machine Learning Interpretability", "https://arxiv.org/abs/1909.09223", Year = 2019, Authors = "Harsha Nori, Samuel Jenkins, Paul Koch, Rich Caruana")]
 public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
 {

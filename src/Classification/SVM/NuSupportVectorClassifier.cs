@@ -49,7 +49,7 @@ namespace AiDotNet.Classification.SVM;
 [ModelCategory(ModelCategory.Kernel)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("New Support Vector Algorithms", "https://doi.org/10.1162/089976600300015565", Year = 2000, Authors = "Bernhard Scholkopf, Alex J. Smola, Robert C. Williamson, Peter L. Bartlett")]
 public class NuSupportVectorClassifier<T> : SVMBase<T>
 {

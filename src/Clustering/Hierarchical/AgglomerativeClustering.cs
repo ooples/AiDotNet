@@ -41,7 +41,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class AgglomerativeClustering<T> : ClusteringBase<T>
 {
     private readonly HierarchicalOptions<T> _options;

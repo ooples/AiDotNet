@@ -45,7 +45,7 @@ namespace AiDotNet.AnomalyDetection.Linear;
 [ModelCategory(ModelCategory.Kernel)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class KernelPCADetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _gamma;

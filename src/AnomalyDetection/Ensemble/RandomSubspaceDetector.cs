@@ -44,7 +44,7 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class RandomSubspaceDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nEstimators;

@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class LoOPDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;

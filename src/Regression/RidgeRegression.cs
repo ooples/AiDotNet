@@ -48,7 +48,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Regularization)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class RidgeRegression<T> : RegressionBase<T>
 {
     /// <summary>

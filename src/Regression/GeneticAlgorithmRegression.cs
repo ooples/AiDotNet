@@ -35,7 +35,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Optimization)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class GeneticAlgorithmRegression<T> : RegressionBase<T>
 {
     /// <summary>

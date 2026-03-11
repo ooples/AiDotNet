@@ -31,7 +31,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class MultipleRegression<T> : RegressionBase<T>
 {
     /// <summary>

@@ -42,7 +42,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Tackling the Poor Assumptions of Naive Bayes Text Classifiers", "https://people.csail.mit.edu/jrennie/papers/icml03-nb.pdf", Year = 2003, Authors = "Jason D. Rennie, Lawrence Shih, Jaime Teevan, David R. Karger")]
 public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
 {

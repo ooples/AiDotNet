@@ -46,7 +46,7 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 [ModelTask(ModelTask.Classification)]
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 {
     /// <summary>

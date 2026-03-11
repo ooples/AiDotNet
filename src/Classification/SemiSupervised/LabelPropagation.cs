@@ -38,7 +38,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 [ModelCategory(ModelCategory.Kernel)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Learning from Labeled and Unlabeled Data with Label Propagation", "https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=8a6a114d699824b678325766be195b0e7b564f87", Year = 2002, Authors = "Xiaojin Zhu, Zoubin Ghahramani")]
 public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
 {

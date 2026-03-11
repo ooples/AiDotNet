@@ -41,7 +41,7 @@ namespace AiDotNet.AnomalyDetection.Linear;
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class PCADetector<T> : AnomalyDetectorBase<T>
 {
     /// <summary>Eigenvalues below this threshold are treated as zero to avoid division by near-zero values in Mahalanobis distance.</summary>

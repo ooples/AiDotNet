@@ -46,7 +46,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelCategory(ModelCategory.Autoencoder)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Auto-Encoding Variational Bayes", "https://doi.org/10.48550/arXiv.1312.6114", Year = 2014, Authors = "Diederik P. Kingma, Max Welling")]
 public class VAEDetector<T> : AnomalyDetectorBase<T>
 {

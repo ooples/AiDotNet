@@ -41,7 +41,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Regularization)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("DART: Dropouts meet Multiple Additive Regression Trees", "https://arxiv.org/abs/1505.01866", Year = 2015, Authors = "K. V. Rashmi, Ran Gilad-Bachrach")]
 public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {

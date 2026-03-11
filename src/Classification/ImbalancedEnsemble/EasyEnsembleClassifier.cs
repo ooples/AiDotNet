@@ -53,7 +53,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Exploratory Undersampling for Class-Imbalance Learning", "https://doi.org/10.1109/TSMCB.2008.2007853", Year = 2009, Authors = "Xu-Ying Liu, Jianxin Wu, Zhi-Hua Zhou")]
 public class EasyEnsembleClassifier<T> : ClassifierBase<T>
 {

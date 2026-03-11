@@ -44,7 +44,7 @@ namespace AiDotNet.Clustering.Partitioning;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Finding Groups in Data: An Introduction to Cluster Analysis", "https://doi.org/10.1002/9780470316801", Year = 1990, Authors = "Leonard Kaufman, Peter J. Rousseeuw")]
 public class KMedoids<T> : ClusteringBase<T>
 {

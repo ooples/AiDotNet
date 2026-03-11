@@ -45,7 +45,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("STL: A Seasonal-Trend Decomposition Procedure Based on Loess", "https://doi.org/10.6028/jres.095.015", Year = 1990, Authors = "Robert B. Cleveland, William S. Cleveland, Jean E. McRae, Irma Terpenning")]
 public class STLDetector<T> : AnomalyDetectorBase<T>
 {

@@ -39,7 +39,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Greedy Function Approximation: A Gradient Boosting Machine", "https://doi.org/10.1214/aos/1013203451", Year = 2001, Authors = "Jerome H. Friedman")]
 public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {

@@ -36,7 +36,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class StepwiseRegression<T> : RegressionBase<T>
 {
     /// <summary>

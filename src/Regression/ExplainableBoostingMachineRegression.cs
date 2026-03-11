@@ -45,7 +45,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Interpretable)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Intelligible Models for HealthCare: Predicting Pneumonia Risk and Hospital 30-day Readmission", "https://doi.org/10.1145/2783258.2788613", Year = 2015, Authors = "Rich Caruana, Yin Lou, Johannes Gehrke, Paul Koch, Marc Sturm, Noemie Elhadad")]
 public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {

@@ -31,7 +31,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelTask(ModelTask.DimensionalityReduction)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class PartialLeastSquaresRegression<T> : RegressionBase<T>
 {
     /// <summary>

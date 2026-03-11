@@ -44,7 +44,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelCategory(ModelCategory.InstanceBased)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("LOCI: Fast Outlier Detection Using the Local Correlation Integral", "https://doi.org/10.1109/ICDE.2003.1260802", Year = 2003, Authors = "Spiros Papadimitriou, Hiroyuki Kitagawa, Phillip B. Gibbons, Christos Faloutsos")]
 public class LOCIDetector<T> : AnomalyDetectorBase<T>
 {

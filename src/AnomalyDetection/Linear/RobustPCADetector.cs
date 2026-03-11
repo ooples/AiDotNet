@@ -45,7 +45,7 @@ namespace AiDotNet.AnomalyDetection.Linear;
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Robust Principal Component Analysis?", "https://doi.org/10.1145/1970392.1970395", Year = 2011, Authors = "Emmanuel J. Candes, Xiaodong Li, Yi Ma, John Wright")]
 public class RobustPCADetector<T> : AnomalyDetectorBase<T>
 {

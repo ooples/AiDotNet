@@ -49,7 +49,7 @@ namespace AiDotNet.Clustering.Density;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Mean Shift: A Robust Approach toward Feature Space Analysis", "https://doi.org/10.1109/34.1000236", Year = 2002, Authors = "Dorin Comaniciu, Peter Meer")]
 public class MeanShift<T> : ClusteringBase<T>
 {

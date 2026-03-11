@@ -41,7 +41,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class MovingAverageDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _windowSize;

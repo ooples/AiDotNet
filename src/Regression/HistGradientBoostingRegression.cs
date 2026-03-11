@@ -58,7 +58,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("LightGBM: A Highly Efficient Gradient Boosting Decision Tree", "https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree", Year = 2017, Authors = "Guolin Ke, Qi Meng, Thomas Finley, Taifeng Wang, Wei Chen, Weidong Ma, Qiwei Ye, Tie-Yan Liu")]
 public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector<T>>, IConfigurableModel<T>
 {

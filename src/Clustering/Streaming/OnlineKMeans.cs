@@ -50,7 +50,7 @@ namespace AiDotNet.Clustering.Streaming;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class OnlineKMeans<T> : ClusteringBase<T>
 {
     private readonly OnlineKMeansOptions<T> _options;

@@ -42,7 +42,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelCategory(ModelCategory.InstanceBased)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class COFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;

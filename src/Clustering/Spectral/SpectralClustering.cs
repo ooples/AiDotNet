@@ -39,7 +39,7 @@ namespace AiDotNet.Clustering.Spectral;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("On Spectral Clustering: Analysis and an algorithm", "https://proceedings.neurips.cc/paper/2001/hash/801272ee79cfde7fa5960571fee36b9b-Abstract.html", Year = 2002, Authors = "Andrew Ng, Michael Jordan, Yair Weiss")]
 public class SpectralClustering<T> : ClusteringBase<T>
 {

@@ -34,7 +34,7 @@ namespace AiDotNet.Classification.Trees;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBasedClassifier<T>
 {
     /// <summary>

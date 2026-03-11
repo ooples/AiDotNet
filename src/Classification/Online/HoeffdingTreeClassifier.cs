@@ -47,7 +47,7 @@ namespace AiDotNet.Classification.Online;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Mining High-Speed Data Streams", "https://doi.org/10.1145/347090.347107", Year = 2000, Authors = "Pedro Domingos, Geoff Hulten")]
 public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {

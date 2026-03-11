@@ -45,7 +45,7 @@ namespace AiDotNet.Clustering.Probabilistic;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class GaussianMixtureModel<T> : ClusteringBase<T>
 {
     private readonly GMMOptions<T> _options;

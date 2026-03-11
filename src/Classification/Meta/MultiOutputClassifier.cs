@@ -39,7 +39,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class MultiOutputClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>

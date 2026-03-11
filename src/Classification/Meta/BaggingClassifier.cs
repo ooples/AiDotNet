@@ -41,7 +41,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Bagging Predictors", "https://doi.org/10.1007/BF00058655", Year = 1996, Authors = "Leo Breiman")]
 public class BaggingClassifier<T> : MetaClassifierBase<T>
 {

@@ -48,7 +48,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
 {
     private IClassifier<T> _baseClassifier;

@@ -46,7 +46,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Stacked Generalization", "https://doi.org/10.1016/S0893-6080(05)80023-1", Year = 1992, Authors = "David H. Wolpert")]
 public class StackingClassifier<T> : MetaClassifierBase<T>
 {

@@ -53,7 +53,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Using Random Forest to Learn Imbalanced Data", "https://statistics.berkeley.edu/sites/default/files/tech-reports/666.pdf", Year = 2004, Authors = "Chao Chen, Andy Liaw, Leo Breiman")]
 public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
 {

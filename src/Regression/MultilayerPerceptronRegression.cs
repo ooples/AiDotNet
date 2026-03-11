@@ -34,7 +34,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

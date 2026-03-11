@@ -43,7 +43,7 @@ namespace AiDotNet.Clustering.Partitioning;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("FCM: The Fuzzy c-Means Clustering Algorithm", "https://doi.org/10.1016/0098-3004(84)90020-7", Year = 1984, Authors = "James C. Bezdek, Robert Ehrlich, William Full")]
 public class FuzzyCMeans<T> : ClusteringBase<T>
 {

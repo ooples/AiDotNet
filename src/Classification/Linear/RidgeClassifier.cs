@@ -39,7 +39,7 @@ namespace AiDotNet.Classification.Linear;
 [ModelCategory(ModelCategory.Regularization)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class RidgeClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>

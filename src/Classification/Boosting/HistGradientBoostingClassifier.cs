@@ -55,7 +55,7 @@ namespace AiDotNet.Classification.Boosting;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
 {
     /// <summary>

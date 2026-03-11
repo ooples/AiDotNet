@@ -37,7 +37,7 @@ namespace AiDotNet.Classification.Linear;
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class SGDClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>

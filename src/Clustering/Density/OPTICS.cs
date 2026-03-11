@@ -43,7 +43,7 @@ namespace AiDotNet.Clustering.Density;
 [ModelTask(ModelTask.Clustering)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("OPTICS: Ordering Points To Identify the Clustering Structure", "https://doi.org/10.1145/304181.304187", Year = 1999, Authors = "Mihael Ankerst, Markus M. Breunig, Hans-Peter Kriegel, Jorg Sander")]
 public class OPTICS<T> : ClusteringBase<T>
 {

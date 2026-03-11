@@ -42,7 +42,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class InverseGaussianRegression<T> : RegressionBase<T>
 {
     private const double MuFloor = 1e-10;

@@ -50,7 +50,7 @@ namespace AiDotNet.Classification.Online;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {
     private readonly OnlineNaiveBayesOptions<T> _options;

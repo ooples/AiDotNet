@@ -58,7 +58,7 @@ namespace AiDotNet.Classification.Ordinal;
 [ModelCategory(ModelCategory.Regularization)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
 {
     /// <summary>

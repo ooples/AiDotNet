@@ -37,7 +37,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Super Learner", "https://doi.org/10.2202/1544-6115.1309", Year = 2007, Authors = "Mark J. van der Laan, Eric C. Polley, Alan E. Hubbard")]
 public class SuperLearner<T> : NonLinearRegressionBase<T>
 {

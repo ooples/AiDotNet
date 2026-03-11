@@ -44,7 +44,7 @@ namespace AiDotNet.Classification.SVM;
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class LinearSupportVectorClassifier<T> : SVMBase<T>
 {
     /// <summary>

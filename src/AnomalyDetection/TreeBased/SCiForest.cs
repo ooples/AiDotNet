@@ -46,7 +46,7 @@ namespace AiDotNet.AnomalyDetection.TreeBased;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Isolation-Based Anomaly Detection", "https://doi.org/10.1145/2133360.2133363", Year = 2012, Authors = "Fei Tony Liu, Kai Ming Ting, Zhi-Hua Zhou")]
 public class SCiForest<T> : AnomalyDetectorBase<T>
 {

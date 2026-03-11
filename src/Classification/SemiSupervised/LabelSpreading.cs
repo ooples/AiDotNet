@@ -41,7 +41,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 [ModelCategory(ModelCategory.Kernel)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Learning with Local and Global Consistency", "https://proceedings.neurips.cc/paper/2003/hash/87682805257e619d49b8e0dfdc14affa-Abstract.html", Year = 2003, Authors = "Dengyong Zhou, Olivier Bousquet, Thomas N. Lal, Jason Weston, Bernhard Scholkopf")]
 public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
 {

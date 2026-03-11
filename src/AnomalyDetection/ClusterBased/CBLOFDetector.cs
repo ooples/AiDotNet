@@ -44,7 +44,7 @@ namespace AiDotNet.AnomalyDetection.ClusterBased;
 [ModelCategory(ModelCategory.Clustering)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Discovering Cluster-Based Local Outliers", "https://doi.org/10.1016/S0167-8655(03)00003-5", Year = 2003, Authors = "Zengyou He, Xiaofei Xu, Shengchun Deng")]
 public class CBLOFDetector<T> : AnomalyDetectorBase<T>
 {

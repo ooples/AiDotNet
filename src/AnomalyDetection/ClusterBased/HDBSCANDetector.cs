@@ -45,7 +45,7 @@ namespace AiDotNet.AnomalyDetection.ClusterBased;
 [ModelCategory(ModelCategory.Clustering)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Density-Based Clustering Based on Hierarchical Density Estimates", "https://doi.org/10.1007/978-3-642-37456-2_14", Year = 2013, Authors = "Ricardo J. G. B. Campello, Davoud Moulavi, Joerg Sander")]
 public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
 {

@@ -39,7 +39,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelCategory(ModelCategory.Bayesian)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("ML-KNN: A Lazy Learning Approach to Multi-Label Learning", "https://doi.org/10.1016/j.patcog.2006.12.019", Year = 2007, Authors = "Min-Ling Zhang, Zhi-Hua Zhou")]
 public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
 {

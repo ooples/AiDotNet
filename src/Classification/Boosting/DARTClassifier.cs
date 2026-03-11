@@ -42,7 +42,7 @@ namespace AiDotNet.Classification.Boosting;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("DART: Dropouts meet Multiple Additive Regression Trees", "https://arxiv.org/abs/1505.01866", Year = 2015, Authors = "K. V. Rashmi, Ran Gilad-Bachrach")]
 public class DARTClassifier<T> : EnsembleClassifierBase<T>
 {

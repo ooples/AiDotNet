@@ -43,7 +43,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Generalized additive models for location, scale and shape", "https://doi.org/10.1111/j.1467-9876.2005.00510.x", Year = 2005, Authors = "Robert A. Rigby, D. Mikis Stasinopoulos")]
 public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {

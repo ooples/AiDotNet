@@ -39,7 +39,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

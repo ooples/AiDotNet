@@ -48,7 +48,7 @@ namespace AiDotNet.Classification.Ensemble;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Random Forests", "https://doi.org/10.1023/A:1010933404324", Year = 2001, Authors = "Leo Breiman")]
 public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
 {

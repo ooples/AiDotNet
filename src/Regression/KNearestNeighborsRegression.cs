@@ -37,7 +37,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.InstanceBased)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

@@ -39,7 +39,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Analysis of Extreme Values", "https://doi.org/10.1214/aoms/1177729747", Year = 1950, Authors = "Wilfrid J. Dixon")]
 public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
 {

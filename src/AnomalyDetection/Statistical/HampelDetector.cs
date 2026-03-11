@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class HampelDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _windowSize;

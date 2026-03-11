@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelCategory(ModelCategory.InstanceBased)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("LOF: Identifying Density-Based Local Outliers", "https://doi.org/10.1145/335191.335388", Year = 2000, Authors = "Markus M. Breunig, Hans-Peter Kriegel, Raymond T. Ng, Joerg Sander")]
 public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
 {

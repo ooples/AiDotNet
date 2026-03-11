@@ -32,7 +32,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Quantile Regression Forests", "https://jmlr.org/papers/v7/meinshausen06a.html", Year = 2006, Authors = "Nicolai Meinshausen")]
 public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
 {

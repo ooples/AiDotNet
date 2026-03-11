@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.Linear;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _supportFraction;

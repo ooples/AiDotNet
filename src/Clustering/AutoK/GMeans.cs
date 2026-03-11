@@ -46,7 +46,7 @@ namespace AiDotNet.Clustering.AutoK;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Learning the k in k-means", "https://proceedings.neurips.cc/paper/2003/hash/234833147b97bb6aed53a8f4f1c7a7d8-Abstract.html", Year = 2004, Authors = "Greg Hamerly, Charles Elkan")]
 public class GMeans<T> : ClusteringBase<T>
 {

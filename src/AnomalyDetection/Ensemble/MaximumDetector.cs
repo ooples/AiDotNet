@@ -34,7 +34,7 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class MaximumDetector<T> : AnomalyDetectorBase<T>
 {
     private List<IAnomalyDetector<T>>? _baseDetectors;

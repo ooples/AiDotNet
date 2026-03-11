@@ -48,7 +48,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Regularization and Variable Selection via the Elastic Net", "https://doi.org/10.1111/j.1467-9868.2005.00503.x", Year = 2005, Authors = "Hui Zou, Trevor Hastie")]
 public class ElasticNetRegression<T> : RegressionBase<T>
 {

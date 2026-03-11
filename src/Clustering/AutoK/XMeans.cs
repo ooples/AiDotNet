@@ -45,7 +45,7 @@ namespace AiDotNet.Clustering.AutoK;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("X-means: Extending K-means with Efficient Estimation of the Number of Clusters", "https://www.cs.cmu.edu/~dpelleg/download/xmeans.pdf", Year = 2000, Authors = "Dan Pelleg, Andrew Moore")]
 public class XMeans<T> : ClusteringBase<T>
 {

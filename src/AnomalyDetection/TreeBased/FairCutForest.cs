@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.TreeBased;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class FairCutForest<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numTrees;

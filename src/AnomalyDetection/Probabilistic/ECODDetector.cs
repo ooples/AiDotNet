@@ -43,7 +43,7 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("ECOD: Unsupervised Outlier Detection Using Empirical Cumulative Distribution Functions", "https://doi.org/10.1109/TKDE.2022.3159580", Year = 2022, Authors = "Zheng Li, Yue Zhao, Xiyang Hu, Nicola Botta, Cezar Ionescu, George H. Chen")]
 public class ECODDetector<T> : AnomalyDetectorBase<T>
 {

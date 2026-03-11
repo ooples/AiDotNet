@@ -45,7 +45,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Improving Regressors using Boosting Techniques", "https://doi.org/10.1145/3321386.3322519", Year = 1997, Authors = "Harris Drucker")]
 public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
 {

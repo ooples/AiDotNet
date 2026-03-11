@@ -38,7 +38,7 @@ namespace AiDotNet.Regression;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class SplineRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

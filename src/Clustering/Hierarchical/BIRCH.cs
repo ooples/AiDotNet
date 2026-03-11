@@ -46,7 +46,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("BIRCH: An Efficient Data Clustering Method for Very Large Databases", "https://doi.org/10.1145/233269.233324", Year = 1996, Authors = "Tian Zhang, Raghu Ramakrishnan, Miron Livny")]
 public class BIRCH<T> : ClusteringBase<T>
 {
