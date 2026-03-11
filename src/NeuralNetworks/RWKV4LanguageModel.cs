@@ -1,13 +1,14 @@
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
-using AiDotNet.NeuralNetworks.Layers.SSM;
+using AiDotNet.Interfaces;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
-/// Implements a full RWKV-4 language model: token embedding + N RWKVLayer blocks + RMS normalization + LM head.
+/// Implements a full RWKV-4 language model: token embedding + N RWKVLayer blocks + layer normalization + LM head.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -15,7 +16,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 ///   1. Token Embedding: token indices -> dense vectors [batch, seqLen, modelDim]
 ///   2. N x RWKVLayer: time mixing (WKV attention) + channel mixing (squared ReLU) with residual connections
-///   3. RMS Normalization: final layer normalization
+///   3. Layer Normalization: final normalization
 ///   4. LM Head: dense projection to vocabulary logits [batch, seqLen, vocabSize]
 /// </code>
 /// </para>
@@ -63,42 +64,19 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("RWKV: Reinventing RNNs for the Transformer Era", "https://arxiv.org/abs/2305.13048", Year = 2023, Authors = "Bo Peng, Eric Alcaide, Quentin Anthony, Alon Albalak, Samuel Arcadinho, Stella Biderman, Huanqi Cao, Xin Cheng, Michael Chung, Matteo Grella, Kranthi Kiran GV, Xuzheng He, Haowen Hou, Przemyslaw Kazienko, Jan Kocon, Jiaming Kong, Bartlomiej Koptyra, Hayden Lau, Krishna Sri Ipsit Mantri, Ferdinand Mom, Atsushi Saito, Xiangru Tang, Bolun Wang, Johan S. Wind, Stanislaw Wozniak, Ruichong Zhang, Zhenyuan Zhang, Qihang Zhao, Peng Zhou, Jian Zhu, Rui-Jie Zhu")]
-public class RWKV4LanguageModel<T> : LayerBase<T>
+public class RWKV4LanguageModel<T> : NeuralNetworkBase<T>
 {
+    private readonly RWKV4Options _options;
     private readonly int _vocabSize;
     private readonly int _modelDimension;
     private readonly int _numLayers;
-
-    // Token embedding: [vocabSize, modelDim]
-    private Tensor<T> _embeddingWeights;
-
-    // Stack of RWKV layers (using the generic RWKVLayer which implements v4-v6 features)
-    private readonly RWKVLayer<T>[] _blocks;
-
-    // Final RMS normalization
-    private Tensor<T> _finalNormGamma;
-
-    // LM head (output projection): [modelDim, vocabSize]
-    private Tensor<T> _lmHeadWeights;
-    private Tensor<T> _lmHeadBias;
-
-    // Cached values for backward pass
-    private Tensor<T>? _lastInput;
-    private Tensor<T>? _lastOutput;
-    private Tensor<T>? _lastEmbedded;
-    private Tensor<T>? _lastNormedOutput;
-    private Tensor<T>? _lastPostBlocksOutput;
-    private Tensor<T>[]? _lastBlockInputs;
-    private int[]? _originalInputShape;
-
-    // Gradients
-    private Tensor<T>? _embeddingWeightsGradient;
-    private Tensor<T>? _finalNormGammaGradient;
-    private Tensor<T>? _lmHeadWeightsGradient;
-    private Tensor<T>? _lmHeadBiasGradient;
+    private readonly int _maxSeqLength;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc />
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>Gets the vocabulary size.</summary>
     public int VocabSize => _vocabSize;
@@ -109,23 +87,12 @@ public class RWKV4LanguageModel<T> : LayerBase<T>
     /// <summary>Gets the number of RWKV-4 blocks.</summary>
     public int NumLayers => _numLayers;
 
-    /// <inheritdoc />
-    public override int ParameterCount
-    {
-        get
-        {
-            int count = _embeddingWeights.Length;
-            foreach (var block in _blocks)
-                count += block.ParameterCount;
-            count += _finalNormGamma.Length;
-            count += _lmHeadWeights.Length + _lmHeadBias.Length;
-            return count;
-        }
-    }
+    #region Constructors
 
     /// <summary>
-    /// Creates a new RWKV-4 language model.
+    /// Creates an RWKV-4 language model using native library layers.
     /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="vocabSize">
     /// Size of the token vocabulary. Typical: 50277 for RWKV-4 models (using the 20B tokenizer).
     /// <para><b>For Beginners:</b> How many different words/tokens the model knows.</para>
@@ -141,18 +108,23 @@ public class RWKV4LanguageModel<T> : LayerBase<T>
     /// 1.5B uses 24, 7B uses 32, 14B uses 40.</para>
     /// </param>
     /// <param name="maxSeqLength">Maximum sequence length. Default: 512.</param>
-    /// <param name="activationFunction">Optional activation function on final output.</param>
+    /// <param name="lossFunction">Optional loss function for training. Defaults to cross-entropy for text generation.</param>
+    /// <param name="options">Optional RWKV-4 specific options.</param>
     public RWKV4LanguageModel(
-        int vocabSize,
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabSize = 50277,
         int modelDimension = 256,
         int numLayers = 4,
         int maxSeqLength = 512,
-        IActivationFunction<T>? activationFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        RWKV4Options? options = null)
         : base(
-            [maxSeqLength, vocabSize],
-            [maxSeqLength, vocabSize],
-            activationFunction ?? new ActivationFunctions.IdentityActivation<T>())
+            architecture,
+            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
     {
+        _options = options ?? new RWKV4Options();
+        Options = _options;
+
         if (vocabSize <= 0)
             throw new ArgumentException($"Vocab size ({vocabSize}) must be positive.", nameof(vocabSize));
         if (modelDimension <= 0)
@@ -165,399 +137,142 @@ public class RWKV4LanguageModel<T> : LayerBase<T>
         _vocabSize = vocabSize;
         _modelDimension = modelDimension;
         _numLayers = numLayers;
+        _maxSeqLength = maxSeqLength;
 
-        // Token embedding
-        _embeddingWeights = new Tensor<T>(new[] { vocabSize, modelDimension });
-        InitializeTensor(_embeddingWeights);
-
-        // RWKV-4 layers: single-head (numHeads=1) to match original v4 architecture
-        _blocks = new RWKVLayer<T>[numLayers];
-        for (int i = 0; i < numLayers; i++)
-        {
-            _blocks[i] = new RWKVLayer<T>(
-                maxSeqLength, modelDimension, numHeads: 1);
-        }
-
-        // Final RMS normalization
-        _finalNormGamma = new Tensor<T>(new[] { modelDimension });
-        _finalNormGamma.Fill(NumOps.One);
-
-        // LM head
-        _lmHeadWeights = new Tensor<T>(new[] { modelDimension, vocabSize });
-        InitializeTensor(_lmHeadWeights);
-        _lmHeadBias = new Tensor<T>(new[] { vocabSize });
-        _lmHeadBias.Fill(NumOps.Zero);
+        InitializeLayers();
     }
 
-    private void InitializeTensor(Tensor<T> tensor)
-    {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-    }
+    #endregion
+
+    #region Initialization
 
     /// <inheritdoc />
-    public override Tensor<T> Forward(Tensor<T> input)
+    protected override void InitializeLayers()
     {
-        _originalInputShape = input.Shape;
-
-        int rank = input.Shape.Length;
-        if (rank < 2)
-            throw new ArgumentException(
-                $"Input must be at least rank 2 [seqLen, vocabSize], got rank {rank}.",
-                nameof(input));
-        int seqLen = input.Shape[rank - 2];
-        int inputDim = input.Shape[rank - 1];
-
-        int batchSize = 1;
-        for (int d = 0; d < rank - 2; d++)
-            batchSize *= input.Shape[d];
-        if (rank < 3) batchSize = 1;
-
-        var input3D = rank == 2
-            ? input.Reshape(1, seqLen, inputDim)
-            : input.Reshape(batchSize, seqLen, inputDim);
-
-        _lastInput = input3D;
-
-        if (inputDim != _vocabSize)
-            throw new ArgumentException(
-                $"Input last dimension ({inputDim}) must match vocab size ({_vocabSize}).",
-                nameof(input));
-
-        // Step 1: Token embedding
-        var inputFlat = input3D.Reshape(batchSize * seqLen, inputDim);
-        var embedded = Engine.TensorMatMul(inputFlat, _embeddingWeights);
-        var embedded3D = embedded.Reshape(batchSize, seqLen, _modelDimension);
-        _lastEmbedded = embedded3D;
-
-        // Step 2: Pass through RWKV-4 blocks (each has internal residual connections)
-        _lastBlockInputs = new Tensor<T>[_numLayers];
-        var current = embedded3D;
-
-        for (int i = 0; i < _numLayers; i++)
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            _lastBlockInputs[i] = current;
-            current = _blocks[i].Forward(current);
+            Layers.AddRange(Architecture.Layers);
         }
-
-        // Step 3: Final RMS normalization
-        _lastPostBlocksOutput = current;
-        var normed = ApplyRMSNorm(current, _finalNormGamma, batchSize, seqLen);
-        _lastNormedOutput = normed;
-
-        // Step 4: LM head projection
-        var normedFlat = normed.Reshape(batchSize * seqLen, _modelDimension);
-        var logitsFlat = Engine.TensorMatMul(normedFlat, _lmHeadWeights);
-        var bias2D = _lmHeadBias.Reshape(1, _vocabSize);
-        logitsFlat = Engine.TensorBroadcastAdd(logitsFlat, bias2D);
-        var logits3D = logitsFlat.Reshape(batchSize, seqLen, _vocabSize);
-
-        var result = ApplyActivation(logits3D);
-        _lastOutput = result;
-
-        if (rank == 2)
-            return result.Reshape(seqLen, _vocabSize);
-
-        var outputShape = new int[rank];
-        for (int i = 0; i < rank - 2; i++)
-            outputShape[i] = input.Shape[i];
-        outputShape[rank - 2] = seqLen;
-        outputShape[rank - 1] = _vocabSize;
-        return result.Reshape(outputShape);
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateRWKV4Layers(
+                _vocabSize, _modelDimension, _numLayers, _maxSeqLength));
+        }
     }
+
+    #endregion
+
+    #region NeuralNetworkBase Overrides
 
     /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (_lastInput == null || _lastOutput == null || _lastEmbedded == null ||
-            _lastNormedOutput == null || _lastPostBlocksOutput == null || _lastBlockInputs == null)
+        SetTrainingMode(false);
+
+        var output = input;
+        for (int i = 0; i < Layers.Count; i++)
         {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, seqLen, _vocabSize)
-            : outputGradient.Reshape(batchSize, seqLen, _vocabSize);
-
-        grad3D = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Step 4 backward: LM head
-        var gradFlat = grad3D.Reshape(batchSize * seqLen, _vocabSize);
-        _lmHeadBiasGradient = Engine.ReduceSum(grad3D, new int[] { 0, 1 });
-
-        var normedFlat = _lastNormedOutput.Reshape(batchSize * seqLen, _modelDimension);
-        _lmHeadWeightsGradient = Engine.TensorMatMul(
-            normedFlat.Transpose(new[] { 1, 0 }), gradFlat);
-
-        var dNormed = Engine.TensorMatMul(gradFlat, _lmHeadWeights.Transpose(new[] { 1, 0 }))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Step 3 backward: RMS norm
-        var dPostBlocks = BackwardRMSNorm(dNormed, _lastPostBlocksOutput,
-            _finalNormGamma, batchSize, seqLen, out var dFinalGamma);
-        _finalNormGammaGradient = dFinalGamma;
-
-        // Step 2 backward: RWKV blocks in reverse
-        var current = dPostBlocks;
-        for (int i = _numLayers - 1; i >= 0; i--)
-        {
-            current = _blocks[i].Backward(current);
-        }
-
-        // Step 1 backward: Embedding
-        var embGradFlat = current.Reshape(batchSize * seqLen, _modelDimension);
-        var inputFlat = _lastInput.Reshape(batchSize * seqLen, _lastInput.Shape[2]);
-        _embeddingWeightsGradient = Engine.TensorMatMul(
-            inputFlat.Transpose(new[] { 1, 0 }), embGradFlat);
-
-        var dInputFlat = Engine.TensorMatMul(embGradFlat, _embeddingWeights.Transpose(new[] { 1, 0 }));
-        var dInput3D = dInputFlat.Reshape(batchSize, seqLen, _lastInput.Shape[2]);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput3D.Reshape(seqLen, _lastInput.Shape[2]);
-
-        if (_originalInputShape != null)
-            return dInput3D.Reshape(_originalInputShape);
-
-        return dInput3D;
-    }
-
-    private Tensor<T> ApplyRMSNorm(Tensor<T> input, Tensor<T> gamma, int batchSize, int seqLen)
-    {
-        var output = new Tensor<T>(input.Shape);
-        T eps = NumOps.FromDouble(1e-6);
-        var gamma2D = gamma.Reshape(1, _modelDimension);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var slice = input.GetSliceAlongDimension(t, 1);
-            var squared = Engine.TensorMultiply(slice, slice);
-            var meanSquared = Engine.ReduceSum(squared, new int[] { 1 });
-            T divisor = NumOps.FromDouble(_modelDimension);
-
-            var normed = new Tensor<T>(slice.Shape);
-            for (int b = 0; b < batchSize; b++)
-            {
-                T rms = NumOps.Sqrt(NumOps.Add(NumOps.Divide(meanSquared[new[] { b }], divisor), eps));
-                for (int d = 0; d < _modelDimension; d++)
-                    normed[new[] { b, d }] = NumOps.Divide(slice[new[] { b, d }], rms);
-            }
-
-            var scaled = Engine.TensorBroadcastMultiply(normed, gamma2D);
-            output.SetSlice(1, t, scaled);
+            output = Layers[i].Forward(output);
         }
 
         return output;
     }
 
-    private Tensor<T> BackwardRMSNorm(Tensor<T> dOutput, Tensor<T> input, Tensor<T> gamma,
-        int batchSize, int seqLen, out Tensor<T> dGamma)
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var dInput = new Tensor<T>(input.Shape);
-        dGamma = new Tensor<T>(new[] { _modelDimension });
-        T eps = NumOps.FromDouble(1e-6);
+        SetTrainingMode(true);
 
-        for (int t = 0; t < seqLen; t++)
+        // Forward pass
+        var predictions = Predict(input);
+
+        // Calculate loss
+        var flatPredictions = predictions.ToVector();
+        var flatExpected = expectedOutput.ToVector();
+        LastLoss = LossFunction.CalculateLoss(flatPredictions, flatExpected);
+
+        // Backward pass through all layers in reverse
+        var outputGradients = LossFunction.CalculateDerivative(flatPredictions, flatExpected);
+        Backpropagate(Tensor<T>.FromVector(outputGradients));
+
+        // Get parameter gradients and update
+        var parameterGradients = GetParameterGradients();
+        parameterGradients = ClipGradient(parameterGradients);
+        UpdateParameters(parameterGradients);
+
+        SetTrainingMode(false);
+    }
+
+    /// <inheritdoc />
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+        int expectedCount = ParameterCount;
+        if (gradients.Length != expectedCount)
         {
-            var slice = input.GetSliceAlongDimension(t, 1);
-            var dOut = dOutput.GetSliceAlongDimension(t, 1);
+            throw new ArgumentException(
+                $"Expected {expectedCount} gradients, but got {gradients.Length}",
+                nameof(gradients));
+        }
 
-            for (int b = 0; b < batchSize; b++)
+        var currentParams = GetParameters();
+        T learningRate = NumOps.FromDouble(0.001);
+        currentParams = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
+        SetParameters(currentParams);
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.NeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
             {
-                T sumSq = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T val = slice[new[] { b, d }];
-                    sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
-                }
-                T meanSq = NumOps.Divide(sumSq, NumOps.FromDouble(_modelDimension));
-                T rms = NumOps.Sqrt(NumOps.Add(meanSq, eps));
-                T rmsInv = NumOps.Divide(NumOps.One, rms);
-
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T normed = NumOps.Multiply(slice[new[] { b, d }], rmsInv);
-                    dGamma[d] = NumOps.Add(dGamma[d], NumOps.Multiply(dOut[new[] { b, d }], normed));
-                }
-
-                T dotProduct = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    dotProduct = NumOps.Add(dotProduct,
-                        NumOps.Multiply(dOut[new[] { b, d }],
-                            NumOps.Multiply(gamma[d], slice[new[] { b, d }])));
-                }
-
-                T rms3Inv = NumOps.Divide(rmsInv, NumOps.Multiply(rms, rms));
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T g = gamma[d];
-                    T grad = NumOps.Multiply(NumOps.Multiply(dOut[new[] { b, d }], g), rmsInv);
-                    T correction = NumOps.Multiply(
-                        NumOps.Multiply(dotProduct, slice[new[] { b, d }]),
-                        NumOps.Divide(rms3Inv, NumOps.FromDouble(_modelDimension)));
-                    dInput[new[] { b, t, d }] = NumOps.Subtract(grad, correction);
-                }
-            }
-        }
-
-        return dInput;
+                { "Architecture", "RWKV-4" },
+                { "VocabSize", _vocabSize },
+                { "ModelDimension", _modelDimension },
+                { "NumLayers", _numLayers },
+                { "MaxSeqLength", _maxSeqLength },
+                { "TotalParameters", ParameterCount },
+                { "LayerCount", Layers.Count }
+            },
+            ModelData = this.Serialize()
+        };
     }
 
     /// <inheritdoc />
-    public override void UpdateParameters(T learningRate)
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        if (_embeddingWeightsGradient == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
-
-        T negLR = NumOps.Negate(learningRate);
-
-        _embeddingWeights = Engine.TensorAdd(_embeddingWeights,
-            Engine.TensorMultiplyScalar(_embeddingWeightsGradient, negLR));
-
-        foreach (var block in _blocks)
-            block.UpdateParameters(learningRate);
-
-        if (_finalNormGammaGradient != null)
-            _finalNormGamma = Engine.TensorAdd(_finalNormGamma,
-                Engine.TensorMultiplyScalar(_finalNormGammaGradient, negLR));
-        if (_lmHeadWeightsGradient != null)
-            _lmHeadWeights = Engine.TensorAdd(_lmHeadWeights,
-                Engine.TensorMultiplyScalar(_lmHeadWeightsGradient, negLR));
-        if (_lmHeadBiasGradient != null)
-            _lmHeadBias = Engine.TensorAdd(_lmHeadBias,
-                Engine.TensorMultiplyScalar(_lmHeadBiasGradient, negLR));
+        writer.Write(_vocabSize);
+        writer.Write(_modelDimension);
+        writer.Write(_numLayers);
+        writer.Write(_maxSeqLength);
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        var parameters = new Vector<T>(ParameterCount);
-        int index = 0;
+        int vocabSize = reader.ReadInt32();
+        int modelDimension = reader.ReadInt32();
+        int numLayers = reader.ReadInt32();
+        int maxSeqLength = reader.ReadInt32();
 
-        for (int i = 0; i < _embeddingWeights.Length; i++)
-            parameters[index++] = _embeddingWeights[i];
-
-        foreach (var block in _blocks)
+        if (vocabSize != _vocabSize || modelDimension != _modelDimension ||
+            numLayers != _numLayers || maxSeqLength != _maxSeqLength)
         {
-            var blockParams = block.GetParameters();
-            for (int i = 0; i < blockParams.Length; i++)
-                parameters[index++] = blockParams[i];
+            throw new InvalidOperationException(
+                $"Deserialized dimensions (vocab={vocabSize}, dim={modelDimension}, layers={numLayers}, seq={maxSeqLength}) " +
+                $"do not match instance (vocab={_vocabSize}, dim={_modelDimension}, layers={_numLayers}, seq={_maxSeqLength}).");
         }
-
-        for (int i = 0; i < _finalNormGamma.Length; i++)
-            parameters[index++] = _finalNormGamma[i];
-
-        for (int i = 0; i < _lmHeadWeights.Length; i++)
-            parameters[index++] = _lmHeadWeights[i];
-
-        for (int i = 0; i < _lmHeadBias.Length; i++)
-            parameters[index++] = _lmHeadBias[i];
-
-        return parameters;
     }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        int expectedParams = ParameterCount;
-        if (parameters.Length != expectedParams)
-            throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
-
-        int index = 0;
-
-        for (int i = 0; i < _embeddingWeights.Length; i++)
-            _embeddingWeights[i] = parameters[index++];
-
-        foreach (var block in _blocks)
-        {
-            var blockParams = new Vector<T>(block.ParameterCount);
-            for (int i = 0; i < block.ParameterCount; i++)
-                blockParams[i] = parameters[index++];
-            block.SetParameters(blockParams);
-        }
-
-        for (int i = 0; i < _finalNormGamma.Length; i++)
-            _finalNormGamma[i] = parameters[index++];
-
-        for (int i = 0; i < _lmHeadWeights.Length; i++)
-            _lmHeadWeights[i] = parameters[index++];
-
-        for (int i = 0; i < _lmHeadBias.Length; i++)
-            _lmHeadBias[i] = parameters[index++];
+        return new RWKV4LanguageModel<T>(
+            Architecture, _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
+            LossFunction, _options);
     }
 
-    /// <inheritdoc />
-    public override void ResetState()
-    {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastEmbedded = null;
-        _lastNormedOutput = null;
-        _lastPostBlocksOutput = null;
-        _lastBlockInputs = null;
-        _originalInputShape = null;
-        _embeddingWeightsGradient = null;
-        _finalNormGammaGradient = null;
-        _lmHeadWeightsGradient = null;
-        _lmHeadBiasGradient = null;
-
-        foreach (var block in _blocks)
-            block.ResetState();
-    }
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var inputPlaceholder = new Tensor<T>(new int[] { 1, _vocabSize });
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "rwkv4_token_input");
-        inputNodes.Add(inputNode);
-
-        var embWeightsNode = TensorOperations<T>.Variable(_embeddingWeights, "rwkv4_W_emb");
-        inputNodes.Add(embWeightsNode);
-        var embedded = TensorOperations<T>.MatrixMultiply(inputNode, embWeightsNode);
-
-        var current = embedded;
-        for (int i = 0; i < _numLayers; i++)
-        {
-            var blockInputs = new List<ComputationNode<T>> { current };
-            var blockOutput = _blocks[i].ExportComputationGraph(blockInputs);
-            inputNodes.AddRange(blockInputs.GetRange(1, blockInputs.Count - 1));
-            current = blockOutput;
-        }
-
-        var finalNormGammaNode = TensorOperations<T>.Variable(_finalNormGamma, "rwkv4_final_norm_gamma");
-        inputNodes.Add(finalNormGammaNode);
-        var normed = TensorOperations<T>.ElementwiseMultiply(current, finalNormGammaNode);
-
-        var lmWeightsNode = TensorOperations<T>.Variable(_lmHeadWeights, "rwkv4_W_lm");
-        var lmBiasNode = TensorOperations<T>.Variable(_lmHeadBias, "rwkv4_b_lm");
-        inputNodes.Add(lmWeightsNode);
-        inputNodes.Add(lmBiasNode);
-
-        var logits = TensorOperations<T>.MatrixMultiply(normed, lmWeightsNode);
-        return TensorOperations<T>.Add(logits, lmBiasNode);
-    }
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        var metadata = base.GetMetadata();
-        metadata["VocabSize"] = _vocabSize.ToString();
-        metadata["ModelDimension"] = _modelDimension.ToString();
-        metadata["NumLayers"] = _numLayers.ToString();
-        metadata["Architecture"] = "RWKV-4";
-        return metadata;
-    }
+    #endregion
 }
