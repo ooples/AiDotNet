@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.ConstraintBased;
@@ -11,6 +13,14 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 /// <para>Reference: Huang et al. (2020), "Causal Discovery from Heterogeneous/Nonstationary Data", JMLR.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Causal Discovery from Heterogeneous/Nonstationary Data", "https://jmlr.org/papers/v21/19-232.html", Year = 2020, Authors = "Biwei Huang, Kun Zhang, Jiji Zhang, Joseph Ramsey, Ruben Sanchez-Romero, Clark Glymour, Bernhard Scholkopf")]
 public class CDNODAlgorithm<T> : ConstraintBasedBase<T>
 {
     public override string Name => "CD-NOD";

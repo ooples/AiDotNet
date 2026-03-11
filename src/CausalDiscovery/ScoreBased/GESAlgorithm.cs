@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.ScoreBased;
@@ -23,6 +25,14 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Optimal Structure Identification with Greedy Search", "https://jmlr.org/papers/v3/chickering02b.html", Year = 2002, Authors = "David Maxwell Chickering")]
 public class GESAlgorithm<T> : ScoreBasedBase<T>
 {
     /// <inheritdoc/>
