@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -6,6 +8,12 @@ namespace AiDotNet.NeuralNetworks;
 /// Represents a Spiking Neural Network, which is a type of neural network that more closely models biological neurons with temporal dynamics.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelDomain(ModelDomain.Science)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly SpikingNeuralNetworkOptions _options;

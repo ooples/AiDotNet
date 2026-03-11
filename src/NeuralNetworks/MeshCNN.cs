@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
@@ -36,6 +38,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Reference: "MeshCNN: A Network with an Edge" by Hanocka et al., SIGGRAPH 2019
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.ThreeD)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MeshCNN: A Network with an Edge", "https://arxiv.org/abs/1809.05910", Year = 2019, Authors = "Rana Hanocka, Amir Hertz, Noa Fish, Raja Giryes, Shachar Fleishman, Daniel Cohen-Or")]
 public class MeshCNN<T> : NeuralNetworkBase<T>
 {
     /// <summary>

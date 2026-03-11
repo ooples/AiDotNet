@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -44,6 +46,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality", "https://arxiv.org/abs/2405.21060", Year = 2024, Authors = "Tri Dao, Albert Gu")]
 public class Mamba2LanguageModel<T> : LayerBase<T>
 {
     private readonly int _vocabSize;

@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -34,6 +36,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Conditional Generative Adversarial Nets", "https://arxiv.org/abs/1411.1784", Year = 2014, Authors = "Mehdi Mirza, Simon Osindero")]
 public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly ConditionalGANOptions _options;

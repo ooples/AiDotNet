@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers.SSM;
@@ -16,6 +18,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// <para><b>Reference:</b> Lieber et al., "Jamba: A Hybrid Transformer-Mamba Language Model", 2024.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Jamba: A Hybrid Transformer-Mamba Language Model", "https://arxiv.org/abs/2403.19887", Year = 2024, Authors = "Opher Lieber, Barak Lenz, Hofit Bata, Gal Cohen, Jhonathan Osin, Itay Dalmedigos, Erez Safahi, Shaked Meirom, Yonatan Belinkov, Shai Shalev-Shwartz, Omri Abend, Raz Alon, Tomer Asida, Amir Bergman, Roman Glozman, Michael Gokhman, Avashalom Manevich, Nir Ratner, Noam Rozen, Erez Shwartz, Mor Zusman, Yoav Shoham")]
 public class JambaLanguageModel<T> : LayerBase<T>
 {
     private readonly int _vocabSize, _modelDimension, _numLayers;

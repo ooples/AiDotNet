@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -47,6 +48,16 @@ namespace AiDotNet.NeuralNetworks;
 /// 2. Vision-to-Language Generative Learning (Q-Former + LLM)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models", "https://arxiv.org/abs/2301.12597", Year = 2023, Authors = "Junnan Li, Dongxu Li, Silvio Savarese, Steven Hoi")]
 public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 {
     private readonly Blip2Options _options;

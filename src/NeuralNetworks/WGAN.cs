@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Options;
@@ -33,6 +35,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Wasserstein GAN", "https://arxiv.org/abs/1701.07875", Year = 2017, Authors = "Martin Arjovsky, Soumith Chintala, Leon Bottou")]
 public class WGAN<T> : NeuralNetworkBase<T>
 {
     private readonly WGANOptions _options;

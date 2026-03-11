@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
@@ -37,6 +39,15 @@ namespace AiDotNet.NeuralNetworks;
 /// Reference: "SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator" by Gong et al.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.ThreeD)]
+[ModelDomain(ModelDomain.GraphAnalysis)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator", "https://arxiv.org/abs/1911.05856", Year = 2019, Authors = "Shunwang Gong, Lei Chen, Michael Bronstein, Stefanos Zafeiriou")]
 public class SpiralNet<T> : NeuralNetworkBase<T>
 {
     /// <summary>

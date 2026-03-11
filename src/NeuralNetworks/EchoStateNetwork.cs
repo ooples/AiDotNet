@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -29,6 +31,15 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("The 'echo state' approach to analysing and training recurrent neural networks", "https://www.ai.rug.nl/minds/uploads/EchoStatesTechRep.pdf", Year = 2001, Authors = "Herbert Jaeger")]
 public class EchoStateNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly EchoStateNetworkOptions _options;

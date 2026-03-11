@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -30,6 +32,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Fast Learning Algorithm for Deep Belief Nets", "https://www.cs.toronto.edu/~hinton/absps/fastnc.pdf", Year = 2006, Authors = "Geoffrey E. Hinton, Simon Osindero, Yee-Whye Teh")]
 public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly DeepBeliefNetworkOptions _options;

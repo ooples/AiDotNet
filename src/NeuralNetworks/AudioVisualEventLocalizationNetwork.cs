@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +22,15 @@ namespace AiDotNet.NeuralNetworks;
 /// in video by jointly analyzing audio and visual streams with precise temporal boundaries.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAudioVisualEventLocalizationModel<T>
 {
     private readonly AudioVisualEventLocalizationOptions _options;

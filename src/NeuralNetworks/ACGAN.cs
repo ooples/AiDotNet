@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -35,6 +37,15 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Conditional Image Synthesis with Auxiliary Classifier GANs", "https://arxiv.org/abs/1610.09585", Year = 2017, Authors = "Augustus Odena, Christopher Olah, Jonathon Shlens")]
 public class ACGAN<T> : NeuralNetworkBase<T>
 {
     private readonly ACGANOptions _options;

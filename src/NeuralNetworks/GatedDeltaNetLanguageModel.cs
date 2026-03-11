@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -21,6 +23,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Gated Delta Networks: Improving Mamba2 with Delta Rule", "https://arxiv.org/abs/2412.06464", Year = 2024, Authors = "Songlin Yang, Jan Kautz, Ali Hatamizadeh")]
 public class GatedDeltaNetLanguageModel<T> : LayerBase<T>
 {
     private readonly int _vocabSize;

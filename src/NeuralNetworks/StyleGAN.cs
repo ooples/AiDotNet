@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -50,6 +52,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Style-Based Generator Architecture for Generative Adversarial Networks", "https://arxiv.org/abs/1812.04948", Year = 2019, Authors = "Tero Karras, Samuli Laine, Timo Aila")]
 public class StyleGAN<T> : NeuralNetworkBase<T>
 {
     private readonly StyleGANOptions _options;

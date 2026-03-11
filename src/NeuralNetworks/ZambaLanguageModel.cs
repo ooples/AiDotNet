@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers.SSM;
@@ -16,6 +18,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// <para><b>Reference:</b> Glorioso et al., "Zamba: A Compact 7B SSM Hybrid Model", 2024.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Zamba: A Compact 7B SSM Hybrid Model", "https://arxiv.org/abs/2405.16712", Year = 2024, Authors = "Paolo Glorioso, Quentin Anthony, Yury Tokpanov, James Whittington, Jonathan Pilault, Adam Ibrahim, Beren Millidge")]
 public class ZambaLanguageModel<T> : LayerBase<T>
 {
     private readonly int _vocabSize, _modelDimension, _numLayers;

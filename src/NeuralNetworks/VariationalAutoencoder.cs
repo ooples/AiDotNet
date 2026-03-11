@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -37,6 +39,15 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Autoencoder)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114", Year = 2014, Authors = "Diederik P. Kingma, Max Welling")]
 public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly VariationalAutoencoderOptions _options;

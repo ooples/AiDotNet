@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -49,6 +51,13 @@ namespace AiDotNet.NeuralNetworks;
 /// - Protein structure generation
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.GraphAnalysis)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 {
     private readonly GraphGenerationModelOptions _options;

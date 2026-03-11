@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -33,6 +35,14 @@ namespace AiDotNet.NeuralNetworks
     /// you need total accuracy.
     /// </para>
     /// </remarks>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Transformer)]
+    [ModelCategory(ModelCategory.EmbeddingModel)]
+    [ModelTask(ModelTask.Embedding)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Matryoshka Representation Learning", "https://arxiv.org/abs/2205.13147", Year = 2022, Authors = "Aditya Kusupati, Gantavya Bhatt, Aniket Rege, Matthew Wallingford, Aditya Sinha, Vivek Ramanujan, William Howard-Snyder, Kaifeng Chen, Sham Kakade, Prateek Jain, Ali Farhadi")]
     public class MatryoshkaEmbedding<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly MatryoshkaEmbeddingOptions _options;

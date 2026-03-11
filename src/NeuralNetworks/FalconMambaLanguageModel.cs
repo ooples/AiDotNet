@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -15,6 +17,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// <para><b>Reference:</b> Zuo et al., "Falcon Mamba: The First Competitive Attention-free 7B Language Model", 2024.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Falcon Mamba: The First Competitive Attention-free 7B Language Model", "https://arxiv.org/abs/2410.05355", Year = 2024, Authors = "Jingwei Zuo, Younes Belkada, Paul Music, Rouven Bauer, Komal Kumar Bein, Yago Gimenez")]
 public class FalconMambaLanguageModel<T> : LayerBase<T>
 {
     private readonly int _vocabSize, _modelDimension, _numLayers, _stateDimension, _expandFactor;

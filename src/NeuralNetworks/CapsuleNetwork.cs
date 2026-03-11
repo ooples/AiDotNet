@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -26,6 +28,12 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Dynamic Routing Between Capsules", "https://arxiv.org/abs/1710.09829", Year = 2017, Authors = "Sara Sabour, Nicholas Frosst, Geoffrey E. Hinton")]
 public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly CapsuleNetworkOptions _options;

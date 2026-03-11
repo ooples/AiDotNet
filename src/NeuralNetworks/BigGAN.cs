@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -36,6 +37,14 @@ namespace AiDotNet.NeuralNetworks;
 /// by Brock et al. (2019)
 /// </summary>
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Large Scale GAN Training for High Fidelity Natural Image Synthesis", "https://arxiv.org/abs/1809.11096", Year = 2019, Authors = "Andrew Brock, Jeff Donahue, Karen Simonyan")]
 public class BigGAN<T> : NeuralNetworkBase<T>
 {
     private readonly BigGANOptions _options;

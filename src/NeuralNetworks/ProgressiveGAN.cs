@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -30,6 +31,14 @@ namespace AiDotNet.NeuralNetworks;
 /// by Karras et al. (2018)
 /// </summary>
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Progressive Growing of GANs for Improved Quality, Stability, and Variation", "https://arxiv.org/abs/1710.10196", Year = 2018, Authors = "Tero Karras, Timo Aila, Samuli Laine, Jaakko Lehtinen")]
 public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 {
     private readonly ProgressiveGANOptions _options;

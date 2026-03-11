@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -32,6 +33,14 @@ namespace AiDotNet.NeuralNetworks
     /// of the sentence that stays constant regardless of small changes.
     /// </para>
     /// </remarks>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Transformer)]
+    [ModelCategory(ModelCategory.EmbeddingModel)]
+    [ModelTask(ModelTask.Embedding)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("SimCSE: Simple Contrastive Learning of Sentence Embeddings", "https://arxiv.org/abs/2104.08821", Year = 2022, Authors = "Tianyu Gao, Xingcheng Yao, Danqi Chen")]
     public class SimCSE<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly SimCSEOptions _options;

@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -37,6 +39,17 @@ namespace AiDotNet.NeuralNetworks;
 /// - Emergent alignment: Compare modalities never directly paired during training
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.EmbeddingModel)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("ImageBind: One Embedding Space To Bind Them All", "https://arxiv.org/abs/2305.05665", Year = 2023, Authors = "Rohit Girdhar, Alaaeldin El-Nouby, Zhuang Liu, Mannat Singh, Kalyan Vasudev Alwala, Armand Joulin, Ishan Misra")]
 public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T>
 {
     private readonly ImageBindOptions _options;

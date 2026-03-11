@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -53,6 +54,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Densely Connected Convolutional Networks", "https://arxiv.org/abs/1608.06993", Year = 2017, Authors = "Gao Huang, Zhuang Liu, Laurens van der Maaten, Kilian Q. Weinberger")]
 public class DenseNetNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly DenseNetOptions _options;

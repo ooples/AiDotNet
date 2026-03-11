@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -28,6 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// partial results and carry digits, similar to how humans solve addition problems.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Neural Turing Machines", "https://arxiv.org/abs/1410.5401", Year = 2014, Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
 public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly NeuralTuringMachineOptions _options;

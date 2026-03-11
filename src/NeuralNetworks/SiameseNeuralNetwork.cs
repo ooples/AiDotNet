@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -32,6 +34,13 @@ namespace AiDotNet.NeuralNetworks
     /// recognition or "find similar" search systems.
     /// </para>
     /// </remarks>
+    [ModelDomain(ModelDomain.General)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.EmbeddingModel)]
+    [ModelTask(ModelTask.Embedding)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelComplexity(ModelComplexity.Medium)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class SiameseNeuralNetwork<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         private readonly SiameseNeuralNetworkOptions _options;

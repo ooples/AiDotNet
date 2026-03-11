@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -35,6 +36,13 @@ namespace AiDotNet.NeuralNetworks
     /// "King - Man + Woman = Queen."
     /// </para>
     /// </remarks>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.EmbeddingModel)]
+    [ModelTask(ModelTask.Embedding)]
+    [ModelComplexity(ModelComplexity.Low)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("GloVe: Global Vectors for Word Representation", "https://nlp.stanford.edu/pubs/glove.pdf", Year = 2014, Authors = "Jeffrey Pennington, Richard Socher, Christopher D. Manning")]
     public class GloVe<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         private readonly GloVeOptions _options;

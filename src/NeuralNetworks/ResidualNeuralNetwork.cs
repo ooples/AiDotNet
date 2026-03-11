@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -32,6 +34,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Residual Learning for Image Recognition", "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
 public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly ResidualNeuralNetworkOptions _options;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -26,6 +28,13 @@ namespace AiDotNet.NeuralNetworks;
 /// - Understanding room layouts from depth sensors
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.ThreeD)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class VoxelCNN<T> : NeuralNetworkBase<T>
 {
     private readonly VoxelCNNOptions _options;
