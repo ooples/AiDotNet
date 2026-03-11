@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
@@ -47,6 +48,14 @@ namespace AiDotNet.CausalInference;
 /// <para><b>Reference:</b> Künzel et al., "Metalearners for Estimating Heterogeneous Treatment Effects" (2019)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Metalearners for estimating heterogeneous treatment effects using machine learning", "https://doi.org/10.1073/pnas.1804597116", Year = 2019, Authors = "Sören R. Künzel, Jasjeet S. Sekhon, Peter J. Bickel, Bin Yu")]
 public class XLearner<T> : CausalModelBase<T>
 {
     /// <summary>

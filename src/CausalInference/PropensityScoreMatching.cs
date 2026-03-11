@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -47,6 +48,14 @@ namespace AiDotNet.CausalInference;
 /// - Rosenbaum &amp; Rubin (1983). "The Central Role of the Propensity Score"
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelCategory(ModelCategory.InstanceBased)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class PropensityScoreMatching<T> : CausalModelBase<T>
 {
     /// <summary>

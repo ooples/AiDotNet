@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
@@ -35,6 +36,13 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <para><b>Reference:</b> Nelson (1972), Aalen (1978)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.SurvivalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
 {
     /// <summary>

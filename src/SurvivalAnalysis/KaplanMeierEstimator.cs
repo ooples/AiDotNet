@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -43,6 +44,14 @@ namespace AiDotNet.SurvivalAnalysis;
 /// - Kaplan &amp; Meier (1958). "Nonparametric Estimation from Incomplete Observations"
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.SurvivalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Nonparametric Estimation from Incomplete Observations", "https://doi.org/10.2307/2281868", Year = 1958, Authors = "Edward L. Kaplan, Paul Meier")]
 public class KaplanMeierEstimator<T> : SurvivalModelBase<T>
 {
     /// <summary>
