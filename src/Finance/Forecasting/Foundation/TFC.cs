@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -30,6 +31,16 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Zhang et al., "Self-Supervised Contrastive Pre-Training For Time Series via Time-Frequency Consistency", NeurIPS 2022.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Self-Supervised Contrastive Pre-Training For Time Series via Time-Frequency Consistency", "https://arxiv.org/abs/2206.08496", Year = 2022, Authors = "Xiang Zhang, Ziyuan Zhao, Theodoros Tsiligkaridis, Marinka Zitnik")]
 public class TFC<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

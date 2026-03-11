@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -30,6 +31,15 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Fan et al., "MG-TSD: Multi-Granularity Time Series Diffusion Models with Guided Learning Process", ICLR 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MG-TSD: Multi-Granularity Time Series Diffusion Models with Guided Learning Process", "https://arxiv.org/abs/2403.05751", Year = 2024, Authors = "Xinyao Fan, Yueying Wu, Chang Xu, Yuhao Huang, Weiqing Liu, Jiang Bian")]
 public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

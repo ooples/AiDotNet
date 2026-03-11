@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -16,6 +17,14 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Financial Proximal Policy Optimization (PPO) agent for robust trading.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.ReinforcementLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Proximal Policy Optimization Algorithms", "https://arxiv.org/abs/1707.06347", Year = 2017, Authors = "John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov")]
 public class FinancialPPOAgent<T> : TradingAgentBase<T>
 {
     #region Fields

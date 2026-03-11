@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -32,6 +33,15 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// with Mixture of Experts", ICLR 2025. https://openreview.net/forum?id=e1wDDFmlVu
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Time-MoE: Billion-Scale Time Series Foundation Models with Mixture of Experts", "https://arxiv.org/abs/2409.16040", Year = 2025, Authors = "Xiaoming Shi, Shiyu Wang, Yuqi Nie, Dianqi Li, Zhou Ye, Qingsong Wen, Ming Jin")]
 public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

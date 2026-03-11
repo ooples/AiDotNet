@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Base;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -22,6 +23,13 @@ namespace AiDotNet.Finance.Portfolio;
 /// dynamically based on market context, rather than relying on static historical correlations.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class AttentionAllocation<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields

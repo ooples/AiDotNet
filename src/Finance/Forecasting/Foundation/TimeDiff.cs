@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -29,6 +30,15 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Shen &amp; Kwok, "Non-autoregressive Conditional Diffusion Models for Time Series Prediction", ICML 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Non-autoregressive Conditional Diffusion Models for Time Series Prediction", "https://arxiv.org/abs/2306.05043", Year = 2023, Authors = "Lifeng Shen, James Kwok")]
 public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -58,6 +59,15 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// Timer-XL: "Timer-XL: Long-Context Transformers for Unified Time Series Forecasting", 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Timer: Generative Pre-trained Transformers Are Large Time Series Models", "https://arxiv.org/abs/2402.02368", Year = 2024, Authors = "Yong Liu, Haoran Zhang, Chenyu Li, Xiangdong Huang, Jianmin Wang, Mingsheng Long")]
 public class Timer<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode

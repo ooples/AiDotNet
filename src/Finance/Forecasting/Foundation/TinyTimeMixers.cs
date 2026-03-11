@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -57,6 +58,14 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Thread Safety:</b> This class is NOT thread-safe. Create separate instances for concurrent usage.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Tiny Time Mixers (TTMs): Fast Pre-trained Models for Enhanced Zero/Few-Shot Forecasting of Multivariate Time Series", "https://arxiv.org/abs/2401.03955", Year = 2024, Authors = "Vijay Ekambaram, Arindam Jati, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam")]
 public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode

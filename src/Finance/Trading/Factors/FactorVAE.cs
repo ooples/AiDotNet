@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -38,6 +39,15 @@ namespace AiDotNet.Finance.Trading.Factors;
 /// Reference: Kim &amp; Mnih (2019). "Disentangling by Factorising"
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Autoencoder)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FactorVAE: A Probabilistic Dynamic Factor Model Based on Variational Autoencoder for Predicting Cross-Sectional Stock Returns", "https://arxiv.org/abs/2005.02634", Year = 2020, Authors = "Yitong Duan, Lei Wang, Qizhong Zhang, Jian Li")]
 public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode

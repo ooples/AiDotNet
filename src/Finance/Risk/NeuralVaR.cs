@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
@@ -21,16 +23,22 @@ namespace AiDotNet.Finance.Risk;
 /// NeuralVaR uses deep neural networks to estimate the potential loss of a portfolio
 /// under various market conditions, accounting for complex non-linear dependencies.
 /// </para>
-/// <para><b>For Beginners:</b> Value-at-Risk (VaR) is a way to answer the question: 
+/// <para><b>For Beginners:</b> Value-at-Risk (VaR) is a way to answer the question:
 /// "What is the most I could lose on this investment tomorrow with 95% confidence?"
-/// Traditional methods often assume simple patterns, but this AI model "learns" 
-/// from historical market crashes and complex trends to give a more realistic 
+/// Traditional methods often assume simple patterns, but this AI model "learns"
+/// from historical market crashes and complex trends to give a more realistic
 /// estimate of risk.
 /// </para>
 /// <para>
 /// Reference: Riskfuel, "Neural Value at Risk", 2021.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class NeuralVaR<T> : RiskModelBase<T>
 {
     #region Shared Fields

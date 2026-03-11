@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -56,6 +57,14 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// Recurrent Networks for Sequence Modeling", 2018. https://arxiv.org/abs/1803.01271
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling", "https://arxiv.org/abs/1803.01271", Year = 2018, Authors = "Shaojie Bai, J. Zico Kolter, Vladlen Koltun")]
 public class TCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

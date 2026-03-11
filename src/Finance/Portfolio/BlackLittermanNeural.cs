@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Base;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -23,6 +24,13 @@ namespace AiDotNet.Finance.Portfolio;
 /// market baseline to produce robust portfolios.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields

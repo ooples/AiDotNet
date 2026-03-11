@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models.Options;
@@ -41,6 +42,14 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// Forecasting", TMLR 2023. https://arxiv.org/abs/2303.06053
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TSMixer: An All-MLP Architecture for Time Series Forecasting", "https://arxiv.org/abs/2303.06053", Year = 2023, Authors = "Si-An Chen, Chun-Liang Li, Nate Yoder, Sercan O. Arik, Tomas Pfister")]
 public class TSMixer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

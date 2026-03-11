@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Interfaces;
@@ -16,6 +17,13 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Specialized market making agent using reinforcement learning for optimal quoting.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.ReinforcementLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class MarketMakingAgent<T> : TradingAgentBase<T>
 {
     #region Fields

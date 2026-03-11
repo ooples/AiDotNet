@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using ModelOptions = AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
@@ -16,6 +18,15 @@ namespace AiDotNet.Finance.NLP;
 /// InvestLM neural network model specialized for investment professionals and research.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("InvestLM: A Large Language Model for Investment using Financial Domain Instruction Tuning", "https://arxiv.org/abs/2309.13064", Year = 2023, Authors = "Yi Yang, Yixuan Tang, Kar Yan Tam")]
 public class InvestLM<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields

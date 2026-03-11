@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -50,6 +51,15 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// Neural Networks", SIGIR 2018. https://arxiv.org/abs/1703.07015
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Modeling Long- and Short-Term Temporal Patterns with Deep Neural Networks", "https://arxiv.org/abs/1703.07015", Year = 2018, Authors = "Guokun Lai, Wei-Cheng Chang, Yiming Yang, Hanxiao Liu")]
 public class LSTNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

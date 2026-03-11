@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models.Options;
@@ -45,6 +46,14 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// in Time Series Forecasting", NeurIPS 2022. https://arxiv.org/abs/2205.14415
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Non-stationary Transformers: Exploring the Stationarity in Time Series Forecasting", "https://arxiv.org/abs/2205.14415", Year = 2022, Authors = "Yong Liu, Haixu Wu, Jianmin Wang, Mingsheng Long")]
 public class NonStationaryTransformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -63,6 +64,13 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 /// https://arxiv.org/abs/2008.07669
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("HiPPO: Recurrent Memory with Optimal Polynomial Projections", "https://arxiv.org/abs/2008.07669", Year = 2020, Authors = "Albert Gu, Tri Dao, Stefano Ermon, Atri Rudra, Christopher Re")]
 public class Hippo<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using ModelOptions = AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
@@ -16,6 +18,14 @@ namespace AiDotNet.Finance.NLP;
 /// FinBERT-tone neural network model specialized for financial sentiment analysis.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FinBERT: Financial Sentiment Analysis with Pre-trained Language Models", "https://arxiv.org/abs/1908.10063", Year = 2019, Authors = "Dogu Araci")]
 public class FinBERTTone<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields
