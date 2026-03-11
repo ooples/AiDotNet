@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
@@ -23,6 +26,11 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// - Numerical stability improvements in various algorithms
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class GramSchmidtDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

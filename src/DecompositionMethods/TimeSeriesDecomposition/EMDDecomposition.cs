@@ -1,4 +1,6 @@
 global using AiDotNet.Interpolation;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
@@ -12,6 +14,14 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// different instruments in a song - you can hear the whole song, but EMD helps you identify 
 /// the individual instruments playing together.
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("The empirical mode decomposition and the Hilbert spectrum for nonlinear and non-stationary time series analysis", "https://doi.org/10.1098/rspa.1998.0193", Year = 1998, Authors = "Norden E. Huang, Zheng Shen, Steven R. Long, Manli C. Wu, Hsing H. Shih, Quanan Zheng, Nai-Chyuan Yen, Chi Chao Tung, Henry H. Liu")]
 public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly int _maxImf;

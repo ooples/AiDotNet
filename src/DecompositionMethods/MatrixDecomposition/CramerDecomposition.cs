@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
@@ -24,6 +27,11 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// - Theoretical analysis and mathematical proofs
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class CramerDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

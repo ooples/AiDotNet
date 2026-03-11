@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 /// <summary>
@@ -16,6 +19,13 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// - Residual: What's left over after removing trend and seasonal components (the "noise")
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     /// <summary>

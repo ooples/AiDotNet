@@ -1,4 +1,6 @@
 global using AiDotNet.Enums.AlgorithmTypes;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
@@ -26,6 +28,11 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// - Finding matrix inverses in numerical algorithms
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class LuDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 /// <summary>
@@ -12,6 +15,14 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// This is useful for understanding which changes in your data (like stock prices or economic indicators)
 /// are likely to persist versus which are temporary fluctuations.
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("A New Approach to Decomposition of Economic Time Series into Permanent and Transitory Components", "https://doi.org/10.1016/0304-3932(81)90040-4", Year = 1981, Authors = "Stephen Beveridge, Charles R. Nelson")]
 public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly BeveridgeNelsonAlgorithmType _algorithm;
