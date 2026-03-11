@@ -199,8 +199,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
                     var val = attr.ConstructorArguments[0].Value;
                     if (val is int intVal)
                     {
-                        entry.Category = intVal;
-                        entry.HasCategory = true;
+                        entry.Categories.Add(intVal);
                     }
                 }
             }
@@ -432,8 +431,8 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    public int TypeParameterCount { get; }");
         sb.AppendLine("    /// <summary>Gets the application domains this model belongs to.</summary>");
         sb.AppendLine("    public IReadOnlyList<ModelDomain> Domains { get; }");
-        sb.AppendLine("    /// <summary>Gets the algorithm category.</summary>");
-        sb.AppendLine("    public ModelCategory Category { get; }");
+        sb.AppendLine("    /// <summary>Gets the algorithm categories this model belongs to.</summary>");
+        sb.AppendLine("    public IReadOnlyList<ModelCategory> Categories { get; }");
         sb.AppendLine("    /// <summary>Gets the tasks this model performs.</summary>");
         sb.AppendLine("    public IReadOnlyList<ModelTask> Tasks { get; }");
         sb.AppendLine("    /// <summary>Gets the computational complexity.</summary>");
@@ -452,7 +451,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <summary>Initializes a new metadata entry.</summary>");
         sb.AppendLine("    public ModelMetadataEntry(");
         sb.AppendLine("        string typeName, string className, int typeParameterCount,");
-        sb.AppendLine("        ModelDomain[] domains, ModelCategory category, ModelTask[] tasks,");
+        sb.AppendLine("        ModelDomain[] domains, ModelCategory[] categories, ModelTask[] tasks,");
         sb.AppendLine("        ModelComplexity complexity, string inputTypeName, string outputTypeName,");
         sb.AppendLine("        ModelPaperEntry[] papers, string summary, string beginnerGuide)");
         sb.AppendLine("    {");
@@ -460,7 +459,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("        ClassName = className;");
         sb.AppendLine("        TypeParameterCount = typeParameterCount;");
         sb.AppendLine("        Domains = domains;");
-        sb.AppendLine("        Category = category;");
+        sb.AppendLine("        Categories = categories;");
         sb.AppendLine("        Tasks = tasks;");
         sb.AppendLine("        Complexity = complexity;");
         sb.AppendLine("        InputTypeName = inputTypeName;");
@@ -526,12 +525,15 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("                domainList.Add(entry);");
         sb.AppendLine("            }");
         sb.AppendLine();
-        sb.AppendLine("            if (!byCategory.TryGetValue(entry.Category, out var catList))");
+        sb.AppendLine("            foreach (var category in entry.Categories)");
         sb.AppendLine("            {");
-        sb.AppendLine("                catList = new List<ModelMetadataEntry>();");
-        sb.AppendLine("                byCategory[entry.Category] = catList;");
+        sb.AppendLine("                if (!byCategory.TryGetValue(category, out var catList))");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    catList = new List<ModelMetadataEntry>();");
+        sb.AppendLine("                    byCategory[category] = catList;");
+        sb.AppendLine("                }");
+        sb.AppendLine("                catList.Add(entry);");
         sb.AppendLine("            }");
-        sb.AppendLine("            catList.Add(entry);");
         sb.AppendLine();
         sb.AppendLine("            foreach (var task in entry.Tasks)");
         sb.AppendLine("            {");
@@ -630,8 +632,17 @@ public class ModelRegistryGenerator : IIncrementalGenerator
             sb.AppendLine(" },");
         }
 
-        // Category
-        sb.AppendLine($"            (ModelCategory){entry.Category},");
+        // Categories array
+        if (entry.Categories.Count == 0)
+        {
+            sb.AppendLine("            System.Array.Empty<ModelCategory>(),");
+        }
+        else
+        {
+            sb.Append("            new ModelCategory[] { ");
+            sb.Append(string.Join(", ", entry.Categories.Select(c => $"(ModelCategory){c}")));
+            sb.AppendLine(" },");
+        }
 
         // Tasks array
         if (entry.Tasks.Count == 0)
@@ -693,8 +704,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         public string ClassName { get; set; } = string.Empty;
         public int TypeParameterCount { get; set; }
         public List<int> Domains { get; } = new List<int>();
-        public int Category { get; set; }
-        public bool HasCategory { get; set; }
+        public List<int> Categories { get; } = new List<int>();
         public List<int> Tasks { get; } = new List<int>();
         public int Complexity { get; set; }
         public bool HasComplexity { get; set; }
@@ -705,7 +715,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         public string BeginnerGuide { get; set; } = string.Empty;
 
         public bool HasAnyMetadata =>
-            Domains.Count > 0 || HasCategory || Tasks.Count > 0 || HasComplexity ||
+            Domains.Count > 0 || Categories.Count > 0 || Tasks.Count > 0 || HasComplexity ||
             !string.IsNullOrEmpty(InputTypeName) || Papers.Count > 0;
     }
 

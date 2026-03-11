@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -48,6 +50,15 @@ namespace AiDotNet.Audio.Enhancement;
 /// Magnitude Masking for Speech Separation.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.SourceSeparation)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.Denoising)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Conv-TasNet: Surpassing Ideal Time-Frequency Magnitude Masking for Speech Separation", "https://arxiv.org/abs/1809.07454", Year = 2019, Authors = "Yi Luo, Nima Mesgarani")]
 public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly ConvTasNetOptions _options;

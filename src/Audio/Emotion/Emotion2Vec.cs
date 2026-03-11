@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -34,6 +36,15 @@ namespace AiDotNet.Audio.Emotion;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.EmbeddingModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("emotion2vec: Self-Supervised Pre-Training for Speech Emotion Representation", "https://arxiv.org/abs/2312.15185", Year = 2023, Authors = "Ziyang Ma, Zhisheng Zheng, Jiaxin Ye, Jinchao Li, Zhifu Gao, Shiliang Zhang, Xie Chen")]
 public class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Fields

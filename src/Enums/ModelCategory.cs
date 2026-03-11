@@ -167,5 +167,11 @@ public enum ModelCategory
     /// An autonomous agent that uses AI models to take actions and make decisions.
     /// Examples: LLM-based agents, planning agents, tool-using agents.
     /// </summary>
-    Agent
+    Agent,
+
+    /// <summary>
+    /// A classical signal processing method that uses mathematical transforms and filters.
+    /// Examples: spectral subtraction, Wiener filtering, beamforming, parametric EQ.
+    /// </summary>
+    SignalProcessing
 }

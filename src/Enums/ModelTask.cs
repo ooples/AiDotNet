@@ -221,5 +221,17 @@ public enum ModelTask
     /// Generates intermediate frames between existing video frames.
     /// Example: converting 30fps video to smooth 60fps by generating in-between frames.
     /// </summary>
-    FrameInterpolation
+    FrameInterpolation,
+
+    /// <summary>
+    /// Improves the overall quality of audio, images, or other signals.
+    /// Example: enhancing speech clarity by removing noise and improving frequency response.
+    /// </summary>
+    Enhancement,
+
+    /// <summary>
+    /// Processes, analyzes, or transforms raw signals (audio, radio, sensor data).
+    /// Example: applying parametric EQ or spectral analysis to audio signals.
+    /// </summary>
+    SignalProcessing
 }

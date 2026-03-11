@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -53,6 +55,15 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// Reference: Gong, Y., Chung, Y. A., &amp; Glass, J. (2021). AST: Audio Spectrogram Transformer.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.EmbeddingModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AST: Audio Spectrogram Transformer", "https://arxiv.org/abs/2104.01778", Year = 2021, Authors = "Yuan Gong, Yu-An Chung, James Glass")]
 public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     private readonly ASTModelOptions _options;

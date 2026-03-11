@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -41,6 +43,12 @@ namespace AiDotNet.Audio.Classification;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Look at DCASE 2017 Task 1 Acoustic Scene Classification", "https://arxiv.org/abs/1709.10296", Year = 2017, Authors = "Annamaria Mesaros, Toni Heittola, Tuomas Virtanen")]
 public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
 {
     #region Fields

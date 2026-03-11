@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -47,6 +49,14 @@ namespace AiDotNet.Audio.Enhancement;
 /// </list>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.Denoising)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FullSubNet+: Channel Attention FullSubNet with Complex Spectrograms for Speech Enhancement", "https://arxiv.org/abs/2203.12188", Year = 2022, Authors = "Jun Chen, Zilin Wang, Deyi Tuo, Zhiyong Wu, Shiyin Kang, Helen Meng")]
 public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -33,6 +35,15 @@ namespace AiDotNet.Audio.Enhancement;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SourceSeparation)]
+[ModelTask(ModelTask.Denoising)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Music Source Separation with Band-Split RNN", "https://arxiv.org/abs/2209.15174", Year = 2023, Authors = "Yi Luo, Jianwei Yu")]
 public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

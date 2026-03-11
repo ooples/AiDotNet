@@ -8,17 +8,19 @@ namespace AiDotNet.Attributes;
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> Apply this attribute to your model class to indicate what kind
-/// of algorithm it uses. Each model should have exactly one category.
+/// of algorithm it uses. You can apply it multiple times if the model combines
+/// multiple algorithm families (e.g., a Transformer that is also an Autoencoder).
 /// </para>
 /// <para>
 /// <b>Usage:</b>
 /// <code>
-/// [ModelCategory(ModelCategory.ConvolutionalNetwork)]
-/// public class ResNet&lt;T&gt; : NeuralNetworkBase&lt;T&gt; { }
+/// [ModelCategory(ModelCategory.Transformer)]
+/// [ModelCategory(ModelCategory.Autoencoder)]
+/// public class AudioMAE&lt;T&gt; : NeuralNetworkBase&lt;T&gt; { }
 /// </code>
 /// </para>
 /// </remarks>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
 public sealed class ModelCategoryAttribute : Attribute
 {
     /// <summary>

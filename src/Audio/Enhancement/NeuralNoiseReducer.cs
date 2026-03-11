@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -47,6 +48,14 @@ namespace AiDotNet.Audio.Enhancement;
 /// 2. Native Mode: Train your own model on custom data
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Regression Approach to Speech Enhancement Based on Deep Neural Networks", "https://arxiv.org/abs/1406.2279", Year = 2015, Authors = "Yong Xu, Jun Du, Li-Rong Dai, Chin-Hui Lee")]
 public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly NeuralNoiseReducerOptions _options;

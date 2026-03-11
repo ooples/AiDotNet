@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Audio.Enhancement;
 
 /// <summary>
@@ -34,6 +37,13 @@ namespace AiDotNet.Audio.Enhancement;
 /// - Smoothing to reduce musical noise
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Suppression of Acoustic Noise in Speech Using Spectral Subtraction", "https://doi.org/10.1109/TASSP.1979.1163209", Year = 1979, Authors = "Steven F. Boll")]
 public class SpectralSubtractionEnhancer<T> : AudioEnhancerBase<T>
 {
     #region Configuration

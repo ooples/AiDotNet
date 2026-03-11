@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -22,6 +24,13 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// or slight speed changes.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("An Industrial-Strength Audio Search Algorithm", "https://www.ee.columbia.edu/~dpwe/papers/Wang03-shazam.pdf", Year = 2003, Authors = "Avery Li-Chun Wang")]
 public class SpectrogramFingerprinter<T> : AudioFingerprinterBase<T>
 {
     private readonly ShortTimeFourierTransform<T> _stft;

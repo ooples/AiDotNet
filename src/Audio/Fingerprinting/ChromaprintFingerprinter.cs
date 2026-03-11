@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -22,6 +24,13 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// matching different recordings of the same song.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Chromaprint: Audio Fingerprinting with Chromagram", "https://acoustid.org/chromaprint", Year = 2010, Authors = "Lukas Lalinsky")]
 public class ChromaprintFingerprinter<T> : AudioFingerprinterBase<T>
 {
     private readonly ChromaExtractor<T> _chromaExtractor;

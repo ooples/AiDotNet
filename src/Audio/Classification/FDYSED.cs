@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -48,6 +50,13 @@ namespace AiDotNet.Audio.Classification;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Frequency Dynamic Convolution: Frequency-Adaptive Pattern Recognition for Sound Event Detection", "https://arxiv.org/abs/2203.15296", Year = 2022, Authors = "Hyeonuk Nam, Seong-Hu Kim, Byeong-Yun Ko, Yong-Hwa Park")]
 public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
