@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -26,6 +27,16 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelDomain(ModelDomain.ReinforcementLearning)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Ordering-Based Causal Discovery with Reinforcement Learning", "https://doi.org/10.24963/ijcai.2021/491", Year = 2021, Authors = "Xiaoqiang Wang, Yali Du, Shengyu Zhu, Liangjun Ke, Zhitang Chen, Jianye Hao, Jun Wang")]
 public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
 {
     /// <inheritdoc/>

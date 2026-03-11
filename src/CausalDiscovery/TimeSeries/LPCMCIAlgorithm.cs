@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.TimeSeries;
@@ -22,6 +24,15 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("High-recall causal discovery for autocorrelated time series with latent confounders", "https://proceedings.neurips.cc/paper_files/paper/2020/hash/94e70705efae45eb3e42bfcb84a5a0d0-Abstract.html", Year = 2020, Authors = "Andreas Gerhardus, Jakob Runge")]
 public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <inheritdoc/>

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -22,6 +23,15 @@ namespace AiDotNet.CausalDiscovery.Specialized;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Bayesian Network Learning with Cutting Planes", "https://auai.org/uai2012/papers/162.pdf", Year = 2012, Authors = "James Cussens")]
 public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
 {
     /// <inheritdoc/>

@@ -32,6 +32,7 @@ namespace AiDotNet.CausalDiscovery.Bayesian;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("BCD Nets: Scalable Variational Approaches for Bayesian Causal Discovery", "https://proceedings.neurips.cc/paper/2021/hash/5a378f8490c8d6af8647a753812f6e31-Abstract.html", Year = 2021, Authors = "Chris Cundy, Aditya Grover, Stefano Ermon")]
 public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
 {
     /// <inheritdoc/>

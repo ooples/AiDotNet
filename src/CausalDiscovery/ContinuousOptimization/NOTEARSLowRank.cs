@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -23,6 +24,14 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Low-Rank DAG Learning", "https://arxiv.org/abs/2006.13006", Year = 2020, Authors = "Zhuangyan Fang, Shengyu Zhu, Jiji Zhang, Yue Liu, Zhitang Chen, Yangbo He")]
 public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
 {
     /// <inheritdoc/>

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -26,6 +27,14 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("DAGs with No Curl: An Efficient DAG Structure Learning Approach", "https://proceedings.mlr.press/v139/yu21a.html", Year = 2021, Authors = "Yue Yu, Tian Gao, Naiyu Yin, Qiang Ji")]
 public class NoCurlAlgorithm<T> : ContinuousOptimizationBase<T>
 {
     /// <inheritdoc/>

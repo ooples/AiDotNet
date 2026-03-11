@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.Hybrid;
@@ -26,6 +28,14 @@ namespace AiDotNet.CausalDiscovery.Hybrid;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("The Max-Min Hill-Climbing Bayesian Network Structure Learning Algorithm", "https://doi.org/10.1007/s10994-006-6889-7", Year = 2006, Authors = "Ioannis Tsamardinos, Laura E. Brown, Constantin F. Aliferis")]
 public class MMHCAlgorithm<T> : HybridBase<T>
 {
     /// <inheritdoc/>

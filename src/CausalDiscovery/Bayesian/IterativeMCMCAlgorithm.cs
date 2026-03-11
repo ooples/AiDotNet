@@ -31,6 +31,7 @@ namespace AiDotNet.CausalDiscovery.Bayesian;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Efficient Structure Learning and Sampling of Bayesian Networks", "https://arxiv.org/abs/1803.07859", Year = 2017, Authors = "Jack Kuipers, Giusi Moffa, David Heckerman")]
 public class IterativeMCMCAlgorithm<T> : BayesianCausalBase<T>
 {
     /// <inheritdoc/>

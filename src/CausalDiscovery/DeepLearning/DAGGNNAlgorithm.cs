@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.DeepLearning;
@@ -21,6 +23,15 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("DAG-GNN: DAG Structure Learning with Graph Neural Networks", "https://proceedings.mlr.press/v97/yu19a.html", Year = 2019, Authors = "Yue Yu, Jie Chen, Tian Gao, Mo Yu")]
 public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>

@@ -1,4 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
+
 namespace AiDotNet.CausalDiscovery.Functional;
 
 /// <summary>
@@ -12,6 +15,14 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// <para>Reference: Aragam and Zhou (2015), "Concave Penalized Estimation of Sparse
 /// Gaussian Bayesian Networks", JMLR.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Concave Penalized Estimation of Sparse Gaussian Bayesian Networks", "https://jmlr.org/papers/v16/aragam15a.html", Year = 2015, Authors = "Bryon Aragam, Qing Zhou")]
 public class CCDrAlgorithm<T> : FunctionalBase<T>
 {
     private readonly CausalDiscoveryOptions? _options;

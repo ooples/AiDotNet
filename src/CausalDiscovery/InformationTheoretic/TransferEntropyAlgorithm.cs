@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.InformationTheoretic;
@@ -22,6 +24,15 @@ namespace AiDotNet.CausalDiscovery.InformationTheoretic;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Measuring Information Transfer", "https://doi.org/10.1103/PhysRevLett.85.461", Year = 2000, Authors = "Thomas Schreiber")]
 public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
 {
     /// <inheritdoc/>

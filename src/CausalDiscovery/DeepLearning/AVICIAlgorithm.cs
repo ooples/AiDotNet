@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.DeepLearning;
@@ -21,6 +23,15 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Amortized Inference for Causal Structure Learning", "https://proceedings.neurips.cc/paper_files/paper/2022/hash/07cb5f86508f146774a5b5d2b5e529e4-Abstract-Conference.html", Year = 2022, Authors = "Lars Lorch, Scott Sussex, Jonas Rothfuss, Andreas Krause, Bernhard Scholkopf")]
 public class AVICIAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>

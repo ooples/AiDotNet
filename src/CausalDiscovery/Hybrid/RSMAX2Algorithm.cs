@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.Hybrid;
@@ -21,6 +23,14 @@ namespace AiDotNet.CausalDiscovery.Hybrid;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Learning Bayesian Networks with the bnlearn R Package", "https://doi.org/10.18637/jss.v035.i03", Year = 2010, Authors = "Marco Scutari")]
 public class RSMAX2Algorithm<T> : HybridBase<T>
 {
     /// <inheritdoc/>

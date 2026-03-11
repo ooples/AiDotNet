@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.Hybrid;
@@ -22,6 +24,14 @@ namespace AiDotNet.CausalDiscovery.Hybrid;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("A Hybrid Causal Search Algorithm for Latent Variable Models", "https://doi.org/10.48550/arXiv.1602.01426", Year = 2016, Authors = "Juan Miguel Ogarrio, Peter Spirtes, Joe Ramsey")]
 public class GFCIAlgorithm<T> : HybridBase<T>
 {
     /// <inheritdoc/>

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.TimeSeries;
@@ -31,6 +33,16 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Investigating Causal Relations by Econometric Models and Cross-spectral Methods", "https://doi.org/10.2307/1912791", Year = 1969, Authors = "Clive W. J. Granger")]
 public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     private readonly double _significanceLevel = 0.05;

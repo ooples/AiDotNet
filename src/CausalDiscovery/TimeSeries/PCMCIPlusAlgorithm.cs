@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -25,6 +26,15 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Discovering Contemporaneous and Lagged Causal Relations in Autocorrelated Nonlinear Time Series Datasets", "https://proceedings.mlr.press/v124/runge20a.html", Year = 2020, Authors = "Jakob Runge")]
 public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     private double _alpha = 0.05;

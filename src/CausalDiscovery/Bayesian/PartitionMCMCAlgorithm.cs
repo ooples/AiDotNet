@@ -31,6 +31,7 @@ namespace AiDotNet.CausalDiscovery.Bayesian;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Partition MCMC for Inference on Acyclic Digraphs", "https://doi.org/10.1080/01621459.2015.1133426", Year = 2017, Authors = "Jack Kuipers, Giusi Moffa")]
 public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
 {
     /// <inheritdoc/>

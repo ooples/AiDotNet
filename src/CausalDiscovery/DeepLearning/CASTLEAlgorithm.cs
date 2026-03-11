@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.DeepLearning;
@@ -21,6 +23,14 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("CASTLE: Regularization via Auxiliary Causal Graph Discovery", "https://proceedings.neurips.cc/paper/2020/hash/1f8d87e1461a3d422a3e0eaa8e945e19-Abstract.html", Year = 2020, Authors = "Trent Kyono, Yao Zhang, Mihaela van der Schaar")]
 public class CASTLEAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>

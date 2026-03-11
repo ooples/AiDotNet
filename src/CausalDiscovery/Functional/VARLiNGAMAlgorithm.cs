@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -27,6 +29,17 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Estimation of a Structural Vector Autoregression Model Using Non-Gaussianity", "https://jmlr.org/papers/v11/hyvarinen10a.html", Year = 2010, Authors = "Aapo Hyvarinen, Kun Zhang, Shohei Shimizu, Patrik O. Hoyer")]
 public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
 {
     private readonly int _maxLag = 3;

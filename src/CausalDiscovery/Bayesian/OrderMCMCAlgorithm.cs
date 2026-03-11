@@ -30,6 +30,7 @@ namespace AiDotNet.CausalDiscovery.Bayesian;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Being Bayesian About Network Structure", "https://doi.org/10.1023/B:MACH.0000033120.25888.1e", Year = 2003, Authors = "Nir Friedman, Daphne Koller")]
 public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
 {
     /// <inheritdoc/>
