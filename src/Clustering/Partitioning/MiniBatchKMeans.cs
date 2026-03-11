@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -41,6 +42,12 @@ namespace AiDotNet.Clustering.Partitioning;
 /// difference is very small (a few percent in inertia).
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Web-Scale K-Means Clustering", "https://doi.org/10.1145/1772690.1772862", Year = 2010, Authors = "David Sculley")]
 public class MiniBatchKMeans<T> : ClusteringBase<T>
 {
     private readonly MiniBatchKMeansOptions<T> _options;

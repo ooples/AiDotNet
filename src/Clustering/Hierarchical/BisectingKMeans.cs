@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -39,6 +40,11 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// - Each split is a small K-Means problem, so it's efficient
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class BisectingKMeans<T> : ClusteringBase<T>
 {
     private readonly BisectingKMeansOptions<T> _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -41,6 +42,12 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// - Radius = sqrt((SS/N) - (LS/N)²)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("BIRCH: An Efficient Data Clustering Method for Very Large Databases", "https://doi.org/10.1145/233269.233324", Year = 1996, Authors = "Tian Zhang, Raghu Ramakrishnan, Miron Livny")]
 public class BIRCH<T> : ClusteringBase<T>
 {
     private readonly BIRCHOptions<T> _options;

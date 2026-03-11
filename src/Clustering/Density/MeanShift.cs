@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -43,6 +44,13 @@ namespace AiDotNet.Clustering.Density;
 /// - Can be slow for large datasets
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Kernel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Mean Shift: A Robust Approach toward Feature Space Analysis", "https://doi.org/10.1109/34.1000236", Year = 2002, Authors = "Dorin Comaniciu, Peter Meer")]
 public class MeanShift<T> : ClusteringBase<T>
 {
     private readonly MeanShiftOptions<T> _options;

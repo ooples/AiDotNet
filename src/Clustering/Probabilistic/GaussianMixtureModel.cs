@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
@@ -40,6 +41,11 @@ namespace AiDotNet.Clustering.Probabilistic;
 /// - Repeat until stable
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class GaussianMixtureModel<T> : ClusteringBase<T>
 {
     private readonly GMMOptions<T> _options;

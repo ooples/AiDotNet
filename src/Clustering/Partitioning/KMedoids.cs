@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -39,6 +40,12 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - With K-Means, the center might not represent any real customer
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Finding Groups in Data: An Introduction to Cluster Analysis", "https://doi.org/10.1002/9780470316801", Year = 1990, Authors = "Leonard Kaufman, Peter J. Rousseeuw")]
 public class KMedoids<T> : ClusteringBase<T>
 {
     private readonly KMedoidsOptions<T> _options;
