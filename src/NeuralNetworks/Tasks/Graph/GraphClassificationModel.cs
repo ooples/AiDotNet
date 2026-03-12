@@ -74,8 +74,6 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     Authors = "Thomas N. Kipf, Max Welling")]
 public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 {
-    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly GraphPooling _poolingType;
