@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -39,6 +40,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// ICLR 2023 Spotlight.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Vision Transformer Adapter for Dense Predictions", "https://arxiv.org/abs/2205.08534", Year = 2023, Authors = "Chen et al.")]
 public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly ViTAdapterOptions _options;

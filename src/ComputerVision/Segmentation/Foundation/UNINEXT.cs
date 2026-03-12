@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -40,6 +41,14 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// CVPR 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Tracking)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Universal Instance Perception as Object Discovery and Retrieval", "https://arxiv.org/abs/2308.06820", Year = 2023, Authors = "Yan et al.")]
 public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly UNINEXTOptions _options;

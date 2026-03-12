@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,16 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 /// <b>Reference:</b> Zhang et al., "OMG-LLaVA: Bridging Image-Level, Object-Level, Pixel-Level Reasoning and Understanding", arXiv 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("OMG-LLaVA: Bridging Image-Level, Object-Level, Pixel-Level Reasoning and Understanding", "https://arxiv.org/abs/2406.19389", Year = 2024, Authors = "Zhang et al.")]
 public class OMGLLaVA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
 {
     private readonly OMGLLaVAOptions _options;

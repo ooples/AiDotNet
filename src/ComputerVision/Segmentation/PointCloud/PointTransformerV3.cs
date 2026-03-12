@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,13 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// <b>Reference:</b> Wu et al., "Point Transformer V3: Simpler, Faster, Stronger", CVPR 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.ThreeD)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Point Transformer V3: Simpler, Faster, Stronger", "https://arxiv.org/abs/2312.10035", Year = 2024, Authors = "Wu et al.")]
 public class PointTransformerV3<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly PointTransformerV3Options _options;

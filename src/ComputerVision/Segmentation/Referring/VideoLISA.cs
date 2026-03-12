@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,16 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 /// <b>Reference:</b> Bai et al., "Video-LISA: Language Instructed Segmentation Assistant for Video", arXiv 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Tracking)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Video-LISA: Language Instructed Segmentation Assistant for Video", "", Year = 2024, Authors = "Bai et al.")]
 public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
 {
     private readonly VideoLISAOptions _options;

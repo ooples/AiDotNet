@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 /// <b>Reference:</b> Xu et al., "Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", CVPR 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", "https://arxiv.org/abs/2303.04803", Year = 2023, Authors = "Xu et al.")]
 public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly ODISEOptions _options;

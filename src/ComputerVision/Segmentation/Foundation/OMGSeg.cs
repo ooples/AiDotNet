@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -39,6 +40,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// <b>Reference:</b> Li et al., "OMG-Seg: Is One Model Good Enough For All Segmentation?", CVPR 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("OMG-Seg: Is One Model Good Enough For All Segmentation?", "https://arxiv.org/abs/2401.10229", Year = 2024, Authors = "Li et al.")]
 public class OMGSeg<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly OMGSegOptions _options;

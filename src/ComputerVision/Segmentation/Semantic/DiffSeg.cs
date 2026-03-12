@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -39,6 +40,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// on Diffusion Difference", arXiv 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DiffSeg: A Segmentation Model for Skin Lesions Based on Diffusion Difference", "", Year = 2024, Authors = "Tian et al.")]
 public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly DiffSegOptions _options;

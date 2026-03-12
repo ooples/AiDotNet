@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,14 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 /// <b>Reference:</b> Li et al., "UniVS: Unified and Universal Video Segmentation with Prompts as Queries", CVPR 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Tracking)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("UniVS: Unified and Universal Video Segmentation with Prompts as Queries", "https://arxiv.org/abs/2402.18115", Year = 2024, Authors = "Li et al.")]
 public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
 {
     private readonly UniVSOptions _options;

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,13 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <b>Reference:</b> Xie et al., "Mask-Adapter: The Devil is in the Masks for Open-Vocabulary Segmentation", arXiv 2025.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Mask-Adapter: The Devil is in the Masks for Open-Vocabulary Segmentation", "", Year = 2025, Authors = "Xie et al.")]
 public class MaskAdapter<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly MaskAdapterOptions _options;

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,14 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// <b>Reference:</b> Wu et al., "Sonata and Concerto: Mamba for 3D Point Clouds", arXiv 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.ThreeD)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Sonata and Concerto: Mamba for 3D Point Clouds", "", Year = 2024, Authors = "Wu et al.")]
 public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly ConcertoOptions _options;

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 /// <b>Reference:</b> Archit and Pape, "ViM-UNet: Vision Mamba for Biomedical Segmentation", arXiv 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("ViM-UNet: Vision Mamba for Biomedical Segmentation", "https://arxiv.org/abs/2404.07705", Year = 2024, Authors = "Archit and Pape")]
 public class ViMUNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly ViMUNetOptions _options;

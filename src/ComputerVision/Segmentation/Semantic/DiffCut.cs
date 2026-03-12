@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -41,6 +42,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// with Diffusion Features and Recursive Normalized Cut", NeurIPS 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DiffCut: Catalyzing Zero-Shot Semantic Segmentation with Diffusion Features and Recursive Normalized Cut", "https://arxiv.org/abs/2407.11230", Year = 2024, Authors = "Couairon et al.")]
 public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly DiffCutOptions _options;

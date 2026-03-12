@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -39,6 +40,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// <b>Reference:</b> Saporta et al., "Encoder-only Mask Transformer", CVPR 2025 Highlight.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Encoder-only Mask Transformer", "https://arxiv.org/abs/2501.03884", Year = 2025, Authors = "Antoine Saporta, Alexandre Music, Sotirios Diamantas, Yassine Marrakchi, Thomas Brox")]
 public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly EoMTOptions _options;

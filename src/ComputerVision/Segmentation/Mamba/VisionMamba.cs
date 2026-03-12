@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 /// <b>Reference:</b> Zhu et al., "Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", ICML 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", "https://arxiv.org/abs/2401.09417", Year = 2024, Authors = "Zhu et al.")]
 public class VisionMamba<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly VisionMambaOptions _options;

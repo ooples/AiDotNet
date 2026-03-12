@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,14 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <b>Reference:</b> Cho et al., "CAT-Seg: Cost Aggregation for Open-Vocabulary Semantic Segmentation", CVPR 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CAT-Seg: Cost Aggregation for Open-Vocabulary Semantic Segmentation", "https://arxiv.org/abs/2303.11797", Year = 2024, Authors = "Cho et al.")]
 public class CATSeg<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly CATSegOptions _options;
