@@ -122,8 +122,17 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
                     W[i, j] = NumOps.Multiply(P[i, j], wSample);
                 }
 
-            // Compute L2 loss: (1/2n) * ||X - XW||^2 using covariance
-            // dLoss/dW[i,j] = sum_k (cov[k,j] * W[k,j]) - cov[i,j]
+            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+            var PSqCurrent = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    PSqCurrent[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
+            var expPSqCurrent = MatrixExponentialTaylor(PSqCurrent, d);
+            T hValCurrent = NumOps.Zero;
+            for (int i = 0; i < d; i++)
+                hValCurrent = NumOps.Add(hValCurrent, expPSqCurrent[i, i]);
+            hValCurrent = NumOps.Subtract(hValCurrent, NumOps.FromDouble(d));
+
             var gradMu = new Matrix<T>(d, d);
             var gradLogvar = new Matrix<T>(d, d);
             var gradZ = new Matrix<T>(d, d);
@@ -162,10 +171,10 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
                         ? NumOps.Divide(W[i, j], pij) : NumOps.Zero;
                     T edgeGrad = NumOps.Multiply(reconGrad, wSample);
 
-                    // Acyclicity penalty on edge probabilities
+                    // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
                     T acycGrad = NumOps.Multiply(
-                        NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
-                        NumOps.FromDouble(2));
+                        NumOps.Add(alpha, NumOps.Multiply(rho, hValCurrent)),
+                        NumOps.Multiply(expPSqCurrent[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
 
                     T totalEdgeGrad = NumOps.Add(edgeGrad, acycGrad);
                     T sigDeriv = NumOps.Divide(NumOps.Multiply(pij, oneMinusP),
@@ -184,15 +193,9 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
                         NumOps.Multiply(NumOps.FromDouble(_learningRate * 0.1), gradLogvar[i, j]));
                 }
 
-            // Update augmented Lagrangian
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    if (i != j)
-                        hVal = NumOps.Add(hVal, NumOps.Multiply(P[i, j], P[i, j]));
-
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            // Update augmented Lagrangian with NOTEARS h(P) = tr(exp(P∘P)) - d
+            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValCurrent));
+            if (NumOps.GreaterThan(hValCurrent, NumOps.FromDouble(0.25)))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
@@ -217,6 +220,36 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
                 }
             }
 
+        return result;
+    }
+
+    private Matrix<T> MatrixExponentialTaylor(Matrix<T> M, int d, int terms = 10)
+    {
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            result[i, i] = NumOps.One;
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            power[i, i] = NumOps.One;
+        for (int k = 1; k <= terms; k++)
+        {
+            var next = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int l = 0; l < d; l++)
+                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, l], M[l, j]));
+                    next[i, j] = sum;
+                }
+            power = next;
+            T factorial = NumOps.FromDouble(1.0);
+            for (int f = 2; f <= k; f++)
+                factorial = NumOps.Multiply(factorial, NumOps.FromDouble(f));
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    result[i, j] = NumOps.Add(result[i, j], NumOps.Divide(power[i, j], factorial));
+        }
         return result;
     }
 }
