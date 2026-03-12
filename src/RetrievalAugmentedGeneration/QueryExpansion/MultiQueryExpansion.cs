@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using AiDotNet.Validation;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 
@@ -56,10 +55,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 /// - Extremely short queries (no room for variation)
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class MultiQueryExpansion : QueryExpansionBase
 {
     /// <summary>

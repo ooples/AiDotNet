@@ -5,7 +5,6 @@ using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -28,11 +27,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.High)]
-    [ModelPaper("Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs", "https://arxiv.org/abs/1603.09320", Year = 2018, Authors = "Malkov and Yashunin")]
     public class HNSWIndex<T> : IVectorIndex<T>
     {
         private readonly Dictionary<string, Vector<T>> _vectors;

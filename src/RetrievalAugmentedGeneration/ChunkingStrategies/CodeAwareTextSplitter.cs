@@ -2,17 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using AiDotNet.Validation;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 {
     /// <summary>
     /// Code-aware text splitter that respects code structure and syntax.
     /// </summary>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Medium)]
     public class CodeAwareTextSplitter : ChunkingStrategyBase
     {
         private readonly string _language;

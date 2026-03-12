@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,10 +20,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// making it ideal for hybrid retrieval scenarios where both keyword matching and semantic
 /// similarity are important.
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
 {
     private readonly HttpClient _httpClient;

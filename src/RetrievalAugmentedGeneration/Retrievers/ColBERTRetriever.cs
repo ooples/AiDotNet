@@ -7,7 +7,6 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Validation;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -65,11 +64,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - You have computational resources for token-level matching
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT", "https://arxiv.org/abs/2004.12832", Year = 2020, Authors = "Khattab and Zaharia")]
 public class ColBERTRetriever<T> : RetrieverBase<T>
 {
     private readonly string _modelPath;

@@ -7,7 +7,6 @@ using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using AiDotNet.Validation;
 // Note: Use fully qualified names for RagModels.ThoughtNode<T> to avoid ambiguity with AiDotNet.Reasoning.Models.RagModels.ThoughtNode<T>
 using RagModels = AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -65,11 +64,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// </code>
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Tree of Thoughts: Deliberate Problem Solving with Large Language Models", "https://arxiv.org/abs/2305.10601", Year = 2023, Authors = "Yao et al.")]
 public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
 {
     private readonly IGenerator<T> _generator;

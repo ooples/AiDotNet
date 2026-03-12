@@ -1,5 +1,4 @@
 using AiDotNet.Interfaces;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 
@@ -59,10 +58,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// - Chunk 5: "Third paragraph."
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Low)]
 public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase
 {
     private readonly string[] _separators;

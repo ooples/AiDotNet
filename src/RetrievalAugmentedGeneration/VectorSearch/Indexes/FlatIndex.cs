@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Validation;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -17,10 +16,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// Best for small datasets (< 10K vectors) where accuracy is critical.
     /// </remarks>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Low)]
     public class FlatIndex<T> : IVectorIndex<T>
     {
         private readonly Dictionary<string, Vector<T>> _vectors;

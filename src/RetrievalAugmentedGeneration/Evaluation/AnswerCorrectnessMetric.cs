@@ -1,7 +1,6 @@
 
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Validation;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 
@@ -13,10 +12,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// Assesses whether the generated answer contains factually correct information
 /// by comparing against ground truth or using fact-checking mechanisms.
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class AnswerCorrectnessMetric<T> : RAGMetricBase<T>
 {
     private readonly string _llmEndpoint;

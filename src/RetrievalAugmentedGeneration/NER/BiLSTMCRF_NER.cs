@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.NER;
 
@@ -36,11 +35,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.NER;
 /// Future: Will be upgraded to BiLSTM-CRF neural network model for higher accuracy.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Neural Architectures for Named Entity Recognition", "https://arxiv.org/abs/1603.01360", Year = 2016, Authors = "Lample et al.")]
 public class NamedEntityRecognizer
 {
     private readonly Dictionary<string, string> _commonNames;

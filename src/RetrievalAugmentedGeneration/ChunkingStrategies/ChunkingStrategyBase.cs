@@ -1,5 +1,4 @@
 using AiDotNet.Interfaces;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 
@@ -20,10 +19,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// - This ensures all chunking strategies work consistently
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Low)]
 public abstract class ChunkingStrategyBase : IChunkingStrategy
 {
     private readonly int _chunkSize;

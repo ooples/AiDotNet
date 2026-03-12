@@ -1,6 +1,5 @@
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics
 {
@@ -8,10 +7,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics
     /// Jaccard similarity metric for vector search.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.Classification)]
-    [ModelComplexity(ModelComplexity.Low)]
     public class JaccardSimilarityMetric<T> : ISimilarityMetric<T>
     {
         /// <inheritdoc/>

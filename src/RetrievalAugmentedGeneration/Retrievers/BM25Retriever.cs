@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 {
@@ -12,10 +11,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     /// BM25 (Best Matching 25) retrieval algorithm for sparse keyword-based search.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Low)]
     public class BM25Retriever<T> : RetrieverBase<T>
     {
         private readonly IDocumentStore<T> _documentStore;

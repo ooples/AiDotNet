@@ -1,5 +1,4 @@
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 
@@ -11,10 +10,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// Measures how relevant the retrieved documents are to answering the query,
 /// helping identify retrieval quality issues.
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class ContextRelevanceMetric<T> : RAGMetricBase<T>
 {
     public override string Name => "Context Relevance";

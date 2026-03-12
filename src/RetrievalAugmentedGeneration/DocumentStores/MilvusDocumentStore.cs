@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 {
@@ -37,10 +36,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Medium)]
     public class MilvusDocumentStore<T> : DocumentStoreBase<T>
     {
         private readonly Dictionary<string, VectorDocument<T>> _documents;

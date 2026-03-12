@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Interfaces;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -46,10 +45,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// For persistent storage, use FileGraphStore or Neo4jGraphStore instead.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Low)]
 public class MemoryGraphStore<T> : IGraphStore<T>
 {
     private readonly Dictionary<string, GraphNode<T>> _nodes;

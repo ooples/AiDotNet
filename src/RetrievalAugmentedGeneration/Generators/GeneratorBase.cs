@@ -1,6 +1,5 @@
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 
@@ -28,10 +27,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// 4. Everything else (validation, prompt formatting, citations) is handled automatically
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Low)]
 public abstract class GeneratorBase<T> : IGenerator<T>
 {
     /// <summary>

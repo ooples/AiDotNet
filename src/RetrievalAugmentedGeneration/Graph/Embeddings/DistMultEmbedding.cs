@@ -1,5 +1,4 @@
 using System;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -24,11 +23,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// - Works best for symmetric relations where direction doesn't matter
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Embedding Entities and Relations for Learning and Inference in Knowledge Bases", "https://arxiv.org/abs/1412.6575", Year = 2015, Authors = "Yang et al.")]
 public class DistMultEmbedding<T> : KGEmbeddingBase<T>
 {
     /// <inheritdoc />

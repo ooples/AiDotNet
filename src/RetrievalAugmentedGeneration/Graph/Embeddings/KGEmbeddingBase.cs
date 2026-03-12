@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -25,10 +24,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// 6. Subclasses define how to score triples and compute gradients
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Low)]
 public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
 {
     private protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

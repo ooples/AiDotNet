@@ -1,7 +1,6 @@
 using System;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 {
@@ -9,10 +8,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     /// Local transformer embedding model for generating embeddings using ONNX Runtime without external API calls.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.Transformer)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.High)]
     public class LocalTransformerEmbedding<T> : EmbeddingModelBase<T>
     {
         private readonly ONNXSentenceTransformer<T> _onnxTransformer;

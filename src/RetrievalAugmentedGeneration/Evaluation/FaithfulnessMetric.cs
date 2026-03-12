@@ -1,5 +1,4 @@
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 
@@ -33,10 +32,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// techniques like NLI (Natural Language Inference) models.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class FaithfulnessMetric<T> : RAGMetricBase<T>
 {
     /// <summary>

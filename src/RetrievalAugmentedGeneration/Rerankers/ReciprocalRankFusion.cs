@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.Attributes;
 
 
 namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
@@ -11,10 +10,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
     /// Reciprocal Rank Fusion for combining multiple ranking lists.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.Classification)]
-    [ModelComplexity(ModelComplexity.Medium)]
     public class ReciprocalRankFusion<T> : Rerankers.RerankerBase<T>
     {
         private readonly int _k;

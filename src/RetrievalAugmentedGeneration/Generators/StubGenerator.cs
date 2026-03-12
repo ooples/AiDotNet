@@ -2,7 +2,6 @@ using System.Text.RegularExpressions;
 
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 
@@ -36,10 +35,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// This enables development on Issue #284 without waiting for transformer integration.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Low)]
 public class StubGenerator<T> : IGenerator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

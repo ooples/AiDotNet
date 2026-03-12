@@ -7,7 +7,6 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Validation;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -67,10 +66,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - Memory-constrained systems (returns more content per match)
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class ParentDocumentRetriever<T> : RetrieverBase<T>
 {
     private readonly IDocumentStore<T> _documentStore;

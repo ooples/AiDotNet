@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
@@ -20,10 +19,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// Cohere provides state-of-the-art embeddings with multiple model sizes optimized
 /// for different use cases (English, multilingual, search, classification).
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly string _apiKey;

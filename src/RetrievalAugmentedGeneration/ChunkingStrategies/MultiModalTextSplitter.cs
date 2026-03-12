@@ -1,5 +1,4 @@
 using AiDotNet.Interfaces;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 
@@ -10,10 +9,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// Creates chunks that keep text and related images together, preserving the relationship
 /// between visual and textual content for better context preservation.
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class MultiModalTextSplitter : ChunkingStrategyBase
 {
     private readonly bool _preserveImageContext;
