@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>Multi-band MelGAN: decomposes target into sub-bands, generates each in parallel, then synthesizes full-band.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech" (Yang et al., 2021)</item></list></para><para><b>For Beginners:</b> Multi-band MelGAN: decomposes target into sub-bands, generates each in parallel, then synthesizes full-band.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech", "https://arxiv.org/abs/2005.05106", Year = 2021, Authors = "Yang et al.")]
 public class MultiBandMelGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly MultiBandMelGANOptions _options; public override ModelOptions GetOptions() => _options;

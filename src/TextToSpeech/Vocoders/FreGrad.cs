@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>FreGrad: lightweight diffusion vocoder that operates in the frequency domain via DWT (discrete wavelet transform) for faster synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder" (Shin et al., 2022)</item></list></para><para><b>For Beginners:</b> FreGrad: lightweight diffusion vocoder that operates in the frequency domain via DWT (discrete wavelet transform) for faster synthesis.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder", "https://arxiv.org/abs/2206.04063", Year = 2022, Authors = "Shin et al.")]
 public class FreGrad<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly FreGradOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,4 +1,13 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>
 /// WaveNet: autoregressive generative model using dilated causal convolutions for raw audio generation.
@@ -7,6 +16,12 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <remarks><para><b>References:</b>
 /// <list type="bullet"><item>Paper: "WaveNet: A Generative Model for Raw Audio" (van den Oord et al., 2016)</item></list></para><para><b>For Beginners:</b> /// WaveNet: autoregressive generative model using dilated causal convolutions for raw audio generation.
 ///. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("WaveNet: A Generative Model for Raw Audio", "https://arxiv.org/abs/1609.03499", Year = 2016, Authors = "van den Oord et al.")]
 public class WaveNet<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveNetOptions _options; public override ModelOptions GetOptions() => _options;
