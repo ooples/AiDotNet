@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -39,6 +40,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// <b>Reference:</b> Ke et al., "Segment Anything in High Quality", NeurIPS 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Segment Anything in High Quality", "https://arxiv.org/abs/2306.01567", Year = 2023, Authors = "Lei Ke, Mingqiao Ye, Martin Danelljan, Yifan Liu, Yu-Wing Tai, Chi-Keung Tang, Fisher Yu")]
 public class SAMHQ<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly SAMHQOptions _options;

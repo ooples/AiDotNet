@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// <b>Reference:</b> Zhou et al., "EdgeSAM: Prompt-In-the-Loop Distillation for On-Device Deployment of SAM", arXiv 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("EdgeSAM: Prompt-In-the-Loop Distillation for On-Device Deployment of SAM", "https://arxiv.org/abs/2312.06660", Year = 2024, Authors = "Chong Zhou, Xiangtai Li, Chen Change Loy, Bo Dai")]
 public class EdgeSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly EdgeSAMOptions _options;

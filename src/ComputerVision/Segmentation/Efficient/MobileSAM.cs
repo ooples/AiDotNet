@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// <b>Reference:</b> Zhang et al., "Faster Segment Anything: Towards Lightweight SAM for Mobile Applications", arXiv 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Faster Segment Anything: Towards Lightweight SAM for Mobile Applications", "https://arxiv.org/abs/2306.14289", Year = 2023, Authors = "Chaoning Zhang, Dongshen Han, Yu Qiao, Jung Uk Kim, Sung-Ho Bae, Seungkyu Lee, Choong Seon Hong")]
 public class MobileSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly MobileSAMOptions _options;

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -38,6 +39,14 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// <b>Reference:</b> Ravi et al., "SAM 2: Segment Anything in Images and Videos", Meta AI, 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Tracking)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SAM 2: Segment Anything in Images and Videos", "https://arxiv.org/abs/2408.00714", Year = 2024, Authors = "Nikhila Ravi, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman Rädle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Dollár, Christoph Feichtenhofer")]
 public class SAM21<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly SAM21Options _options;
