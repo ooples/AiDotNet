@@ -58,7 +58,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int headDim = Math.Min(HiddenUnits, 8);
+        int headDim = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -240,37 +240,129 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                 gWo[k, 0] = NumOps.Multiply(gWo[k, 0], normFactor);
                 Wo[k, 0] = NumOps.Subtract(Wo[k, 0], NumOps.Multiply(lr, gWo[k, 0]));
             }
+            // Gradient w.r.t. Wq and Wk through attention scores
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    if (i == j) continue;
+                    int idx = i * d + j;
+                    T pij = P[i, j];
+                    T absCorr2 = NumOps.Abs(corr[i, j]);
+                    T dataGrad2 = NumOps.Subtract(pij, absCorr2);
+                    T sigDeriv2 = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
+                    T dLogit2 = NumOps.Multiply(dataGrad2, sigDeriv2);
+
+                    // dLogit/dAttended * dAttended/dAttnWeights * dAttnWeights/dScores * dScores/dQ,K
+                    for (int ki = 0; ki < d; ki++)
+                    {
+                        T aw = attnWeights[idx, ki];
+                        int kIdx2 = ki * d + j;
+                        // d(attended)/d(attnWeight[ki]) = V[ki]
+                        T dAttnW = NumOps.Zero;
+                        for (int k = 0; k < headDim; k++)
+                            dAttnW = NumOps.Add(dAttnW,
+                                NumOps.Multiply(dLogit2, NumOps.Multiply(Wo[k, 0], V[kIdx2, k])));
+                        // softmax jacobian (simplified): attn * (1-attn) for diagonal term
+                        T dScore = NumOps.Multiply(dAttnW, NumOps.Multiply(aw, NumOps.Subtract(NumOps.One, aw)));
+                        dScore = NumOps.Multiply(dScore, headScale);
+                        // dScore/dQ = K, dScore/dK = Q
+                        for (int f = 0; f < featDim; f++)
+                        {
+                            gWq[f, 0] = NumOps.Add(gWq[f, 0],
+                                NumOps.Multiply(dScore,
+                                    NumOps.Multiply(features[idx, f], K[kIdx2, 0])));
+                            gWk[f, 0] = NumOps.Add(gWk[f, 0],
+                                NumOps.Multiply(dScore,
+                                    NumOps.Multiply(features[kIdx2, f], Q[idx, 0])));
+                        }
+                    }
+                }
+
             for (int f = 0; f < featDim; f++)
                 for (int k = 0; k < headDim; k++)
                 {
                     gWv[f, k] = NumOps.Multiply(gWv[f, k], normFactor);
+                    gWq[f, k] = NumOps.Multiply(gWq[f, k], normFactor);
+                    gWk[f, k] = NumOps.Multiply(gWk[f, k], normFactor);
                     Wv[f, k] = NumOps.Subtract(Wv[f, k], NumOps.Multiply(lr, gWv[f, k]));
-                    // Also update Wq and Wk with small regularization toward data fit
-                    Wq[f, k] = NumOps.Subtract(Wq[f, k],
-                        NumOps.Multiply(NumOps.FromDouble(LearningRate * 0.01), Wq[f, k]));
-                    Wk[f, k] = NumOps.Subtract(Wk[f, k],
-                        NumOps.Multiply(NumOps.FromDouble(LearningRate * 0.01), Wk[f, k]));
+                    Wq[f, k] = NumOps.Subtract(Wq[f, k], NumOps.Multiply(lr, gWq[f, k]));
+                    Wk[f, k] = NumOps.Subtract(Wk[f, k], NumOps.Multiply(lr, gWk[f, k]));
                 }
 
-            // Update augmented Lagrangian
-            T hVal = NumOps.Zero;
+            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+            var PSq = new Matrix<T>(d, d);
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
-                    if (i != j) hVal = NumOps.Add(hVal, NumOps.Multiply(P[i, j], P[i, j]));
+                    PSq[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
+            var expPSq = MatrixExponentialTaylor(PSq, d);
+            T hVal = NumOps.Zero;
+            for (int i = 0; i < d; i++)
+                hVal = NumOps.Add(hVal, expPSq[i, i]);
+            hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
             if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
-        // Final inference
+        // Final inference using trained parameters
         var result = new Matrix<T>(d, d);
-        T threshold = NumOps.FromDouble(0.5);
+        // Re-run forward pass with trained Wq, Wk, Wv, Wo
+        var Qf = new Matrix<T>(d * d, headDim);
+        var Kf = new Matrix<T>(d * d, headDim);
+        var Vf = new Matrix<T>(d * d, headDim);
+        for (int idx = 0; idx < d * d; idx++)
+            for (int k = 0; k < headDim; k++)
+            {
+                T qSum = NumOps.Zero, kSum = NumOps.Zero, vSum = NumOps.Zero;
+                for (int f = 0; f < featDim; f++)
+                {
+                    qSum = NumOps.Add(qSum, NumOps.Multiply(features[idx, f], Wq[f, k]));
+                    kSum = NumOps.Add(kSum, NumOps.Multiply(features[idx, f], Wk[f, k]));
+                    vSum = NumOps.Add(vSum, NumOps.Multiply(features[idx, f], Wv[f, k]));
+                }
+                Qf[idx, k] = qSum; Kf[idx, k] = kSum; Vf[idx, k] = vSum;
+            }
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
-                T absCorr = NumOps.Abs(corr[i, j]);
-                if (NumOps.GreaterThan(absCorr, NumOps.FromDouble(0.1)))
+                int qIdx = i * d + j;
+                // Compute attention and output
+                T maxS = NumOps.FromDouble(-1e10);
+                var sc = new T[d];
+                for (int ki = 0; ki < d; ki++)
+                {
+                    int kIdx = ki * d + j;
+                    T score = NumOps.Zero;
+                    for (int k = 0; k < headDim; k++)
+                        score = NumOps.Add(score, NumOps.Multiply(Qf[qIdx, k], Kf[kIdx, k]));
+                    score = NumOps.Multiply(score, headScale);
+                    sc[ki] = score;
+                    if (NumOps.GreaterThan(score, maxS)) maxS = score;
+                }
+                T sExp = NumOps.Zero;
+                for (int ki = 0; ki < d; ki++)
+                {
+                    sc[ki] = NumOps.FromDouble(Math.Exp(Math.Min(20, NumOps.ToDouble(NumOps.Subtract(sc[ki], maxS)))));
+                    sExp = NumOps.Add(sExp, sc[ki]);
+                }
+                var att = new T[headDim];
+                for (int k = 0; k < headDim; k++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int ki = 0; ki < d; ki++)
+                    {
+                        T w = NumOps.Divide(sc[ki], NumOps.Add(sExp, eps));
+                        sum = NumOps.Add(sum, NumOps.Multiply(w, Vf[ki * d + j, k]));
+                    }
+                    att[k] = sum;
+                }
+                T logit = NumOps.Zero;
+                for (int k = 0; k < headDim; k++)
+                    logit = NumOps.Add(logit, NumOps.Multiply(att[k], Wo[k, 0]));
+                double sv2 = NumOps.ToDouble(logit);
+                double prob = sv2 > 20 ? 1.0 : sv2 < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv2));
+                if (prob > 0.5)
                 {
                     T varI = cov[i, i];
                     if (NumOps.GreaterThan(varI, eps))
@@ -282,6 +374,36 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                 }
             }
 
+        return result;
+    }
+
+    private Matrix<T> MatrixExponentialTaylor(Matrix<T> M, int d, int terms = 10)
+    {
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            result[i, i] = NumOps.One;
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            power[i, i] = NumOps.One;
+        for (int k = 1; k <= terms; k++)
+        {
+            var next = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int l = 0; l < d; l++)
+                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, l], M[l, j]));
+                    next[i, j] = sum;
+                }
+            power = next;
+            T factorial = NumOps.FromDouble(1.0);
+            for (int f = 2; f <= k; f++)
+                factorial = NumOps.Multiply(factorial, NumOps.FromDouble(f));
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    result[i, j] = NumOps.Add(result[i, j], NumOps.Divide(power[i, j], factorial));
+        }
         return result;
     }
 }
