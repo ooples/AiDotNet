@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <list type="bullet"><item>Paper: "Ferret: Refer and Ground Anything Anywhere at Any Granularity" (Apple, 2023)</item></list></para>
 /// <para><b>For Beginners:</b> Ferret is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Ferret: Refer and Ground Anything Anywhere at Any Granularity", "https://arxiv.org/abs/2310.07704", Year = 2023, Authors = "You et al.")]
 public class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly FerretOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,13 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <list type="bullet"><item>Paper: "Grounding DINO: Marrying DINO with Grounded Pre-Training" (IDEA, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> GroundingDINO is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection", "https://arxiv.org/abs/2303.05499", Year = 2024, Authors = "Liu et al.")]
 public class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GroundingDINOOptions _options; public override ModelOptions GetOptions() => _options;

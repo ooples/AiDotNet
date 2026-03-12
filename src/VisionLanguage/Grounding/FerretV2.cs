@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <list type="bullet"><item>Paper: "Ferret-v2: An Improved Baseline for Referring and Grounding" (Apple, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> FerretV2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Ferret-v2: An Improved Baseline for Referring and Grounding with Multi-Granularity Visual Encoding", "https://arxiv.org/abs/2404.07973", Year = 2024, Authors = "Zhang et al.")]
 public class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly FerretV2Options _options; public override ModelOptions GetOptions() => _options;

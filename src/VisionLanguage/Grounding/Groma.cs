@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <list type="bullet"><item>Paper: "Groma: Localized Visual Tokenization for Grounding Multimodal Large Language Models" (ByteDance, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> Groma is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Groma: Localized Visual Tokenization for Grounding Multimodal Large Language Models", "https://arxiv.org/abs/2404.13013", Year = 2024, Authors = "Ma et al.")]
 public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GromaOptions _options; public override ModelOptions GetOptions() => _options;

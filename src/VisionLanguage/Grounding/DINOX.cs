@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <list type="bullet"><item>Paper: "DINO-X: A Unified Vision Model for Open-World Object Detection and Understanding" (IDEA, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> DINOX is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DINO-X: A Unified Vision Model for Open-World Object Detection and Understanding", "https://arxiv.org/abs/2411.14347", Year = 2024, Authors = "Ren et al.")]
 public class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly DINOXOptions _options; public override ModelOptions GetOptions() => _options;
