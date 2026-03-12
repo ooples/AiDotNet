@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,12 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// the full Whisper large-v3 on Japanese benchmarks while being 6x faster.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Distil-Whisper: Robust Knowledge Distillation via Large-Scale Pseudo Labelling", "https://arxiv.org/abs/2311.00430", Year = 2023, Authors = "Gandhi et al.")]
 public class KotobaWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly KotobaWhisperOptions _options; public override ModelOptions GetOptions() => _options;
