@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using AiDotNet.Attributes;
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -43,6 +44,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
 {
     private readonly ConcurrentDictionary<string, VectorDocument<T>> _store;

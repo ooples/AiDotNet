@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.Attributes;
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -17,7 +18,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// on implementing storage-specific logic and search algorithms.
 /// </para>
 /// <para><b>For Beginners:</b> This is the foundation that all document storage systems build upon.
-/// 
+///
 /// Think of it like a template for building a library:
 /// - It handles common tasks (checking inputs, managing documents, calculating similarity)
 /// - Specific storage systems (in-memory, database) just fill in where/how documents are stored
@@ -25,6 +26,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class DocumentStoreBase<T> : IDocumentStore<T>
 {
     /// <summary>
