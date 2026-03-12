@@ -382,18 +382,28 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         }
 
         // Normalize whitespace
-        var result = sb.ToString().Trim();
-        while (result.Contains("  "))
+        // Single-pass whitespace normalization: collapse all runs of whitespace to a single space
+        var raw = sb.ToString();
+        var normalized = new StringBuilder(raw.Length);
+        bool prevWasSpace = false;
+        foreach (char c in raw)
         {
-            result = result.Replace("  ", " ");
-        }
-        result = result.Replace("\r\n", " ").Replace("\n", " ").Replace("\r", " ");
-        while (result.Contains("  "))
-        {
-            result = result.Replace("  ", " ");
+            if (c == ' ' || c == '\r' || c == '\n' || c == '\t')
+            {
+                if (!prevWasSpace)
+                {
+                    normalized.Append(' ');
+                    prevWasSpace = true;
+                }
+            }
+            else
+            {
+                normalized.Append(c);
+                prevWasSpace = false;
+            }
         }
 
-        return result.Trim();
+        return normalized.ToString().Trim();
     }
 
     private static void EmitEmptyRegistry(SourceProductionContext context)

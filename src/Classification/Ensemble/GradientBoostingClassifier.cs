@@ -45,7 +45,6 @@ namespace AiDotNet.Classification.Ensemble;
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.Classifier)]
-[ModelTask(ModelTask.Classification)]
 [ModelTask(ModelTask.BinaryClassification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
@@ -71,10 +70,11 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
     private Random? _random;
 
     /// <summary>
-    /// Mean residual values for each tree's leaf predictions.
-    /// Each entry contains [meanForClass0, meanForClass1] for the corresponding tree.
+    /// Newton-Raphson leaf values for each tree, keyed by leaf identifier.
+    /// Each leaf in the tree gets its own Newton step: sum(residuals) / sum(hessian).
+    /// The key is derived from the leaf's class-1 probability (discretized to avoid float issues).
     /// </summary>
-    private readonly List<T[]> _leafResidualMeans = new();
+    private readonly List<Dictionary<long, T>> _leafNewtonValues = new();
 
     /// <inheritdoc/>
     public int MaxDepth => Options.MaxDepth;
@@ -122,7 +122,7 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
 
         // Clear existing estimators and residual means
         Estimators.Clear();
-        _leafResidualMeans.Clear();
+        _leafNewtonValues.Clear();
 
         int n = x.Rows;
 
@@ -215,15 +215,19 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             tree.Train(xSample, residualClasses);
             Estimators.Add(tree);
 
-            // Compute Newton-Raphson leaf values per leaf region
+            // Compute Newton-Raphson leaf values per terminal leaf
             // For log loss: leaf_value = sum(residuals) / sum(p * (1 - p))
             // where residuals = y - p (negative gradient) and p*(1-p) is the Hessian
-            var samplePreds = tree.Predict(xSample);
-            T sumResid0 = NumOps.Zero, sumResid1 = NumOps.Zero;
-            T sumHessian0 = NumOps.Zero, sumHessian1 = NumOps.Zero;
+            // Use PredictProbabilities to identify unique leaves (each leaf has unique class probs)
+            var sampleProbs = tree.PredictProbabilities(xSample);
+            var leafAccum = new Dictionary<long, (T sumResid, T sumHessian)>();
 
             for (int i = 0; i < residualsSample.Length; i++)
             {
+                // Identify leaf by discretized class-1 probability
+                double leafProb = NumClasses > 1 ? NumOps.ToDouble(sampleProbs[i, 1]) : 0.0;
+                long leafKey = (long)Math.Round(leafProb * 1_000_000);
+
                 // Get the probability for this sample to compute Hessian
                 int origIdx = sampleIndices[i];
                 T prob = Sigmoid(fValues[origIdx]);
@@ -234,35 +238,36 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
                     hessian = NumOps.FromDouble(1e-10);
                 }
 
-                if (NumOps.Compare(samplePreds[i], NumOps.One) == 0)
+                if (leafAccum.TryGetValue(leafKey, out var accum))
                 {
-                    sumResid1 = NumOps.Add(sumResid1, residualsSample[i]);
-                    sumHessian1 = NumOps.Add(sumHessian1, hessian);
+                    leafAccum[leafKey] = (NumOps.Add(accum.sumResid, residualsSample[i]),
+                                          NumOps.Add(accum.sumHessian, hessian));
                 }
                 else
                 {
-                    sumResid0 = NumOps.Add(sumResid0, residualsSample[i]);
-                    sumHessian0 = NumOps.Add(sumHessian0, hessian);
+                    leafAccum[leafKey] = (residualsSample[i], hessian);
                 }
             }
 
-            // Newton step: sum(gradient) / sum(hessian) per leaf region
-            T leafVal0 = NumOps.Compare(sumHessian0, NumOps.FromDouble(1e-10)) > 0
-                ? NumOps.Divide(sumResid0, sumHessian0)
-                : NumOps.Zero;
-            T leafVal1 = NumOps.Compare(sumHessian1, NumOps.FromDouble(1e-10)) > 0
-                ? NumOps.Divide(sumResid1, sumHessian1)
-                : NumOps.Zero;
+            // Newton step: sum(gradient) / sum(hessian) per terminal leaf
+            var leafValues = new Dictionary<long, T>();
+            foreach (var kvp in leafAccum)
+            {
+                var (sumResid, sumHessian) = kvp.Value;
+                leafValues[kvp.Key] = NumOps.Compare(sumHessian, NumOps.FromDouble(1e-10)) > 0
+                    ? NumOps.Divide(sumResid, sumHessian)
+                    : NumOps.Zero;
+            }
 
-            _leafResidualMeans.Add(new[] { leafVal0, leafVal1 });
+            _leafNewtonValues.Add(leafValues);
 
-            // Update predictions using Newton-step leaf values
-            var treePreds = tree.Predict(x);
+            // Update predictions using per-leaf Newton-step values
+            var fullProbs = tree.PredictProbabilities(x);
             for (int i = 0; i < n; i++)
             {
-                T treeOutput = NumOps.Compare(treePreds[i], NumOps.One) == 0
-                    ? leafVal1
-                    : leafVal0;
+                double lp = NumClasses > 1 ? NumOps.ToDouble(fullProbs[i, 1]) : 0.0;
+                long lk = (long)Math.Round(lp * 1_000_000);
+                T treeOutput = leafValues.TryGetValue(lk, out var lv) ? lv : NumOps.Zero;
                 fValues[i] = NumOps.Add(fValues[i], NumOps.Multiply(lr, treeOutput));
             }
         }
@@ -343,11 +348,10 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
 
             for (int m = 0; m < Estimators.Count; m++)
             {
-                var treePred = Estimators[m].Predict(sample);
-                // Use stored mean residuals for this tree
-                T treeOutput = NumOps.Compare(treePred[0], NumOps.One) == 0
-                    ? _leafResidualMeans[m][1]
-                    : _leafResidualMeans[m][0];
+                var treeProbs = ((IProbabilisticClassifier<T>)Estimators[m]).PredictProbabilities(sample);
+                double lp = NumClasses > 1 ? NumOps.ToDouble(treeProbs[0, 1]) : 0.0;
+                long lk = (long)Math.Round(lp * 1_000_000);
+                T treeOutput = _leafNewtonValues[m].TryGetValue(lk, out var lv) ? lv : NumOps.Zero;
                 fValue = NumOps.Add(fValue, NumOps.Multiply(lr, treeOutput));
             }
 
@@ -384,11 +388,10 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
 
             for (int m = 0; m < Estimators.Count; m++)
             {
-                var treePred = Estimators[m].Predict(sample);
-                // Use stored mean residuals for this tree
-                T treeOutput = NumOps.Compare(treePred[0], NumOps.One) == 0
-                    ? _leafResidualMeans[m][1]
-                    : _leafResidualMeans[m][0];
+                var treeProbs = ((IProbabilisticClassifier<T>)Estimators[m]).PredictProbabilities(sample);
+                double lp = NumClasses > 1 ? NumOps.ToDouble(treeProbs[0, 1]) : 0.0;
+                long lk = (long)Math.Round(lp * 1_000_000);
+                T treeOutput = _leafNewtonValues[m].TryGetValue(lk, out var lv) ? lv : NumOps.Zero;
                 fValue = NumOps.Add(fValue, NumOps.Multiply(lr, treeOutput));
             }
 
@@ -493,12 +496,10 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             }
         }
 
-        // Clone leaf residual means
-        foreach (var means in _leafResidualMeans)
+        // Clone leaf Newton values
+        foreach (var leafDict in _leafNewtonValues)
         {
-            var clonedMeans = new T[means.Length];
-            Array.Copy(means, clonedMeans, means.Length);
-            clone._leafResidualMeans.Add(clonedMeans);
+            clone._leafNewtonValues.Add(new Dictionary<long, T>(leafDict));
         }
 
         // Clone all estimators
@@ -557,15 +558,22 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             modelData["FeatureImportances"] = fiArray;
         }
 
-        // Serialize leaf residual means
-        modelData["LeafResidualMeansCount"] = _leafResidualMeans.Count;
-        for (int i = 0; i < _leafResidualMeans.Count; i++)
+        // Serialize per-leaf Newton values
+        modelData["LeafNewtonValuesCount"] = _leafNewtonValues.Count;
+        for (int i = 0; i < _leafNewtonValues.Count; i++)
         {
-            var means = _leafResidualMeans[i];
-            var meansDouble = new double[means.Length];
-            for (int j = 0; j < means.Length; j++)
-                meansDouble[j] = NumOps.ToDouble(means[j]);
-            modelData[$"LeafResidualMeans_{i}"] = meansDouble;
+            var leafDict = _leafNewtonValues[i];
+            var keys = new long[leafDict.Count];
+            var values = new double[leafDict.Count];
+            int idx = 0;
+            foreach (var kvp in leafDict)
+            {
+                keys[idx] = kvp.Key;
+                values[idx] = NumOps.ToDouble(kvp.Value);
+                idx++;
+            }
+            modelData[$"LeafNewtonKeys_{i}"] = keys;
+            modelData[$"LeafNewtonVals_{i}"] = values;
         }
 
         // Serialize each estimator as base64
@@ -629,22 +637,26 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             }
         }
 
-        // Deserialize leaf residual means
-        _leafResidualMeans.Clear();
-        int lrmCount = modelDataObj["LeafResidualMeansCount"]?.ToObject<int>() ?? 0;
-        for (int i = 0; i < lrmCount; i++)
+        // Deserialize per-leaf Newton values
+        _leafNewtonValues.Clear();
+        int lnvCount = modelDataObj["LeafNewtonValuesCount"]?.ToObject<int>() ?? 0;
+        for (int i = 0; i < lnvCount; i++)
         {
-            var lrmToken = modelDataObj[$"LeafResidualMeans_{i}"];
-            if (lrmToken is null)
+            var keysToken = modelDataObj[$"LeafNewtonKeys_{i}"];
+            var valsToken = modelDataObj[$"LeafNewtonVals_{i}"];
+            if (keysToken is null || valsToken is null)
             {
                 throw new InvalidOperationException(
-                    $"Deserialization failed: LeafResidualMeans_{i} is missing (expected {lrmCount} entries).");
+                    $"Deserialization failed: LeafNewtonKeys_{i} or LeafNewtonVals_{i} is missing (expected {lnvCount} entries).");
             }
-            var meansDouble = lrmToken.ToObject<double[]>() ?? Array.Empty<double>();
-            var means = new T[meansDouble.Length];
-            for (int j = 0; j < meansDouble.Length; j++)
-                means[j] = NumOps.FromDouble(meansDouble[j]);
-            _leafResidualMeans.Add(means);
+            var keys = keysToken.ToObject<long[]>() ?? Array.Empty<long>();
+            var vals = valsToken.ToObject<double[]>() ?? Array.Empty<double>();
+            var leafDict = new Dictionary<long, T>();
+            for (int j = 0; j < keys.Length; j++)
+            {
+                leafDict[keys[j]] = NumOps.FromDouble(vals[j]);
+            }
+            _leafNewtonValues.Add(leafDict);
         }
 
         // Deserialize estimators
