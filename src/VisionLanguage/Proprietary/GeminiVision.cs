@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// <list type="bullet"><item>Gemini: Google's natively multimodal model family with 1M+ token context (Google, 2024-2026)</item></list></para>
 /// <para><b>For Beginners:</b> GeminiVision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Gemini: A Family of Highly Capable Multimodal Models", "https://arxiv.org/abs/2312.11805", Year = 2024, Authors = "Gemini Team, Google")]
 public class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
 {
     private readonly GeminiVisionOptions _options; public override ModelOptions GetOptions() => _options;

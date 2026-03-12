@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// <list type="bullet"><item>Paper: "Skywork R1V: Pioneering Multimodal Reasoning with Chain-of-Thought" (2025)</item></list></para>
 /// <para><b>For Beginners:</b> SkyworkR1V is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Skywork R1V: Pioneering Multimodal Reasoning with Chain-of-Thought", "https://arxiv.org/abs/2501.12368", Year = 2025, Authors = "Skywork Team")]
 public class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly SkyworkR1VOptions _options; public override ModelOptions GetOptions() => _options;

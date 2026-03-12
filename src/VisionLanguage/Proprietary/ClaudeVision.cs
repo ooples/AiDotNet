@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// <list type="bullet"><item>Claude 3/4 Vision: strong document and chart understanding with extended thinking (Anthropic, 2024-2025)</item></list></para>
 /// <para><b>For Beginners:</b> ClaudeVision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class ClaudeVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
 {
     private readonly ClaudeVisionOptions _options; public override ModelOptions GetOptions() => _options;

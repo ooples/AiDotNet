@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,17 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// <list type="bullet"><item>Paper: "GeoChat: Grounded Large Vision-Language Model for Remote Sensing (MBZUAI, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> GeoChat is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Science)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GeoChat: Grounded Large Vision-Language Model for Remote Sensing", "https://arxiv.org/abs/2311.15826", Year = 2024, Authors = "Kuckreja et al.")]
 public class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly GeoChatOptions _options; public override ModelOptions GetOptions() => _options;

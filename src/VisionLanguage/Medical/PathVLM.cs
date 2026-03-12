@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <list type="bullet"><item>Paper: "PathVLM: A Vision-Language Model for Computational Pathology (Various, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> PathVLM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Foundational Multimodal Vision Language AI Assistant for Human Pathology", "https://arxiv.org/abs/2312.07814", Year = 2024, Authors = "Sun et al.")]
 public class PathVLM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly PathVLMOptions _options; public override ModelOptions GetOptions() => _options;

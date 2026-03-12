@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// <list type="bullet"><item>Paper: "RSGPT: A Remote Sensing Vision Language Model and Benchmark (Various, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> RSGPT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Science)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RSGPT: A Remote Sensing Vision Language Model and Benchmark", "https://arxiv.org/abs/2307.15266", Year = 2024, Authors = "Hu et al.")]
 public class RSGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly RSGPTOptions _options; public override ModelOptions GetOptions() => _options;

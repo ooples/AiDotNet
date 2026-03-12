@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <list type="bullet"><item>Paper: "LLaVA-Med: Training a Large Language-and-Vision Assistant for Biomedicine (Microsoft, 2023)"</item></list></para>
 /// <para><b>For Beginners:</b> LLaVAMed is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LLaVA-Med: Training a Large Language-and-Vision Assistant for Biomedicine in One Day", "https://arxiv.org/abs/2306.00890", Year = 2023, Authors = "Li et al.")]
 public class LLaVAMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly LLaVAMedOptions _options; public override ModelOptions GetOptions() => _options;

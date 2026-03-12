@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <list type="bullet"><item>Paper: "Dragonfly-Med: Multi-Resolution Visual Encoding for Medical Image Understanding (Together.ai, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> DragonflyMed is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Dragonfly: Multi-Resolution Zoom Supercharges Large Visual-Language Model", "https://arxiv.org/abs/2406.00977", Year = 2024, Authors = "Chen et al.")]
 public class DragonflyMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly DragonflyMedOptions _options; public override ModelOptions GetOptions() => _options;
