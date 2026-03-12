@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,11 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// Azure Speech Service provides enterprise-grade speech-to-text through Microsoft's cloud platform. The service uses FastTransformer-based models trained on massive multilingual datasets. Features include custom speech models trained on domain data, real-time and batch transcription, conversation transcription with speaker diarization, and pronunciation assessment. The custom neural voice feature enables domain adaptation with as little as 30 minutes of training data.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class AzureSpeechSTT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AzureSpeechSTTOptions _options; public override ModelOptions GetOptions() => _options;

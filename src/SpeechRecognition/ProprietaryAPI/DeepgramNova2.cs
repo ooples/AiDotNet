@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,11 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// Deepgram Nova-2 is an ASR model optimized for speed and accuracy in production deployments. The model achieves sub-300ms latency for streaming transcription while maintaining competitive accuracy. Nova-2 uses a proprietary end-to-end architecture trained on diverse audio data. Key features include smart formatting (dates, currency, phone numbers), topic detection, sentiment analysis, entity detection, and language detection across 36+ languages. Deepgram's API is designed for high-throughput production use cases.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class DeepgramNova2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly DeepgramNova2Options _options; public override ModelOptions GetOptions() => _options;

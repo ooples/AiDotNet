@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,11 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// AssemblyAI Universal-2 is a state-of-the-art ASR model that achieves best-in-class accuracy across multiple benchmarks. The model is trained on 12.5M hours of multilingual audio data. It supports automatic language detection, code-switching, and proper noun boosting. The API provides comprehensive audio intelligence features including speaker diarization, sentiment analysis, content moderation, PII redaction, chapter detection, and entity recognition. Universal-2 uses a proprietary Conformer-based architecture with language model rescoring.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class AssemblyAIUniversal2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AssemblyAIUniversal2Options _options; public override ModelOptions GetOptions() => _options;

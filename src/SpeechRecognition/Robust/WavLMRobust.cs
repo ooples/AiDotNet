@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,13 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// WavLM-Robust is a specialized ASR model leveraging WavLM's unique denoising pre-training for robust speech recognition. During pre-training, overlapping utterances from different speakers are used as input, and the model learns to denoise and separate while predicting masked tokens. This produces representations inherently robust to noise, reverberation, and overlapping speech. Fine-tuned with CTC for ASR, WavLM-Robust achieves strong performance on noisy benchmarks like CHiME-4 and VoiceBank-DEMAND.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing", "https://arxiv.org/abs/2110.13900", Year = 2022, Authors = "Chen et al.")]
 public class WavLMRobust<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly WavLMRobustOptions _options; public override ModelOptions GetOptions() => _options;

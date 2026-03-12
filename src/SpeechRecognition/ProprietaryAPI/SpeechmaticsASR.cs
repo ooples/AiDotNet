@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,11 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// Speechmatics provides real-time multilingual ASR optimized for accuracy across diverse audio conditions. The platform uses a proprietary Conformer-based architecture trained on diverse multilingual data. Key features include Global English (a single model for all English accents), real-time and batch processing, custom dictionary for domain terms, and translation. Speechmatics supports 50+ languages with automatic language identification and handles challenging audio conditions including telephony, broadcast, and meetings.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SpeechmaticsASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SpeechmaticsASROptions _options; public override ModelOptions GetOptions() => _options;
