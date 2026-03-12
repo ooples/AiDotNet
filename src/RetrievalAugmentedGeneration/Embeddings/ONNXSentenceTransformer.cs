@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -14,6 +15,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     /// Production-ready sentence transformer for generating semantic embeddings using ONNX Runtime.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.Transformer)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
     public class ONNXSentenceTransformer<T> : EmbeddingModelBase<T>
     {
         private readonly string _modelPath;

@@ -1,6 +1,7 @@
 
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -22,6 +23,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - This ensures all retrievers work consistently
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class RetrieverBase<T> : IRetriever<T>
 {
     private readonly int _defaultTopK;

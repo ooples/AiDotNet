@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
@@ -23,6 +24,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// This helps match documents that use different forms of the same word!
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class LemmatizationQueryProcessor : QueryProcessorBase
 {
     /// <summary>

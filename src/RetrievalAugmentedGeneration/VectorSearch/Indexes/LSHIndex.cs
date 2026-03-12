@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -21,6 +22,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// <typeparam name="T">The numeric type for vector operations. Must be a numeric type
     /// that implements IConvertible (e.g., float, double, decimal). Using non-numeric types
     /// will result in InvalidCastException at runtime.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
     public class LSHIndex<T> : IVectorIndex<T>
     {
         private readonly Dictionary<string, Vector<T>> _vectors;

@@ -6,6 +6,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -94,6 +95,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// - Slower than direct retrieval
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Chain-of-Thought Prompting Elicits Reasoning in Large Language Models", "https://arxiv.org/abs/2201.11903", Year = 2022, Authors = "Wei et al.")]
 public class ChainOfThoughtRetriever<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

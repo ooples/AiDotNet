@@ -8,6 +8,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -82,6 +83,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// - Limited to max iterations (prevents infinite loops)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class SelfCorrectingRetriever<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

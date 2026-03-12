@@ -8,6 +8,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -99,6 +100,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// - Current implementation uses simple keyword matching (needs improvement with real LLM logprobs)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Active Retrieval Augmented Generation", "https://arxiv.org/abs/2305.06983", Year = 2023, Authors = "Jiang et al.")]
 public class FLARERetriever<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

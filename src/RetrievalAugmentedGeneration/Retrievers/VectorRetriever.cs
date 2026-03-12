@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -33,6 +34,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class VectorRetriever<T> : RetrieverBase<T>
 {
     private readonly IDocumentStore<T> _documentStore;

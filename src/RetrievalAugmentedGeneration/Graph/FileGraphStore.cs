@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -52,6 +53,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// - Distributed systems (use Neo4j or similar instead)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 {
     private readonly string _storageDirectory;

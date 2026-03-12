@@ -1,5 +1,6 @@
 using System.Linq;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 
@@ -44,6 +45,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// - Helps tune retrieval parameters (topK, similarity threshold)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class ContextCoverageMetric<T> : RAGMetricBase<T>
 {
     /// <summary>

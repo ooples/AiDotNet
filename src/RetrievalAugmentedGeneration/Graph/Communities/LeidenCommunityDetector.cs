@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 
@@ -28,6 +29,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 /// - Coarsest level: Grade levels or departments
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("From Louvain to Leiden: guaranteeing well-connected communities", "https://arxiv.org/abs/1810.08473", Year = 2019, Authors = "Traag et al.")]
 public class LeidenCommunityDetector<T>
 {
     /// <summary>

@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 
@@ -10,6 +11,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// Voyage AI-compatible embedding model using ONNX for high-performance local inference.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private const int DefaultMaxTokens = 16000;

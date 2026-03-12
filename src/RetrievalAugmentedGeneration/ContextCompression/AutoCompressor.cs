@@ -1,5 +1,6 @@
 using System.Text;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 
@@ -12,6 +13,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 /// and position in the document. This is a production implementation that doesn't require
 /// external ML models.
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class AutoCompressor<T> : ContextCompressorBase<T>
 {
     private readonly int _maxOutputLength;

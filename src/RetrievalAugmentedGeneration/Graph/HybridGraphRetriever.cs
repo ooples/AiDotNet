@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -40,6 +41,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// - Graph connections provide context vectors can't capture!
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class HybridGraphRetriever<T>
 {
     private readonly KnowledgeGraph<T> _graph;

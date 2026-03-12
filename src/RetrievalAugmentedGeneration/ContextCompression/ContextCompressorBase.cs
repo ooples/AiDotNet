@@ -1,6 +1,7 @@
 
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 
@@ -22,6 +23,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 /// - This ensures all compressors work consistently
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class ContextCompressorBase<T> : IContextCompressor<T>
 {
     /// <summary>

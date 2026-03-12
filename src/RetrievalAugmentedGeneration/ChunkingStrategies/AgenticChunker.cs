@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 
@@ -52,6 +53,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// - Maintains semantic coherence
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class AgenticChunker : ChunkingStrategyBase
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

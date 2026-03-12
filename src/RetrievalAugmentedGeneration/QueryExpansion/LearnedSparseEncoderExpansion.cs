@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 
@@ -59,6 +60,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 /// - When pure semantic search works well enough (dense retrieval)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class LearnedSparseEncoderExpansion : QueryExpansionBase
 {
     private readonly string _modelPath;

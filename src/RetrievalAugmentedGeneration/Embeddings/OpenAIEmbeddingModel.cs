@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -13,6 +14,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     /// OpenAI embedding model for generating embeddings via OpenAI API.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.Transformer)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
     public class OpenAIEmbeddingModel<T> : EmbeddingModelBase<T>
     {
         private readonly string _apiKey;

@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 
@@ -38,6 +39,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// Chunk 2: "Third sentence. Fourth sentence." (overlap: "Third sentence")
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public class SentenceChunkingStrategy : ChunkingStrategyBase
 {
     private readonly int _targetChunkSize;

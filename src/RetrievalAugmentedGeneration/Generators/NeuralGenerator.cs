@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 
@@ -56,6 +57,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// models instead of training your own LSTM.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class NeuralGenerator<T> : IGenerator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -23,6 +24,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// Time is grouped into bins (e.g., one per year). Each bin has its own learned vector.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
 {
     /// <inheritdoc />

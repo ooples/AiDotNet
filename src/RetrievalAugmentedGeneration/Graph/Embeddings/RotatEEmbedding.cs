@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -23,6 +24,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// - Composition: "grandparent_of" = "parent_of" + "parent_of" (rotations compose)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("RotatE: Knowledge Graph Embedding by Relational Rotation in Complex Space", "https://arxiv.org/abs/1902.10197", Year = 2019, Authors = "Sun et al.")]
 public class RotatEEmbedding<T> : KGEmbeddingBase<T>
 {
     /// <inheritdoc />

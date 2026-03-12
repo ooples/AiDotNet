@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +16,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
     /// HuggingFace-based embedding model for generating embeddings via Inference API.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.Transformer)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
     public class HuggingFaceEmbeddingModel<T> : EmbeddingModelBase<T>
     {
         private readonly string _modelName;

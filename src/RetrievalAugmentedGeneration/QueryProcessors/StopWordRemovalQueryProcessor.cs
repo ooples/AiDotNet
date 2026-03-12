@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
@@ -24,6 +25,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// Words like "what", "are", "the", "of" are removed because they don't help find specific documents.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public class StopWordRemovalQueryProcessor : QueryProcessorBase
 {
     /// <summary>

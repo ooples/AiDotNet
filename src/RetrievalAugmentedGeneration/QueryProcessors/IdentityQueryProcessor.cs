@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
 /// <summary>
@@ -24,6 +25,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// exactly what you gave it, no changes at all.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public class IdentityQueryProcessor : QueryProcessorBase
 {
     /// <summary>

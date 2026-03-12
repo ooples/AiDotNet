@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -63,6 +64,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - Documents with uniform content (no benefit from multiple vectors)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class MultiVectorRetriever<T> : RetrieverBase<T>
 {
     private readonly int _vectorsPerDocument;

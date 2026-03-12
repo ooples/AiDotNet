@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -40,6 +41,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// - You need transparent, verifiable reasoning chains
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class VerifiedReasoningRetriever<T> : RetrieverBase<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

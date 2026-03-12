@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -37,6 +38,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// 4. Repeat refinement for N iterations
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("From Local to Global: A Graph RAG Approach to Query-Focused Summarization", "https://arxiv.org/abs/2404.16130", Year = 2024, Authors = "Edge et al.")]
 public class EnhancedGraphRAG<T>
 {
     // Context items per topK result: each entity generates ~3 lines (entity + outgoing + incoming edges)

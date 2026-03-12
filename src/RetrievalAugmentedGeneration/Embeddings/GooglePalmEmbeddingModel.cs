@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,6 +22,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// Provides access to Google's PaLM (Pathways Language Model) and Gemini embedding capabilities
 /// through the Google Cloud Vertex AI platform.
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly string _projectId;

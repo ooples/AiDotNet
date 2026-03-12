@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics
 {
@@ -6,6 +7,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics
     /// Dot product metric for vector search.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelComplexity(ModelComplexity.Low)]
     public class DotProductMetric<T> : ISimilarityMetric<T>
     {
         /// <inheritdoc/>

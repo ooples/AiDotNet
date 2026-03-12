@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics
 {
@@ -7,6 +8,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics
     /// Cosine similarity metric for vector search.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelComplexity(ModelComplexity.Low)]
     public class CosineSimilarityMetric<T> : ISimilarityMetric<T>
     {
         /// <inheritdoc/>

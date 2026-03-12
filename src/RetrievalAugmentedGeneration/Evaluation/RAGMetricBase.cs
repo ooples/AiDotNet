@@ -1,6 +1,7 @@
 
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 
@@ -24,6 +25,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// their specific scoring logic.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class RAGMetricBase<T> : IRAGMetric<T>
 {
     /// <summary>
