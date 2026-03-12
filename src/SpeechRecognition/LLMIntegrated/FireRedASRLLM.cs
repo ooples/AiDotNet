@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,13 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// FireRedASR-LLM extends the base system with Qwen2-7B as the decoder, using the speech encoder's output as prefix tokens for the LLM. This enables the model to leverage the LLM's extensive language knowledge for improved accuracy on complex utterances. The adapter module aligns speech encoder dimensions with the LLM's embedding space. This approach achieves significant WER reductions on hard test sets with proper nouns, code-switching, and domain-specific terminology.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition", "https://arxiv.org/abs/2501.07755", Year = 2025, Authors = "FireRed Team")]
 public class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly FireRedASRLLMOptions _options; public override ModelOptions GetOptions() => _options;

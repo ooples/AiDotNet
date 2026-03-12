@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,13 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// Granite Speech integrates speech understanding into IBM's Granite enterprise LLM family. A pre-trained speech encoder (based on Conformer) is paired with a lightweight adapter that maps speech representations to the Granite LLM's input space. The model supports multi-turn spoken dialogue, speech translation, and domain-specific ASR with enterprise-grade accuracy. Fine-tuning on domain data enables specialized performance for business applications.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Granite Speech: Integrating Speech Capabilities into Enterprise LLMs", "https://arxiv.org/abs/2502.01700", Year = 2025, Authors = "IBM Research")]
 public class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly GraniteSpeechOptions _options; public override ModelOptions GetOptions() => _options;
