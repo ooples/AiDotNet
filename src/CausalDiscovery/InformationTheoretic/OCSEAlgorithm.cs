@@ -70,7 +70,10 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
         int d = data.Columns;
         int effectiveN = n - 1; // We need transitions
 
-        if (effectiveN < d + 3 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"oCSE requires at least 2 variables, got {d}.");
+        if (effectiveN < d + 3)
+            throw new ArgumentException($"oCSE requires at least {d + 3 + 1} time points for {d} variables, got {n}.");
 
         // Compute transitions: delta_Y[t] = Y[t+1] - Y[t]
         var transitions = new Matrix<T>(effectiveN, d);

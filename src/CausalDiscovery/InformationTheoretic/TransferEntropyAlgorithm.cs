@@ -62,6 +62,10 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         ApplyInfoOptions(options);
         _maxLag = options?.MaxIterations ?? 2;
         _threshold = options?.EdgeThreshold ?? 0.05;
+        if (_maxLag < 1)
+            throw new ArgumentException("MaxIterations (lag) must be at least 1.");
+        if (double.IsNaN(_threshold) || double.IsInfinity(_threshold) || _threshold < 0)
+            throw new ArgumentException("EdgeThreshold must be non-negative and finite.");
     }
 
     /// <inheritdoc/>
@@ -71,7 +75,10 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         int d = data.Columns;
         int effectiveN = n - _maxLag;
 
-        if (effectiveN < 2 * _maxLag + 3 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"TransferEntropy requires at least 2 variables, got {d}.");
+        if (effectiveN < 2 * _maxLag + 3)
+            throw new ArgumentException($"TransferEntropy requires at least {2 * _maxLag + 3 + _maxLag} samples for lag={_maxLag}, got {n}.");
 
         var result = new Matrix<T>(d, d);
 

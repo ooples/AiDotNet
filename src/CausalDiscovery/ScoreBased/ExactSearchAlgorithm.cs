@@ -171,14 +171,18 @@ public class ExactSearchAlgorithm<T> : ScoreBasedBase<T>
             remaining = predecessors;
         }
 
-        // Build adjacency matrix with OLS-estimated edge weights
+        // Build adjacency matrix with multivariate OLS-estimated edge weights
+        // Each child is regressed against ALL of its selected parents jointly
         var W = new Matrix<T>(d, d);
         for (int v = 0; v < d; v++)
         {
-            foreach (int parent in optimalParents[v])
+            var parents = optimalParents[v].ToList();
+            if (parents.Count == 0) continue;
+
+            var coefficients = EstimateMultivariateOLS(data, n, parents, v);
+            for (int p = 0; p < parents.Count; p++)
             {
-                double weight = EstimateEdgeWeight(data, n, parent, v);
-                W[parent, v] = NumOps.FromDouble(weight);
+                W[parents[p], v] = NumOps.FromDouble(coefficients[p]);
             }
         }
 
@@ -200,27 +204,108 @@ public class ExactSearchAlgorithm<T> : ScoreBasedBase<T>
     }
 
     /// <summary>
-    /// Estimates the OLS regression coefficient for parent→child edge weight.
+    /// Multivariate OLS: regress child on all parents jointly.
+    /// Returns coefficient vector (one per parent).
     /// </summary>
-    private double EstimateEdgeWeight(Matrix<T> data, int n, int parent, int child)
+    private double[] EstimateMultivariateOLS(Matrix<T> data, int n, List<int> parents, int child)
     {
-        double meanP = 0, meanC = 0;
+        int p = parents.Count;
+        if (p == 0) return [];
+
+        // Compute means
+        var means = new double[p + 1];
         for (int i = 0; i < n; i++)
         {
-            meanP += NumOps.ToDouble(data[i, parent]);
-            meanC += NumOps.ToDouble(data[i, child]);
+            for (int k = 0; k < p; k++)
+                means[k] += NumOps.ToDouble(data[i, parents[k]]);
+            means[p] += NumOps.ToDouble(data[i, child]);
         }
-        meanP /= n;
-        meanC /= n;
+        for (int k = 0; k <= p; k++)
+            means[k] /= n;
 
-        double cov = 0, varP = 0;
+        // Build X'X and X'y (normal equations)
+        var XtX = new double[p, p];
+        var Xty = new double[p];
+
         for (int i = 0; i < n; i++)
         {
-            double dp = NumOps.ToDouble(data[i, parent]) - meanP;
-            cov += dp * (NumOps.ToDouble(data[i, child]) - meanC);
-            varP += dp * dp;
+            var dx = new double[p];
+            for (int k = 0; k < p; k++)
+                dx[k] = NumOps.ToDouble(data[i, parents[k]]) - means[k];
+            double dy = NumOps.ToDouble(data[i, child]) - means[p];
+
+            for (int a = 0; a < p; a++)
+            {
+                Xty[a] += dx[a] * dy;
+                for (int b = a; b < p; b++)
+                {
+                    XtX[a, b] += dx[a] * dx[b];
+                }
+            }
         }
 
-        return varP > 1e-10 ? cov / varP : 0;
+        // Symmetrize and add ridge
+        for (int a = 0; a < p; a++)
+        {
+            XtX[a, a] += 1e-10;
+            for (int b = a + 1; b < p; b++)
+                XtX[b, a] = XtX[a, b];
+        }
+
+        // Solve via Cholesky-like approach (small p, so direct Gaussian elimination)
+        var coeffs = SolveSmallSystem(XtX, Xty, p);
+        return coeffs;
+    }
+
+    /// <summary>
+    /// Solves a small linear system Ax=b via Gaussian elimination with partial pivoting.
+    /// </summary>
+    private static double[] SolveSmallSystem(double[,] A, double[] b, int p)
+    {
+        // Augmented matrix
+        var aug = new double[p, p + 1];
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = 0; j < p; j++)
+                aug[i, j] = A[i, j];
+            aug[i, p] = b[i];
+        }
+
+        // Forward elimination with partial pivoting
+        for (int col = 0; col < p; col++)
+        {
+            int maxRow = col;
+            for (int row = col + 1; row < p; row++)
+                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
+                    maxRow = row;
+
+            if (maxRow != col)
+                for (int j = col; j <= p; j++)
+                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
+
+            double pivot = aug[col, col];
+            if (Math.Abs(pivot) < 1e-15)
+                continue;
+
+            for (int row = col + 1; row < p; row++)
+            {
+                double factor = aug[row, col] / pivot;
+                for (int j = col; j <= p; j++)
+                    aug[row, j] -= factor * aug[col, j];
+            }
+        }
+
+        // Back substitution
+        var x = new double[p];
+        for (int row = p - 1; row >= 0; row--)
+        {
+            double sum = aug[row, p];
+            for (int j = row + 1; j < p; j++)
+                sum -= aug[row, j] * x[j];
+            double diag = aug[row, row];
+            x[row] = Math.Abs(diag) > 1e-15 ? sum / diag : 0;
+        }
+
+        return x;
     }
 }

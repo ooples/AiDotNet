@@ -58,6 +58,10 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
     {
         ApplyInfoOptions(options);
         _threshold = options?.EdgeThreshold ?? 0.1;
+        if (double.IsNaN(_threshold) || _threshold < 0)
+            throw new ArgumentException("EdgeThreshold must be non-negative and finite.");
+        if (KNeighbors < 1)
+            throw new ArgumentException("KNeighbors must be at least 1.");
     }
 
     /// <inheritdoc/>
@@ -67,11 +71,18 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
         int d = data.Columns;
         int k = Math.Min(KNeighbors, n - 1);
 
-        if (n < k + 2 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"KraskovMI requires at least 2 variables, got {d}.");
+        if (k < 1)
+            throw new ArgumentException($"KraskovMI requires at least {KNeighbors + 2} samples for k={KNeighbors}, got {n}.");
+        if (n < k + 2)
+            throw new ArgumentException($"KraskovMI requires at least {k + 2} samples for k={k}, got {n}.");
 
         var result = new Matrix<T>(d, d);
 
         // Compute KSG mutual information for each pair
+        // KSG is an undirected MI estimator — emit undirected adjacency (both directions)
+        // and leave orientation to a dedicated algorithm (e.g., PC, FCI)
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
@@ -80,21 +91,10 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
 
                 if (mi > _threshold)
                 {
-                    // Assign direction via asymmetry: compare conditional MI
-                    // MI(i→j) vs MI(j→i) using residual-based direction test
-                    double dirScore = ComputeDirectionScore(data, i, j, n);
-
                     T miVal = NumOps.FromDouble(mi);
-                    if (dirScore > 0)
-                        result[i, j] = miVal;
-                    else if (dirScore < 0)
-                        result[j, i] = miVal;
-                    else
-                    {
-                        // Undetermined: place in both
-                        result[i, j] = miVal;
-                        result[j, i] = miVal;
-                    }
+                    // Undirected: MI is symmetric, place in both directions
+                    result[i, j] = miVal;
+                    result[j, i] = miVal;
                 }
             }
         }
@@ -130,7 +130,26 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
             // Find k-th nearest neighbor distance
             double epsilon = FindKthSmallest(jointDists, n, k);
 
-            // Count marginal neighbors within epsilon
+            // Handle zero-distance ties: when duplicate samples collapse epsilon to 0,
+            // strict < epsilon would leave nx/ny at 0, producing spurious MI.
+            // Use <= for ties and ensure at least k neighbors are counted.
+            if (epsilon < 1e-15)
+            {
+                // Degenerate case: k-th neighbor is at distance ~0
+                // Count exact duplicates in each marginal
+                int nx0 = 0, ny0 = 0;
+                for (int j = 0; j < n; j++)
+                {
+                    if (j == i) continue;
+                    if (Math.Abs(x[j] - x[i]) < 1e-15) nx0++;
+                    if (Math.Abs(y[j] - y[i]) < 1e-15) ny0++;
+                }
+                sumPsiNx += Digamma(Math.Max(nx0, 1) + 1);
+                sumPsiNy += Digamma(Math.Max(ny0, 1) + 1);
+                continue;
+            }
+
+            // Count marginal neighbors within epsilon (strict inequality per KSG)
             int nx = 0, ny = 0;
             for (int j = 0; j < n; j++)
             {
@@ -146,62 +165,6 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
         // MI = psi(k) - <psi(nx+1) + psi(ny+1)> / N + psi(N)
         double mi = Digamma(k) - (sumPsiNx + sumPsiNy) / n + Digamma(n);
         return Math.Max(mi, 0); // MI is non-negative
-    }
-
-    private double ComputeDirectionScore(Matrix<T> data, int i, int j, int n)
-    {
-        // Direction via entropy-based asymmetry:
-        // If i→j, then H(Y|X) < H(X|Y) approximately
-        // Use residual variance ratio as proxy
-
-        // Compute variance-based conditional entropy proxy
-        var xVec = new Vector<T>(n);
-        var yVec = new Vector<T>(n);
-        for (int t = 0; t < n; t++)
-        {
-            xVec[t] = data[t, i];
-            yVec[t] = data[t, j];
-        }
-
-        // Compute means
-        T nT = NumOps.FromDouble(n);
-        T sumX = NumOps.Zero, sumY = NumOps.Zero;
-        for (int t = 0; t < n; t++)
-        {
-            sumX = NumOps.Add(sumX, xVec[t]);
-            sumY = NumOps.Add(sumY, yVec[t]);
-        }
-        T meanX = NumOps.Divide(sumX, nT);
-        T meanY = NumOps.Divide(sumY, nT);
-
-        // Center
-        var centX = new Vector<T>(n);
-        var centY = new Vector<T>(n);
-        for (int t = 0; t < n; t++)
-        {
-            centX[t] = NumOps.Subtract(xVec[t], meanX);
-            centY[t] = NumOps.Subtract(yVec[t], meanY);
-        }
-
-        // Regression X→Y: beta = cov(X,Y)/var(X), residual var = var(Y) - beta^2*var(X)
-        T covXY = Engine.DotProduct(centX, centY);
-        T varX = Engine.DotProduct(centX, centX);
-        T varY = Engine.DotProduct(centY, centY);
-
-        double dVarX = Math.Max(NumOps.ToDouble(varX), 1e-15);
-        double dVarY = Math.Max(NumOps.ToDouble(varY), 1e-15);
-        double dCovXY = NumOps.ToDouble(covXY);
-
-        // Residual variance for X→Y direction
-        double betaXY = dCovXY / dVarX;
-        double resVarXY = dVarY - betaXY * betaXY * dVarX;
-
-        // Residual variance for Y→X direction
-        double betaYX = dCovXY / dVarY;
-        double resVarYX = dVarX - betaYX * betaYX * dVarY;
-
-        // Lower residual variance = better fit = more likely causal direction
-        return Math.Log(Math.Max(resVarYX, 1e-15)) - Math.Log(Math.Max(resVarXY, 1e-15));
     }
 
     private static double FindKthSmallest(double[] arr, int n, int k)

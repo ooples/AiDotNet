@@ -51,7 +51,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 public class RCDAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold;
-    private readonly double _independenceThreshold;
+    private readonly double _independenceCutoff;
 
     /// <inheritdoc/>
     public override string Name => "RCD";
@@ -68,7 +68,8 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     public RCDAlgorithm(CausalDiscoveryOptions? options = null)
     {
         _threshold = options?.EdgeThreshold ?? 0.1;
-        _independenceThreshold = options?.SignificanceLevel ?? 0.05;
+        // Dedicated independence cutoff for MI-based test (not reusing p-value option)
+        _independenceCutoff = options?.EdgeThreshold ?? 0.1;
     }
 
     /// <inheritdoc/>
@@ -77,7 +78,10 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
         int n = data.Rows;
         int d = data.Columns;
 
-        if (n < 3 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"RCD requires at least 2 variables, got {d}.");
+        if (n < d + 3)
+            throw new ArgumentException($"RCD requires at least {d + 3} samples for {d} variables, got {n}.");
 
         var standardized = StandardizeData(data);
 
@@ -106,7 +110,7 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
                 foreach (int other in remaining)
                 {
                     if (other == candidate) continue;
-                    totalMI += ComputeMutualInformationFromResiduals(residualData, n, candidate, other);
+                    totalMI += ComputeEntropyBasedMI(residualData, n, candidate, other);
                 }
 
                 // Normalize by number of comparisons
@@ -120,10 +124,15 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
                 }
             }
 
-            // Check if the best variable is sufficiently independent
-            if (bestVar < 0 || bestScore > _independenceThreshold * 10)
+            // Check if the best variable is sufficiently independent using MI cutoff directly
+            if (bestVar < 0 || bestScore > _independenceCutoff)
             {
-                // Remaining variables are likely confounded — stop
+                // Remaining variables are likely confounded — mark as confounded and stop.
+                // Per RCD: confounded variables cannot be cleanly ordered, so we do NOT
+                // assign edges among them. The zero entries in W for these variables
+                // indicate "unidentified due to latent confounding", which is the correct
+                // RCD behavior. Callers can check: if W[i,j]==0 AND W[j,i]==0 for
+                // remaining variables, those relationships are confounded.
                 break;
             }
 
@@ -155,38 +164,58 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     }
 
     /// <summary>
-    /// Computes an estimate of mutual information between two columns using
-    /// a kernel density-based approach suitable for non-Gaussian data.
+    /// Computes mutual information between two columns using entropy-based estimation.
+    /// Uses differential entropy via histogram binning: MI = H(X) + H(Y) - H(X,Y).
     /// </summary>
-    private double ComputeMutualInformationFromResiduals(double[,] data, int n, int col1, int col2)
+    private static double ComputeEntropyBasedMI(double[,] data, int n, int col1, int col2)
     {
-        // Use kurtosis-based independence proxy (faster than full MI estimation)
-        // For non-Gaussian data, correlation of absolute values indicates dependence
-        double mean1 = 0, mean2 = 0;
+        if (n < 4) return 0;
+
+        // Number of bins via Sturges' rule
+        int numBins = Math.Max(3, (int)Math.Ceiling(Math.Log2(n) + 1));
+
+        // Find ranges for each variable
+        double min1 = double.MaxValue, max1 = double.MinValue;
+        double min2 = double.MaxValue, max2 = double.MinValue;
         for (int i = 0; i < n; i++)
         {
-            mean1 += Math.Abs(data[i, col1]);
-            mean2 += Math.Abs(data[i, col2]);
+            double v1 = data[i, col1], v2 = data[i, col2];
+            if (v1 < min1) min1 = v1; if (v1 > max1) max1 = v1;
+            if (v2 < min2) min2 = v2; if (v2 > max2) max2 = v2;
         }
-        mean1 /= n;
-        mean2 /= n;
 
-        double cov = 0, var1 = 0, var2 = 0;
+        double range1 = max1 - min1, range2 = max2 - min2;
+        if (range1 < 1e-15 || range2 < 1e-15) return 0;
+
+        // Build joint and marginal histograms
+        var joint = new int[numBins, numBins];
+        var marginal1 = new int[numBins];
+        var marginal2 = new int[numBins];
+
         for (int i = 0; i < n; i++)
         {
-            double d1 = Math.Abs(data[i, col1]) - mean1;
-            double d2 = Math.Abs(data[i, col2]) - mean2;
-            cov += d1 * d2;
-            var1 += d1 * d1;
-            var2 += d2 * d2;
+            int b1 = Math.Min((int)((data[i, col1] - min1) / range1 * numBins), numBins - 1);
+            int b2 = Math.Min((int)((data[i, col2] - min2) / range2 * numBins), numBins - 1);
+            joint[b1, b2]++;
+            marginal1[b1]++;
+            marginal2[b2]++;
         }
 
-        if (var1 < 1e-10 || var2 < 1e-10) return 0;
-        double r = Math.Abs(cov / Math.Sqrt(var1 * var2));
+        // MI = sum p(x,y) * log(p(x,y) / (p(x)*p(y)))
+        double mi = 0;
+        double logN = Math.Log(n);
+        for (int b1 = 0; b1 < numBins; b1++)
+        {
+            if (marginal1[b1] == 0) continue;
+            for (int b2 = 0; b2 < numBins; b2++)
+            {
+                if (joint[b1, b2] == 0 || marginal2[b2] == 0) continue;
+                mi += (double)joint[b1, b2] / n *
+                      (Math.Log(joint[b1, b2]) - Math.Log(marginal1[b1]) - Math.Log(marginal2[b2]) + logN);
+            }
+        }
 
-        // Convert absolute correlation to MI estimate: MI ≈ -0.5 * log(1 - r^2)
-        double rSq = Math.Min(r * r, 0.999);
-        return -0.5 * Math.Log(1 - rSq);
+        return Math.Max(mi, 0);
     }
 
     /// <summary>
