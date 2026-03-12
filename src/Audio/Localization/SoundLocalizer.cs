@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -38,6 +40,13 @@ namespace AiDotNet.Audio.Localization;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.SignalProcessing)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("The Generalized Correlation Method for Estimation of Time Delay", "https://doi.org/10.1109/TASSP.1976.1162830", Year = 1976, Authors = "Charles Knapp, G. Clifford Carter")]
 public class SoundLocalizer<T> : IDisposable
 {
     private readonly INumericOperations<T> _numOps;

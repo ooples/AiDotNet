@@ -34,6 +34,14 @@ namespace AiDotNet.Audio.Generation;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(string), typeof(Tensor<>))]
+[ModelPaper("ACE-Step: A Step Towards Music Generation Foundation Model", "https://doi.org/10.48550/arXiv.2501.09263", Year = 2024, Authors = "Yushen Chen, Liwei Deng, Ziyang Ma, Kehan Chen, Yongqi Wang, Jianwei Yu, Dong Yu")]
 public class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     #region Fields

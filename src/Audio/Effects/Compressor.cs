@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Audio.Effects;
 
 /// <summary>
@@ -36,6 +39,12 @@ namespace AiDotNet.Audio.Effects;
 /// - Podcasts: Keep voice at consistent level
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Digital Audio Signal Processing", "https://doi.org/10.1002/9780470680018", Year = 2008, Authors = "Udo Zölzer")]
 public class Compressor<T> : AudioEffectBase<T>
 {
     #region Configuration

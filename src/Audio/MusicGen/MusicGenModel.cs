@@ -56,6 +56,14 @@ namespace AiDotNet.Audio.MusicGen;
 /// Reference: "Simple and Controllable Music Generation" by Copet et al., Meta AI, 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(string), typeof(Tensor<>))]
+[ModelPaper("Simple and Controllable Music Generation", "https://doi.org/10.48550/arXiv.2306.05284", Year = 2023, Authors = "Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez")]
 public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     #region Fields

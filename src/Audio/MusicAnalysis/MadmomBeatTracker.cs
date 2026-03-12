@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -33,6 +35,14 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.SignalProcessing)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Joint Beat and Downbeat Tracking with Recurrent Neural Networks", "https://doi.org/10.5281/zenodo.1160264", Year = 2016, Authors = "Sebastian Böck, Florian Krebs, Gerhard Widmer")]
 public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
 {
     #region Fields
