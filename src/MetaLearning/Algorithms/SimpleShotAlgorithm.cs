@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -6,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -73,6 +76,16 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// SimpleShot: Revisiting Nearest-Neighbor Classification for Few-Shot Learning.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SimpleShot: Revisiting Nearest-Neighbor Classification for Few-Shot Learning",
+    "https://arxiv.org/abs/1911.04623",
+    Year = 2019,
+    Authors = "Yan Wang, Wei-Lun Chao, Kilian Q. Weinberger, Laurens van der Maaten")]
 public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly SimpleShotOptions<T, TInput, TOutput> _simpleShotOptions;
