@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -40,6 +42,17 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 /// "Deep Autoencoding Gaussian Mixture Model for Unsupervised Anomaly Detection." ICLR.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Autoencoder)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Deep Autoencoding Gaussian Mixture Model for Unsupervised Anomaly Detection",
+    "https://openreview.net/forum?id=BJJLHbb0-",
+    Year = 2018,
+    Authors = "Bo Zong, Qi Song, Martin Renqiang Min, Wei Cheng, Cristian Lumezanu, Daeki Cho, Haifeng Chen")]
 public class DAGMMDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _latentDim;
@@ -480,20 +493,72 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
 
                     if (phi != null && mu != null && sigma != null)
                     {
-                        // Compute log-likelihood for each component
+                        // Compute log-likelihood for each component using full covariance
                         for (int k = 0; k < _numMixtures; k++)
                         {
-                            double logDet = 0;
-                            double mahal = 0;
+                            // Attempt Cholesky for this component
+                            var Lk = new double[_zDim][];
+                            for (int ii = 0; ii < _zDim; ii++)
+                                Lk[ii] = new double[_zDim];
 
-                            for (int d = 0; d < _zDim; d++)
+                            bool cholOk = true;
+                            for (int ii = 0; ii < _zDim; ii++)
                             {
-                                logDet += Math.Log(sigma[k][d][d] + 1e-10);
-                                double diff = zcDouble[d] - mu[k][d];
-                                mahal += diff * diff / (sigma[k][d][d] + 1e-10);
+                                for (int jj = 0; jj <= ii; jj++)
+                                {
+                                    double s = sigma[k][ii][jj];
+                                    for (int mm = 0; mm < jj; mm++)
+                                        s -= Lk[ii][mm] * Lk[jj][mm];
+                                    if (ii == jj)
+                                    {
+                                        if (s <= 0) { cholOk = false; break; }
+                                        Lk[ii][jj] = Math.Sqrt(s);
+                                    }
+                                    else
+                                    {
+                                        Lk[ii][jj] = s / Lk[jj][jj];
+                                    }
+                                }
+                                if (!cholOk) break;
                             }
 
-                            // log N(z|mu_k, sigma_k) + log phi_k
+                            double logDet;
+                            double mahal;
+
+                            if (cholOk)
+                            {
+                                // Log det from Cholesky
+                                logDet = 0;
+                                for (int ii = 0; ii < _zDim; ii++)
+                                    logDet += Math.Log(Lk[ii][ii]);
+                                logDet *= 2;
+
+                                // Forward substitution for Mahalanobis
+                                var yy = new double[_zDim];
+                                for (int ii = 0; ii < _zDim; ii++)
+                                {
+                                    double s = zcDouble[ii] - mu[k][ii];
+                                    for (int jj = 0; jj < ii; jj++)
+                                        s -= Lk[ii][jj] * yy[jj];
+                                    yy[ii] = s / Lk[ii][ii];
+                                }
+                                mahal = 0;
+                                for (int ii = 0; ii < _zDim; ii++)
+                                    mahal += yy[ii] * yy[ii];
+                            }
+                            else
+                            {
+                                // Diagonal fallback
+                                logDet = 0;
+                                mahal = 0;
+                                for (int d = 0; d < _zDim; d++)
+                                {
+                                    logDet += Math.Log(sigma[k][d][d] + 1e-10);
+                                    double diff = zcDouble[d] - mu[k][d];
+                                    mahal += diff * diff / (sigma[k][d][d] + 1e-10);
+                                }
+                            }
+
                             componentLogLikelihood[k] = -0.5 * (_zDim * Math.Log(2 * Math.PI) + logDet + mahal)
                                                        + Math.Log(phi[k] + 1e-10);
                             if (componentLogLikelihood[k] > maxLogLik)
@@ -990,7 +1055,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
             }
         }
 
-        // Update sigma (covariances) - diagonal only for simplicity
+        // Update sigma (full covariance)
         for (int k = 0; k < _numMixtures; k++)
         {
             double sumGamma = 0;
@@ -999,15 +1064,21 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                 sumGamma += allGamma[i][k];
             }
 
-            for (int j = 0; j < _zDim; j++)
+            for (int j1 = 0; j1 < _zDim; j1++)
             {
-                double sumWeighted = 0;
-                for (int i = 0; i < n; i++)
+                for (int j2 = 0; j2 < _zDim; j2++)
                 {
-                    double diff = allZ[i][j] - mu[k][j];
-                    sumWeighted += allGamma[i][k] * diff * diff;
+                    double sumWeighted = 0;
+                    for (int i = 0; i < n; i++)
+                    {
+                        double diff1 = allZ[i][j1] - mu[k][j1];
+                        double diff2 = allZ[i][j2] - mu[k][j2];
+                        sumWeighted += allGamma[i][k] * diff1 * diff2;
+                    }
+                    sigma[k][j1][j2] = sumGamma > 0 ? sumWeighted / sumGamma : (j1 == j2 ? 1.0 : 0.0);
                 }
-                sigma[k][j][j] = sumGamma > 0 ? Math.Max(1e-6, sumWeighted / sumGamma) : 1.0;
+                // Add regularization to diagonal for numerical stability
+                sigma[k][j1][j1] = Math.Max(1e-6, sigma[k][j1][j1]);
             }
         }
     }
@@ -1024,22 +1095,96 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("GMM parameters not initialized.");
         }
 
-        // Compute negative log-likelihood under GMM
+        // Compute negative log-likelihood under GMM using full covariance
         double energy = 0;
 
         for (int k = 0; k < _numMixtures; k++)
         {
-            double logDet = 0;
-            double mahal = 0;
-
-            for (int j = 0; j < _zDim; j++)
+            // Compute Cholesky decomposition L such that sigma = L * L^T
+            var L = new double[_zDim][];
+            for (int i = 0; i < _zDim; i++)
             {
-                logDet += Math.Log(sigma[k][j][j]);
-                double diff = NumOps.ToDouble(zc[j]) - mu[k][j];
-                mahal += diff * diff / sigma[k][j][j];
+                L[i] = new double[_zDim];
             }
 
-            double logPdf = -0.5 * (_zDim * Math.Log(2 * Math.PI) + logDet + mahal);
+            bool choleskySuccess = true;
+            for (int i = 0; i < _zDim; i++)
+            {
+                for (int j = 0; j <= i; j++)
+                {
+                    double sum = sigma[k][i][j];
+                    for (int m = 0; m < j; m++)
+                    {
+                        sum -= L[i][m] * L[j][m];
+                    }
+
+                    if (i == j)
+                    {
+                        if (sum <= 0)
+                        {
+                            choleskySuccess = false;
+                            break;
+                        }
+                        L[i][j] = Math.Sqrt(sum);
+                    }
+                    else
+                    {
+                        L[i][j] = sum / L[j][j];
+                    }
+                }
+                if (!choleskySuccess) break;
+            }
+
+            // Fall back to diagonal if Cholesky fails
+            if (!choleskySuccess)
+            {
+                double logDet = 0;
+                double mahal = 0;
+                for (int j = 0; j < _zDim; j++)
+                {
+                    logDet += Math.Log(sigma[k][j][j] + 1e-10);
+                    double diff = NumOps.ToDouble(zc[j]) - mu[k][j];
+                    mahal += diff * diff / (sigma[k][j][j] + 1e-10);
+                }
+                double logPdfFallback = -0.5 * (_zDim * Math.Log(2 * Math.PI) + logDet + mahal);
+                energy += phi[k] * Math.Exp(logPdfFallback);
+                continue;
+            }
+
+            // Log determinant from Cholesky: log|sigma| = 2 * sum(log(L_ii))
+            double logDetChol = 0;
+            for (int i = 0; i < _zDim; i++)
+            {
+                logDetChol += Math.Log(L[i][i]);
+            }
+            logDetChol *= 2;
+
+            // Mahalanobis distance via forward substitution: solve L * y = (z - mu)
+            var diff2 = new double[_zDim];
+            for (int j = 0; j < _zDim; j++)
+            {
+                diff2[j] = NumOps.ToDouble(zc[j]) - mu[k][j];
+            }
+
+            var y = new double[_zDim];
+            for (int i = 0; i < _zDim; i++)
+            {
+                double sum = diff2[i];
+                for (int j = 0; j < i; j++)
+                {
+                    sum -= L[i][j] * y[j];
+                }
+                y[i] = sum / L[i][i];
+            }
+
+            // Mahalanobis = y^T * y
+            double mahalDist = 0;
+            for (int i = 0; i < _zDim; i++)
+            {
+                mahalDist += y[i] * y[i];
+            }
+
+            double logPdf = -0.5 * (_zDim * Math.Log(2 * Math.PI) + logDetChol + mahalDist);
             energy += phi[k] * Math.Exp(logPdf);
         }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -35,6 +36,15 @@ namespace AiDotNet.NeuralNetworks
     /// even if you didn't say them. This helps it find relevant documents that use different words.
     /// </para>
     /// </remarks>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Transformer)]
+    [ModelCategory(ModelCategory.EmbeddingModel)]
+    [ModelTask(ModelTask.Embedding)]
+    [ModelTask(ModelTask.Ranking)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking", "https://arxiv.org/abs/2107.05720", Year = 2021, Authors = "Thibault Formal, Benjamin Piwowarski, Stephane Clinchant")]
     public class SPLADE<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly SPLADEOptions _options;

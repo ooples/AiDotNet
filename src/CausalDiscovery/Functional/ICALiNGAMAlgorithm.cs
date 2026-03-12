@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -39,6 +41,14 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("A Linear Non-Gaussian Acyclic Model for Causal Discovery", "https://jmlr.org/papers/v7/shimizu06a.html", Year = 2006, Authors = "Shohei Shimizu, Patrik O. Hoyer, Aapo Hyvarinen, Antti Kerminen")]
 public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
 {
     /// <inheritdoc/>

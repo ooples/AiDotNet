@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -25,6 +26,16 @@ namespace AiDotNet.Safety.Watermarking;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AudioSeal: Proactive Detection of Voice Cloning with Localized Watermarking",
+    "https://arxiv.org/abs/2401.17264",
+    Year = 2024,
+    Authors = "Robin San Roman, Pierre Fernandez, et al.")]
 public class AudioSealWatermarker<T> : AudioWatermarkerBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

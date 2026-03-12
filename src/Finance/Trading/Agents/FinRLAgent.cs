@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Interfaces;
@@ -15,6 +16,14 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Unified FinRL-style agent that can switch between multiple RL algorithms.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.ReinforcementLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FinRL: Deep Reinforcement Learning Framework to Automate Trading in Quantitative Finance", "https://arxiv.org/abs/2011.09607", Year = 2021, Authors = "Xiao-Yang Liu, Hongyang Yang, Jiechao Gao, Christina Dan Wang")]
 public class FinRLAgent<T> : TradingAgentBase<T>
 {
     #region Fields

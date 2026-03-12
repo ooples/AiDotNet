@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Finance.Base;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -23,6 +24,14 @@ namespace AiDotNet.Finance.Portfolio;
 /// making it robust to noise and stable even when assets are highly correlated.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Clustering)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Building Diversified Portfolios that Outperform Out of Sample", "https://doi.org/10.3905/jpm.2016.42.4.059", Year = 2016, Authors = "Marcos Lopez de Prado")]
 public class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields

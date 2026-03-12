@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -35,6 +37,12 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Neural Networks and Physical Systems with Emergent Collective Computational Abilities", "https://www.pnas.org/doi/10.1073/pnas.79.8.2554", Year = 1982, Authors = "John J. Hopfield")]
 public class HopfieldNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly HopfieldNetworkOptions _options;

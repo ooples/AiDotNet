@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Classification.Linear;
@@ -32,6 +34,12 @@ namespace AiDotNet.Classification.Linear;
 /// - Assumes linear relationship between features and class labels
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class RidgeClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>

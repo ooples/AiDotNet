@@ -2,6 +2,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
 using AiDotNet.Reasoning.Verification;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.DomainSpecific;
@@ -38,6 +40,13 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 /// - Any mathematical reasoning tasks
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Agent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(string), typeof(string))]
+[ModelPaper("Chain-of-Thought Prompting Elicits Reasoning in Large Language Models", "https://doi.org/10.48550/arXiv.2201.11903", Year = 2022, Authors = "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc Le, Denny Zhou")]
 public class MathematicalReasoner<T>
 {
     private readonly IChatModel<T> _chatModel;

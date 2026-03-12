@@ -1,7 +1,9 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Results;
 using AiDotNet.ContinualLearning.Strategies;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -113,6 +115,13 @@ public class SITrainerOptions<T>
 ///
 /// <para><b>Reference:</b> Zenke et al. "Continual Learning Through Synaptic Intelligence" (ICML 2017)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Continual Learning Through Synaptic Intelligence", "https://arxiv.org/abs/1703.04200", Year = 2017, Authors = "Friedemann Zenke, Ben Poole, Surya Ganguli")]
 public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOutput>
 {
     [ThreadStatic]

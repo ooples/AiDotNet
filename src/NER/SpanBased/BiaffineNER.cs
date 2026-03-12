@@ -1,8 +1,11 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.SpanBased;
 
@@ -55,6 +58,15 @@ namespace AiDotNet.NER.SpanBased;
 /// and part of "New York University").
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Named Entity Recognition as Dependency Parsing",
+    "https://arxiv.org/abs/2005.07150",
+    Year = 2020,
+    Authors = "Juntao Yu, Bernd Bohnet, Massimo Poesio")]
 public class BiaffineNER<T> : SpanBasedNERBase<T>
 {
     /// <summary>

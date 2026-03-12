@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -43,6 +44,15 @@ namespace AiDotNet.Document.LayoutAware;
 /// https://arxiv.org/abs/1912.13318
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LayoutLM: Pre-training of Text and Layout for Document Image Understanding", "https://doi.org/10.1145/3394486.3403172", Year = 2020, Authors = "Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou")]
 public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 {
     private readonly LayoutLMOptions _options;

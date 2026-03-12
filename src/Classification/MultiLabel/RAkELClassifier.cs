@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -33,6 +34,12 @@ namespace AiDotNet.Classification.MultiLabel;
 /// <para><b>Reference:</b> Tsoumakas et al., "Random k-Labelsets for Multilabel Classification" (2011)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Random k-Labelsets for Multilabel Classification", "https://doi.org/10.1109/TKDE.2010.164", Year = 2011, Authors = "Grigorios Tsoumakas, Ioannis Katakis, Ioannis Vlahavas")]
 public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
 {
     /// <summary>

@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
@@ -46,6 +48,14 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// Time-series Forecasting", 2022. https://arxiv.org/abs/2202.01381
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("ETSformer: Exponential Smoothing Transformers for Time-series Forecasting", "https://arxiv.org/abs/2202.01381", Year = 2022, Authors = "Gerald Woo, Chenghao Liu, Doyen Sahoo, Akshat Kumar, Steven Hoi")]
 public class ETSformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

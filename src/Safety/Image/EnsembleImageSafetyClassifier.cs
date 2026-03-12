@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -30,6 +31,17 @@ namespace AiDotNet.Safety.Image;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("UnsafeBench: Benchmarking Image Safety Classifiers on Real-World and AI-Generated Images",
+    "https://arxiv.org/abs/2405.03486",
+    Year = 2024,
+    Authors = "Yiting Qu, Xinyue Shen, Yixin Wu, et al.")]
 public class EnsembleImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
 {
     private readonly IImageSafetyModule<T>[] _classifiers;

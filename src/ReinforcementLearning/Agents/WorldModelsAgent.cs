@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -37,6 +38,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.WorldModels;
 /// Famous for: Car racing from pixels with limited environment samples
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("World Models",
+    "https://arxiv.org/abs/1803.10122",
+    Year = 2018,
+    Authors = "Ha, D. & Schmidhuber, J.")]
 public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private WorldModelsOptions<T> _options;

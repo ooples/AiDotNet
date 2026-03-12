@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Safety;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Text;
 
@@ -31,6 +33,16 @@ namespace AiDotNet.Safety.Text;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PRvL: LLMs for Contextual PII Redaction Outperform Rule-Based NER",
+    "https://arxiv.org/abs/2508.05545",
+    Year = 2025,
+    Authors = "Various")]
 public class RegexPIIDetector<T> : TextSafetyModuleBase<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);

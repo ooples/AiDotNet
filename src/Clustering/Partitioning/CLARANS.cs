@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -42,6 +43,12 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - Try swapping whose house, keep improvements
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("CLARANS: A Method for Clustering Objects for Spatial Data Mining", "https://doi.org/10.1109/69.971187", Year = 2002, Authors = "Raymond T. Ng, Jiawei Han")]
 public class CLARANS<T> : ClusteringBase<T>
 {
     private readonly CLARANSOptions<T> _options;

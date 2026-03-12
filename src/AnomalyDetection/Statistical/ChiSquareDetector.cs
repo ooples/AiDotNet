@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -31,6 +33,11 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 /// - Alpha (significance level): 0.05 (5%)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;

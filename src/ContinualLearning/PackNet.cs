@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -41,6 +43,13 @@ namespace AiDotNet.ContinualLearning;
 /// <para><b>Reference:</b> Mallya, A. and Lazebnik, S. "PackNet: Adding Multiple Tasks to a
 /// Single Network by Iterative Pruning" (2018). CVPR.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PackNet: Adding Multiple Tasks to a Single Network by Iterative Pruning", "https://arxiv.org/abs/1711.05769", Year = 2018, Authors = "Arun Mallya, Svetlana Lazebnik")]
 public class PackNet<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

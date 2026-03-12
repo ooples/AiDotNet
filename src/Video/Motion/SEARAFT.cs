@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
@@ -22,6 +25,16 @@ namespace AiDotNet.Video.Motion;
 /// SEA-RAFT simplifies RAFT with a mixture of Laplace loss and direct initial flow prediction, achieving state-of-the-art accuracy with improved efficiency.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SEA-RAFT: Simple, Efficient, Accurate RAFT for Optical Flow",
+    "https://arxiv.org/abs/2405.14793",
+    Year = 2024,
+    Authors = "Yihan Wang, Lahav Lipson, Jia Deng")]
 public class SEARAFT<T> : OpticalFlowBase<T>
 {
     private readonly SEARAFTOptions _options;

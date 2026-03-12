@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
@@ -36,6 +37,12 @@ namespace AiDotNet.Clustering.Subspace;
 /// CLIQUE automatically discovers these hidden subspaces!
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Automatic Subspace Clustering of High Dimensional Data for Data Mining Applications", "https://doi.org/10.1145/276304.276314", Year = 1998, Authors = "Rakesh Agrawal, Johannes Gehrke, Dimitrios Gunopulos, Prabhakar Raghavan")]
 public class CLIQUE<T> : ClusteringBase<T>
 {
     private readonly CLIQUEOptions<T> _options;

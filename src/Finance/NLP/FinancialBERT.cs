@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using ModelOptions = AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
@@ -16,6 +18,13 @@ namespace AiDotNet.Finance.NLP;
 /// FinancialBERT neural network model for domain-specific financial language processing.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class FinancialBERT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields

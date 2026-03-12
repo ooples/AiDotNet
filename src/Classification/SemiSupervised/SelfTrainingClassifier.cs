@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -43,6 +44,11 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// - Triguero et al. (2015). "Self-labeled techniques for semi-supervised learning"
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
 {
     private IClassifier<T> _baseClassifier;

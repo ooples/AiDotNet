@@ -3,10 +3,12 @@ using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 
@@ -28,6 +30,16 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 ///
 /// <para>Reference: Zhang et al., "DINO: DETR with Improved DeNoising Anchor Boxes for End-to-End Object Detection", ICLR 2023</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DINO: DETR with Improved DeNoising Anchor Boxes for End-to-End Object Detection",
+    "https://arxiv.org/abs/2203.03605",
+    Year = 2023,
+    Authors = "Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel M. Ni, Heung-Yeung Shum")]
 public class DINO<T> : ObjectDetectorBase<T>
 {
     private readonly DINOEncoder<T> _encoder;

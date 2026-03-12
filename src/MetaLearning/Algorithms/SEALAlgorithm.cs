@@ -1,9 +1,12 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -57,6 +60,17 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// improvements including temperature scaling and entropy regularization.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("How to Train Your MAML",
+    "https://arxiv.org/abs/1810.09502",
+    Year = 2019,
+    Authors = "Antoniou, A., Edwards, H., & Storkey, A.")]
 public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly SEALOptions<T, TInput, TOutput> _sealOptions;

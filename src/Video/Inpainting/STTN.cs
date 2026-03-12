@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Inpainting;
@@ -25,6 +27,17 @@ namespace AiDotNet.Video.Inpainting;
 /// feature scales enables both fine-grained texture transfer and large-scale structure completion.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning Joint Spatial-Temporal Transformations for Video Inpainting",
+    "https://arxiv.org/abs/2007.10247",
+    Year = 2020,
+    Authors = "Yanhong Zeng, Jianlong Fu, Hongyang Chao")]
 public class STTN<T> : VideoInpaintingBase<T>
 {
     private readonly STTNOptions _options;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -32,6 +34,13 @@ namespace AiDotNet.Audio.VoiceActivity;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MarbleNet: Deep 1D Time-Channel Separable Convolutional Neural Network for Voice Activity Detection", "https://arxiv.org/abs/2010.13886", Year = 2021, Authors = "Fei Jia, Somshubra Majumdar, Boris Ginsburg")]
 public class MarbleNet<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
     #region Fields

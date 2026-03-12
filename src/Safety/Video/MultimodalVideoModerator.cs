@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -32,6 +33,17 @@ namespace AiDotNet.Safety.Video;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VideoGuard: Multimodal Video Safety with Reasoning-Based Instruction Hierarchy",
+    "https://arxiv.org/abs/2503.14298",
+    Year = 2025,
+    Authors = "Various")]
 public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

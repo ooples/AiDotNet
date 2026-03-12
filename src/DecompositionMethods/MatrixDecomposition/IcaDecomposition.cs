@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
@@ -24,6 +27,12 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// - Telecommunications signal processing
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class IcaDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

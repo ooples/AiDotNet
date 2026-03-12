@@ -1,8 +1,10 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.ContinualLearning.Config;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Results;
 using AiDotNet.ContinualLearning.Strategies;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -97,6 +99,13 @@ public class EWCTrainerOptions<T>
 ///
 /// <para><b>Reference:</b> Kirkpatrick et al. "Overcoming catastrophic forgetting in neural networks" (PNAS 2017)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Overcoming Catastrophic Forgetting in Neural Networks", "https://arxiv.org/abs/1612.00796", Year = 2017, Authors = "James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, Raia Hadsell")]
 public class EWCTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOutput>
 {
     [ThreadStatic]

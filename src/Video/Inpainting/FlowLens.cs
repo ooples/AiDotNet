@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Inpainting;
@@ -26,6 +28,16 @@ namespace AiDotNet.Video.Inpainting;
 /// consistent inpainting.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FlowLens: Seeing Beyond the FoV via Flow-Guided Clip-Recurrent Transformer",
+    "https://arxiv.org/abs/2211.11293",
+    Year = 2022,
+    Authors = "Hao Luo, Peng Zhao, Ling Pei")]
 public class FlowLens<T> : VideoInpaintingBase<T>
 {
     private readonly FlowLensOptions _options;

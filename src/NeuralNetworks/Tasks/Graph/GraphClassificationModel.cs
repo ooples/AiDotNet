@@ -1,10 +1,13 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 
@@ -60,10 +63,17 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// ```
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Semi-Supervised Classification with Graph Convolutional Networks",
+    "https://arxiv.org/abs/1609.02907",
+    Year = 2017,
+    Authors = "Thomas N. Kipf, Max Welling")]
 public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 {
-    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly GraphPooling _poolingType;

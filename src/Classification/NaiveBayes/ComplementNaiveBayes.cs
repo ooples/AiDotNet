@@ -1,5 +1,7 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Classification;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -35,6 +37,13 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// - Topic categorization
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Tackling the Poor Assumptions of Naive Bayes Text Classifiers", "https://people.csail.mit.edu/jrennie/papers/icml03-nb.pdf", Year = 2003, Authors = "Jason D. Rennie, Lawrence Shih, Jaime Teevan, David R. Karger")]
 public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
 {
     /// <summary>

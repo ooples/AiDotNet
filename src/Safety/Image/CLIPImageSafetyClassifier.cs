@@ -1,6 +1,8 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Image;
 
@@ -36,6 +38,16 @@ namespace AiDotNet.Safety.Image;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Safe-CLIP: Removing NSFW Concepts from Vision-and-Language Models",
+    "https://arxiv.org/abs/2311.16254",
+    Year = 2024,
+    Authors = "Samuele Poppi, Tobia Carletti, Marco Galatolo, et al.")]
 internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

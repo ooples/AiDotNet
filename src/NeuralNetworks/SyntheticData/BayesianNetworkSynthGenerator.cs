@@ -1,5 +1,8 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -28,6 +31,16 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// Disadvantage: Less flexible than deep learning for complex distributions.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.SyntheticDataGenerator)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PrivBayes: Private Data Release via Bayesian Networks",
+    "https://arxiv.org/abs/1401.0939",
+    Year = 2017,
+    Authors = "Jun Zhang, Graham Cormode, Cecilia M. Procopiuc, Divesh Srivastava, Xiaokui Xiao")]
 public class BayesianNetworkSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
 {
     private readonly BayesianNetworkSynthOptions<T> _options;

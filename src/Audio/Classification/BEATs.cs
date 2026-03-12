@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -140,6 +142,13 @@ namespace AiDotNet.Audio.Classification;
 /// </list>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BEATs: Audio Pre-Training with Acoustic Tokenizers", "https://arxiv.org/abs/2212.09058", Year = 2023, Authors = "Sanyuan Chen, Yu Wu, Chengyi Wang, Shujie Liu, Daniel Tompkins, Zhuo Chen, Furu Wei")]
 public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields

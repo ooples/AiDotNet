@@ -1,4 +1,6 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -14,6 +16,12 @@ namespace AiDotNet.NeuralNetworks;
 /// Core innovation of Google's Nested Learning paradigm.
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class HopeNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly HopeNetworkOptions _options;

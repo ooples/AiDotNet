@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -58,6 +60,13 @@ namespace AiDotNet.Agents;
 /// which showed that prompting models to show their reasoning steps significantly improves performance
 /// on arithmetic, commonsense, and symbolic reasoning tasks.
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Agent)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(string), typeof(string))]
+[ModelPaper("Chain-of-Thought Prompting Elicits Reasoning in Large Language Models", "https://arxiv.org/abs/2201.11903", Year = 2022, Authors = "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc Le, Denny Zhou")]
 public class ChainOfThoughtAgent<T> : AgentBase<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -65,6 +66,14 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/2005.11650
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.GraphAnalysis)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Connecting the Dots: Multivariate Time Series Forecasting with Graph Neural Networks", "https://arxiv.org/abs/2005.11650", Year = 2020, Authors = "Zonghan Wu, Shirui Pan, Guodong Long, Jing Jiang, Xiaojun Chang, Chengqi Zhang")]
 public class MTGNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

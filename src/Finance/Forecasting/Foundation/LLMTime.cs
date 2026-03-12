@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -30,6 +31,15 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Gruver et al., "Large Language Models Are Zero-Shot Time Series Forecasters", NeurIPS 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Large Language Models Are Zero-Shot Time Series Forecasters", "https://arxiv.org/abs/2310.07820", Year = 2023, Authors = "Nate Gruver, Marc Finzi, Shikai Qiu, Andrew Gordon Wilson")]
 public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields

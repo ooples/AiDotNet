@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
@@ -42,6 +44,14 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// https://openreview.net/forum?id=vSVLM2j9eie
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Crossformer: Transformer Utilizing Cross-Dimension Dependency for Multivariate Time Series Forecasting", "https://arxiv.org/abs/2209.15174", Year = 2023, Authors = "Yunhao Zhang, Junchi Yan")]
 public class Crossformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

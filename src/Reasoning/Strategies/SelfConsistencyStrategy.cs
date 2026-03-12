@@ -1,5 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Reasoning.Models;
 
 namespace AiDotNet.Reasoning.Strategies;
@@ -66,6 +68,14 @@ namespace AiDotNet.Reasoning.Strategies;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Agent)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(string), typeof(string))]
+[ModelPaper("Self-Consistency Improves Chain of Thought Reasoning in Language Models", "https://doi.org/10.48550/arXiv.2203.11171", Year = 2022, Authors = "Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, Denny Zhou")]
 public class SelfConsistencyStrategy<T> : ReasoningStrategyBase<T>
 {
     private readonly ChainOfThoughtStrategy<T> _cotStrategy;

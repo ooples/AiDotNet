@@ -7,6 +7,8 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.PhysicsInformed.Options;
 
 namespace AiDotNet.PhysicsInformed.NeuralOperators
@@ -106,6 +108,14 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// DeepONet was introduced by Lu et al. (2021) and has been highly successful
     /// in learning solution operators for PDEs with theoretical guarantees.
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators", "https://doi.org/10.1038/s42256-021-00302-5", Year = 2021, Authors = "Lu Lu, Pengzhan Jin, Guofei Pang, Zhongqiang Zhang, George Em Karniadakis")]
     public class DeepOperatorNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly DeepOperatorNetworkOptions _options;

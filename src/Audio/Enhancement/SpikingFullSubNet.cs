@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -33,6 +35,14 @@ namespace AiDotNet.Audio.Enhancement;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.Denoising)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Spiking-FullSubNet: Spiking Neural Networks for Speech Enhancement", "https://arxiv.org/abs/2406.04662", Year = 2024, Authors = "Jiaying Lin, Rong Xie, Qi Liu")]
 public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

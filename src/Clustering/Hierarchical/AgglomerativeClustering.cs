@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -36,6 +37,11 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// Use Ward linkage for most cases - it creates nice, balanced clusters.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class AgglomerativeClustering<T> : ClusteringBase<T>
 {
     private readonly HierarchicalOptions<T> _options;

@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -48,6 +50,16 @@ namespace AiDotNet.NeuralNetworks;
 /// - Image organization (auto-tag photos)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation", "https://arxiv.org/abs/2201.12086", Year = 2022, Authors = "Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi")]
 public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 {
     private readonly BlipOptions _options;

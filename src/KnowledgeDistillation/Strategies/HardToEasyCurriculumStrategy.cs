@@ -1,4 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -58,6 +61,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Krueger &amp; Dayan (2009). Flexible shaping: How learning in small steps helps.
 /// - Kumar et al. (2010). Self-paced curriculum learning (discusses anti-curriculum).</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Curriculum Learning",
+    "https://dl.acm.org/doi/10.1145/1553374.1553380",
+    Year = 2009,
+    Authors = "Yoshua Bengio, Jérôme Louradour, Ronan Collobert, Jason Weston")]
 public class HardToEasyCurriculumStrategy<T> : CurriculumDistillationStrategyBase<T>
 {
     /// <summary>

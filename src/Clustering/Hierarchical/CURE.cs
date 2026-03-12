@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -43,6 +44,12 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// even if their centers are close together!
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("CURE: An Efficient Clustering Algorithm for Large Databases", "https://doi.org/10.1145/276304.276312", Year = 1998, Authors = "Sudipto Guha, Rajeev Rastogi, Kyuseok Shim")]
 public class CURE<T> : ClusteringBase<T>
 {
     private readonly CUREOptions<T> _options;

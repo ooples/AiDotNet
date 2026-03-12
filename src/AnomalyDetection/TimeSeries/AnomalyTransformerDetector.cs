@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -40,6 +42,18 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 /// "Anomaly Transformer: Time Series Anomaly Detection with Association Discrepancy." ICLR.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Anomaly Transformer: Time Series Anomaly Detection with Association Discrepancy",
+    "https://openreview.net/forum?id=LzQQ89U1qm_",
+    Year = 2022,
+    Authors = "Jiehui Xu, Haixu Wu, Jianmin Wang, Mingsheng Long")]
 public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _modelDim;
@@ -659,26 +673,71 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             }
         }
 
-        // Simplified: Also add gradients for Wq and Wk (through attention scores)
-        // Full attention backprop is complex, here we use a simplified version
+        // Proper attention backprop through softmax Jacobian for Q and K
         double scale = Math.Sqrt(headDim);
         for (int i = 0; i < seqLen; i++)
         {
+            // Compute dScore[i, j] = gradient of loss w.r.t. attention scores (pre-softmax)
+            // dScore = attention * (dWeightedV * V^T) passed through softmax Jacobian
+            // For softmax: dScore[i,j] = sum_l (attention[i,l] * (delta(j,l) - attention[i,j])) * dAttn[i,l]
+            // where dAttn[i,l] = sum_k dWeightedV[k] * V[l,k]
+
+            // First compute dAttn: gradient w.r.t. attention weights (post-softmax)
+            var dAttn = new double[seqLen];
+            for (int j = 0; j < seqLen; j++)
+            {
+                for (int k = 0; k < _modelDim; k++)
+                {
+                    double dWVk = 0;
+                    for (int m = 0; m < _modelDim; m++)
+                    {
+                        dWVk += NumOps.ToDouble(Wo[k, m]) * NumOps.ToDouble(dAttnOutput[i, m]);
+                    }
+                    dAttn[j] += dWVk * V[j, k];
+                }
+            }
+
+            // Apply softmax Jacobian: dScore[j] = sum_l attention[i,l] * (delta(l,j) - attention[i,j]) * dAttn[l]
+            var dScore = new double[seqLen];
+            for (int j = 0; j < seqLen; j++)
+            {
+                double attnJ = NumOps.ToDouble(attention[i, j]);
+                for (int l = 0; l < seqLen; l++)
+                {
+                    double attnL = NumOps.ToDouble(attention[i, l]);
+                    double jacobian = attnL * ((l == j ? 1.0 : 0.0) - attnJ);
+                    dScore[j] += jacobian * dAttn[l];
+                }
+            }
+
+            // Score[i,j] = Q[i,:] . K[j,:] / scale, so:
+            // dQ[i,k] = sum_j dScore[i,j] * K[j,k] / scale
+            // dK[j,k] = sum_i dScore[i,j] * Q[i,k] / scale
             for (int k = 0; k < _modelDim; k++)
             {
-                // Approximate gradient contribution
-                double qGrad = 0;
-                double kGrad = 0;
+                double dQ_ik = 0;
                 for (int j = 0; j < seqLen; j++)
                 {
-                    double attnVal = NumOps.ToDouble(attention[i, j]);
-                    qGrad += attnVal * K[j, k] / scale;
-                    kGrad += attnVal * Q[i, k] / scale;
+                    dQ_ik += dScore[j] * K[j, k] / scale;
                 }
+
+                // dWq: dL/dWq[p,k] += projected[i,p] * dQ[i,k]
                 for (int p = 0; p < _modelDim; p++)
                 {
-                    dWq[p, k] += NumOps.ToDouble(projected[i, p]) * qGrad * 0.01;
-                    dWk[p, k] += NumOps.ToDouble(projected[i, p]) * kGrad * 0.01;
+                    dWq[p, k] += NumOps.ToDouble(projected[i, p]) * dQ_ik;
+                }
+            }
+
+            for (int j = 0; j < seqLen; j++)
+            {
+                for (int k = 0; k < _modelDim; k++)
+                {
+                    double dK_jk = dScore[j] * Q[i, k] / scale;
+                    // dWk: dL/dWk[p,k] += projected[j,p] * dK[j,k]
+                    for (int p = 0; p < _modelDim; p++)
+                    {
+                        dWk[p, k] += NumOps.ToDouble(projected[j, p]) * dK_jk;
+                    }
                 }
             }
         }

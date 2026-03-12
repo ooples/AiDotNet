@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
@@ -22,6 +25,16 @@ namespace AiDotNet.Video.Motion;
 /// RoMa achieves robust dense feature matching using DINOv2 foundation features, producing pixel-dense correspondence maps for geometry estimation.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RoMa: Robust Dense Feature Matching",
+    "https://arxiv.org/abs/2305.15404",
+    Year = 2024,
+    Authors = "Johan Edstedt, Qiyu Sun, Georg Bökman, Marten Wadenbäck, Michael Felsberg")]
 public class RoMa<T> : OpticalFlowBase<T>
 {
     private readonly RoMaOptions _options;

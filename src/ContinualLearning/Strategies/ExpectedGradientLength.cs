@@ -1,5 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.ContinualLearning.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -81,6 +83,13 @@ public class EGLOptions<T>
 /// <para>EGL is simpler than EWC and provides a direct measure of how much each
 /// parameter contributes to the loss during training.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("An Analysis of Active Learning Strategies for Sequence Labeling Tasks", "https://aclanthology.org/D08-1112/", Year = 2008, Authors = "Burr Settles, Mark Craven")]
 public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInput, TOutput>
 {
     private readonly T _lambda;

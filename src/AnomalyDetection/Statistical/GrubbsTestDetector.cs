@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -34,6 +36,12 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 /// Annals of Mathematical Statistics.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Sample Criteria for Testing Outlying Observations", "https://doi.org/10.1214/aoms/1177729885", Year = 1950, Authors = "Frank E. Grubbs")]
 public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;

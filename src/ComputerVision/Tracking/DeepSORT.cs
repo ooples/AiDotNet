@@ -1,8 +1,11 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
 using AiDotNet.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Tracking;
 
@@ -25,6 +28,15 @@ namespace AiDotNet.ComputerVision.Tracking;
 /// <para>Reference: Wojke et al., "Simple Online and Realtime Tracking with a Deep
 /// Association Metric", ICIP 2017</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Simple Online and Realtime Tracking with a Deep Association Metric",
+    "https://arxiv.org/abs/1703.07402",
+    Year = 2017,
+    Authors = "Nicolai Wojke, Alex Bewley, Dietrich Paulus")]
 public class DeepSORT<T> : ObjectTrackerBase<T>
 {
     private readonly List<DeepTrack<T>> _deepTracks;

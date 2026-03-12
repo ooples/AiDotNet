@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +23,17 @@ namespace AiDotNet.Finance.Risk;
 /// but fully learnable.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Tabular)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.TabularModel)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SAINT: Improved Neural Networks for Tabular Data via Row Attention and Contrastive Pre-Training", "https://arxiv.org/abs/2106.01342", Year = 2021, Authors = "Gowthami Somepalli, Micah Goldblum, Avi Schwarzschild, C. Bayan Bruss, Tom Goldstein")]
 public class SAINT<T> : RiskModelBase<T>
 {
     #region Shared Fields

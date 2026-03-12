@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -38,6 +40,12 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 /// Anomaly Detection Algorithms for RapidMiner." Workshop on Open Source Data Mining Software.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Clustering)]
+[ModelCategory(ModelCategory.InstanceBased)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class LDCOFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numClusters;

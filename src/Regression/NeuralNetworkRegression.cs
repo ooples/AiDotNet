@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Regression;
@@ -24,6 +26,11 @@ namespace AiDotNet.Regression;
 /// the model's accuracy. This process is similar to how we learn from experience.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

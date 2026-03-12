@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -30,6 +33,13 @@ namespace AiDotNet.TimeSeries;
 /// between different variables and learns from its own mistakes.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Multiple Time Series", "https://doi.org/10.1002/0471667196", Year = 2005, Authors = "Helmut Lütkepohl")]
 public class VARMAModel<T> : VectorAutoRegressionModel<T>
 {
     /// <summary>

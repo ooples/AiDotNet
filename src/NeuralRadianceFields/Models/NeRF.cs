@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralRadianceFields.Interfaces;
 
 namespace AiDotNet.NeuralRadianceFields.Models;
@@ -111,6 +113,14 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// by Mildenhall et al., ECCV 2020
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ThreeDGeneration)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis", "https://doi.org/10.1007/978-3-030-58452-8_24", Year = 2020, Authors = "Ben Mildenhall, Pratul P. Srinivasan, Matthew Tancik, Jonathan T. Barron, Ravi Ramamoorthi, Ren Ng")]
 public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 {
     private readonly NeRFOptions _options;

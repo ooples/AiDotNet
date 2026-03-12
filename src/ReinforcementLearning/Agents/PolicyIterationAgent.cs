@@ -1,7 +1,10 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
@@ -14,6 +17,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 /// Policy Iteration alternates between policy evaluation and policy improvement
 /// until convergence to the optimal policy.
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Reinforcement Learning: An Introduction",
+    "http://incompleteideas.net/book/the-book-2nd.html",
+    Year = 2018,
+    Authors = "Sutton, R. S. & Barto, A. G.")]
 public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private PolicyIterationOptions<T> _options;

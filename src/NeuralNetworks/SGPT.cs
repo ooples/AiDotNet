@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -32,6 +34,15 @@ namespace AiDotNet.NeuralNetworks
     /// SGPT uses that summary as the coordinate (embedding) for the whole sentence.
     /// </para>
     /// </remarks>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Transformer)]
+    [ModelCategory(ModelCategory.EmbeddingModel)]
+    [ModelTask(ModelTask.Embedding)]
+    [ModelTask(ModelTask.Ranking)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("SGPT: GPT Sentence Embeddings for Semantic Search", "https://arxiv.org/abs/2202.08904", Year = 2022, Authors = "Niklas Muennighoff")]
     public class SGPT<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly SGPTOptions _options;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -36,6 +38,12 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 /// Reference: Kriegel, H., et al. (2009). "LoOP: Local Outlier Probabilities." CIKM.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.InstanceBased)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class LoOPDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;

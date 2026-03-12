@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -31,6 +32,16 @@ namespace AiDotNet.Safety.Fairness;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Gender Shades: Intersectional Accuracy Disparities in Commercial Gender Classification",
+    "https://proceedings.mlr.press/v81/buolamwini18a.html",
+    Year = 2018,
+    Authors = "Joy Buolamwini, Timnit Gebru")]
 public class IntersectionalBiasDetector<T> : ITextSafetyModule<T>
 {
     private readonly double _threshold;

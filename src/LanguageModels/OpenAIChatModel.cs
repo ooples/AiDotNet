@@ -1,6 +1,8 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LanguageModels.Models;
 using Newtonsoft.Json;
@@ -50,6 +52,12 @@ namespace AiDotNet.LanguageModels;
 /// - Cache responses when appropriate
 /// - Monitor usage at platform.openai.com/usage
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(string), typeof(string))]
 public class OpenAIChatModel<T> : ChatModelBase<T>
 {
     private readonly string _apiKey;

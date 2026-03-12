@@ -1,10 +1,13 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -54,6 +57,17 @@ namespace AiDotNet.Video.Generation;
 /// https://arxiv.org/abs/2408.06072
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CogVideo: Large-scale Pretraining for Text-to-Video Generation via Transformers",
+    "https://arxiv.org/abs/2205.15868",
+    Year = 2022,
+    Authors = "Wenyi Hong, Ming Ding, Wendi Zheng, Xinghan Liu, Jie Tang")]
 public class CogVideo<T> : NeuralNetworkBase<T>
 {
     private readonly CogVideoOptions _options;

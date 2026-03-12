@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -31,6 +32,14 @@ namespace AiDotNet.NeuralNetworks
     /// It's like a person who can understand a complex new word by looking at its root and its suffix.
     /// </para>
     /// </remarks>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.EmbeddingModel)]
+    [ModelTask(ModelTask.Embedding)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelComplexity(ModelComplexity.Low)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Enriching Word Vectors with Subword Information", "https://arxiv.org/abs/1607.04606", Year = 2017, Authors = "Piotr Bojanowski, Edouard Grave, Armand Joulin, Tomas Mikolov")]
     public class FastText<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         private readonly FastTextOptions _options;

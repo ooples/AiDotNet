@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -23,6 +26,12 @@ namespace AiDotNet.Regression;
 /// that most influence the taste, rather than just the most abundant ingredients.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class PartialLeastSquaresRegression<T> : RegressionBase<T>
 {
     /// <summary>

@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Policies
@@ -15,6 +18,17 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Common in robotics where you have discrete mode selection and continuous parameter control.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Reinforcement Learning: An Introduction",
+        "http://incompleteideas.net/book/the-book-2nd.html",
+        Year = 2018,
+        Authors = "Sutton, R. S. & Barto, A. G.")]
     public class MixedPolicy<T> : PolicyBase<T>
     {
         private readonly INeuralNetwork<T> _discreteNetwork;

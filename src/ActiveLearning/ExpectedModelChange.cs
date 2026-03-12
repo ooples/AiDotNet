@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -32,6 +34,12 @@ namespace AiDotNet.ActiveLearning;
 ///
 /// <para><b>Reference:</b> Settles et al., "Multiple-Instance Active Learning" (2008). ICML.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Multiple-Instance Active Learning", "https://dl.acm.org/doi/10.5555/1390156.1390273", Year = 2008, Authors = "Burr Settles, Mark Craven, Soumya Ray")]
 public class ExpectedModelChange<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.Regression;
 
 /// <summary>
@@ -37,6 +40,13 @@ namespace AiDotNet.Regression;
 /// ```
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class LassoRegression<T> : RegressionBase<T>
 {
     /// <summary>

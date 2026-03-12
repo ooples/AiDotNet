@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using ModelOptions = AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
@@ -24,6 +26,14 @@ namespace AiDotNet.Finance.NLP;
 /// Reference: Loukas et al., "SEC-BERT: A Pre-trained Financial Language Model", 2022.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SEC-BERT: A Pre-trained Language Model for the Securities Domain", "https://doi.org/10.1145/3533271.3561753", Year = 2022, Authors = "Lefteris Loukas, Manos Fergadiotis, Ion Androutsopoulos, Prodromos Malakasiotis")]
 public class SECBERT<T> : FinancialNLPModelBase<T>
 {
     #region Native Mode Fields

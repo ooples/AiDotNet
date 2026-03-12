@@ -1,5 +1,7 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Classification;
+using AiDotNet.Enums;
 using AiDotNet.Classification.Trees;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
@@ -41,6 +43,13 @@ namespace AiDotNet.Classification.Ensemble;
 /// - Together, they give a more reliable prediction than any single tree
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Random Forests", "https://doi.org/10.1023/A:1010933404324", Year = 2001, Authors = "Leo Breiman")]
 public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
 {
     /// <summary>

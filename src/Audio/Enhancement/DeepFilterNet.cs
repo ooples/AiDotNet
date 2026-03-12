@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -49,6 +51,15 @@ namespace AiDotNet.Audio.Enhancement;
 /// Full-Band Audio based on Deep Filtering" by Schröter et al., ICASSP 2022
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.Denoising)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DeepFilterNet: A Low Complexity Speech Enhancement Framework for Full-Band Audio Based on Deep Filtering", "https://arxiv.org/abs/2110.05588", Year = 2022, Authors = "Hendrik Schröter, Alberto N. Escalante-B., Tobias Rosenkranz, Andreas Maier")]
 public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly DeepFilterNetOptions _options;

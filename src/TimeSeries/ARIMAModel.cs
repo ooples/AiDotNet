@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -32,6 +35,13 @@ namespace AiDotNet.TimeSeries;
 /// <item>q: How many past prediction errors to consider (MA component)</item>
 /// </list>
 /// </remarks>
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
 public class ARIMAModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

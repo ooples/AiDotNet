@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;
@@ -44,6 +45,12 @@ namespace AiDotNet.Clustering.Streaming;
 /// Quality is usually 90-99% of regular K-Means!
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Web-Scale K-Means Clustering", "https://doi.org/10.1145/1772690.1772862", Year = 2010, Authors = "David Sculley")]
 public class MiniBatchKMeans<T> : ClusteringBase<T>
 {
     private readonly MiniBatchKMeansOptions<T> _options;

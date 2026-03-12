@@ -1,10 +1,13 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -45,6 +48,16 @@ namespace AiDotNet.Video.Denoising;
 /// https://arxiv.org/abs/1907.01361
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FastDVDnet: Towards Real-Time Deep Video Denoising Without Flow Estimation",
+    "https://arxiv.org/abs/1907.01361",
+    Year = 2020,
+    Authors = "Matias Tassano, Julie Delon, Thomas Veit")]
 public class FastDVDNet<T> : VideoDenoisingBase<T>
 {
     private readonly FastDVDNetOptions _options;

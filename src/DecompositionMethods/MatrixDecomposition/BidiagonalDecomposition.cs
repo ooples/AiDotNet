@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
@@ -31,6 +33,11 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// </list>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

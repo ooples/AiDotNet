@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.TimeSeries;
 
@@ -26,6 +28,14 @@ namespace AiDotNet.TimeSeries;
 /// The model offers different algorithms (standard, robust, and fast) to handle various types of data.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("STL: A Seasonal-Trend Decomposition Procedure Based on Loess", "https://doi.org/10.6028/jres.090.015", Year = 1990, Authors = "Robert B. Cleveland, William S. Cleveland, Jean E. McRae, Irma Terpenning")]
 public class STLDecomposition<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

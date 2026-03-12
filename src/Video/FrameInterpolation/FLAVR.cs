@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -44,6 +46,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// (Kalluri et al., CVPR 2023)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FLAVR: Flow-Agnostic Video Representations for Fast Frame Interpolation",
+    "https://arxiv.org/abs/2012.08512",
+    Year = 2021,
+    Authors = "Tarun Kalluri, Deepak Pathak, Manmohan Chandraker, Du Tran")]
 public class FLAVR<T> : FrameInterpolationBase<T>
 {
     #region Fields

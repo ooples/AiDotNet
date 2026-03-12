@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -45,6 +46,15 @@ namespace AiDotNet.Document.PixelToSequence;
 /// https://arxiv.org/abs/2203.16618
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Dessurt: A Dessert for Document Understanding Transformer", "https://doi.org/10.48550/arXiv.2203.16618", Year = 2022, Authors = "Brian Davis, Bryan Morse, Brian Price, Chris Tensmeyer, Curtis Wigington")]
 public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly DessurtOptions _options;

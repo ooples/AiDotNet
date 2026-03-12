@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Stabilization;
@@ -25,6 +27,16 @@ namespace AiDotNet.Video.Stabilization;
 /// depth-aware warping that correctly handles parallax and depth-dependent motion.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("3D Multi-frame Fusion for Video Stabilization",
+    "https://arxiv.org/abs/2404.12887",
+    Year = 2024,
+    Authors = "Yuchen Zhang, Xiu Li")]
 public class ThreeDMF<T> : VideoStabilizationBase<T>
 {
     private readonly ThreeDMFOptions _options;

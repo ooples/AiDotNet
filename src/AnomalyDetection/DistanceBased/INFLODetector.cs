@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -36,6 +38,12 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 /// Reference: Jin, W., et al. (2006). "Mining Top-n Local Outliers in Large Databases." KDD.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.InstanceBased)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Mining Top-n Local Outliers in Large Databases", "https://doi.org/10.1145/1150402.1150438", Year = 2006, Authors = "Wen Jin, Anthony K. H. Tung, Jiawei Han, Wei Wang")]
 public class INFLODetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;

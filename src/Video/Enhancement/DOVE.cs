@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -42,6 +44,16 @@ namespace AiDotNet.Video.Enhancement;
 /// Restoration" (Chen et al., 2025)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DOVE: Harnessing Large-Scale Video Diffusion Priors for General Video Restoration",
+    "https://arxiv.org/abs/2501.00766",
+    Year = 2025,
+    Authors = "Zheyuan Chen, Yue Wu, Zijian Chen, Ming Lu, Shanghang Zhang")]
 public class DOVE<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

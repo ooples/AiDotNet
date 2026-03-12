@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
@@ -25,6 +27,13 @@ namespace AiDotNet.TimeSeries;
 /// 3. Generative-Style Decoder for parallel multi-step forecasting
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting", "https://arxiv.org/abs/2012.07436", Year = 2021, Authors = "Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, Wancai Zhang")]
 public class InformerModel<T> : TimeSeriesModelBase<T>
 {
     private readonly InformerOptions<T> _options;

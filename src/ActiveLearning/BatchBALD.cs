@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -31,6 +33,13 @@ namespace AiDotNet.ActiveLearning;
 /// <para><b>Reference:</b> Kirsch, A., van Amersfoort, J., &amp; Gal, Y. (2019). "BatchBALD:
 /// Efficient and Diverse Batch Acquisition for Deep Bayesian Active Learning."</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BatchBALD: Efficient and Diverse Batch Acquisition for Deep Bayesian Active Learning", "https://arxiv.org/abs/1906.08158", Year = 2019, Authors = "Andreas Kirsch, Joost van Amersfoort, Yarin Gal")]
 public class BatchBALD<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

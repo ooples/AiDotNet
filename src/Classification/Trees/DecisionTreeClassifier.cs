@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Classification;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 
@@ -28,6 +30,11 @@ namespace AiDotNet.Classification.Trees;
 /// Each question splits the data based on a feature value, and leaves contain the final decisions.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBasedClassifier<T>
 {
     /// <summary>

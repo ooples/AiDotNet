@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -6,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -89,6 +92,17 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Meta-Learning with Warped Gradient Descent. ICLR 2020.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Learning with Warped Gradient Descent",
+    "https://arxiv.org/abs/1909.00025",
+    Year = 2020,
+    Authors = "Flennerhag, S., Rusu, A. A., Pascanu, R., Visin, F., Yin, H., & Hadsell, R.")]
 public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly WarpGradOptions<T, TInput, TOutput> _warpOptions;

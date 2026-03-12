@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.DriftDetection;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -48,6 +49,13 @@ namespace AiDotNet.Classification.Online;
 /// <para><b>Reference:</b> Gomes et al., "Adaptive Random Forests for Evolving Data Stream Classification" (2017)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Adaptive Random Forests for Evolving Data Stream Classification", "https://doi.org/10.1007/s10994-017-5642-8", Year = 2017, Authors = "Heitor Murilo Gomes, Albert Bifet, Jesse Read, Jean Paul Barddal, Fabricio Enembreck, Bernhard Pfharinger, Geoff Holmes, Talel Abdessalem")]
 public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {
     private readonly AdaptiveRandomForestOptions<T> _options;

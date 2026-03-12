@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -43,6 +44,12 @@ namespace AiDotNet.Clustering.SemiSupervised;
 /// - Helps when random init gives poor results
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Seeded Region Growing", "https://doi.org/10.1109/34.295913", Year = 2000, Authors = "Sugato Basu, Arindam Banerjee, Raymond Mooney")]
 public class SeededKMeans<T> : ClusteringBase<T>
 {
     private readonly SeededKMeansOptions<T> _options;

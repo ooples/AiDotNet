@@ -1,9 +1,12 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -64,6 +67,16 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Fast and Flexible Multi-Task Classification Using Conditional Neural Adaptive Processes.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Fast and Flexible Multi-Task Classification Using Conditional Neural Adaptive Processes",
+    "https://arxiv.org/abs/1906.07697",
+    Year = 2019,
+    Authors = "James Requeima, Jonathan Gordon, John Bronskill, et al.")]
 public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly CNAPOptions<T, TInput, TOutput> _cnapOptions;

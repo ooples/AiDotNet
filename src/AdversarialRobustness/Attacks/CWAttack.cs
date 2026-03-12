@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -26,6 +28,13 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Towards Evaluating the Robustness of Neural Networks", "https://arxiv.org/abs/1608.04644", Year = 2017, Authors = "Nicholas Carlini, David Wagner")]
 public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOutput>
 {
     /// <summary>

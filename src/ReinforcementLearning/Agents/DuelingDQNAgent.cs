@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -42,6 +43,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
 /// Wang et al., "Dueling Network Architectures for Deep RL", 2016.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Dueling Network Architectures for Deep Reinforcement Learning",
+    "https://arxiv.org/abs/1511.06581",
+    Year = 2016,
+    Authors = "Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., & de Freitas, N.")]
 public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DuelingDQNOptions<T> _options;

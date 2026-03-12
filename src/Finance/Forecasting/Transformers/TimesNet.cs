@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
@@ -42,6 +44,14 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// Time Series Analysis", ICLR 2023. https://arxiv.org/abs/2210.02186
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TimesNet: Temporal 2D-Variation Modeling for General Time Series Analysis", "https://arxiv.org/abs/2210.02186", Year = 2023, Authors = "Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, Mingsheng Long")]
 public class TimesNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

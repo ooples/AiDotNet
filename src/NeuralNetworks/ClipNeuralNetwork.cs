@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -17,6 +19,17 @@ namespace AiDotNet.NeuralNetworks;
 /// and images into a shared embedding space, enabling cross-modal similarity and zero-shot classification.
 /// </summary>
 /// <typeparam name="T">The numeric type used for computations (typically float or double).</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.EmbeddingModel)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning Transferable Visual Models From Natural Language Supervision", "https://arxiv.org/abs/2103.00020", Year = 2021, Authors = "Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, Ilya Sutskever")]
 public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T>, IDisposable
 {
     private readonly ClipOptions _options;

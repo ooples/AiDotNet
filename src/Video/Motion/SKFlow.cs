@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
@@ -22,6 +25,16 @@ namespace AiDotNet.Video.Motion;
 /// SKFlow uses selective kernel attention mechanisms to efficiently capture multi-scale motion information for optical flow estimation.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SKFlow: Learning Optical Flow with Super Kernels",
+    "https://arxiv.org/abs/2205.14623",
+    Year = 2022,
+    Authors = "Shangkun Sun, Yuanqi Chen, Yu Zhu, Guodong Guo, Ge Li")]
 public class SKFlow<T> : OpticalFlowBase<T>
 {
     private readonly SKFlowOptions _options;

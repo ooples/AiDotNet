@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.ExpectedSARSA;
@@ -29,6 +32,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.ExpectedSARSA;
 /// Famous for: Van Seijen et al. 2009, bridging SARSA and Q-Learning
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Theoretical and Empirical Analysis of Expected Sarsa",
+    "https://doi.org/10.1109/ADPRL.2009.4927542",
+    Year = 2009,
+    Authors = "van Seijen, H., van Hasselt, H., Whiteson, S., & Wiering, M.")]
 public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private ExpectedSARSAOptions<T> _options;

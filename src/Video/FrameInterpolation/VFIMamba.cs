@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -6,6 +7,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -39,6 +41,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// understanding how every pixel relates to every other pixel.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VFIMamba: Video Frame Interpolation with State Space Models",
+    "https://arxiv.org/abs/2407.02315",
+    Year = 2024,
+    Authors = "Guozhen Zhang, Chunxu Liu, Yuhan Zhu, Limin Wang")]
 public class VFIMamba<T> : FrameInterpolationBase<T>
 {
     private readonly VFIMambaOptions _options;

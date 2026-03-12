@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
@@ -27,6 +30,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
 /// Famous for: Hado van Hasselt 2010, foundation for Double DQN
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Double Q-learning",
+    "https://papers.nips.cc/paper/2010/hash/091d584fced301b442654dd8c23b3fc9-Abstract.html",
+    Year = 2010,
+    Authors = "van Hasselt, H.")]
 public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DoubleQLearningOptions<T> _options;

@@ -1,5 +1,8 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
@@ -21,6 +24,15 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 ///
 /// <para>Reference: Tan et al., "EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks", ICML 2019</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks",
+    "https://arxiv.org/abs/1905.11946",
+    Year = 2019,
+    Authors = "Mingxing Tan, Quoc V. Le")]
 public class EfficientNet<T> : BackboneBase<T>
 {
     private readonly Conv2D<T> _stem;

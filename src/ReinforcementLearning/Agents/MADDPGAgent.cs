@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -39,6 +40,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 /// Examples: Robot swarms, traffic control, multi-player games
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments",
+    "https://arxiv.org/abs/1706.02275",
+    Year = 2017,
+    Authors = "Lowe, R., Wu, Y., Tamar, A., Harb, J., Abbeel, P., & Mordatch, I.")]
 public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private MADDPGOptions<T> _options;

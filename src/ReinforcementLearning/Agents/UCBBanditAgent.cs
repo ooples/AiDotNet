@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -11,6 +13,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// Upper Confidence Bound (UCB) Multi-Armed Bandit agent.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Finite-time Analysis of the Multiarmed Bandit Problem",
+    "https://doi.org/10.1023/A:1013689704352",
+    Year = 2002,
+    Authors = "Auer, P., Cesa-Bianchi, N., & Fischer, P.")]
 public class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private UCBBanditOptions<T> _options;

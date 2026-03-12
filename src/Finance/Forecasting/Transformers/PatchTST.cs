@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -28,6 +30,14 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// with Transformers", ICLR 2023. https://arxiv.org/abs/2211.14730
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Time Series is Worth 64 Words: Long-term Forecasting with Transformers", "https://arxiv.org/abs/2211.14730", Year = 2023, Authors = "Yuqi Nie, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam")]
 public class PatchTST<T> : ForecastingModelBase<T>
 {
     #region Native Mode Fields

@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -32,6 +34,14 @@ namespace AiDotNet.NeuralNetworks;
 /// more specific "leaf" concepts.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelDomain(ModelDomain.GraphAnalysis)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Hyperbolic Neural Networks", "https://arxiv.org/abs/1805.09112", Year = 2018, Authors = "Octavian-Eugen Ganea, Gary Becigneul, Thomas Hofmann")]
 public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly HyperbolicNeuralNetworkOptions _options;

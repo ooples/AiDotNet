@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -38,6 +39,12 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - Works well with any similarity measure
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Clustering by Passing Messages Between Data Points", "https://doi.org/10.1126/science.1136800", Year = 2007, Authors = "Brendan J. Frey, Delbert Dueck")]
 public class AffinityPropagation<T> : ClusteringBase<T>
 {
     private readonly AffinityPropagationOptions<T> _options;

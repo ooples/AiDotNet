@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LoRA.Adapters;
@@ -55,14 +57,19 @@ namespace AiDotNet.NeuralNetworks;
 /// - Any task where graph structure similarity matters
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.GraphAnalysis)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("How Powerful are Graph Neural Networks?", "https://arxiv.org/abs/1810.00826", Year = 2019, Authors = "Keyulu Xu, Weihua Hu, Jure Leskovec, Stefanie Jegelka")]
 public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly GraphIsomorphismNetworkOptions _options;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-
-    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.

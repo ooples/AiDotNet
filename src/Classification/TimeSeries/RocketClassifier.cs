@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Classification.Linear;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -40,6 +41,15 @@ namespace AiDotNet.Classification.TimeSeries;
 /// using random convolutional kernels" (2020)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Vector<>))]
+[ModelPaper("ROCKET: Exceptionally fast and accurate time series classification using random convolutional kernels", "https://arxiv.org/abs/1910.13051", Year = 2020, Authors = "Angus Dempster, Francois Petitjean, Geoffrey I. Webb")]
 public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
 {
     private readonly List<RocketKernel> _kernels;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -29,6 +30,16 @@ namespace AiDotNet.Safety.Fairness;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BEATS: Benchmarking Evaluation of AI Text-based Bias and Stereotypes",
+    "https://arxiv.org/abs/2503.24310",
+    Year = 2025,
+    Authors = "Various")]
 public class RepresentationalBiasDetector<T> : ITextSafetyModule<T>
 {
     private readonly double _disparityThreshold;

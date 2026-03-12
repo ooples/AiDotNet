@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -40,6 +41,12 @@ namespace AiDotNet.Clustering.SemiSupervised;
 /// - Data linkage: "These records refer to the same entity"
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Constrained K-means Clustering with Background Knowledge", "https://doi.org/10.1145/944919.944935", Year = 2001, Authors = "Kiri Wagstaff, Claire Cardie, Seth Rogers, Stefan Schroedl")]
 public class COPKMeans<T> : ClusteringBase<T>
 {
     private readonly COPKMeansOptions<T> _options;

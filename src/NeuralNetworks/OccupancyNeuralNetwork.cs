@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -20,6 +22,12 @@ namespace AiDotNet.NeuralNetworks;
 /// useful for smart buildings, energy management, security systems, and space utilization analysis.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.ThreeD)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.ThreeDGeneration)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Occupancy Networks: Learning 3D Reconstruction in Function Space", "https://arxiv.org/abs/1812.03828", Year = 2019, Authors = "Lars Mescheder, Michael Oechsle, Michael Niemeyer, Sebastian Nowozin, Andreas Geiger")]
 public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly OccupancyNeuralNetworkOptions _options;

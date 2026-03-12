@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -40,6 +41,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
 /// Advantages: Sample efficient, works with images, enables planning
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Dream to Control: Learning Behaviors by Latent Imagination",
+    "https://arxiv.org/abs/1912.01603",
+    Year = 2020,
+    Authors = "Hafner, D., Lillicrap, T., Ba, J., & Norouzi, M.")]
 public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DreamerOptions<T> _options;

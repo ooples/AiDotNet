@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -45,6 +46,14 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToSpeech)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BigVGAN: A Universal Neural Vocoder with Large-Scale Training", "https://arxiv.org/abs/2206.04658", Year = 2023, Authors = "Sang-gil Lee, Wei Ping, Boris Ginsburg, Bryan Catanzaro, Sungroh Yoon")]
 public class BigVGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     #region Fields

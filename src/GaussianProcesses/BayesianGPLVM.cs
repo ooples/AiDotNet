@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.GaussianProcesses;
 
 /// <summary>
@@ -33,6 +36,14 @@ namespace AiDotNet.GaussianProcesses;
 /// The inducing points framework makes this scalable to large datasets.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.GaussianProcess)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Bayesian Gaussian Process Latent Variable Model", "https://doi.org/10.48550/arXiv.1309.6835", Year = 2010, Authors = "Michalis K. Titsias, Neil D. Lawrence")]
 public class BayesianGPLVM<T>
 {
     /// <summary>

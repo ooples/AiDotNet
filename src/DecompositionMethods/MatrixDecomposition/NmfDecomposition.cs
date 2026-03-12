@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
@@ -24,6 +27,13 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// - Bioinformatics data analysis
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Learning the parts of objects by non-negative matrix factorization", "https://doi.org/10.1038/44565", Year = 1999, Authors = "Daniel D. Lee, H. Sebastian Seung")]
 public class NmfDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

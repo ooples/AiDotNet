@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -36,6 +37,15 @@ namespace AiDotNet.Safety.Compliance;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("EU AI Act (Regulation 2024/1689)",
+    "https://eur-lex.europa.eu/eli/reg/2024/1689",
+    Year = 2024,
+    Authors = "European Parliament and Council")]
 public class EUAIActComplianceChecker<T> : ITextSafetyModule<T>
 {
     private readonly SafetyConfig _config;

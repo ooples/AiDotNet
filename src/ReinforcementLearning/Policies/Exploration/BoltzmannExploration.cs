@@ -1,5 +1,8 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ReinforcementLearning.Policies.Exploration
 {
@@ -9,6 +12,15 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Action probability: P(a) = exp(Q(a)/τ) / Σ exp(Q(a')/τ)
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelComplexity(ModelComplexity.Low)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Reinforcement Learning: An Introduction",
+        "http://incompleteideas.net/book/the-book-2nd.html",
+        Year = 2018,
+        Authors = "Sutton, R. S. & Barto, A. G.")]
     public class BoltzmannExploration<T> : ExplorationStrategyBase<T>
     {
         private double _temperature;

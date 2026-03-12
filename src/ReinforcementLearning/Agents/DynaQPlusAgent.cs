@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -11,6 +13,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 /// Dyna-Q+ agent with exploration bonus for handling changing environments.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Integrated Architectures for Learning, Planning, and Reacting Based on Approximating Dynamic Programming",
+    "https://doi.org/10.1016/B978-1-55860-213-7.50013-X",
+    Year = 1991,
+    Authors = "Sutton, R. S.")]
 public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DynaQPlusOptions<T> _options;

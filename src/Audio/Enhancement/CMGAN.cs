@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -47,6 +49,15 @@ namespace AiDotNet.Audio.Enhancement;
 /// </list>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.Denoising)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CMGAN: Conformer-based Metric GAN for Speech Enhancement", "https://arxiv.org/abs/2203.15149", Year = 2022, Authors = "Ruizhe Cao, Sherif Abdulatif, Bin Yang")]
 public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

@@ -1,5 +1,7 @@
 using AiDotNet.ActiveLearning.Config;
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -37,6 +39,13 @@ namespace AiDotNet.ActiveLearning.Strategies.Hybrid;
 ///
 /// <para><b>Reference:</b> Ash et al. "Deep Batch Active Learning by Diverse, Uncertain Gradient Lower Bounds" (ICLR 2020)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Batch Active Learning by Diverse, Uncertain Gradient Lower Bounds", "https://arxiv.org/abs/1906.03671", Year = 2020, Authors = "Jordan T. Ash, Chicheng Zhang, Akshay Krishnamurthy, John Langford, Alekh Agarwal")]
 public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutput>
 {
     [ThreadStatic]

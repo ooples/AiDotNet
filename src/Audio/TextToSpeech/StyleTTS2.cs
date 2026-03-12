@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -38,6 +39,15 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.TextToSpeech)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models", "https://arxiv.org/abs/2306.07691", Year = 2023, Authors = "Yinghao Aaron Li, Cong Han, Vinay S. Raber, Nima Mesgarani")]
 public class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     #region Fields

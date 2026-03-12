@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -42,6 +43,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
 /// Williams, R. J. (1992). "Simple statistical gradient-following algorithms for connectionist RL."
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning",
+    "https://link.springer.com/article/10.1007/BF00992696",
+    Year = 1992,
+    Authors = "Williams, R. J.")]
 public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private REINFORCEOptions<T> _reinforceOptions;

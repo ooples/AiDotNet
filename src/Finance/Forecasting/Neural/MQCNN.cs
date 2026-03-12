@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -63,6 +64,14 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// https://arxiv.org/abs/1711.11053
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Multi-Horizon Quantile Recurrent Forecaster", "https://arxiv.org/abs/1711.11053", Year = 2017, Authors = "Ruofeng Wen, Kari Torkkola, Balakrishnan Narayanaswamy, Dhruv Madeka")]
 public class MQCNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

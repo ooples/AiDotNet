@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -30,6 +31,14 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para><b>Reference:</b> Zhou et al., "iBOT: Image BERT Pre-Training with Online Tokenizer"
 /// (ICLR 2022)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("iBOT: Image BERT Pre-Training with Online Tokenizer", "https://arxiv.org/abs/2111.07832", Year = 2022, Authors = "Jinghao Zhou, Chen Wei, Huiber Wang, Wei Shen, Cihang Xie, Alan Yuille, Tao Kong")]
 public class iBOT<T> : TeacherStudentSSL<T>
 {
     private readonly DINOLoss<T> _clsLoss;

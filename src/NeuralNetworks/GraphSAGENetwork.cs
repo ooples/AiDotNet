@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LoRA.Adapters;
@@ -56,14 +58,20 @@ namespace AiDotNet.NeuralNetworks;
 /// - Social networks, recommendation systems, dynamic graphs
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.GraphAnalysis)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Inductive Representation Learning on Large Graphs", "https://arxiv.org/abs/1706.02216", Year = 2017, Authors = "William L. Hamilton, Rex Ying, Jure Leskovec")]
 public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
 {
     private readonly GraphSAGEOptions _options;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-
-    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.

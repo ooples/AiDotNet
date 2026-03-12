@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -47,6 +48,17 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.BinaryClassification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Using Random Forest to Learn Imbalanced Data",
+    "https://statistics.berkeley.edu/sites/default/files/tech-reports/666.pdf",
+    Year = 2004,
+    Authors = "Chao Chen, Andy Liaw, Leo Breiman")]
 public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
 {
     /// <summary>

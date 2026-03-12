@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Models.Options;
 
@@ -31,6 +33,14 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// Order Search and Penalized Regression", Annals of Statistics.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("CAM: Causal Additive Models, High-Dimensional Order Search and Penalized Regression", "https://doi.org/10.1214/14-AOS1260", Year = 2014, Authors = "Peter Buhlmann, Jonas Peters, Jan Ernest")]
 public class CAMAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold = 0.1;

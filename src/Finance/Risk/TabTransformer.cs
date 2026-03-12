@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +22,17 @@ namespace AiDotNet.Finance.Risk;
 /// contextual embeddings for these categories before combining them with numerical data.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Tabular)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.TabularModel)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TabTransformer: Tabular Data Modeling Using Contextual Embeddings", "https://arxiv.org/abs/2012.06678", Year = 2021, Authors = "Xin Huang, Ashish Khetan, Milan Cvitkovic, Zohar Karnin")]
 public class TabTransformer<T> : RiskModelBase<T>
 {
     #region Shared Fields

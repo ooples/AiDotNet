@@ -1,6 +1,8 @@
 using System.Text.Json;
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.ContinualLearning.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -123,6 +125,13 @@ public enum DistillationLossType
 ///
 /// <para><b>Reference:</b> Li and Hoiem "Learning without Forgetting" (ECCV 2016)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning without Forgetting", "https://arxiv.org/abs/1606.09282", Year = 2017, Authors = "Zhizhong Li, Derek Hoiem")]
 public class LearningWithoutForgetting<T, TInput, TOutput>
     : ContinualLearningStrategyBase<T, TInput, TOutput>,
       IDistillationStrategy<T, TInput, TOutput>

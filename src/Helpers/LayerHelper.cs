@@ -28622,6 +28622,18 @@ public static class LayerHelper<T>
     #region VisionMamba Layers
 
     /// <summary>
+    /// Creates MambaBlock layers for the Vision Mamba classifier model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateVisionMambaClassifierLayers(
+        int numPatches, int mambaInputDim, int numLayers, int stateDimension)
+    {
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MambaBlock<T>(numPatches, mambaInputDim, stateDimension);
+        }
+    }
+
+    /// <summary>
     /// Creates encoder layers for the VisionMamba model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateVisionMambaEncoderLayers(
@@ -31312,6 +31324,366 @@ public static class LayerHelper<T>
 
         // LM head
         yield return new DenseLayer<T>(lmHiddenDim, vocabularySize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the RWKV-4 language model architecture.
+    /// Architecture: EmbeddingLayer + N x RWKVLayer + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    /// <param name="vocabSize">Size of the token vocabulary.</param>
+    /// <param name="modelDimension">Model dimension (d_model).</param>
+    /// <param name="numLayers">Number of RWKV blocks.</param>
+    /// <param name="maxSeqLength">Maximum sequence length.</param>
+    public static IEnumerable<ILayer<T>> CreateRWKV4Layers(
+        int vocabSize = 50277,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int maxSeqLength = 512)
+    {
+        // Token embedding: maps token indices to dense vectors
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+
+        // RWKV-4 blocks: single-head (numHeads=1) per the original v4 architecture
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new RWKVLayer<T>(maxSeqLength, modelDimension, numHeads: 1);
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // LM head: project back to vocabulary logits
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Mamba language model architecture.
+    /// Architecture: EmbeddingLayer + N x MambaBlock + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMambaLayers(
+        int vocabSize = 50277,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int stateDimension = 16,
+        int expandFactor = 2,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension, expandFactor);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Mamba-2 language model architecture.
+    /// Architecture: EmbeddingLayer + N x Mamba2Block + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateMamba2Layers(
+        int vocabSize = 50277,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int stateDimension = 64,
+        int numHeads = 8,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new Mamba2Block<T>(maxSeqLength, modelDimension, stateDimension, numHeads);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the FalconMamba language model architecture.
+    /// Architecture: EmbeddingLayer + N x MambaBlock + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateFalconMambaLayers(
+        int vocabSize = 65024,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int stateDimension = 16,
+        int expandFactor = 2,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension, expandFactor);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Eagle (RWKV-5) language model architecture.
+    /// Architecture: EmbeddingLayer + N x RWKVLayer + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateEagleLayers(
+        int vocabSize = 65536,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int numHeads = 8,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new RWKVLayer<T>(maxSeqLength, modelDimension, numHeads);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Finch (RWKV-6) language model architecture.
+    /// Architecture: EmbeddingLayer + N x RWKVLayer + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateFinchLayers(
+        int vocabSize = 65536,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int numHeads = 8,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new RWKVLayer<T>(maxSeqLength, modelDimension, numHeads);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the RWKV-7 language model architecture.
+    /// Architecture: EmbeddingLayer + N x RWKV7Block + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateRWKV7Layers(
+        int vocabSize = 65536,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int numHeads = 4,
+        double ffnMultiplier = 3.5,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new RWKV7Block<T>(maxSeqLength, modelDimension, numHeads, ffnMultiplier);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the xLSTM language model architecture.
+    /// Architecture: EmbeddingLayer + N x ExtendedLSTMLayer + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateXLSTMLayers(
+        int vocabSize = 50277,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int numHeads = 8,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new ExtendedLSTMLayer<T>(maxSeqLength, modelDimension, numHeads);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the GLA (Gated Linear Attention) language model architecture.
+    /// Architecture: EmbeddingLayer + N x GatedLinearAttentionLayer + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateGLALayers(
+        int vocabSize = 50277,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int numHeads = 8,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new GatedLinearAttentionLayer<T>(maxSeqLength, modelDimension, numHeads);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the GatedDeltaNet language model architecture.
+    /// Architecture: EmbeddingLayer + N x GatedDeltaNetLayer + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateGatedDeltaNetLayers(
+        int vocabSize = 50277,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int numHeads = 8,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new GatedDeltaNetLayer<T>(maxSeqLength, modelDimension, numHeads);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Griffin language model architecture.
+    /// Architecture: EmbeddingLayer + N x RealGatedLinearRecurrenceLayer + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateGriffinLayers(
+        int vocabSize = 256000,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Hawk language model architecture.
+    /// Architecture: EmbeddingLayer + N x RealGatedLinearRecurrenceLayer + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateHawkLayers(
+        int vocabSize = 256000,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the RecurrentGemma language model architecture.
+    /// Architecture: EmbeddingLayer + N x RealGatedLinearRecurrenceLayer + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateRecurrentGemmaLayers(
+        int vocabSize = 256000,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+        for (int i = 0; i < numLayers; i++)
+            yield return new RealGatedLinearRecurrenceLayer<T>(maxSeqLength, modelDimension);
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Jamba hybrid language model architecture.
+    /// Architecture: EmbeddingLayer + HybridBlockScheduler (Mamba + Attention) + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateJambaLayers(
+        int vocabSize = 65536,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int stateDimension = 16,
+        int attentionInterval = 4,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+
+        var blocks = new ILayer<T>[numLayers];
+        var isAttn = new bool[numLayers];
+        for (int i = 0; i < numLayers; i++)
+        {
+            blocks[i] = new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension);
+            isAttn[i] = attentionInterval > 0 && (i + 1) % attentionInterval == 0;
+        }
+        yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
+            HybridSchedulePattern.JambaStyle, modelDimension);
+
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Samba hybrid language model architecture.
+    /// Architecture: EmbeddingLayer + HybridBlockScheduler (Mamba + sliding window attention) + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateSambaLayers(
+        int vocabSize = 32000,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int stateDimension = 16,
+        int attentionInterval = 2,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+
+        var blocks = new ILayer<T>[numLayers];
+        var isAttn = new bool[numLayers];
+        for (int i = 0; i < numLayers; i++)
+        {
+            blocks[i] = new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension);
+            isAttn[i] = attentionInterval > 0 && (i + 1) % attentionInterval == 0;
+        }
+        yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
+            HybridSchedulePattern.JambaStyle, modelDimension);
+
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Zamba hybrid language model architecture.
+    /// Architecture: EmbeddingLayer + HybridBlockScheduler (Mamba + shared attention) + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateZambaLayers(
+        int vocabSize = 32000,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int stateDimension = 16,
+        int attentionInterval = 4,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+
+        var blocks = new ILayer<T>[numLayers];
+        var isAttn = new bool[numLayers];
+        for (int i = 0; i < numLayers; i++)
+        {
+            blocks[i] = new MambaBlock<T>(maxSeqLength, modelDimension, stateDimension);
+            isAttn[i] = attentionInterval > 0 && (i + 1) % attentionInterval == 0;
+        }
+        yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
+            HybridSchedulePattern.ZambaStyle, modelDimension);
+
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates layers for the Zamba2 hybrid language model architecture.
+    /// Architecture: EmbeddingLayer + HybridBlockScheduler (Mamba2 + shared attention) + LayerNormalization + DenseLayer (LM head).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateZamba2Layers(
+        int vocabSize = 32000,
+        int modelDimension = 256,
+        int numLayers = 4,
+        int stateDimension = 64,
+        int numHeads = 8,
+        int attentionInterval = 4,
+        int maxSeqLength = 512)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, modelDimension);
+
+        var blocks = new ILayer<T>[numLayers];
+        var isAttn = new bool[numLayers];
+        for (int i = 0; i < numLayers; i++)
+        {
+            blocks[i] = new Mamba2Block<T>(maxSeqLength, modelDimension, stateDimension, numHeads);
+            isAttn[i] = attentionInterval > 0 && (i + 1) % attentionInterval == 0;
+        }
+        yield return new HybridBlockScheduler<T>(maxSeqLength, blocks, isAttn,
+            HybridSchedulePattern.ZambaStyle, modelDimension);
+
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+        yield return new DenseLayer<T>(modelDimension, vocabSize, (IActivationFunction<T>?)null);
     }
 
     /// <summary>

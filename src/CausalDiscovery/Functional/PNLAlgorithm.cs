@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Models.Options;
 
@@ -32,6 +34,14 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// Post-Nonlinear Causal Model", UAI.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("On the Identifiability of the Post-Nonlinear Causal Model", "https://auai.org/uai2009/papers/UAI2009_0172_7af15a82e72625cee10a906ac00f34b0.pdf", Year = 2009, Authors = "Kun Zhang, Aapo Hyvarinen")]
 public class PNLAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold = 0.1;

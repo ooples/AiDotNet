@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Policies
@@ -12,6 +15,16 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <summary>
     /// Multi-modal policy using mixture of Gaussians for complex action distributions.
     /// </summary>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Mixture Density Networks",
+        "https://publications.aston.ac.uk/id/eprint/373/1/NCRG_94_004.pdf",
+        Year = 1994,
+        Authors = "Bishop, C. M.")]
     public class MultiModalPolicy<T> : PolicyBase<T>
     {
         private readonly INeuralNetwork<T> _policyNetwork;

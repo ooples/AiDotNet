@@ -1,6 +1,9 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation;
 
@@ -48,6 +51,16 @@ namespace AiDotNet.KnowledgeDistillation;
 /// - Furlanello, T., et al. (2018). Born Again Neural Networks. ICML.
 /// - Zhang, L., et al. (2019). Be Your Own Teacher: Improve the Performance of Convolutional Neural Networks via Self-Distillation.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Born Again Neural Networks",
+    "https://arxiv.org/abs/1805.04770",
+    Year = 2018,
+    Authors = "Tommaso Furlanello, Zachary C. Lipton, Michael Tschannen, et al.")]
 public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Vector<T>, Vector<T>>
 {
     private readonly int _generations;

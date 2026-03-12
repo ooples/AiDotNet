@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Clustering.Base;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
@@ -42,6 +43,13 @@ namespace AiDotNet.Clustering.Ensemble;
 /// - Can combine different algorithms
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Cluster Ensembles - A Knowledge Reuse Framework for Combining Multiple Partitions", "https://doi.org/10.1162/153244303321897735", Year = 2003, Authors = "Alexander Strehl, Joydeep Ghosh")]
 public class ConsensusClustering<T> : ClusteringBase<T>
 {
     private readonly ConsensusClusteringOptions<T> _options;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LoRA.Adapters;
@@ -49,14 +51,20 @@ namespace AiDotNet.NeuralNetworks;
 /// - Citation networks, social networks, knowledge graphs
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.GraphAnalysis)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Graph Attention Networks", "https://arxiv.org/abs/1710.10903", Year = 2018, Authors = "Petar Velickovic, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Lio, Yoshua Bengio")]
 public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly GraphAttentionNetworkOptions _options;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-
-    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.

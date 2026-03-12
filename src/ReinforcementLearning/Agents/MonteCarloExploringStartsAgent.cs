@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -14,6 +16,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// Monte Carlo ES ensures exploration by starting each episode from a randomly
 /// chosen state-action pair, then following the greedy policy thereafter.
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Reinforcement Learning: An Introduction",
+    "http://incompleteideas.net/book/the-book-2nd.html",
+    Year = 2018,
+    Authors = "Sutton, R. S. & Barto, A. G.")]
 public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private MonteCarloExploringStartsOptions<T> _options;

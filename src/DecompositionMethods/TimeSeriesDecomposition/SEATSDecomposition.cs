@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 /// <summary>
@@ -14,6 +17,13 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly SARIMAOptions<T> _sarimaOptions;

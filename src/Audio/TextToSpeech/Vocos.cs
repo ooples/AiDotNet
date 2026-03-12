@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -44,6 +45,13 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToSpeech)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Vocos: Closing the gap between time-domain and Fourier-based neural vocoders for high-quality audio synthesis", "https://arxiv.org/abs/2306.00814", Year = 2023, Authors = "Hubert Siuzdak")]
 public class Vocos<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     #region Fields

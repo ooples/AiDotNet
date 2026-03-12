@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -38,6 +40,12 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 /// Reference: Lazarevic, A., Kumar, V. (2005). "Feature Bagging for Outlier Detection." KDD.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Feature Bagging for Outlier Detection", "https://doi.org/10.1145/1081870.1081891", Year = 2005, Authors = "Aleksandar Lazarevic, Vipin Kumar")]
 public class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nEstimators;

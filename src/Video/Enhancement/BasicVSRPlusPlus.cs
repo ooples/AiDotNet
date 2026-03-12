@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -52,6 +55,16 @@ namespace AiDotNet.Video.Enhancement;
 /// Enhanced Propagation and Alignment", CVPR 2022. https://arxiv.org/abs/2104.13371
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BasicVSR++: Improving Video Super-Resolution with Enhanced Propagation and Alignment",
+    "https://arxiv.org/abs/2104.13371",
+    Year = 2022,
+    Authors = "Kelvin C.K. Chan, Shangchen Zhou, Xiangyu Xu, Chen Change Loy")]
 public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 {
     private readonly BasicVSRPlusPlusOptions _options;

@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Stabilization;
@@ -25,6 +27,16 @@ namespace AiDotNet.Video.Stabilization;
 /// to fill missing border regions, avoiding the field-of-view loss of traditional cropping.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FuSta: Hybrid Approach for Video Stabilization",
+    "https://arxiv.org/abs/2202.06897",
+    Year = 2022,
+    Authors = "Zhiming Wang, Feng Xu, Jiangyu Liu")]
 public class FuSta<T> : VideoStabilizationBase<T>
 {
     private readonly FuStaOptions _options;

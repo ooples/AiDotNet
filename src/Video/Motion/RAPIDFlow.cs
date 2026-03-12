@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
@@ -22,6 +25,16 @@ namespace AiDotNet.Video.Motion;
 /// RAPIDFlow combines recurrent adaptable pyramids with efficient NeXt1D convolutions for fast and accurate optical flow estimation.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RAPIDFlow: Recurrent Adaptable Pyramids with Iterative Decoding for Efficient Optical Flow",
+    "https://arxiv.org/abs/2501.04350",
+    Year = 2025,
+    Authors = "Henrique Morimitsu")]
 public class RAPIDFlow<T> : OpticalFlowBase<T>
 {
     private readonly RAPIDFlowOptions _options;

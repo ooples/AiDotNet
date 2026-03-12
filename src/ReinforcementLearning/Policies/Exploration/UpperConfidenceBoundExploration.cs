@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ReinforcementLearning.Policies.Exploration
 {
@@ -9,6 +12,15 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Balances exploration and exploitation using confidence intervals: UCB(a) = Q(a) + c * √(ln(t) / N(a))
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelComplexity(ModelComplexity.Low)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Finite-time Analysis of the Multiarmed Bandit Problem",
+        "https://link.springer.com/article/10.1023/A:1013689704352",
+        Year = 2002,
+        Authors = "Auer, P., Cesa-Bianchi, N., & Fischer, P.")]
     public class UpperConfidenceBoundExploration<T> : ExplorationStrategyBase<T>
     {
         private readonly Dictionary<int, int> _actionCounts;

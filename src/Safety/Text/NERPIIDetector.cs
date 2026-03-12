@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -29,6 +30,16 @@ namespace AiDotNet.Safety.Text;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Text Anonymization Benchmark: A Survey on NER and LLMs for PII Detection",
+    "https://arxiv.org/abs/2508.21587",
+    Year = 2025,
+    Authors = "Various")]
 public class NERPIIDetector<T> : TextSafetyModuleBase<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);

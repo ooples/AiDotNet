@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Benchmarking;
 
@@ -25,6 +27,15 @@ namespace AiDotNet.Safety.Benchmarking;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Watermark for Large Language Models",
+    "https://arxiv.org/abs/2301.10226",
+    Year = 2023,
+    Authors = "John Kirchenbauer, Jonas Geiping, Yuxin Wen, et al.")]
 public class WatermarkBenchmark<T> : SafetyBenchmarkBase<T>
 {
     /// <inheritdoc />

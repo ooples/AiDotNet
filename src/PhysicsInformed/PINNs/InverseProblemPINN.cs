@@ -10,6 +10,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed.PINNs
@@ -49,6 +51,15 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// 3. Gradually increase data weight
     /// 4. Use separate learning rates for network and parameters
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelTask(ModelTask.CausalInference)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations", "https://doi.org/10.1016/j.jcp.2018.10.045", Year = 2019, Authors = "M. Raissi, P. Perdikaris, G.E. Karniadakis")]
     public class InverseProblemPINN<T> : NeuralNetworkBase<T>
     {
         private readonly IInverseProblem<T> _inverseProblem;

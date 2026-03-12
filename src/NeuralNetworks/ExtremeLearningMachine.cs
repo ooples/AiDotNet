@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -26,6 +28,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Extreme Learning Machine: Theory and Applications", "https://doi.org/10.1016/j.neucom.2005.12.126", Year = 2006, Authors = "Guang-Bin Huang, Qin-Yu Zhu, Chee-Kheong Siew")]
 public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
 {
     private readonly ExtremeLearningMachineOptions _options;

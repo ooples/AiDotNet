@@ -1,5 +1,7 @@
 using AiDotNet.ActiveLearning.Config;
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -40,6 +42,13 @@ namespace AiDotNet.ActiveLearning.Strategies.Diversity;
 ///
 /// <para><b>Reference:</b> Sener and Savarese "Active Learning for Convolutional Neural Networks: A Core-Set Approach" (ICLR 2018)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.Clustering)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Active Learning for Convolutional Neural Networks: A Core-Set Approach", "https://arxiv.org/abs/1708.00489", Year = 2018, Authors = "Ozan Sener, Silvio Savarese")]
 public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

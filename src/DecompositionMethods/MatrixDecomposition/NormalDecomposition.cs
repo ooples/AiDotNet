@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
@@ -17,6 +20,12 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// minimizes the overall error.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelCategory(ModelCategory.Regression)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class NormalDecomposition<T> : MatrixDecompositionBase<T>
 {
     // A property is inherited from MatrixDecompositionBase<T>

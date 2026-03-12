@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -7,6 +9,15 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
 
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning from Delayed Rewards",
+    "https://www.cs.rhul.ac.uk/~chrisw/new_thesis.pdf",
+    Year = 1989,
+    Authors = "Watkins, C. J. C. H.")]
 public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private QLambdaOptions<T> _options;

@@ -1,10 +1,13 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -78,6 +81,16 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// Reference: Zheng et al., "DAGs with NO TEARS: Continuous Optimization for Structure Learning" (NeurIPS 2018)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.SyntheticDataGenerator)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CausalGAN: Learning Causal Implicit Generative Models with Adversarial Training",
+    "https://arxiv.org/abs/1709.02023",
+    Year = 2018,
+    Authors = "Murat Kocaoglu, Christopher Snyder, Alexandros G. Dimakis, Sriram Vishwanath")]
 public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly CausalGANOptions<T> _options;

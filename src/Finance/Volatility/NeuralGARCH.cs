@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -27,6 +29,13 @@ namespace AiDotNet.Finance.Volatility;
 /// It looks at recent returns and predicts how bouncy prices will be next.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Generalized Autoregressive Conditional Heteroskedasticity", "https://doi.org/10.1016/0304-4076(86)90063-1", Year = 1986, Authors = "Tim Bollerslev")]
 public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
 {
     #region Native Mode Fields

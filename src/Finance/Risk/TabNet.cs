@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
@@ -21,6 +23,16 @@ namespace AiDotNet.Finance.Risk;
 /// and the end-to-end learning of neural networks.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Tabular)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.TabularModel)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TabNet: Attentive Interpretable Tabular Learning", "https://doi.org/10.1609/aaai.v35i8.16826", Year = 2021, Authors = "Sercan O. Arik, Tomas Pfister")]
 public class TabNet<T> : RiskModelBase<T>
 {
     #region Shared Fields

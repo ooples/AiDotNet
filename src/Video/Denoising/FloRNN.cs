@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Denoising;
@@ -25,6 +27,16 @@ namespace AiDotNet.Video.Denoising;
 /// gating to suppress unreliable aligned features.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Flowing Recurrent Network for Video Denoising",
+    "https://arxiv.org/abs/2111.05507",
+    Year = 2022,
+    Authors = "Jiahao Li, Bin Chen, Dawei Leng, Yuhui Quan")]
 public class FloRNN<T> : VideoDenoisingBase<T>
 {
     private readonly FloRNNOptions _options;

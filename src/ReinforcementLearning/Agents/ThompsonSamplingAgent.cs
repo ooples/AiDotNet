@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -11,6 +13,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// Thompson Sampling (Bayesian) Multi-Armed Bandit agent.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples",
+    "https://doi.org/10.2307/2332286",
+    Year = 1933,
+    Authors = "Thompson, W. R.")]
 public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private ThompsonSamplingOptions<T> _options;

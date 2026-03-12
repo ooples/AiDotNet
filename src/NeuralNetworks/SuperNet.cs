@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Attributes;
 using AiDotNet.AutoML;
+using AiDotNet.Enums;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -18,6 +20,12 @@ namespace AiDotNet.NeuralNetworks
     /// and network weights simultaneously.
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    [ModelDomain(ModelDomain.General)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class SuperNet<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
         /// <summary>

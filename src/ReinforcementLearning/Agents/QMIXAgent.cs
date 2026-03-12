@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -38,6 +39,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
 /// Famous for: StarCraft II micromanagement, cooperative games
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("QMIX: Monotonic Value Function Factorisation for Deep Multi-Agent Reinforcement Learning",
+    "https://arxiv.org/abs/1803.11485",
+    Year = 2018,
+    Authors = "Rashid, T., Samvelyan, M., de Witt, C. S., Farquhar, G., Foerster, J., & Whiteson, S.")]
 public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private QMIXOptions<T> _options;

@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -41,6 +42,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.PPO;
 /// Schulman, J., et al. (2017). "Proximal Policy Optimization Algorithms." arXiv:1707.06347.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Proximal Policy Optimization Algorithms",
+    "https://arxiv.org/abs/1707.06347",
+    Year = 2017,
+    Authors = "Schulman, J., Wolski, F., Dhariwal, P., Radford, A., & Klimov, O.")]
 public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private PPOOptions<T> _ppoOptions;

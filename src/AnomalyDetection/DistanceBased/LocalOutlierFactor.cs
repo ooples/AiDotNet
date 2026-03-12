@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -37,6 +39,12 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 /// "LOF: Identifying Density-Based Local Outliers." ACM SIGMOD Record.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.InstanceBased)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("LOF: Identifying Density-Based Local Outliers", "https://doi.org/10.1145/335191.335388", Year = 2000, Authors = "Markus M. Breunig, Hans-Peter Kriegel, Raymond T. Ng, Joerg Sander")]
 public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numNeighbors;

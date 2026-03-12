@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 /// <summary>
@@ -13,6 +16,15 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// Think of it like separating a bumpy road (your data) into the general path (trend) 
 /// and the bumps along the way (cycles).
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelDomain(ModelDomain.Finance)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Postwar U.S. Business Cycles: An Empirical Investigation", "https://doi.org/10.2307/2953682", Year = 1997, Authors = "Robert J. Hodrick, Edward C. Prescott")]
 public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     /// <summary>

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -36,6 +37,12 @@ namespace AiDotNet.Regression;
 /// proportional to μ³, meaning it handles even heavier tails where large values are much more variable.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class InverseGaussianRegression<T> : RegressionBase<T>
 {
     private const double MuFloor = 1e-10;

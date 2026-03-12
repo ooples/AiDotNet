@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -33,6 +35,12 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 /// Annals of Mathematical Statistics.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Analysis of Extreme Values", "https://doi.org/10.1214/aoms/1177729747", Year = 1950, Authors = "Wilfrid J. Dixon")]
 public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;

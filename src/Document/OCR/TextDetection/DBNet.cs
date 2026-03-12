@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -45,6 +46,13 @@ namespace AiDotNet.Document.OCR.TextDetection;
 /// https://arxiv.org/abs/1911.08947
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Real-time Scene Text Detection with Differentiable Binarization", "https://doi.org/10.48550/arXiv.1911.08947", Year = 2020, Authors = "Minghui Liao, Zhaoyi Wan, Cong Yao, Kai Chen, Xiang Bai")]
 public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly DBNetOptions _options;

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -6,6 +7,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -39,6 +41,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// objects move hundreds of pixels between frames.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("XVFI: eXtreme Video Frame Interpolation",
+    "https://arxiv.org/abs/2103.16206",
+    Year = 2021,
+    Authors = "Hyeonjun Sim, Jihyong Oh, Munchurl Kim")]
 public class XVFI<T> : FrameInterpolationBase<T>
 {
     private readonly XVFIOptions _options;

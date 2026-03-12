@@ -1,4 +1,6 @@
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -37,6 +39,12 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// - Any classification with boolean attributes
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
 {
     /// <summary>

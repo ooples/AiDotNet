@@ -1,7 +1,9 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Results;
 using AiDotNet.ContinualLearning.Strategies;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -119,6 +121,13 @@ public class GEMTrainerOptions<T>
 /// <item><description>Chaudhry et al. "Efficient Lifelong Learning with A-GEM" (ICLR 2019)</description></item>
 /// </list>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Gradient Episodic Memory for Continual Learning", "https://arxiv.org/abs/1706.08840", Year = 2017, Authors = "David Lopez-Paz, Marc'Aurelio Ranzato")]
 public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOutput>
 {
     [ThreadStatic]

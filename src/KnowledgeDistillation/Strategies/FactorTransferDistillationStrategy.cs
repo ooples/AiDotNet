@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -43,6 +46,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - FitNets: Hints for Thin Deep Nets (Romero et al., 2015)
 /// - Attention Transfer (Zagoruyko & Komodakis, 2017)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Paraphrasing Complex Network: Network Compression via Factor Transfer",
+    "https://arxiv.org/abs/1802.04977",
+    Year = 2018,
+    Authors = "Jangho Kim, SeongUk Park, Nojun Kwak")]
 public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _factorWeight;

@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -36,6 +38,13 @@ namespace AiDotNet.ContinualLearning;
 /// <para><b>Reference:</b> Schwarz, J. et al. "Progress &amp; Compress: A scalable framework for
 /// continual learning" (2018). ICML.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Progress & Compress: A Scalable Framework for Continual Learning", "https://arxiv.org/abs/1805.06370", Year = 2018, Authors = "Jonathan Schwarz, Wojciech Czarnecki, Jelena Luketina, Agnieszka Grabska-Barwinska, Yee Whye Teh, Razvan Pascanu, Raia Hadsell")]
 public class OnlineEWC<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

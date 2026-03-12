@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -37,6 +38,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.TD3;
 /// Used by: Robotic control, autonomous systems, continuous optimization
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Addressing Function Approximation Error in Actor-Critic Methods",
+    "https://arxiv.org/abs/1802.09477",
+    Year = 2018,
+    Authors = "Fujimoto, S., van Hoof, H., & Meger, D.")]
 public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private TD3Options<T> _options;

@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
@@ -22,6 +25,17 @@ namespace AiDotNet.Video.Motion;
 /// FlowFormer++ extends FlowFormer with masked cost volume autoencoding pretraining and tile-based processing for high-resolution optical flow.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FlowFormer++: Masked Cost Volume Autoencoding for Pretraining Optical Flow Estimation",
+    "https://arxiv.org/abs/2303.01237",
+    Year = 2023,
+    Authors = "Xiaoyu Shi, Zhaoyang Huang, Dasong Li, Manyuan Zhang, Ka Chun Cheung, Simon See, Hongwei Qin, Jifeng Dai, Hongsheng Li")]
 public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
 {
     private readonly FlowFormerPlusPlusOptions _options;

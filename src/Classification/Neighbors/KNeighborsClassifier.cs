@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Classification;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
@@ -32,6 +34,11 @@ namespace AiDotNet.Classification.Neighbors;
 /// This is why feature scaling is important for KNN!
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.InstanceBased)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
 {
     /// <summary>

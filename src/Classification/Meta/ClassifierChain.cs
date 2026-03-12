@@ -1,4 +1,6 @@
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
@@ -34,6 +36,13 @@ namespace AiDotNet.Classification.Meta;
 /// - Error propagation (early mistakes affect later predictions)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.MultiClassClassification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class ClassifierChain<T> : MetaClassifierBase<T>
 {
     /// <summary>
@@ -104,11 +113,15 @@ public class ClassifierChain<T> : MetaClassifierBase<T>
         NumClasses = yMultiLabel.Columns;
         TaskType = ClassificationTaskType.MultiLabel;
 
-        // Create class labels (0 to NumClasses-1)
-        ClassLabels = new Vector<T>(NumClasses);
-        for (int c = 0; c < NumClasses; c++)
+        // Only set class labels to 0..N-1 indices if not already set by Train()
+        // This preserves caller labels when Train(x, y) calls TrainMultiLabel
+        if (ClassLabels is null || ClassLabels.Length != NumClasses)
         {
-            ClassLabels[c] = NumOps.FromDouble(c);
+            ClassLabels = new Vector<T>(NumClasses);
+            for (int c = 0; c < NumClasses; c++)
+            {
+                ClassLabels[c] = NumOps.FromDouble(c);
+            }
         }
 
         // Determine chain order

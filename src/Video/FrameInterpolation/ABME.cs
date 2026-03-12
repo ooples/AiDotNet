@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -45,6 +47,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// (Park et al., ICCV 2021)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Asymmetric Bilateral Motion Estimation for Video Frame Interpolation",
+    "https://arxiv.org/abs/2108.06815",
+    Year = 2021,
+    Authors = "Junheum Park, Chul Lee, Chang-Su Kim")]
 public class ABME<T> : FrameInterpolationBase<T>
 {
     #region Fields

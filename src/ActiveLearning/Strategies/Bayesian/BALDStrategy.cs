@@ -1,5 +1,7 @@
 using AiDotNet.ActiveLearning.Config;
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -33,6 +35,13 @@ namespace AiDotNet.ActiveLearning.Strategies.Bayesian;
 ///
 /// <para><b>Reference:</b> Gal et al. "Deep Bayesian Active Learning with Image Data" (ICML 2017)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Bayesian Active Learning with Image Data", "https://arxiv.org/abs/1703.02910", Year = 2017, Authors = "Yarin Gal, Riashat Islam, Zoubin Ghahramani")]
 public class BALDStrategy<T, TInput, TOutput> : IBayesianStrategy<T, TInput, TOutput>
 {
     [ThreadStatic]

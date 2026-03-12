@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using Newtonsoft.Json;
 
 namespace AiDotNet.TimeSeries;
@@ -39,6 +41,14 @@ namespace AiDotNet.TimeSeries;
 /// - Temporal patterns that persist in the data after accounting for these external influences
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelCategory(ModelCategory.Regression)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Forecasting: Principles and Practice", "https://otexts.com/fpp3/", Year = 2021, Authors = "Rob J. Hyndman, George Athanasopoulos")]
 public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
@@ -13,6 +16,11 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// useful for solving systems of linear equations and for numerical stability in calculations.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class UduDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

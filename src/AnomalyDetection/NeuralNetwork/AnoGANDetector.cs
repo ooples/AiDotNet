@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -39,6 +41,13 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 /// "Unsupervised Anomaly Detection with Generative Adversarial Networks." IPMI.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Unsupervised Anomaly Detection with Generative Adversarial Networks", "https://doi.org/10.1007/978-3-319-59050-9_12", Year = 2017, Authors = "Thomas Schlegl, Philipp Seeböck, Sebastian M. Waldstein, Ursula Schmidt-Erfurth, Georg Langs")]
 public class AnoGANDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _latentDim;

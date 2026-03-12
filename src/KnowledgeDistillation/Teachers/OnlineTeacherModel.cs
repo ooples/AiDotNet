@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
@@ -56,6 +59,16 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// - Zhang et al. (2018). Deep Mutual Learning. CVPR.
 /// - Anil et al. (2018). Large Scale Distributed Neural Network Training through Online Distillation.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Mutual Learning",
+    "https://arxiv.org/abs/1706.00384",
+    Year = 2018,
+    Authors = "Ying Zhang, Tao Xiang, Timothy M. Hospedales, Huchuan Lu")]
 public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private readonly Func<Vector<T>, Vector<T>>? _teacherForward;

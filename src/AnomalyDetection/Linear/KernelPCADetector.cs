@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -39,6 +41,12 @@ namespace AiDotNet.AnomalyDetection.Linear;
 /// as a Kernel Eigenvalue Problem." Neural Computation.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Kernel)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Nonlinear Component Analysis as a Kernel Eigenvalue Problem", "https://doi.org/10.1162/089976698300017467", Year = 1998, Authors = "Bernhard Scholkopf, Alexander Smola, Klaus-Robert Muller")]
 public class KernelPCADetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _gamma;

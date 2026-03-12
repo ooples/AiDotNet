@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -44,6 +46,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// (Seo et al., CVPR 2025)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BiMVFI: Bidirectional Motion Field-Based Video Frame Interpolation",
+    "https://arxiv.org/abs/2501.07838",
+    Year = 2025,
+    Authors = "Wonyong Seo, Jihyong Oh, Munchurl Kim")]
 public class BiMVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields

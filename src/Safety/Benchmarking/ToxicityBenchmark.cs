@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Benchmarking;
 
@@ -24,6 +26,15 @@ namespace AiDotNet.Safety.Benchmarking;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Jigsaw Toxic Comment Classification Challenge",
+    "https://www.kaggle.com/c/jigsaw-toxic-comment-classification-challenge",
+    Year = 2018,
+    Authors = "Jigsaw/Conversation AI")]
 public class ToxicityBenchmark<T> : SafetyBenchmarkBase<T>
 {
     /// <inheritdoc />

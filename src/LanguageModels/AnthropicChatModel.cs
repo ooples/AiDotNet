@@ -1,6 +1,8 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
@@ -55,6 +57,12 @@ namespace AiDotNet.LanguageModels;
 /// - Use environment variables or secure vaults
 /// - Monitor usage at console.anthropic.com
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(string), typeof(string))]
 public class AnthropicChatModel<T> : ChatModelBase<T>
 {
     private readonly string _apiKey;

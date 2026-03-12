@@ -32,7 +32,6 @@ public class TemporalConvolution<T> : LayerBase<T>
     private readonly bool _causal;
     private readonly DenseLayer<T> _conv;
     private readonly LayerNormalizationLayer<T> _norm;
-    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private Tensor<T>? _lastInput;
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)

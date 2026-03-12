@@ -1,4 +1,6 @@
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
@@ -35,6 +37,12 @@ namespace AiDotNet.Classification.Meta;
 /// - As a simpler alternative to boosting
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Bagging Predictors", "https://doi.org/10.1007/BF00058655", Year = 1996, Authors = "Leo Breiman")]
 public class BaggingClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>

@@ -1,4 +1,6 @@
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -34,6 +36,11 @@ namespace AiDotNet.Classification.Meta;
 /// - To leverage the strengths of different algorithms
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class VotingClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>

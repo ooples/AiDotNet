@@ -9,6 +9,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.Options;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.PINNs;
@@ -59,6 +61,14 @@ namespace AiDotNet.PhysicsInformed.PINNs;
 ///   (XPINNs): A Generalized Space-Time Domain Decomposition Based Deep Learning Framework"
 ///   Communications in Computational Physics, 2020.
 /// </remarks>
+[ModelDomain(ModelDomain.Science)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.PhysicsInformed)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Extended Physics-Informed Neural Networks (XPINNs): A Generalized Space-Time Domain Decomposition Based Deep Learning Framework", "https://doi.org/10.4208/cicp.OA-2020-0164", Year = 2020, Authors = "Ameya D. Jagtap, George Em Karniadakis")]
 public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
 {
     private readonly DomainDecompositionPINNOptions _options;

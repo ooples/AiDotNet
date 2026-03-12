@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -59,6 +60,17 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Thread Safety:</b> This class is NOT thread-safe. Create separate instances for concurrent usage.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MOMENT: A Family of Open Time-Series Foundation Models", "https://arxiv.org/abs/2402.03885", Year = 2024, Authors = "Mononito Goswami, Konrad Szafer, Arjun Choudhry, Yifu Cai, Shuo Li, Artur Dubrawski")]
 public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode

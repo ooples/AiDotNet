@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -46,6 +49,17 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SAINT: Improved Neural Networks for Tabular Data via Row Attention and Contrastive Pre-Training",
+    "https://arxiv.org/abs/2106.01342",
+    Year = 2021,
+    Authors = "Somepalli, G., Goldblum, M., Schwarzschild, A., Bruss, C. B., & Goldstein, T.")]
 public class SAINTNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly SAINTOptions<T> _options;

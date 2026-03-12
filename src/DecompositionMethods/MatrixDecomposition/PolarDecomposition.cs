@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
@@ -16,6 +19,11 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// coordinates break down a point into an angle and a distance.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class PolarDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

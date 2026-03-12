@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
@@ -36,6 +37,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.CQL;
 /// - Robotics from demonstration datasets
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Conservative Q-Learning for Offline Reinforcement Learning",
+    "https://arxiv.org/abs/2006.04779",
+    Year = 2020,
+    Authors = "Kumar, A., Zhou, A., Tucker, G., & Levine, S.")]
 public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private CQLOptions<T> _options;

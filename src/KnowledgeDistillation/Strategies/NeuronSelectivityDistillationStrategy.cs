@@ -1,7 +1,10 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.KnowledgeDistillation;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -49,6 +52,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 ///
 /// <para>The selectivityWeight and metric parameters control the intermediate activation loss component.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Like What You Like: Knowledge Distill via Neuron Selectivity Transfer",
+    "https://arxiv.org/abs/1707.01219",
+    Year = 2017,
+    Authors = "Zehao Huang, Naiyan Wang")]
 public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase<T>, IIntermediateActivationStrategy<T>
 {
     private readonly double _selectivityWeight;

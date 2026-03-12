@@ -1,4 +1,6 @@
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
@@ -40,6 +42,12 @@ namespace AiDotNet.Classification.Meta;
 /// - Computationally expensive
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Stacked Generalization", "https://doi.org/10.1016/S0893-6080(05)80023-1", Year = 1992, Authors = "David H. Wolpert")]
 public class StackingClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Watermarking;
 
@@ -17,6 +19,17 @@ namespace AiDotNet.Safety.Watermarking;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SoK: Watermarking for AI-Generated Content",
+    "https://arxiv.org/abs/2411.18479",
+    Year = 2024,
+    Authors = "Various")]
 public class WatermarkDetector<T> : TextWatermarkerBase<T>
 {
     private readonly SamplingWatermarker<T> _sampling;

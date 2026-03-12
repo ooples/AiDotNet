@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -39,6 +41,13 @@ namespace AiDotNet.AnomalyDetection.TreeBased;
 /// TKDD 6(1), with sparse extensions.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Isolation-Based Anomaly Detection", "https://doi.org/10.1145/2133360.2133363", Year = 2012, Authors = "Fei Tony Liu, Kai Ming Ting, Zhi-Hua Zhou")]
 public class SCiForest<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numTrees;

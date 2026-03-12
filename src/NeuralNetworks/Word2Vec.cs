@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -38,6 +39,13 @@ namespace AiDotNet.NeuralNetworks
     /// </list>
     /// </para>
     /// </remarks>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.EmbeddingModel)]
+    [ModelTask(ModelTask.Embedding)]
+    [ModelComplexity(ModelComplexity.Low)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Efficient Estimation of Word Representations in Vector Space", "https://arxiv.org/abs/1301.3781", Year = 2013, Authors = "Tomas Mikolov, Kai Chen, Greg Corrado, Jeffrey Dean")]
     public class Word2Vec<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
         private readonly Word2VecOptions _options;

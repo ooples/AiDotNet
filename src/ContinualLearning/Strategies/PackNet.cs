@@ -1,5 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.ContinualLearning.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -85,6 +87,13 @@ public class PackNetOptions<T>
 /// <para>PackNet has O(1) memory per task but is limited by network capacity.
 /// Best for scenarios where network size is constrained and tasks can share features.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PackNet: Adding Multiple Tasks to a Single Network by Iterative Pruning", "https://arxiv.org/abs/1711.05769", Year = 2018, Authors = "Arun Mallya, Svetlana Lazebnik")]
 public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInput, TOutput>
 {
     private readonly T _pruningRatio;

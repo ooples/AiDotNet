@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -41,6 +42,15 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.TextToSpeech)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Matcha-TTS: A fast TTS architecture with conditional flow matching", "https://arxiv.org/abs/2309.03199", Year = 2024, Authors = "Shivam Mehta, Ruibo Tu, Jonas Beskow, Eva Szekely, Gustav Eje Henter")]
 public class MatchaTTS<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     #region Fields

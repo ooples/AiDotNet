@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -38,6 +40,16 @@ namespace AiDotNet.AnomalyDetection.Linear;
 /// Rousseeuw, P.J., Driessen, K.V. (1999). "A Fast Algorithm for the Minimum Covariance Determinant Estimator."
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("A Fast Algorithm for the Minimum Covariance Determinant Estimator",
+    "https://doi.org/10.1080/00401706.1999.10485670",
+    Year = 1999,
+    Authors = "Peter J. Rousseeuw, Katrien Van Driessen")]
 public class MCDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _supportFraction;

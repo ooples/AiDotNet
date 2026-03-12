@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Classification.Ensemble;
 using AiDotNet.Classification.Trees;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 
@@ -35,6 +37,13 @@ namespace AiDotNet.Classification.Boosting;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("DART: Dropouts meet Multiple Additive Regression Trees", "https://arxiv.org/abs/1505.01866", Year = 2015, Authors = "K. V. Rashmi, Ran Gilad-Bachrach")]
 public class DARTClassifier<T> : EnsembleClassifierBase<T>
 {
     /// <summary>

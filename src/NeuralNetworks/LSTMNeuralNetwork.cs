@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -35,6 +37,16 @@ namespace AiDotNet.NeuralNetworks;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Long Short-Term Memory", "https://www.bioinf.jku.at/publications/older/2604.pdf", Year = 1997, Authors = "Sepp Hochreiter, Jurgen Schmidhuber")]
 public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly LSTMOptions _options;

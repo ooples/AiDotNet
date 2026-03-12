@@ -1,6 +1,8 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
@@ -21,6 +23,15 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 ///
 /// <para>Reference: He et al., "Deep Residual Learning for Image Recognition", CVPR 2016</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Residual Learning for Image Recognition",
+    "https://arxiv.org/abs/1512.03385",
+    Year = 2016,
+    Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
 public class ResNet<T> : BackboneBase<T>
 {
     private readonly Conv2D<T> _conv1;

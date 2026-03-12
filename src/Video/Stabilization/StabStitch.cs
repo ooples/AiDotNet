@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Stabilization;
@@ -25,6 +27,16 @@ namespace AiDotNet.Video.Stabilization;
 /// a seamless panoramic output without separate stabilization and stitching stages.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("StabStitch: Real-Time Video Stabilization and Stitching",
+    "https://arxiv.org/abs/2303.07198",
+    Year = 2024,
+    Authors = "Lang Nie, Chunyu Lin, Kang Liao, Shuaicheng Liu, Yao Zhao")]
 public class StabStitch<T> : VideoStabilizationBase<T>
 {
     private readonly StabStitchOptions _options;

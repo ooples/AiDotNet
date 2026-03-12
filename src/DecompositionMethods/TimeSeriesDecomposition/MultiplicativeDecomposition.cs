@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 
 /// <summary>
@@ -10,6 +13,13 @@ namespace AiDotNet.DecompositionMethods.TimeSeriesDecomposition;
 /// or financial data where percentage changes are more meaningful than absolute changes.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class MultiplicativeDecomposition<T> : TimeSeriesDecompositionBase<T>
 {
     private readonly MultiplicativeAlgorithmType _algorithm;

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Benchmarking;
 
@@ -25,6 +27,15 @@ namespace AiDotNet.Safety.Benchmarking;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AutoDAN: Generating Stealthy Jailbreak Prompts on Aligned Large Language Models",
+    "https://arxiv.org/abs/2310.04451",
+    Year = 2024,
+    Authors = "Xiaogeng Liu, Nan Xu, Muhao Chen, Chaowei Xiao")]
 public class AdversarialBenchmark<T> : SafetyBenchmarkBase<T>
 {
     /// <inheritdoc />

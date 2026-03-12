@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -38,6 +40,12 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 /// the Local Correlation Integral." ICDE.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.InstanceBased)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("LOCI: Fast Outlier Detection Using the Local Correlation Integral", "https://doi.org/10.1109/ICDE.2003.1260802", Year = 2003, Authors = "Spiros Papadimitriou, Hiroyuki Kitagawa, Phillip B. Gibbons, Christos Faloutsos")]
 public class LOCIDetector<T> : AnomalyDetectorBase<T>
 {
     /// <summary>Number of radius steps used to sweep from zero to <c>_maxRadius</c>.</summary>

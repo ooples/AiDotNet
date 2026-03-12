@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
 /// <summary>
@@ -22,6 +25,11 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 /// - Quantum mechanics simulations with real-valued initial conditions
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class ComplexMatrixDecomposition<T> : MatrixDecompositionBase<Complex<T>>
 {
     /// <summary>

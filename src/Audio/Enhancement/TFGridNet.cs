@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -47,6 +49,15 @@ namespace AiDotNet.Audio.Enhancement;
 /// </list>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SourceSeparation)]
+[ModelTask(ModelTask.Denoising)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TF-GridNet: Making Time-Frequency Domain Models Great Again for Monaural Speaker Separation", "https://arxiv.org/abs/2209.03952", Year = 2023, Authors = "Zhong-Qiu Wang, Samuele Cornell, Shukjae Choi, Younglo Lee, Byeong-Yeol Kim, Shinji Watanabe")]
 public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

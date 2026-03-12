@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Safety.Benchmarking;
 
 /// <summary>
@@ -22,6 +25,16 @@ namespace AiDotNet.Safety.Benchmarking;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SafetyBench: Evaluating the Safety of Large Language Models",
+    "https://arxiv.org/abs/2309.07045",
+    Year = 2024,
+    Authors = "Zhexin Zhang, Leqi Lei, Lindong Wu, et al.")]
 public class ComprehensiveSafetyBenchmark<T> : SafetyBenchmarkBase<T>
 {
     private readonly ISafetyBenchmark<T>[] _benchmarks;

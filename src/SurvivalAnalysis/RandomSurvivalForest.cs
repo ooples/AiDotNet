@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -34,6 +35,15 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <para><b>Reference:</b> Ishwaran et al., "Random Survival Forests" (2008)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.SurvivalModel)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Random Survival Forests", "https://doi.org/10.1214/08-AOAS169", Year = 2008, Authors = "Hemant Ishwaran, Udaya B. Kogalur, Eugene H. Blackstone, Michael S. Lauer")]
 public class RandomSurvivalForest<T> : SurvivalModelBase<T>
 {
     /// <summary>

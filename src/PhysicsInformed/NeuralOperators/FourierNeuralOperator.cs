@@ -8,6 +8,8 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
 
@@ -85,6 +87,14 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// in learning solution operators for PDEs, often matching or exceeding traditional
     /// numerical methods in accuracy while being orders of magnitude faster.
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.VeryHigh)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Fourier Neural Operator for Parametric Partial Differential Equations", "https://doi.org/10.48550/arXiv.2010.08895", Year = 2021, Authors = "Zongyi Li, Nikola Kovachki, Kamyar Azizzadenesheli, Burigede Liu, Kaushik Bhattacharya, Andrew Stuart, Anima Anandkumar")]
     public class FourierNeuralOperator<T> : NeuralNetworkBase<T>
     {
         private readonly FourierNeuralOperatorOptions _options;

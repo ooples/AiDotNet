@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
@@ -39,6 +41,14 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// ICML 2022. https://arxiv.org/abs/2201.12740
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FEDformer: Frequency Enhanced Decomposed Transformer for Long-term Series Forecasting", "https://arxiv.org/abs/2201.12740", Year = 2022, Authors = "Tian Zhou, Ziqing Ma, Qingsong Wen, Xue Wang, Liang Sun, Rong Jin")]
 public class FEDformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

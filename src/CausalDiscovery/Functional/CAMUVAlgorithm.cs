@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Models.Options;
 
@@ -26,6 +28,14 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// </para>
 /// <para>Reference: Maeda and Shimizu (2021), "Causal Additive Models with Unobserved Variables".</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Causal)]
+[ModelCategory(ModelCategory.CausalModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Causal Additive Models with Unobserved Variables", "https://arxiv.org/abs/2005.09042", Year = 2021, Authors = "Takashi Nicholas Maeda, Shohei Shimizu")]
 public class CAMUVAlgorithm<T> : FunctionalBase<T>
 {
     private readonly double _threshold = 0.1;
