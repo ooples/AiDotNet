@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -65,6 +66,14 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/1709.04875
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.GraphAnalysis)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Spatio-Temporal Graph Convolutional Networks: A Deep Learning Framework for Traffic Forecasting", "https://arxiv.org/abs/1709.04875", Year = 2018, Authors = "Bing Yu, Haoteng Yin, Zhanxing Zhu")]
 public class STGNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

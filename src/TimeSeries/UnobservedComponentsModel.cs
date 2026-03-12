@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 
 namespace AiDotNet.TimeSeries;
@@ -48,6 +50,14 @@ namespace AiDotNet.TimeSeries;
 /// - Provides insights that simpler models might miss
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Time Series Analysis by State Space Methods", "https://doi.org/10.1093/acprof:oso/9780199641178.001.0001", Year = 2012, Authors = "James Durbin, Siem Jan Koopman")]
 public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 {
     /// <summary>
