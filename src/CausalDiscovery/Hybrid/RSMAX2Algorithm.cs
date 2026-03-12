@@ -253,9 +253,36 @@ public class RSMAX2Algorithm<T> : HybridBase<T>
         }
         else
         {
-            // Fall back to just using target values for multi-predictor case
+            // Multi-predictor OLS via normal equations
+            int p = predictors.Count;
+            var XtX = new double[p, p];
+            var Xty = new double[p];
             for (int i = 0; i < n; i++)
+            {
+                double dy = NumOps.ToDouble(data[i, target]) - means[0];
+                var dx = new double[p];
+                for (int j = 0; j < p; j++)
+                    dx[j] = NumOps.ToDouble(data[i, predictors[j]]) - means[j + 1];
+                for (int a = 0; a < p; a++)
+                {
+                    Xty[a] += dx[a] * dy;
+                    for (int b = a; b < p; b++)
+                        XtX[a, b] += dx[a] * dx[b];
+                }
+            }
+            for (int a = 0; a < p; a++)
+            {
+                XtX[a, a] += 1e-10;
+                for (int b = a + 1; b < p; b++)
+                    XtX[b, a] = XtX[a, b];
+            }
+            var beta = SolveSmallSystem(XtX, Xty, p);
+            for (int i = 0; i < n; i++)
+            {
                 residuals[i] = NumOps.ToDouble(data[i, target]) - means[0];
+                for (int j = 0; j < p; j++)
+                    residuals[i] -= beta[j] * (NumOps.ToDouble(data[i, predictors[j]]) - means[j + 1]);
+            }
         }
 
         return residuals;
@@ -317,5 +344,40 @@ public class RSMAX2Algorithm<T> : HybridBase<T>
         double t = 1.0 / (1.0 + p * x);
         double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
         return 0.5 * (1.0 + sign * y);
+    }
+
+    private static double[] SolveSmallSystem(double[,] A, double[] b, int p)
+    {
+        var aug = new double[p, p + 1];
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = 0; j < p; j++) aug[i, j] = A[i, j];
+            aug[i, p] = b[i];
+        }
+        for (int col = 0; col < p; col++)
+        {
+            int maxRow = col;
+            for (int row = col + 1; row < p; row++)
+                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
+            if (maxRow != col)
+                for (int j = col; j <= p; j++)
+                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
+            double pivot = aug[col, col];
+            if (Math.Abs(pivot) < 1e-15) continue;
+            for (int row = col + 1; row < p; row++)
+            {
+                double factor = aug[row, col] / pivot;
+                for (int j = col; j <= p; j++) aug[row, j] -= factor * aug[col, j];
+            }
+        }
+        var x = new double[p];
+        for (int row = p - 1; row >= 0; row--)
+        {
+            double sum = aug[row, p];
+            for (int j = row + 1; j < p; j++) sum -= aug[row, j] * x[j];
+            double diag = aug[row, row];
+            x[row] = Math.Abs(diag) > 1e-15 ? sum / diag : 0;
+        }
+        return x;
     }
 }

@@ -472,6 +472,13 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// <returns>Result matrix [m x n].</returns>
     protected Matrix<T> MatMul(Matrix<T> a, Matrix<T> b)
     {
+        if (a.Columns != b.Rows)
+        {
+            throw new ArgumentException(
+                $"Matrix dimension mismatch in MatMul: A is [{a.Rows}x{a.Columns}] but B is [{b.Rows}x{b.Columns}]. " +
+                $"A.Columns ({a.Columns}) must equal B.Rows ({b.Rows}).");
+        }
+
         int m = a.Rows;
         int k = a.Columns;
         int n = b.Columns;
@@ -559,6 +566,13 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// </summary>
     protected Vector<T> MatVecMul(Matrix<T> m, Vector<T> v)
     {
+        if (m.Columns != v.Length)
+        {
+            throw new ArgumentException(
+                $"Dimension mismatch in MatVecMul: matrix is [{m.Rows}x{m.Columns}] but vector length is {v.Length}. " +
+                $"Matrix columns ({m.Columns}) must equal vector length ({v.Length}).");
+        }
+
         return Engine.MatrixVectorMultiply(m, v);
     }
 

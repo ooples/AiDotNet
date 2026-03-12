@@ -246,10 +246,55 @@ public class H2PCAlgorithm<T> : HybridBase<T>
         }
         else
         {
+            // Multi-variable conditioning: use multivariate OLS to partial out all conditioning vars
+            int p = condSet.Count;
+            var condMeans = new double[p];
+            for (int ci = 0; ci < p; ci++)
+            {
+                for (int k = 0; k < n; k++)
+                    condMeans[ci] += NumOps.ToDouble(data[k, condSet[ci]]);
+                condMeans[ci] /= n;
+            }
+
+            // Build normal equations X'X and X'y for both i and j
+            var XtX = new double[p, p];
+            var XtI = new double[p];
+            var XtJ = new double[p];
+            for (int k = 0; k < n; k++)
+            {
+                var dx = new double[p];
+                for (int ci = 0; ci < p; ci++)
+                    dx[ci] = NumOps.ToDouble(data[k, condSet[ci]]) - condMeans[ci];
+                double di = NumOps.ToDouble(data[k, i]) - meanI;
+                double dj = NumOps.ToDouble(data[k, j]) - meanJ;
+                for (int a = 0; a < p; a++)
+                {
+                    XtI[a] += dx[a] * di;
+                    XtJ[a] += dx[a] * dj;
+                    for (int b = a; b < p; b++)
+                        XtX[a, b] += dx[a] * dx[b];
+                }
+            }
+            for (int a = 0; a < p; a++)
+            {
+                XtX[a, a] += 1e-10;
+                for (int b = a + 1; b < p; b++)
+                    XtX[b, a] = XtX[a, b];
+            }
+
+            var betaI = SolveSmallSystem(XtX, XtI, p);
+            var betaJ = SolveSmallSystem(XtX, XtJ, p);
+
             for (int k = 0; k < n; k++)
             {
                 residI[k] = NumOps.ToDouble(data[k, i]) - meanI;
                 residJ[k] = NumOps.ToDouble(data[k, j]) - meanJ;
+                for (int ci = 0; ci < p; ci++)
+                {
+                    double dc = NumOps.ToDouble(data[k, condSet[ci]]) - condMeans[ci];
+                    residI[k] -= betaI[ci] * dc;
+                    residJ[k] -= betaJ[ci] * dc;
+                }
             }
         }
 
@@ -313,5 +358,40 @@ public class H2PCAlgorithm<T> : HybridBase<T>
         double t = 1.0 / (1.0 + p * x);
         double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
         return 0.5 * (1.0 + sign * y);
+    }
+
+    private static double[] SolveSmallSystem(double[,] A, double[] b, int p)
+    {
+        var aug = new double[p, p + 1];
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = 0; j < p; j++) aug[i, j] = A[i, j];
+            aug[i, p] = b[i];
+        }
+        for (int col = 0; col < p; col++)
+        {
+            int maxRow = col;
+            for (int row = col + 1; row < p; row++)
+                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
+            if (maxRow != col)
+                for (int j = col; j <= p; j++)
+                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
+            double pivot = aug[col, col];
+            if (Math.Abs(pivot) < 1e-15) continue;
+            for (int row = col + 1; row < p; row++)
+            {
+                double factor = aug[row, col] / pivot;
+                for (int j = col; j <= p; j++) aug[row, j] -= factor * aug[col, j];
+            }
+        }
+        var x = new double[p];
+        for (int row = p - 1; row >= 0; row--)
+        {
+            double sum = aug[row, p];
+            for (int j = row + 1; j < p; j++) sum -= aug[row, j] * x[j];
+            double diag = aug[row, row];
+            x[row] = Math.Abs(diag) > 1e-15 ? sum / diag : 0;
+        }
+        return x;
     }
 }

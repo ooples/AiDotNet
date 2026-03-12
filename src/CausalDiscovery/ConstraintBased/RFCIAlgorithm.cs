@@ -59,7 +59,10 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
     {
         int d = data.Columns;
 
-        if (data.Rows < 3 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"RFCI requires at least 2 variables, got {d}.");
+        if (data.Rows < 3)
+            throw new ArgumentException($"RFCI requires at least 3 samples, got {data.Rows}.");
 
         // Phase 1: Skeleton discovery (PC-style but with limited conditioning)
         var adj = new bool[d, d];
@@ -149,16 +152,19 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
             }
         }
 
-        // Phase 3: Detect possible latent confounders
-        // If i → k and j → k (both oriented into k) and i and j are non-adjacent,
-        // and both i→k and j→k seem driven by the same hidden factor, mark as bidirected
+        // Phase 3: Detect possible latent confounders via discriminating path logic.
+        // For adjacent pairs where both directions were oriented (i→j AND j→i),
+        // this indicates conflicting evidence — mark as bidirected (latent confounder).
+        // Also: for edges where neither direction is oriented after v-structure phase,
+        // if both endpoints have a common collider child, mark as potential latent confounding.
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
                 if (!adj[i, j]) continue;
 
-                // Check for possible latent confounder: both endpoints have common effects
+                // If both directions were oriented during v-structure phase,
+                // this is contradictory → evidence of latent confounding
                 bool iToJ = oriented[i, j];
                 bool jToI = oriented[j, i];
 
