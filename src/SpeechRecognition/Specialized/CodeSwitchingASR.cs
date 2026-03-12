@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,11 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// Code-Switching ASR handles speech that mixes two or more languages within a single utterance, common in multilingual communities. The model uses a shared multilingual Conformer encoder trained on code-switched corpora, with a unified vocabulary spanning all target languages. Language identification is performed implicitly through shared encoder representations. The CTC decoder uses a multilingual token set that can output tokens from any supported language within the same transcription.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CodeSwitchingASROptions _options; public override ModelOptions GetOptions() => _options;

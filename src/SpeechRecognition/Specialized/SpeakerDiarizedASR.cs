@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,11 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// Speaker-Diarized ASR jointly performs speech recognition and speaker diarization, producing timestamped transcriptions attributed to individual speakers. The model uses a shared Conformer encoder with a speaker-aware serialized output (SA-SOT) decoder that emits speaker change tokens alongside text tokens. Speaker embeddings from an auxiliary speaker encoder condition the decoder to distinguish between speakers. The system handles overlapping speech through multi-talker serialized output.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SpeakerDiarizedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SpeakerDiarizedASROptions _options; public override ModelOptions GetOptions() => _options;

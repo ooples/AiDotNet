@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// Whisper.cpp is a high-performance C++ implementation of OpenAI's Whisper model optimized for CPU inference. It uses GGML tensor library with quantization support (Q4, Q5, Q8) for reduced memory and faster processing. The implementation supports Apple Silicon acceleration (Metal, Core ML, ANE), x86 AVX/AVX2/AVX-512, and ARM NEON. Whisper.cpp achieves 10-20x speedup over the original Python implementation and enables real-time transcription on consumer hardware without GPU.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Robust Speech Recognition via Large-Scale Weak Supervision", "https://arxiv.org/abs/2212.04356", Year = 2023, Authors = "Radford et al.")]
 public class WhisperCPP<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly WhisperCPPOptions _options; public override ModelOptions GetOptions() => _options;
