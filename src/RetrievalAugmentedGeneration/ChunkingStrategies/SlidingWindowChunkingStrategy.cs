@@ -1,11 +1,16 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 {
     /// <summary>
     /// Sliding window chunking strategy with configurable window size and stride.
     /// </summary>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Low)]
     public class SlidingWindowChunkingStrategy : ChunkingStrategyBase
     {
         private readonly int _stride;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
@@ -12,13 +13,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// while allowing derived classes to focus on implementing the core chunking algorithm.
 /// </para>
 /// <para><b>For Beginners:</b> This is the foundation that all text splitting methods build upon.
-/// 
+///
 /// Think of it like a template for dividing text:
 /// - It handles common tasks (checking inputs, managing overlap)
 /// - Specific chunking methods (fixed-size, sentence-based) just fill in how they split text
 /// - This ensures all chunking strategies work consistently
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class ChunkingStrategyBase : IChunkingStrategy
 {
     private readonly int _chunkSize;

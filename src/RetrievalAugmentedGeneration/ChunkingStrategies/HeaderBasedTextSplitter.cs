@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
@@ -9,6 +10,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 /// Ideal for Markdown and HTML documents where headers provide natural semantic boundaries.
 /// Preserves document structure and hierarchy.
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public class HeaderBasedTextSplitter : ChunkingStrategyBase
 {
     private readonly bool _combineSmallChunks;

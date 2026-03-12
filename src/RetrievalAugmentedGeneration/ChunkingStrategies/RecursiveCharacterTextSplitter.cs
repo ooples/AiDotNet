@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
@@ -8,6 +9,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
     /// <summary>
     /// Recursive character-based text splitting that preserves semantic meaning.
     /// </summary>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Low)]
     public class RecursiveCharacterTextSplitter : ChunkingStrategyBase
     {
         private readonly string[] _separators;
