@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -10,6 +11,10 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// affects local training, not aggregation.
 /// <para><b>For Beginners:</b> FedProxFullModelAggregationStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class FedProxFullModelAggregationStrategy<T, TInput, TOutput> :
     AggregationStrategyBase<IFullModel<T, TInput, TOutput>, T>
 {

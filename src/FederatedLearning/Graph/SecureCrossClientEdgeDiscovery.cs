@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using AiDotNet.FederatedLearning.Infrastructure;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Graph;
 
@@ -24,6 +25,10 @@ namespace AiDotNet.FederatedLearning.Graph;
 /// Falls back to hash-based comparison with randomized response for differential privacy.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class SecureCrossClientEdgeDiscovery<T> : FederatedLearningComponentBase<T>, ICrossClientEdgeHandler<T>
 {
     private readonly double _privacyEpsilon;

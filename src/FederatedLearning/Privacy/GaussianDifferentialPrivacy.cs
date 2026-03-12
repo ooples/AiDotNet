@@ -3,6 +3,7 @@ namespace AiDotNet.FederatedLearning.Privacy;
 using System;
 using AiDotNet.Extensions;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
 
 /// <summary>
 /// Implements differential privacy using the Gaussian mechanism.
@@ -62,6 +63,10 @@ using AiDotNet.Tensors.Helpers;
 /// Abadi, M., et al. (2016). "Deep Learning with Differential Privacy." CCS 2016.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T>
 {
     private readonly object _sync = new object();

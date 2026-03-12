@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Compression;
 
 /// <summary>
@@ -22,6 +23,11 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// Learning with Sketching." ICML 2020.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("FetchSGD: Communication-Efficient Federated Learning with Sketching", "https://arxiv.org/abs/2007.07682", Year = 2020, Authors = "Rothchild et al.")]
 public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _sketchRows;

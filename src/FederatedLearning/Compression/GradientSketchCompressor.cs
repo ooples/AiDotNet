@@ -2,6 +2,7 @@ using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Compression;
 
@@ -26,6 +27,10 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// this achieves ~20x compression.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class GradientSketchCompressor<T> : FederatedLearningComponentBase<T>
 {
     private readonly AdvancedCompressionOptions _options;

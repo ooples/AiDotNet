@@ -1,5 +1,6 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Fairness;
 
@@ -25,6 +26,10 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// higher trust than those with sporadic or negative contributions.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class ContributionBasedIncentive<T> : FederatedLearningComponentBase<T>, IIncentiveMechanism<T>
 {
     private readonly ContributionEvaluationOptions _options;

@@ -1,5 +1,6 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Verification;
 
@@ -23,6 +24,10 @@ namespace AiDotNet.FederatedLearning.Verification;
 /// <para><b>Reference:</b> Bulletproofs (Bunz et al., S&amp;P 2018) for logarithmic-size range proofs.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class GradientNormRangeProof<T> : FederatedLearningComponentBase<T>, IVerifiableComputation
 {
     private readonly IZkProofSystem _proofSystem;

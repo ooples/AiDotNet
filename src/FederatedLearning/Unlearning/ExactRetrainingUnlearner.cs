@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Unlearning;
 
@@ -26,6 +27,10 @@ namespace AiDotNet.FederatedLearning.Unlearning;
 /// methods fail verification. Very expensive — O(R * C) where R = rounds, C = clients.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IFederatedUnlearner<T>
 {
     private const double CosineEpsilon = 1e-10;

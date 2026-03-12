@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Decentralized;
 
 /// <summary>
@@ -18,6 +19,10 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// central person.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class RingAllReduceProtocol : IDecentralizedTopology
 {
     /// <inheritdoc/>

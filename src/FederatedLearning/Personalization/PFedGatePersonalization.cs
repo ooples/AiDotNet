@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Personalization;
 
 /// <summary>
@@ -19,6 +20,10 @@ namespace AiDotNet.FederatedLearning.Personalization;
 /// Personalized Federated Learning." NeurIPS 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class PFedGatePersonalization<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _gateInitValue;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Alignment;
 
 /// <summary>
@@ -20,6 +21,11 @@ namespace AiDotNet.FederatedLearning.Alignment;
 /// https://arxiv.org/abs/2404.18567</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Direct Preference Optimization: Your Language Model is Secretly a Reward Model", "https://arxiv.org/abs/2305.18290", Year = 2023, Authors = "Rafailov et al.")]
 public class FederatedDPO<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly FederatedDPOOptions _options;

@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Unlearning;
 
@@ -28,6 +29,10 @@ namespace AiDotNet.FederatedLearning.Unlearning;
 /// but the Hessian approximation degrades for large removals or highly non-convex models.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, IFederatedUnlearner<T>
 {
     private const double CosineEpsilon = 1e-10;

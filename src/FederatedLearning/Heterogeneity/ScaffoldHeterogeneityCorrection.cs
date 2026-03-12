@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Heterogeneity;
 
@@ -11,6 +12,11 @@ namespace AiDotNet.FederatedLearning.Heterogeneity;
 /// how each client's local training differs from the global direction.
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("SCAFFOLD: Stochastic Controlled Averaging for Federated Learning", "https://arxiv.org/abs/1910.06378", Year = 2020, Authors = "Karimireddy et al.")]
 public sealed class ScaffoldHeterogeneityCorrection<T> : FederatedHeterogeneityCorrectionBase<T>
 {
     private readonly double _clientLearningRate;

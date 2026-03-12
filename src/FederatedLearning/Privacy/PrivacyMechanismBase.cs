@@ -2,6 +2,7 @@ namespace AiDotNet.FederatedLearning.Privacy;
 
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 
 /// <summary>
 /// Base class for privacy mechanisms in federated learning.
@@ -11,6 +12,10 @@ using AiDotNet.Interfaces;
 /// <remarks>
 /// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class PrivacyMechanismBase<TModel, T> : FederatedLearningComponentBase<T>, IPrivacyMechanism<TModel>
 {
     public abstract TModel ApplyPrivacy(TModel model, double epsilon, double delta);

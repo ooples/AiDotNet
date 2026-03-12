@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.ServerOptimizers;
 
@@ -9,6 +10,10 @@ namespace AiDotNet.FederatedLearning.ServerOptimizers;
 /// <b>For Beginners:</b> Momentum helps smooth updates across rounds. Instead of applying only the
 /// current round's update, the server maintains a running "velocity" that accumulates updates.
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class FedAvgMServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;

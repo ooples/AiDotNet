@@ -1,5 +1,6 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Vertical;
 
@@ -20,6 +21,10 @@ namespace AiDotNet.FederatedLearning.Vertical;
 /// makes it difficult to reconstruct the original features.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class VerticalPartyClient<T> : FederatedLearningComponentBase<T>, IVerticalParty<T>
 {
     private readonly Tensor<T> _localData;

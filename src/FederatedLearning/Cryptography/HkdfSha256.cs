@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Cryptography;
 
@@ -9,6 +10,10 @@ namespace AiDotNet.FederatedLearning.Cryptography;
 /// <b>For Beginners:</b> HKDF turns an input secret into one or more strong cryptographic keys.
 /// We use it to derive pairwise mask seeds from a shared secret.
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 internal static class HkdfSha256
 {
     public static byte[] DeriveKey(byte[] inputKeyMaterial, byte[] salt, byte[] info, int length)

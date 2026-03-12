@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.Models.Options;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.TEE;
 
@@ -25,6 +26,10 @@ namespace AiDotNet.FederatedLearning.TEE;
 /// ARM Neoverse V2+ and Cortex-X4+ cores.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class ArmCcaTeeProvider<T> : TeeProviderBase<T>
 {
     /// <summary>

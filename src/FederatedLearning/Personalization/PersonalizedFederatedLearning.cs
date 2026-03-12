@@ -3,6 +3,7 @@ namespace AiDotNet.FederatedLearning.Personalization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 
 /// <summary>
 /// Implements personalized federated learning where each client maintains some client-specific parameters.
@@ -66,6 +67,10 @@ using System.Linq;
 /// - Fallah, A., et al. (2020). "Personalized Federated Learning with Theoretical Guarantees: A Model-Agnostic Meta-Learning Approach." NeurIPS 2020.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class PersonalizedFederatedLearning<T>
 {
     private readonly double _personalizationFraction;

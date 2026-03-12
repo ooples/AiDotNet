@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Adapters;
 
 /// <summary>
@@ -22,6 +23,10 @@ namespace AiDotNet.FederatedLearning.Adapters;
 /// <para>Reference: Sparse LoRA for Federated Learning (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedAdapterStrategy<T>
 {
     private readonly int _rank;

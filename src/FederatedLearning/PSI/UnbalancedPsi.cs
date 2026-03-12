@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using AiDotNet.Models.Options;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.PSI;
 
@@ -32,6 +33,10 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// Malicious Security", ACM CCS 2018. Kiss et al., "Private Set Intersection for
 /// Unequal Set Sizes", PETS 2017.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class UnbalancedPsi : PsiBase
 {
     /// <inheritdoc/>

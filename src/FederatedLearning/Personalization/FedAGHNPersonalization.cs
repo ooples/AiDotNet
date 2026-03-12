@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Personalization;
 
 /// <summary>
@@ -20,6 +21,10 @@ namespace AiDotNet.FederatedLearning.Personalization;
 /// <para>Reference: FedAGHN: Adaptive Gradient Heterogeneous Networks for FL (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _sharedDimension;

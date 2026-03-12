@@ -1,5 +1,6 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.TEE;
 
@@ -17,6 +18,10 @@ namespace AiDotNet.FederatedLearning.TEE;
 /// sealing key bound to the enclave measurement.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public abstract class TeeProviderBase<T> : FederatedLearningComponentBase<T>, ITeeProvider<T>
 {
     /// <summary>

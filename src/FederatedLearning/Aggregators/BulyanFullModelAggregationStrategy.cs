@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -12,6 +13,11 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 ///
 /// This can better tolerate malicious clients, at the cost of more computation.
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("The Hidden Vulnerability of Distributed Learning in Byzantium", "https://arxiv.org/abs/1805.09682", Year = 2018, Authors = "Guerraoui et al.")]
 public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
     RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 {

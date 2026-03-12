@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Fairness;
 
 /// <summary>
@@ -20,6 +21,10 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// <para>Reference: Mohri, M., et al. (2019). "Agnostic Federated Learning." ICML 2019.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class AgnosticFairnessObjective<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _lambdaLearningRate;

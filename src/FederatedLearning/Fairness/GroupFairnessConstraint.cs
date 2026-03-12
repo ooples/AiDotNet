@@ -1,6 +1,7 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Fairness;
 
@@ -22,6 +23,10 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// </list>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class GroupFairnessConstraint<T> : FederatedLearningComponentBase<T>, IFairnessConstraint<T>
 {
     private readonly FederatedFairnessOptions _options;

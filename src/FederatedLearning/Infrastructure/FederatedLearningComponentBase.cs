@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Infrastructure;
 
 /// <summary>
@@ -7,6 +8,10 @@ namespace AiDotNet.FederatedLearning.Infrastructure;
 /// <remarks>
 /// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class FederatedLearningComponentBase<T>
 {
     protected static readonly AiDotNet.Tensors.Interfaces.INumericOperations<T> NumOps =

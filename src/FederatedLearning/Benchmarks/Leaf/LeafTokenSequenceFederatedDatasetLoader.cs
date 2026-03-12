@@ -1,6 +1,7 @@
 using System.IO;
 using AiDotNet.Models;
 using Newtonsoft.Json.Linq;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Benchmarks.Leaf;
 
@@ -17,6 +18,10 @@ namespace AiDotNet.FederatedLearning.Benchmarks.Leaf;
 /// This loader keeps the per-user splits intact so federated simulations match the benchmark partitioning.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class LeafTokenSequenceFederatedDatasetLoader
 {
     /// <summary>

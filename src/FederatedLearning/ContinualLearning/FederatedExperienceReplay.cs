@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.ContinualLearning;
 
 /// <summary>
@@ -22,6 +23,10 @@ namespace AiDotNet.FederatedLearning.ContinualLearning;
 /// <para>Reference: Federated Experience Replay for Continual FL (2023).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class FederatedExperienceReplay<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedContinualLearningStrategy<T>
 {
     private readonly int _bufferCapacity;

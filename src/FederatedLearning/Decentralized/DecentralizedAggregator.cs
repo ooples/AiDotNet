@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Decentralized;
 
 /// <summary>
@@ -17,6 +18,10 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class DecentralizedAggregator<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly IDecentralizedTopology _topology;

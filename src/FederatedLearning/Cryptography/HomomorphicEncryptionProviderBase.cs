@@ -2,6 +2,7 @@ using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Cryptography;
 
@@ -12,6 +13,10 @@ namespace AiDotNet.FederatedLearning.Cryptography;
 /// <remarks>
 /// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public abstract class HomomorphicEncryptionProviderBase<T> : FederatedLearningComponentBase<T>, IHomomorphicEncryptionProvider<T>
 {
     public abstract Vector<T> AggregateEncryptedWeightedAverage(
