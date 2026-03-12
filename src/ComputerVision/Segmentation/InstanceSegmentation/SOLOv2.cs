@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -26,6 +27,13 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 ///
 /// <para>Reference: Wang et al., "SOLOv2: Dynamic and Fast Instance Segmentation", NeurIPS 2020</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SOLOv2: Dynamic and Fast Instance Segmentation", "https://arxiv.org/abs/2003.10152", Year = 2020, Authors = "Wang et al.")]
 public class SOLOv2<T> : InstanceSegmenterBase<T>
 {
     private readonly ResNet<T> _backbone;

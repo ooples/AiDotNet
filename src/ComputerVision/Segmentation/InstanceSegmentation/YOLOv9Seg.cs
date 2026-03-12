@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -40,6 +41,13 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 /// Gradient Information", arXiv 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("YOLOv9: Learning What You Want to Learn Using Programmable Gradient Information", "https://arxiv.org/abs/2402.13616", Year = 2024, Authors = "Wang et al.")]
 public class YOLOv9Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
 {
     private readonly YOLOv9SegOptions _options;
