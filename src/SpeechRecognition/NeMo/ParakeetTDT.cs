@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,12 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// many frames to skip forward, avoiding per-frame blank predictions.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Token-and-Duration Transducer for Streaming ASR", "https://arxiv.org/abs/2304.06795", Year = 2024, Authors = "Xu et al.")]
 public class ParakeetTDT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ParakeetTDTOptions _options; public override ModelOptions GetOptions() => _options;
