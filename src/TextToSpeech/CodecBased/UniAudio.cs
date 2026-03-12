@@ -1,8 +1,24 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>UniAudio: unified multi-task audio tokenizer and language model for TTS, music, and sound effects.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "UniAudio: An Audio Foundation Model Toward Universal Audio Generation" (Yang et al., 2024)</item></list></para><para><b>For Beginners:</b> UniAudio: unified multi-task audio tokenizer and language model for TTS, music, and sound effects.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("UniAudio: An Audio Foundation Model Toward Universal Audio Generation", "https://arxiv.org/abs/2310.00704", Year = 2024, Authors = "Yang et al.")]
 public class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly UniAudioOptions _options; public override ModelOptions GetOptions() => _options;

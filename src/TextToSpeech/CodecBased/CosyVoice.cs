@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>CosyVoice: multilingual TTS with supervised semantic tokens and conditional flow matching.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CosyVoice: A Scalable Multilingual TTS Based on Supervised Semantic Tokens" (Du et al., 2024)</item></list></para><para><b>For Beginners:</b> CosyVoice: multilingual TTS with supervised semantic tokens and conditional flow matching.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CosyVoice: A Scalable Multilingual Zero-Shot Text-to-Speech Synthesizer Based on Supervised Semantic Tokens", "https://arxiv.org/abs/2407.05407", Year = 2024, Authors = "Du et al.")]
 public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly CosyVoiceOptions _options; public override ModelOptions GetOptions() => _options;

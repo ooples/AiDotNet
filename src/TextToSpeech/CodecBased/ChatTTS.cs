@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
+
 /// <summary>ChatTTS: conversational TTS with prosody control tokens for natural dialogue synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "ChatTTS: A generative speech model for daily dialogue" (2noise, 2024)</item></list></para><para><b>For Beginners:</b> ChatTTS: conversational TTS with prosody control tokens for natural dialogue synthesis.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly ChatTTSOptions _options; public override ModelOptions GetOptions() => _options;

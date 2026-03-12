@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>SPEARTTS: Speak, Read and Prompt: High-Fidelity TTS with Minimal Supervision.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Speak, Read and Prompt: High-Fidelity TTS with Minimal Supervision" (Kharitonov et al., 2023)</item></list></para><para><b>For Beginners:</b> SPEARTTS: Speak, Read and Prompt: High-Fidelity TTS with Minimal Supervision.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Speak, Read and Prompt: High-Fidelity Text-to-Speech with Minimal Supervision", "https://arxiv.org/abs/2302.03540", Year = 2023, Authors = "Kharitonov et al.")]
 public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SPEARTTSOptions _options; public override ModelOptions GetOptions() => _options;

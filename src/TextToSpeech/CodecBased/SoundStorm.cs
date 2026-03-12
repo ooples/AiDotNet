@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>SoundStorm: parallel audio generation via MaskGIT-style iterative decoding of SoundStream tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "SoundStorm: Efficient Parallel Audio Generation" (Borsos et al., 2023)</item></list></para><para><b>For Beginners:</b> SoundStorm: parallel audio generation via MaskGIT-style iterative decoding of SoundStream tokens.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SoundStorm: Efficient Parallel Audio Generation", "https://arxiv.org/abs/2305.09636", Year = 2023, Authors = "Borsos et al.")]
 public class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SoundStormOptions _options; public override ModelOptions GetOptions() => _options;

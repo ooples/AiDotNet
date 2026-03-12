@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>VALL-E: neural codec language model that uses AR + NAR transformers to predict EnCodec tokens from text + 3s audio prompt.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers" (Wang et al., 2023)</item></list></para><para><b>For Beginners:</b> VALL-E: neural codec language model that uses AR + NAR transformers to predict EnCodec tokens from text + 3s audio prompt.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers", "https://arxiv.org/abs/2301.02111", Year = 2023, Authors = "Wang et al.")]
 public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VALLEOptions _options; public override ModelOptions GetOptions() => _options;

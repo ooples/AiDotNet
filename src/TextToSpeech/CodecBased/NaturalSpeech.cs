@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>NaturalSpeech: fully end-to-end TTS with VAE, normalizing flow, and bidirectional prior/posterior for human-level quality.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "NaturalSpeech: End-to-End Text to Speech Synthesis with Human-Level Quality" (Tan et al., 2022)</item></list></para><para><b>For Beginners:</b> NaturalSpeech: fully end-to-end TTS with VAE, normalizing flow, and bidirectional prior/posterior for human-level quality.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("NaturalSpeech: End-to-End Text to Speech Synthesis with Human-Level Quality", "https://arxiv.org/abs/2205.04421", Year = 2022, Authors = "Tan et al.")]
 public class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeechOptions _options; public override ModelOptions GetOptions() => _options;

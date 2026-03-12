@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Llasa: LLaMA-based speech synthesis using XCodec2 for multi-level codec representation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Llasa: Scaling Compute for Llama-based Speech Synthesis" (Ye et al., 2025)</item></list></para><para><b>For Beginners:</b> Llasa: LLaMA-based speech synthesis using XCodec2 for multi-level codec representation.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Llasa: Scaling Train-Time and Inference-Time Compute for Llama-based Speech Synthesis", "https://arxiv.org/abs/2502.04128", Year = 2025, Authors = "Ye et al.")]
 public class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly LlasaOptions _options; public override ModelOptions GetOptions() => _options;
