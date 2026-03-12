@@ -1,4 +1,6 @@
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -43,6 +45,13 @@ namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Scalable Verified Training for Provably Robust Image Classifiers", "https://arxiv.org/abs/1810.12715", Year = 2018, Authors = "Sven Gowal, Krishnamurthy Dvijotham, Robert Stanforth, Rudy Bunel, Chongli Qin, Jonathan Uesato, Relja Arandjelovic, Timothy Mann, Pushmeet Kohli")]
 public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T, TInput, TOutput>
 {
     /// <summary>

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -22,6 +23,16 @@ namespace AiDotNet.Safety.Watermarking;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Tree-Ring Watermarks: Fingerprints for Diffusion Images that are Invisible and Robust",
+    "https://arxiv.org/abs/2305.20030",
+    Year = 2023,
+    Authors = "Yuxin Wen, John Kirchenbauer, Jonas Geiping, Tom Goldstein")]
 public class FrequencyImageWatermarker<T> : ImageWatermarkerBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

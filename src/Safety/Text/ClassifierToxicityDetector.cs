@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -28,6 +29,13 @@ namespace AiDotNet.Safety.Text;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Challenges in Automated Debiasing for Toxic Language Detection", "https://arxiv.org/abs/2102.00086", Year = 2021, Authors = "Xuhui Zhou, Maarten Sap, Swabha Swayamdipta, Yejin Choi, Noah A. Smith")]
 public class ClassifierToxicityDetector<T> : TextSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

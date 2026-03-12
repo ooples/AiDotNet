@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -29,6 +30,16 @@ namespace AiDotNet.Safety.Guardrails;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("NeMo Guardrails: A Toolkit for Controllable and Safe LLM Applications with Programmable Rails",
+    "https://arxiv.org/abs/2310.10501",
+    Year = 2024,
+    Authors = "Traian Rebedea, Razvan Dinu, Makesh Narsimhan Sreedhar, et al.")]
 public class TopicRestrictionGuardrail<T> : ITextSafetyModule<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);

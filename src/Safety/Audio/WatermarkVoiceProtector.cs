@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -29,6 +30,16 @@ namespace AiDotNet.Safety.Audio;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AudioSeal: Proactive Detection of Voice Cloning with Localized Watermarking",
+    "https://arxiv.org/abs/2401.17264",
+    Year = 2024,
+    Authors = "Robin San Roman, Pierre Fernandez, et al.")]
 public class WatermarkVoiceProtector<T> : AudioSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

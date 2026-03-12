@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -31,6 +32,16 @@ namespace AiDotNet.Safety.Adversarial;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Universal Adversarial Triggers for Attacking and Analyzing NLP",
+    "https://arxiv.org/abs/1908.07125",
+    Year = 2019,
+    Authors = "Eric Wallace, Shi Feng, Nikhil Kandpal, et al.")]
 public class AdversarialRobustnessEvaluator<T> : ITextSafetyModule<T>
 {
     private readonly double _threshold;

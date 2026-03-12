@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -38,6 +39,16 @@ namespace AiDotNet.Safety.Image;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("C2P-CLIP: Injecting Category Common Prompt in CLIP to Enhance Generalization in Deepfake Detection",
+    "https://arxiv.org/abs/2404.09677",
+    Year = 2024,
+    Authors = "Chuangchuang Tan, Renshuai Tao, et al.")]
 public class ProvenanceDeepfakeDetector<T> : ImageSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

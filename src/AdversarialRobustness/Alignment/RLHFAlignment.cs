@@ -1,4 +1,6 @@
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -28,6 +30,13 @@ namespace AiDotNet.AdversarialRobustness.Alignment;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Training Language Models to Follow Instructions with Human Feedback", "https://arxiv.org/abs/2203.02155", Year = 2022, Authors = "Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Carroll L. Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kelton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike, Ryan Lowe")]
 public class RLHFAlignment<T> : IAlignmentMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

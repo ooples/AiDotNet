@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -29,6 +30,16 @@ namespace AiDotNet.Safety.Audio;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Taxonomy of Risks Posed by Language Models: Speech Generator Harms",
+    "https://arxiv.org/abs/2402.01708",
+    Year = 2024,
+    Authors = "Various")]
 public class AcousticToxicityDetector<T> : AudioSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

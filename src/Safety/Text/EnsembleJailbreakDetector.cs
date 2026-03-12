@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -30,6 +31,17 @@ namespace AiDotNet.Safety.Text;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GuardReasoner: Towards Reasoning-based LLM Safeguards",
+    "https://arxiv.org/abs/2501.18492",
+    Year = 2025,
+    Authors = "Yue Liu, Hongcheng Gao, Shaochen Zhong, et al.")]
 public class EnsembleJailbreakDetector<T> : TextSafetyModuleBase<T>
 {
     private readonly ITextSafetyModule<T>[] _detectors;

@@ -1,4 +1,6 @@
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -42,6 +44,13 @@ namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Efficient Neural Network Robustness Certification with General Activation Functions", "https://arxiv.org/abs/1811.00866", Year = 2018, Authors = "Huan Zhang, Tsui-Wei Weng, Pin-Yu Chen, Cho-Jui Hsieh, Luca Daniel")]
 public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput, TOutput>
 {
     /// <summary>

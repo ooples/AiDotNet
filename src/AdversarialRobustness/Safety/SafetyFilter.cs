@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -25,6 +27,13 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 /// moderators, and safety inspectors all working together.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Red Teaming Language Models with Language Models", "https://arxiv.org/abs/2202.03286", Year = 2022, Authors = "Ethan Perez, Sam Ringer, Kamile Lukosiute, Karina Nguyen, Edwin Chen, Scott Heiner, Craig Pettit, Catherine Olsson, Sandipan Kundu, Saurav Kadavath, Andy Jones, Anna Chen, Ben Mann, Brian Israel, Bryan Seethor, Cameron McKinnon, Christopher Olah, Da Yan, Daniela Amodei, Dario Amodei, Dawn Drain, Dustin Li, Eli Tyre, Ethan Perez")]
 public class SafetyFilter<T> : ISafetyFilter<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

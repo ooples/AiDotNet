@@ -1,4 +1,6 @@
 using System.Text;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Engines;
@@ -37,6 +39,14 @@ namespace AiDotNet.AdversarialRobustness.Defenses;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Visual Prompting for Adversarial Robustness", "https://arxiv.org/abs/2407.11126", Year = 2024, Authors = "Aochuan Chen, Peter Hartona, Jiancheng Liu, Yunhui Guo, Xing Xie, Sung-En Chang")]
 public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<T, TInput, TOutput>
 {
     /// <summary>

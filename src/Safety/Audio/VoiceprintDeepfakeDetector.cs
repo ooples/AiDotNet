@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -30,6 +31,16 @@ namespace AiDotNet.Safety.Audio;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VoiceRadar: A Speech-Based Framework for Robust Voice Liveness Detection",
+    "https://www.ndss-symposium.org/ndss-paper/voiceradar/",
+    Year = 2025,
+    Authors = "Various")]
 public class VoiceprintDeepfakeDetector<T> : AudioSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

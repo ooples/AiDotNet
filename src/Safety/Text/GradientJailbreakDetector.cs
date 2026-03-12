@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -39,6 +40,16 @@ namespace AiDotNet.Safety.Text;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GradSafe: Detecting Unsafe Prompts for LLMs via Safety-Critical Gradient Analysis",
+    "https://arxiv.org/abs/2402.13494",
+    Year = 2024,
+    Authors = "Yueqi Xie, Minghong Fang, Renjie Pi, Neil Gong")]
 public class GradientJailbreakDetector<T> : TextSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

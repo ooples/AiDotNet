@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models;
@@ -28,6 +29,16 @@ namespace AiDotNet.Safety.Text;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("HHEM 2.1: A Better Hallucination Evaluation Model",
+    "https://vectara.com/blog/hhem-2-1-a-better-hallucination-evaluation-model/",
+    Year = 2024,
+    Authors = "Vectara")]
 public class ReferenceBasedHallucinationDetector<T> : TextSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

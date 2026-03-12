@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Text;
 
@@ -33,6 +35,16 @@ namespace AiDotNet.Safety.Text;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DE-COP: Detecting Copyrighted Content in Language Models Training Data",
+    "https://arxiv.org/abs/2402.09910",
+    Year = 2024,
+    Authors = "André V. Duarte, Xuandong Zhao, Arlindo L. Oliveira, Lei Li")]
 public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
 {
     private readonly double _threshold;

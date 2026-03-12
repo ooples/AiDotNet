@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -29,6 +30,16 @@ namespace AiDotNet.Safety.Text;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CAPID: Context-Aware PII Detection Reducing Over-Redaction in QA",
+    "https://arxiv.org/abs/2602.10074",
+    Year = 2026,
+    Authors = "Various")]
 public class ContextAwarePIIDetector<T> : TextSafetyModuleBase<T>
 {
     private readonly ITextSafetyModule<T> _innerDetector;
