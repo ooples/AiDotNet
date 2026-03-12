@@ -1,6 +1,5 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -15,10 +14,6 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// <para><b>For Beginners:</b> This base class provides federated learning training coordination.
 /// Federated learning trains a shared model across multiple clients without sharing their raw data.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 public abstract class FederatedTrainerBase<TModel, TData, TMetadata, T> :
     AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase<T>,
     IFederatedTrainer<TModel, TData, TMetadata>

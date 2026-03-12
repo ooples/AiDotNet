@@ -1,6 +1,5 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Verification;
 
@@ -24,10 +23,6 @@ namespace AiDotNet.FederatedLearning.Verification;
 /// a batched proof that commits to all elements at once and proves the bound in aggregate.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class GradientBoundednessProof<T> : FederatedLearningComponentBase<T>, IVerifiableComputation
 {
     private readonly IZkProofSystem _proofSystem;

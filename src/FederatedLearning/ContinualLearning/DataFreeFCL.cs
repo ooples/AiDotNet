@@ -1,6 +1,5 @@
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.ContinualLearning;
 
@@ -27,10 +26,6 @@ namespace AiDotNet.FederatedLearning.ContinualLearning;
 /// Luo et al., "Data-Free Knowledge Distillation for Heterogeneous FL," NeurIPS 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedContinualLearningStrategy<T>
 {
     private readonly double _distillationTemperature;

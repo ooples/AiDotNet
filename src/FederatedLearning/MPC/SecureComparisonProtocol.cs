@@ -1,7 +1,6 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.MPC;
 
@@ -30,10 +29,6 @@ namespace AiDotNet.FederatedLearning.MPC;
 /// </list>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class SecureComparisonProtocol<T> : FederatedLearningComponentBase<T>
 {
     private readonly ISecureComputationProtocol<T> _protocol;

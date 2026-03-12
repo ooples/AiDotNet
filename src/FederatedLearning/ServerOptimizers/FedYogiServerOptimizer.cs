@@ -1,5 +1,4 @@
 using AiDotNet.Interfaces;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.ServerOptimizers;
 
@@ -9,10 +8,6 @@ namespace AiDotNet.FederatedLearning.ServerOptimizers;
 /// <remarks>
 /// <b>For Beginners:</b> Yogi is similar to Adam, but it can be more stable when updates are noisy or sparse.
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 public sealed class FedYogiServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;

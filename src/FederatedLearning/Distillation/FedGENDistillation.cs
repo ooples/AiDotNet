@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Distillation;
 
 /// <summary>
@@ -22,10 +21,6 @@ namespace AiDotNet.FederatedLearning.Distillation;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedDistillationStrategy<T>
 {
     private readonly int _numClasses;

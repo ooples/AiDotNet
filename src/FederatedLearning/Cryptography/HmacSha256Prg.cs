@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Cryptography;
 
@@ -10,10 +9,6 @@ namespace AiDotNet.FederatedLearning.Cryptography;
 /// <b>For Beginners:</b> A PRG expands a short random seed into a long stream of random-looking bytes.
 /// We use it to generate per-parameter mask values from a 32-byte pairwise seed.
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 internal sealed class HmacSha256Prg : IDisposable
 {
     private readonly HMACSHA256 _hmac;

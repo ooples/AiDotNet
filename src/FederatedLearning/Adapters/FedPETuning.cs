@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Adapters;
 
 /// <summary>
@@ -38,10 +37,6 @@ public enum PEFTMethod
 /// Fine-Tuning of Foundation Models." ACL 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedAdapterStrategy<T>
 {
     private readonly PEFTMethod _method;

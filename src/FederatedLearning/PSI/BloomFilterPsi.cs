@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using AiDotNet.Models.Options;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.PSI;
 
@@ -34,10 +33,6 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// <para><b>Reference:</b> Dong et al., "When Private Set Intersection Meets Big Data",
 /// ACM CCS 2013.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class BloomFilterPsi : PsiBase
 {
     /// <inheritdoc/>

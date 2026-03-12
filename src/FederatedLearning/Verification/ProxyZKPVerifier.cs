@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Verification;
 
@@ -26,10 +25,6 @@ namespace AiDotNet.FederatedLearning.Verification;
 /// <para>Reference: Proxy-based ZKP for Efficient Federated Verification (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _maxNorm;

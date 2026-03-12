@@ -1,5 +1,4 @@
 using AiDotNet.Interfaces;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -11,11 +10,6 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// It does this by computing distances between client updates and selecting the one with the smallest
 /// sum of distances to its closest neighbors.
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Machine Learning with Adversaries: Byzantine Tolerant Gradient Descent", "https://arxiv.org/abs/1703.02757", Year = 2017, Authors = "Blanchard et al.")]
 public sealed class KrumFullModelAggregationStrategy<T, TInput, TOutput> :
     RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 {

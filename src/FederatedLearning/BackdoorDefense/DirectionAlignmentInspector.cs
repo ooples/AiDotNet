@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.BackdoorDefense;
 
 /// <summary>
@@ -23,10 +22,6 @@ namespace AiDotNet.FederatedLearning.BackdoorDefense;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class DirectionAlignmentInspector<T> : Infrastructure.FederatedLearningComponentBase<T>, IBackdoorDetector<T>
 {
     private readonly int _numSubspaces;

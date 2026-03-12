@@ -1,6 +1,5 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Verification;
 
@@ -25,10 +24,6 @@ namespace AiDotNet.FederatedLearning.Verification;
 /// verify proofs, then pass verified updates to the inner aggregator.</para>
 /// </remarks>
 /// <typeparam name="TModel">The type of model being aggregated.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class VerifiableAggregationStrategy<TModel> : IAggregationStrategy<TModel>
 {
     private readonly IAggregationStrategy<TModel> _innerStrategy;

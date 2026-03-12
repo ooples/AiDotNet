@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Compression;
 
 /// <summary>
@@ -21,11 +20,6 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// Non-Convex Problems." ICML 2018.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("signSGD: Compressed Optimisation for Non-Convex Problems", "https://arxiv.org/abs/1802.04434", Year = 2018, Authors = "Bernstein et al.")]
 internal class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _learningRate;

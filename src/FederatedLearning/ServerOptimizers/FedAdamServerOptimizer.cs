@@ -1,5 +1,4 @@
 using AiDotNet.Interfaces;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.ServerOptimizers;
 
@@ -9,11 +8,6 @@ namespace AiDotNet.FederatedLearning.ServerOptimizers;
 /// <remarks>
 /// <para><b>For Beginners:</b> FedAdamServerOptimizer provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Adaptive Federated Optimization", "https://arxiv.org/abs/2003.00295", Year = 2021, Authors = "Reddi et al.")]
 public sealed class FedAdamServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;

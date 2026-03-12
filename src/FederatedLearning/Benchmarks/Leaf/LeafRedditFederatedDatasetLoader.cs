@@ -1,7 +1,6 @@
 using System.IO;
 using AiDotNet.Models;
 using Newtonsoft.Json.Linq;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Benchmarks.Leaf;
 
@@ -19,10 +18,6 @@ namespace AiDotNet.FederatedLearning.Benchmarks.Leaf;
 /// you can run CI-friendly benchmark checks.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 public sealed class LeafRedditFederatedDatasetLoader
 {
     private const string PadToken = "<PAD>";

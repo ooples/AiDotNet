@@ -1,7 +1,6 @@
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Cryptography;
 
@@ -13,10 +12,6 @@ namespace AiDotNet.FederatedLearning.Cryptography;
 /// - Any <c>threshold</c> number of shares can reconstruct the secret.
 /// - Fewer than <c>threshold</c> shares reveal nothing useful about the secret.
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 internal static class ShamirSecretSharing
 {
     private static readonly BigInteger Prime = (BigInteger.One << 521) - BigInteger.One;

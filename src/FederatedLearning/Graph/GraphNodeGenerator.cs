@@ -1,6 +1,5 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Graph;
 
@@ -26,10 +25,6 @@ namespace AiDotNet.FederatedLearning.Graph;
 /// have similar features (social networks, citation networks). Less effective on heterophilic graphs.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
 {
     private readonly int _inputDim;

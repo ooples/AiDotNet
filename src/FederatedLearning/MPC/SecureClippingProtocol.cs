@@ -1,6 +1,5 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.MPC;
 
@@ -31,10 +30,6 @@ namespace AiDotNet.FederatedLearning.MPC;
 /// <para><b>Reference:</b> SMPAI (JP Morgan, 2025) — production MPC for FL in financial services.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class SecureClippingProtocol<T> : FederatedLearningComponentBase<T>
 {
     private readonly ISecureComputationProtocol<T> _protocol;

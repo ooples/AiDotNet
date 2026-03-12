@@ -1,6 +1,5 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Vertical;
 
@@ -24,10 +23,6 @@ namespace AiDotNet.FederatedLearning.Vertical;
 /// <para><b>Reference:</b> VertiBench (ICLR 2024) recommends diverse feature distribution testing.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class VerticalDataPartitioner<T> : FederatedLearningComponentBase<T>
 {
     /// <summary>

@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Verification;
 
@@ -25,10 +24,6 @@ namespace AiDotNet.FederatedLearning.Verification;
 /// of committed values. Use <see cref="PedersenCommitment{T}"/> if you need that property.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class HashCommitmentScheme<T> : FederatedLearningComponentBase<T>, IGradientCommitment<T>, IZkProofSystem
 {
     private readonly int _randomnessLength;

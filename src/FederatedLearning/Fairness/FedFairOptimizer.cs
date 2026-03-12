@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 namespace AiDotNet.FederatedLearning.Fairness;
 
 /// <summary>
@@ -23,10 +22,6 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// <para>Reference: FedFair: Multi-Objective Federated Learning (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class FedFairOptimizer<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _accuracyWeight;

@@ -2,7 +2,6 @@ using System.Diagnostics;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Vertical;
 
@@ -27,10 +26,6 @@ namespace AiDotNet.FederatedLearning.Vertical;
 /// fair and accurate VFL evaluation."</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class VerticalFederatedBenchmark<T> : FederatedLearningComponentBase<T>
 {
     /// <summary>

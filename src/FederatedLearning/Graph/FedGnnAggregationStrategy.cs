@@ -1,6 +1,5 @@
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Graph;
 
@@ -25,10 +24,6 @@ namespace AiDotNet.FederatedLearning.Graph;
 /// where E = edges, L = labeled nodes, deg = average degree, and alpha+beta+gamma = 1.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
 public class FedGnnAggregationStrategy<T> : FederatedLearningComponentBase<T>, IGraphAggregationStrategy<T>
 {
     private readonly double _edgeWeight;
