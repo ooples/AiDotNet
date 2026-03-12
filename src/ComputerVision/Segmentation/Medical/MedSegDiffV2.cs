@@ -1,6 +1,8 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -35,6 +37,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Wu et al., "MedSegDiff-V2: Diffusion-based Medical Image Segmentation with Transformer", AAAI 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MedSegDiff-V2: Diffusion-based Medical Image Segmentation with Transformer", "https://arxiv.org/abs/2301.11798", Year = 2024, Authors = "Wu et al.")]
 public class MedSegDiffV2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly MedSegDiffV2Options _options;

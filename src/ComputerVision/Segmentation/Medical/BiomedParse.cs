@@ -1,6 +1,8 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -35,6 +37,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Zhao et al., "BiomedParse: a biomedical foundation model for image parsing of everything everywhere all at once", Nature Methods 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BiomedParse: a Biomedical Foundation Model for Image Parsing of Everything Everywhere All at Once", "https://arxiv.org/abs/2405.12971", Year = 2024, Authors = "Zhao et al.")]
 public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly BiomedParseOptions _options;

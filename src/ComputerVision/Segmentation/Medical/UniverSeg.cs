@@ -1,6 +1,8 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -35,6 +37,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Butoi et al., "UniverSeg: Universal Medical Image Segmentation", ICCV 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("UniverSeg: Universal Medical Image Segmentation", "https://arxiv.org/abs/2304.06131", Year = 2023, Authors = "Butoi et al.")]
 public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly UniverSegOptions _options;
