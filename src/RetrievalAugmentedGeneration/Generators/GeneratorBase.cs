@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -13,13 +14,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// for generator implementations. It defines the template for implementing custom generation logic.
 /// </para>
 /// <para><b>For Beginners:</b> This is the foundation for all text generators in RAG systems.
-/// 
+///
 /// It handles common tasks so you don't have to repeat them:
 /// - Checking that inputs aren't null or empty
 /// - Building prompts that combine the query and retrieved documents
 /// - Extracting citations from generated text
 /// - Creating properly formatted answers
-/// 
+///
 /// When you create a new generator (like OpenAIGenerator or OnnxGenerator):
 /// 1. Inherit from this class
 /// 2. Set MaxContextTokens and MaxGenerationTokens in the constructor
@@ -27,6 +28,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Generators;
 /// 4. Everything else (validation, prompt formatting, citations) is handled automatically
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class GeneratorBase<T> : IGenerator<T>
 {
     /// <summary>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -10,6 +11,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
     /// Document summarizer for creating concise summaries of retrieved content.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
     public class DocumentSummarizer<T> : ContextCompressorBase<T>
     {
         private readonly int _maxSummaryLength;
