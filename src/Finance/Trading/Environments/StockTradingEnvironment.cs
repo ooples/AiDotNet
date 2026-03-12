@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors;
 
@@ -19,6 +21,12 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// the agent decides whether to buy one unit, sell one unit, or do nothing.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.ReinforcementLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public sealed class StockTradingEnvironment<T> : TradingEnvironment<T>
 {
     private readonly T _tradeSize;

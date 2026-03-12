@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors;
 
@@ -20,6 +22,12 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// the portfolio to match those weights.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.ReinforcementLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public sealed class PortfolioTradingEnvironment<T> : TradingEnvironment<T>
 {
     /// <inheritdoc/>

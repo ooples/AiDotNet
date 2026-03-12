@@ -33,6 +33,12 @@ namespace AiDotNet.Classification.Linear;
 /// - May oscillate near optimal solution
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class SGDClassifier<T> : LinearClassifierBase<T>
 {
     /// <summary>

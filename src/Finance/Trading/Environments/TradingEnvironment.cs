@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -24,6 +26,12 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// rewards based on portfolio changes.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.ReinforcementLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public abstract class TradingEnvironment<T> : IEnvironment<T>
 {
     protected readonly INumericOperations<T> NumOps;
