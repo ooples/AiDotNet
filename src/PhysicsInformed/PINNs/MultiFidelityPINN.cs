@@ -10,6 +10,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.Options;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.PINNs;
@@ -57,6 +59,14 @@ namespace AiDotNet.PhysicsInformed.PINNs;
 ///   multi-fidelity data: Application to function approximation and inverse PDE problems"
 ///   Journal of Computational Physics, 2020.
 /// </remarks>
+[ModelDomain(ModelDomain.Science)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.PhysicsInformed)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A composite neural network that learns from multi-fidelity data: Application to function approximation and inverse PDE problems", "https://doi.org/10.1016/j.jcp.2019.109020", Year = 2020, Authors = "Xuhui Meng, George Em Karniadakis")]
 public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
 {
     private readonly MultiFidelityPINNOptions _options;

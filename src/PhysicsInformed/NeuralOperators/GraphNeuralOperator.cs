@@ -10,6 +10,8 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
 
@@ -53,6 +55,15 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// - Climate modeling (irregular Earth grids)
     /// - Particle systems
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.GraphNetwork)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.VeryHigh)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Neural Operator: Graph Kernel Network for Partial Differential Equations", "https://doi.org/10.48550/arXiv.2003.03485", Year = 2020, Authors = "Zongyi Li, Nikola Kovachki, Kamyar Azizzadenesheli, Burigede Liu, Kaushik Bhattacharya, Andrew Stuart, Anima Anandkumar")]
     public class GraphNeuralOperator<T> : NeuralNetworkBase<T>
     {
         private readonly GraphNeuralOperatorOptions _options;

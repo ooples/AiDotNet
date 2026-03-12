@@ -7,6 +7,8 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.PhysicsInformed.Options;
 
 namespace AiDotNet.PhysicsInformed.ScientificML
@@ -68,6 +70,14 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// By encoding physics structure (Hamiltonian formulation), the network
     /// learns faster, generalizes better, and makes physically consistent predictions.
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Hamiltonian Neural Networks", "https://doi.org/10.48550/arXiv.1906.01563", Year = 2019, Authors = "Sam Greydanus, Misko Dzamba, Jason Yosinski")]
     public class HamiltonianNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly HamiltonianNeuralNetworkOptions _options;

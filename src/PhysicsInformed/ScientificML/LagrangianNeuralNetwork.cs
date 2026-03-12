@@ -9,6 +9,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.PhysicsInformed.Options;
 
 namespace AiDotNet.PhysicsInformed.ScientificML
@@ -52,6 +54,14 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// - Aerospace (satellite dynamics)
     /// - Any mechanical system
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Lagrangian Neural Networks", "https://doi.org/10.48550/arXiv.2003.04630", Year = 2020, Authors = "Miles Cranmer, Sam Greydanus, Stephan Hoyer, Peter Battaglia, David Spergel, Shirley Ho")]
     public class LagrangianNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly LagrangianNeuralNetworkOptions _options;

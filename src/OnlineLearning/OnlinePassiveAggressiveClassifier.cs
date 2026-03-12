@@ -2,6 +2,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Attributes;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.OnlineLearning;
@@ -54,6 +55,12 @@ namespace AiDotNet.OnlineLearning;
 /// - Crammer et al. (2006). "Online Passive-Aggressive Algorithms"
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Online Passive-Aggressive Algorithms", "https://doi.org/10.1162/jmlr.2006.7.19.551", Year = 2006, Authors = "Koby Crammer, Ofer Dekel, Joseph Keshet, Shai Shalev-Shwartz, Yoram Singer")]
 public class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelBase<T>
 {
     /// <summary>

@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.OnlineLearning;
@@ -52,6 +53,12 @@ namespace AiDotNet.OnlineLearning;
 /// - Bottou, L. (2010). "Large-Scale Machine Learning with Stochastic Gradient Descent"
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Large-Scale Machine Learning with Stochastic Gradient Descent", "https://doi.org/10.1007/978-3-7908-2604-3_16", Year = 2010, Authors = "Léon Bottou")]
 public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
 {
     /// <summary>

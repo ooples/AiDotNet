@@ -9,6 +9,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed.PINNs
@@ -69,6 +71,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
     ///
     /// The variational formulation often provides better training dynamics and accuracy.
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Variational Physics-Informed Neural Networks For Solving Partial Differential Equations", "https://doi.org/10.48550/arXiv.1912.00873", Year = 2020, Authors = "Ehsan Kharazmi, Zhongqiang Zhang, George Em Karniadakis")]
     public class VariationalPINN<T> : NeuralNetworkBase<T>
     {
         private readonly VariationalPINNOptions _options;

@@ -3,6 +3,8 @@ using AiDotNet.Reasoning.Components;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
 using AiDotNet.Reasoning.Verification;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.DomainSpecific;
@@ -130,6 +132,13 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 /// - Multiple solution paths (Tree-of-Thoughts)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Agent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(string), typeof(string))]
+[ModelPaper("Tree of Thoughts: Deliberate Problem Solving with Large Language Models", "https://doi.org/10.48550/arXiv.2305.10601", Year = 2023, Authors = "Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L. Griffiths, Yuan Cao, Karthik Narasimhan")]
 public class LogicalReasoner<T>
 {
     private readonly IChatModel<T> _chatModel;

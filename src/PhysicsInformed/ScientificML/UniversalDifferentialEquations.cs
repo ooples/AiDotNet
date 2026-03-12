@@ -7,6 +7,8 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.PhysicsInformed.Options;
 
 namespace AiDotNet.PhysicsInformed.ScientificML
@@ -59,6 +61,14 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// - Biology (known population dynamics + unknown environmental factors)
     /// - Engineering (known mechanics + unknown friction/damping)
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Universal Differential Equations for Scientific Machine Learning", "https://doi.org/10.48550/arXiv.2001.04385", Year = 2021, Authors = "Christopher Rackauckas, Yingbo Ma, Julius Martensen, Collin Warner, Kirill Zubov, Rohit Supekar, Dominic Skinner, Ali Ramadhan, Alan Edelman")]
     public class UniversalDifferentialEquation<T> : NeuralNetworkBase<T>
     {
         private readonly UniversalDifferentialEquationsOptions _options;

@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.GaussianProcesses;
 
 /// <summary>
@@ -19,6 +22,13 @@ namespace AiDotNet.GaussianProcesses;
 /// This approach makes Gaussian Processes practical for larger datasets while maintaining most of their predictive power.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.GaussianProcess)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("A Unifying View of Sparse Approximate Gaussian Process Regression", "https://doi.org/10.1162/jmlr.2005.6.65.1939", Year = 2005, Authors = "Joaquin Quiñonero-Candela, Carl Edward Rasmussen")]
 public class SparseGaussianProcess<T> : IGaussianProcess<T>
 {
     /// <summary>

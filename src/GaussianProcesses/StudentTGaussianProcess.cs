@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.GaussianProcesses;
 
 /// <summary>
@@ -27,6 +30,13 @@ namespace AiDotNet.GaussianProcesses;
 /// - Any regression where robustness to bad data points is important
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.GaussianProcess)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Gaussian Process Regression with Student-t Likelihood", "https://doi.org/10.5555/2986459.2986589", Year = 2011, Authors = "Jarno Vanhatalo, Pasi Jylänki, Aki Vehtari")]
 public class StudentTGaussianProcess<T> : IGaussianProcess<T>
 {
     /// <summary>

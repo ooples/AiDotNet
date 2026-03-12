@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.GaussianProcesses;
 
 /// <summary>
@@ -20,6 +23,13 @@ namespace AiDotNet.GaussianProcesses;
 /// without requiring careful tuning of step sizes.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.GaussianProcess)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("MCMC Methods for Gaussian Process Models", "https://doi.org/10.1007/978-3-540-28650-9_6", Year = 2003, Authors = "Mark N. Gibbs")]
 public class GPWithMCMC<T> : IGaussianProcess<T>
 {
     /// <summary>
