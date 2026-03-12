@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -11,6 +13,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// LSTD (Least-Squares Temporal Difference) agent using direct solution for value function weights.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Least-Squares Temporal Difference Learning",
+    "https://doi.org/10.1023/A:1007382027895",
+    Year = 1996,
+    Authors = "Bradtke, S. J. & Barto, A. G.")]
 public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private LSTDOptions<T> _options;

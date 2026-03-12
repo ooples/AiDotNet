@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
@@ -29,6 +32,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
 /// Famous for: Watkins 1989, the foundation of modern RL
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning from Delayed Rewards",
+    "https://www.cs.rhul.ac.uk/~chrisw/new_thesis.pdf",
+    Year = 1989,
+    Authors = "Watkins, C. J. C. H.")]
 public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private TabularQLearningOptions<T> _options;

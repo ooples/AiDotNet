@@ -1,5 +1,8 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ReinforcementLearning.Policies.Exploration
 {
@@ -9,6 +12,15 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Process equation: dx = θ(μ - x)dt + σdW
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.Medium)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Continuous Control with Deep Reinforcement Learning",
+        "https://arxiv.org/abs/1509.02971",
+        Year = 2016,
+        Authors = "Lillicrap, T. P., Hunt, J. J., Pritzel, A., Heess, N., Erez, T., Tassa, Y., Silver, D., & Wierstra, D.")]
     public class OrnsteinUhlenbeckNoise<T> : ExplorationStrategyBase<T>
     {
         private readonly double _theta;      // Mean reversion rate

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -10,6 +12,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// Linear SARSA agent using linear function approximation with on-policy learning.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Reinforcement Learning: An Introduction",
+    "http://incompleteideas.net/book/the-book-2nd.html",
+    Year = 2018,
+    Authors = "Sutton, R. S. & Barto, A. G.")]
 public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private LinearSARSAOptions<T> _options;

@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Policies
@@ -14,6 +17,16 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Commonly used in DDPG, TD3, and other deterministic policy gradient methods.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Deterministic Policy Gradient Algorithms",
+        "http://proceedings.mlr.press/v32/silver14.pdf",
+        Year = 2014,
+        Authors = "Silver, D., Lever, G., Heess, N., Degris, T., Wierstra, D., & Riedmiller, M.")]
     public class DeterministicPolicy<T> : PolicyBase<T>
     {
         private readonly INeuralNetwork<T> _policyNetwork;

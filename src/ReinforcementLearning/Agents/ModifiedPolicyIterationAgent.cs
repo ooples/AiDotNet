@@ -1,7 +1,10 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
@@ -33,6 +36,15 @@ public class TransitionData<T>
 /// Modified PI performs limited policy evaluation sweeps before improvement,
 /// trading off between the efficiency of VI and the stability of PI.
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Reinforcement Learning: An Introduction",
+    "http://incompleteideas.net/book/the-book-2nd.html",
+    Year = 2018,
+    Authors = "Sutton, R. S. & Barto, A. G.")]
 public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private ModifiedPolicyIterationOptions<T> _options;

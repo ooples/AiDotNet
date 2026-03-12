@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -34,6 +35,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
 /// Famous for: DeepMind's combination achieving human-level Atari performance
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Rainbow: Combining Improvements in Deep Reinforcement Learning",
+    "https://arxiv.org/abs/1710.02298",
+    Year = 2018,
+    Authors = "Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostrovski, G., Dabney, W., Horgan, D., Piot, B., Azar, M., & Silver, D.")]
 public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private RainbowDQNOptions<T> _options;

@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -37,6 +38,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.MuZero;
 /// Famous for: Superhuman Atari/board games without knowing rules
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Mastering Atari, Go, Chess and Shogi by Planning with a Learned Model",
+    "https://arxiv.org/abs/1911.08265",
+    Year = 2020,
+    Authors = "Schrittwieser, J., Antonoglou, I., Hubert, T., Simonyan, K., Sifre, L., Schmitt, S., et al.")]
 public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private MuZeroOptions<T> _options;

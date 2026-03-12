@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -14,6 +16,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// On-Policy MC Control uses epsilon-greedy policy for both behavior and target,
 /// ensuring exploration while learning the optimal policy.
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Reinforcement Learning: An Introduction",
+    "http://incompleteideas.net/book/the-book-2nd.html",
+    Year = 2018,
+    Authors = "Sutton, R. S. & Barto, A. G.")]
 public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private OnPolicyMonteCarloOptions<T> _options;

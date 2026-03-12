@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -37,6 +39,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.DQN;
 /// Mnih, V., et al. (2015). "Human-level control through deep reinforcement learning." Nature.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Human-level Control through Deep Reinforcement Learning",
+    "https://arxiv.org/abs/1312.5602",
+    Year = 2015,
+    Authors = "Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare, M. G., et al.")]
 public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DQNOptions<T> _dqnOptions;
