@@ -1,5 +1,8 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -28,6 +31,15 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// This is simpler and faster than GANs, and works well for structured tabular data.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.SyntheticDataGenerator)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SMOTE: Synthetic Minority Over-sampling Technique",
+    "https://arxiv.org/abs/1106.1813",
+    Year = 2002,
+    Authors = "Nitesh V. Chawla, Kevin W. Bowyer, Lawrence O. Hall, W. Philip Kegelmeyer")]
 public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
 {
     private readonly SMOTENCOptions<T> _options;

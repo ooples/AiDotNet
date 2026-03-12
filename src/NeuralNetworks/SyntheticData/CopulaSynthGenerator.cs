@@ -1,5 +1,8 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -34,6 +37,15 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// The result preserves both individual distributions and pairwise correlations.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.SyntheticDataGenerator)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("The Synthetic Data Vault",
+    "https://doi.org/10.1109/DSAA.2016.49",
+    Year = 2016,
+    Authors = "Neha Patki, Roy Wedge, Kalyan Veeramachaneni")]
 public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
 {
     private readonly CopulaSynthOptions<T> _options;

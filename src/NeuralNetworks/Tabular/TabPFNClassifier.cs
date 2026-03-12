@@ -1,5 +1,8 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -38,6 +41,16 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TabPFN: A Transformer That Solves Small Tabular Classification Problems in a Second",
+    "https://arxiv.org/abs/2207.01848",
+    Year = 2023,
+    Authors = "Noah Hollmann, Samuel Müller, Katharina Eggensperger, Frank Hutter")]
 public class TabPFNClassifier<T> : TabPFNBase<T>
 {
     private readonly int _numClasses;

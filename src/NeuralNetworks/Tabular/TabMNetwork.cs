@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -37,6 +40,17 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TabM: Advancing Tabular Deep Learning With Parameter-Efficient Ensembling",
+    "https://arxiv.org/abs/2410.24210",
+    Year = 2024,
+    Authors = "Yury Gorishniy, Akim Kotelnikov, Artem Babenko")]
 public class TabMNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly TabMOptions<T> _options;

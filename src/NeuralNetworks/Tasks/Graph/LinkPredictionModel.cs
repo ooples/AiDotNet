@@ -1,10 +1,13 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 
@@ -53,6 +56,15 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// ```
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Variational Graph Auto-Encoders",
+    "https://arxiv.org/abs/1611.07308",
+    Year = 2016,
+    Authors = "Thomas N. Kipf, Max Welling")]
 public class LinkPredictionModel<T> : NeuralNetworkBase<T>
 {
     private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
