@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -40,6 +42,15 @@ namespace AiDotNet.ContinualLearning;
 /// <para><b>Reference:</b> Shin, H., Lee, J.K., Kim, J., and Kim, J. "Continual Learning with
 /// Deep Generative Replay" (2017). NeurIPS.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Continual Learning with Deep Generative Replay", "https://arxiv.org/abs/1705.08690", Year = 2017, Authors = "Hanul Shin, Jung Kwon Lee, Jaehong Kim, Jiwon Kim")]
 public class GenerativeReplay<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

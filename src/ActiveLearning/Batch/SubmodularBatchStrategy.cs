@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -35,6 +37,12 @@ namespace AiDotNet.ActiveLearning.Batch;
 ///
 /// <para><b>Reference:</b> Wei et al. "Submodularity in Data Subset Selection and Active Learning" (ICML 2015)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Submodularity in Data Subset Selection and Active Learning", "https://arxiv.org/abs/1505.05123", Year = 2015, Authors = "Kai Wei, Rishabh Iyer, Jeff Bilmes")]
 public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

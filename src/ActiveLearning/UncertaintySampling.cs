@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -27,6 +29,12 @@ namespace AiDotNet.ActiveLearning;
 ///
 /// <para><b>Reference:</b> Lewis and Gale, "A Sequential Algorithm for Training Text Classifiers" (1994).</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Sequential Algorithm for Training Text Classifiers", "https://doi.org/10.1007/978-1-4471-2099-5_1", Year = 1994, Authors = "David D. Lewis, William A. Gale")]
 public class UncertaintySampling<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

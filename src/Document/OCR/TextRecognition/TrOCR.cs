@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -42,6 +43,14 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// https://arxiv.org/abs/2109.10282
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models", "https://doi.org/10.48550/arXiv.2109.10282", Year = 2022, Authors = "Minghao Li, Tengchao Lv, Jingye Chen, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei")]
 public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly TrOCROptions _options;

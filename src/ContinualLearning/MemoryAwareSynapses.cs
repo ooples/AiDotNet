@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -36,6 +38,13 @@ namespace AiDotNet.ContinualLearning;
 /// <para><b>Reference:</b> Aljundi, R., Babiloni, F., Elhoseiny, M., Rohrbach, M., and Tuytelaars, T.
 /// "Memory Aware Synapses: Learning what (not) to forget" (2018). ECCV.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Memory Aware Synapses: Learning What (Not) to Forget", "https://arxiv.org/abs/1711.09601", Year = 2018, Authors = "Rahaf Aljundi, Francesca Babiloni, Mohamed Elhoseiny, Marcus Rohrbach, Tinne Tuytelaars")]
 public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

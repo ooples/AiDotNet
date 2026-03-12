@@ -1,5 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.ContinualLearning.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
@@ -82,6 +84,12 @@ public class PNNOptions<T>
 /// <para>PNN guarantees no forgetting but has linear memory growth with tasks.
 /// Best for scenarios with a small number of tasks where zero forgetting is critical.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Progressive Neural Networks", "https://arxiv.org/abs/1606.04671", Year = 2016, Authors = "Andrei A. Rusu, Neil C. Rabinowitz, Guillaume Desjardins, Hubert Soyer, James Kirkpatrick, Koray Kavukcuoglu, Razvan Pascanu, Raia Hadsell")]
 public class ProgressiveNeuralNetworks<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInput, TOutput>
 {
     private readonly int? _hiddenUnitsPerColumn;

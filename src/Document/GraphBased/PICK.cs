@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -45,6 +46,15 @@ namespace AiDotNet.Document.GraphBased;
 /// https://arxiv.org/abs/2004.07464
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PICK: Processing Key Information Extraction from Documents using Improved Graph Learning-Convolutional Networks", "https://doi.org/10.48550/arXiv.2004.07464", Year = 2020, Authors = "Wenwen Yu, Ning Lu, Xianbiao Qi, Ping Gong, Rong Xiao")]
 public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
 {
     private readonly PICKOptions _options;

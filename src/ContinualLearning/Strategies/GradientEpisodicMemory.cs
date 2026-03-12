@@ -1,7 +1,9 @@
 using System.Text.Json;
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Memory;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -143,6 +145,13 @@ public class GEMOptions<T>
 /// </list>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Gradient Episodic Memory for Continual Learning", "https://arxiv.org/abs/1706.08840", Year = 2017, Authors = "David Lopez-Paz, Marc'Aurelio Ranzato")]
 public class GradientEpisodicMemory<T, TInput, TOutput>
     : ContinualLearningStrategyBase<T, TInput, TOutput>,
       IGradientConstraintStrategy<T, TInput, TOutput>

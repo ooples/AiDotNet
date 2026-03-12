@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -32,6 +34,13 @@ namespace AiDotNet.ActiveLearning.StoppingCriteria;
 /// <item><description>1 - max(p): For any classifier (range 0-1)</description></item>
 /// </list>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Active Learning Literature Survey", "https://minds.wisconsin.edu/handle/1793/60660", Year = 2009, Authors = "Burr Settles")]
 public class UncertaintyThresholdCriterion<T> : IUncertaintyBasedCriterion<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.DistributedTraining;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -20,6 +21,14 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// initialization, training loop, evaluation, and checkpointing. It provides
 /// callbacks for monitoring progress and supports resuming from checkpoints.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
 public class SSLSession<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

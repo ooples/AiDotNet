@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -57,6 +58,15 @@ namespace AiDotNet.Document.LayoutAware;
 /// https://arxiv.org/abs/2204.08387
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking", "https://doi.org/10.48550/arXiv.2204.08387", Year = 2022, Authors = "Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei")]
 public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LayoutLMv3Options _options;

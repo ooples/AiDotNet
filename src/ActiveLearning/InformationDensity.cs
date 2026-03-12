@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -33,6 +35,13 @@ namespace AiDotNet.ActiveLearning;
 /// <para><b>Reference:</b> McCallum, A. &amp; Nigam, K. (1998). "Employing EM and Pool-Based
 /// Active Learning for Text Classification."</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.InstanceBased)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Employing EM and Pool-Based Active Learning for Text Classification", "https://dl.acm.org/doi/10.5555/645527.757765", Year = 1998, Authors = "Andrew McCallum, Kamal Nigam")]
 public class InformationDensity<T> : IActiveLearningStrategy<T>
 {
     /// <summary>

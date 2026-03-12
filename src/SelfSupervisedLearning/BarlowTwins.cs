@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.SelfSupervisedLearning.Losses;
@@ -37,6 +38,13 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para><b>Reference:</b> Zbontar et al., "Barlow Twins: Self-Supervised Learning via
 /// Redundancy Reduction" (ICML 2021)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Barlow Twins: Self-Supervised Learning via Redundancy Reduction", "https://arxiv.org/abs/2103.03230", Year = 2021, Authors = "Jure Zbontar, Li Jing, Ishan Misra, Yann LeCun, Stéphane Deny")]
 public class BarlowTwins<T> : SSLMethodBase<T>
 {
     private readonly BarlowTwinsLoss<T> _loss;

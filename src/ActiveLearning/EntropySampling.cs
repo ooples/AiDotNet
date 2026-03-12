@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -32,6 +34,13 @@ namespace AiDotNet.ActiveLearning;
 /// <para><b>Complexity:</b> O(n × c) where n=pool size, c=number of classes.</para>
 /// <para><b>Reference:</b> Shannon, C.E. (1948). "A Mathematical Theory of Communication."</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Mathematical Theory of Communication", "https://doi.org/10.1002/j.1538-7305.1948.tb01338.x", Year = 1948, Authors = "Claude E. Shannon")]
 public class EntropySampling<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

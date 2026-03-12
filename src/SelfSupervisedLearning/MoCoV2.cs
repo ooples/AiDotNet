@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.SelfSupervisedLearning;
@@ -24,6 +26,13 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para><b>Reference:</b> Chen et al., "Improved Baselines with Momentum Contrastive Learning"
 /// (arXiv 2020)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Improved Baselines with Momentum Contrastive Learning", "https://arxiv.org/abs/2003.04297", Year = 2020, Authors = "Xinlei Chen, Haoqi Fan, Ross Girshick, Kaiming He")]
 public class MoCoV2<T> : MoCo<T>
 {
     /// <inheritdoc />

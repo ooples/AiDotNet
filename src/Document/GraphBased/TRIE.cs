@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -46,6 +47,15 @@ namespace AiDotNet.Document.GraphBased;
 /// https://arxiv.org/abs/2005.13118
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TRIE: End-to-End Text Reading and Information Extraction for Document Understanding", "https://doi.org/10.48550/arXiv.2005.13118", Year = 2020, Authors = "Peng Zhang, Yunlu Xu, Zhanzhan Cheng, Shiliang Pu, Jing Lu, Liang Qiao, Yi Niu, Fei Wu")]
 public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITextDetector<T>
 {
     private readonly TRIEOptions _options;

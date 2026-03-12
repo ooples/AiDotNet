@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -51,6 +52,15 @@ namespace AiDotNet.Document.LayoutAware;
 /// https://arxiv.org/abs/2202.13669
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LiLT: A Simple yet Effective Language-Independent Layout Transformer for Structured Document Understanding", "https://doi.org/10.48550/arXiv.2202.13669", Year = 2022, Authors = "Jiapeng Wang, Lianwen Jin, Kai Ding")]
 public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
     private readonly LiLTOptions _options;

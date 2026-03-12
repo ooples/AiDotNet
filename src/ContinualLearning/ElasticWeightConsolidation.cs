@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -29,6 +31,13 @@ namespace AiDotNet.ContinualLearning;
 /// <para><b>Reference:</b> Kirkpatrick et al., "Overcoming catastrophic forgetting in neural
 /// networks" (2017). PNAS.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Overcoming Catastrophic Forgetting in Neural Networks", "https://doi.org/10.1073/pnas.1611835114", Year = 2017, Authors = "James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins, Andrei A. Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska, Demis Hassabis, Claudia Clopath, Dharshan Kumaran, Raia Hadsell")]
 public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

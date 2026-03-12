@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -30,6 +32,13 @@ namespace AiDotNet.ActiveLearning;
 /// <para><b>Reference:</b> Houlsby, N. et al. (2011). "Bayesian Active Learning for Classification
 /// and Preference Learning."</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Bayesian Active Learning for Classification and Preference Learning", "https://arxiv.org/abs/1112.5745", Year = 2011, Authors = "Neil Houlsby, Ferenc Huszár, Zoubin Ghahramani, Máté Lengyel")]
 public class BALD<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

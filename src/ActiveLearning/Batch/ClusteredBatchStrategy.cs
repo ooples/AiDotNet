@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -36,6 +38,14 @@ namespace AiDotNet.ActiveLearning.Batch;
 /// <item><description>May need many iterations for convergence</description></item>
 /// </list>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Clustering)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Active Learning Literature Survey", "https://minds.wisconsin.edu/handle/1793/60660", Year = 2009, Authors = "Burr Settles")]
 public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrategy<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

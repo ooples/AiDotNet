@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -45,6 +46,14 @@ namespace AiDotNet.Document.LayoutAware;
 /// https://arxiv.org/abs/2203.02378
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DiT: Self-supervised Pre-training for Document Image Transformer", "https://doi.org/10.48550/arXiv.2203.02378", Year = 2022, Authors = "Junlong Li, Yiheng Xu, Tengchao Lv, Lei Cui, Cha Zhang, Furu Wei")]
 public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
 {
     private readonly DiTOptions _options;

@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -24,6 +26,13 @@ namespace AiDotNet.ActiveLearning;
 /// <para><b>Complexity:</b> O(n) for selection where n is the pool size.</para>
 /// <para><b>Reference:</b> Standard baseline in active learning literature.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Active Learning Literature Survey", "https://minds.wisconsin.edu/handle/1793/60660", Year = 2009, Authors = "Burr Settles")]
 public class RandomSampling<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

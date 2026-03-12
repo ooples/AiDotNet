@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.SelfSupervisedLearning.Losses;
@@ -33,6 +34,13 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para><b>Reference:</b> Chen et al., "A Simple Framework for Contrastive Learning of Visual
 /// Representations" (ICML 2020)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
 public class SimCLR<T> : SSLMethodBase<T>
 {
     private readonly NTXentLoss<T> _loss;

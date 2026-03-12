@@ -2,6 +2,8 @@ using System.Diagnostics;
 using AiDotNet.ActiveLearning.Config;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ActiveLearning.Results;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -45,6 +47,12 @@ namespace AiDotNet.ActiveLearning.Core;
 /// Console.WriteLine($"Final accuracy: {result.FinalTrainingAccuracy}");
 /// </code>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Active Learning Literature Survey", "https://minds.wisconsin.edu/handle/1793/60660", Year = 2009, Authors = "Burr Settles")]
 public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

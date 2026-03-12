@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -31,6 +33,13 @@ namespace AiDotNet.ActiveLearning.StoppingCriteria;
 ///
 /// <para><b>Reference:</b> Figueroa et al. "Predicting sample size required for classification performance" (BMC 2012)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Predicting Sample Size Required for Classification Performance", "https://doi.org/10.1186/1471-2288-12-8", Year = 2012, Authors = "Rosa L. Figueroa, Qing Zeng-Treitler, Sasikiran Kandula, Long H. Ngo")]
 public class ConvergenceCriterion<T> : IStoppingCriterion<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

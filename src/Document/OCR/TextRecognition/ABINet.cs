@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -45,6 +46,14 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// https://arxiv.org/abs/2103.06495
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Read Like Humans: Autonomous, Bidirectional and Iterative Language Modeling for Scene Text Recognition", "https://doi.org/10.48550/arXiv.2103.06495", Year = 2021, Authors = "Shancheng Fang, Hongtao Xie, Yuxin Wang, Zhendong Mao, Yongdong Zhang")]
 public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private readonly ABINetOptions _options;

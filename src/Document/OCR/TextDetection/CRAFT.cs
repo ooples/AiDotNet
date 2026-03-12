@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -47,6 +48,13 @@ namespace AiDotNet.Document.OCR.TextDetection;
 /// https://arxiv.org/abs/1904.01941
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Character Region Awareness for Text Detection", "https://doi.org/10.48550/arXiv.1904.01941", Year = 2019, Authors = "Youngmin Baek, Bado Lee, Dongyoon Han, Sangdoo Yun, Hwalsuk Lee")]
 public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly CRAFTOptions _options;

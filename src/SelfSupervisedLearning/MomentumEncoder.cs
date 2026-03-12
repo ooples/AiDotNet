@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -37,6 +39,13 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// momentumEncoder.UpdateFromMainEncoder(mainEncoder);  // EMA update
 /// </code>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Momentum Contrast for Unsupervised Visual Representation Learning", "https://arxiv.org/abs/1911.05722", Year = 2020, Authors = "Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, Ross Girshick")]
 public class MomentumEncoder<T> : IMomentumEncoder<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

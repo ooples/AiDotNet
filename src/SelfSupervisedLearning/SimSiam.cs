@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.SelfSupervisedLearning.Losses;
@@ -35,6 +36,13 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para><b>Reference:</b> Chen and He, "Exploring Simple Siamese Representation Learning"
 /// (CVPR 2021)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Exploring Simple Siamese Representation Learning", "https://arxiv.org/abs/2011.10566", Year = 2021, Authors = "Xinlei Chen, Kaiming He")]
 public class SimSiam<T> : SSLMethodBase<T>
 {
     private readonly BYOLLoss<T> _loss;

@@ -1,7 +1,9 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Results;
 using AiDotNet.ContinualLearning.Strategies;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -119,6 +121,13 @@ public class MASTrainerOptions<T>
 ///
 /// <para><b>Reference:</b> Aljundi et al. "Memory Aware Synapses: Learning what (not) to forget" (ECCV 2018)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Memory Aware Synapses: Learning What (Not) to Forget", "https://arxiv.org/abs/1711.09601", Year = 2018, Authors = "Rahaf Aljundi, Francesca Babiloni, Mohamed Elhoseiny, Marcus Rohrbach, Tinne Tuytelaars")]
 public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOutput>
 {
     [ThreadStatic]
