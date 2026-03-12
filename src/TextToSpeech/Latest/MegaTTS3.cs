@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>MegaTTS 3: sparse diffusion transformer TTS using DiT backbone for efficient generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MegaTTS 3: Sparse DiT with Latent LMs" (Jiang et al., 2025)</item></list></para><para><b>For Beginners:</b> MegaTTS 3: sparse diffusion transformer TTS using DiT backbone for efficient generation.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MegaTTS 3: Sparse Diffusion Transformer is a Natural Zero-Shot TTS Engine", "https://arxiv.org/abs/2502.18924", Year = 2025, Authors = "Jiang et al.")]
 public class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly MegaTTS3Options _options; public override ModelOptions GetOptions() => _options;

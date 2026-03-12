@@ -1,8 +1,25 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>Step-Audio: unified understanding and generation speech language model for intelligent voice interaction.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Step-Audio: Unified Understanding and Generation in Intelligent Speech Interaction" (StepFun, 2025)</item></list></para><para><b>For Beginners:</b> Step-Audio: unified understanding and generation speech language model for intelligent voice interaction.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Step-Audio: Unified Understanding and Generation in Intelligent Speech Interaction", "https://arxiv.org/abs/2502.11946", Year = 2025, Authors = "StepFun")]
 public class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly StepAudioOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <summary>StyleTTSZS: StyleTTS-ZS: Zero-Shot Voice Cloning with Style and Duration Control.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "StyleTTS-ZS: Zero-Shot Voice Cloning with Style and Duration Control" (Li et al., 2024)</item></list></para><para><b>For Beginners:</b> StyleTTSZS: StyleTTS-ZS: Zero-Shot Voice Cloning with Style and Duration Control.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("StyleTTS-ZS: Efficient High-Quality Zero-Shot Text-to-Speech Synthesis with Distilled Time-Varying Style Diffusion", "https://arxiv.org/abs/2409.10058", Year = 2024, Authors = "Li et al.")]
 public class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTSZSOptions _options; public override ModelOptions GetOptions() => _options;

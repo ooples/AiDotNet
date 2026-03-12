@@ -1,8 +1,25 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>AudioPaLM: AudioPaLM: A Large Language Model That Can Speak and Listen.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "AudioPaLM: A Large Language Model That Can Speak and Listen" (Rubenstein et al., 2023)</item></list></para><para><b>For Beginners:</b> AudioPaLM: AudioPaLM: A Large Language Model That Can Speak and Listen.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AudioPaLM: A Large Language Model That Can Speak and Listen", "https://arxiv.org/abs/2306.12925", Year = 2023, Authors = "Rubenstein et al.")]
 public class AudioPaLM<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly AudioPaLMOptions _options; public override ModelOptions GetOptions() => _options;

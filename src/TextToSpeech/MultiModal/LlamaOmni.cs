@@ -1,8 +1,25 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>LLaMA-Omni: seamless speech interaction with LLM, enabling low-latency speech-to-speech conversation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "LLaMA-Omni: Seamless Speech Interaction with Large Language Model" (Fang et al., 2024)</item></list></para><para><b>For Beginners:</b> LLaMA-Omni: seamless speech interaction with LLM, enabling low-latency speech-to-speech conversation.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LLaMA-Omni: Seamless Speech Interaction with Large Language Model", "https://arxiv.org/abs/2409.06666", Year = 2024, Authors = "Fang et al.")]
 public class LlamaOmni<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly LlamaOmniOptions _options; public override ModelOptions GetOptions() => _options;

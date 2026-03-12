@@ -1,8 +1,25 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>SpeechGPT: empowering LLMs with intrinsic cross-modal conversational abilities via discrete speech tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities" (Zhang et al., 2023)</item></list></para><para><b>For Beginners:</b> SpeechGPT: empowering LLMs with intrinsic cross-modal conversational abilities via discrete speech tokens.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities", "https://arxiv.org/abs/2305.11000", Year = 2023, Authors = "Zhang et al.")]
 public class SpeechGPT<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SpeechGPTOptions _options; public override ModelOptions GetOptions() => _options;

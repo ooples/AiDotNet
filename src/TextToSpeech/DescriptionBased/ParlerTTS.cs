@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.DescriptionBased;
 /// <summary>Parler-TTS: text-described TTS that generates speech matching a natural language voice description.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Natural language guidance of high-fidelity text-to-speech" (Lyth et al., 2024)</item></list></para><para><b>For Beginners:</b> Parler-TTS: text-described TTS that generates speech matching a natural language voice description.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Natural Language Guidance of High-Fidelity Text-to-Speech with Synthetic Annotations", "https://arxiv.org/abs/2402.01912", Year = 2024, Authors = "Lyth et al.")]
 public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly ParlerTTSOptions _options; public override ModelOptions GetOptions() => _options;
