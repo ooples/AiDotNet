@@ -1098,9 +1098,8 @@ public class PerParameterOptimizer<T, TInput, TOutput>
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Meta-SGD: Learning to Learn Quickly for Few-Shot Learning", "https://arxiv.org/abs/1707.09835", Year = 2017, Authors = "Zhenguo Li, Fengwei Zhou, Fei Chen, Hang Li")]
-public class MetaSGDAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+public class MetaSGDAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
-    private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly PerParameterOptimizer<T, TInput, TOutput> _optimizer;
     private readonly MetaSGDOptions<T, TInput, TOutput> _options;
 
@@ -1114,9 +1113,8 @@ public class MetaSGDAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
         IFullModel<T, TInput, TOutput> model,
         PerParameterOptimizer<T, TInput, TOutput> optimizer,
         MetaSGDOptions<T, TInput, TOutput> options)
+        : base(model)
     {
-        Guard.NotNull(model);
-        _model = model;
         Guard.NotNull(optimizer);
         _optimizer = optimizer;
         Guard.NotNull(options);
@@ -1124,66 +1122,39 @@ public class MetaSGDAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
     }
 
     /// <summary>
-    /// Gets the model metadata.
-    /// </summary>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-
-    /// <summary>
     /// Gets the per-parameter optimizer (for inspection or further adaptation).
     /// </summary>
     public PerParameterOptimizer<T, TInput, TOutput> Optimizer => _optimizer;
 
-    /// <summary>
-    /// Makes predictions using the adapted model.
-    /// </summary>
-    /// <param name="input">The input data.</param>
-    /// <returns>The model predictions.</returns>
-    public TOutput Predict(TInput input)
+    /// <inheritdoc/>
+    public override TOutput Predict(TInput input)
     {
-        return _model.Predict(input);
+        return BaseModel.Predict(input);
     }
 
-    /// <summary>
-    /// Trains the model on the given data.
-    /// </summary>
-    /// <param name="inputs">The input data.</param>
-    /// <param name="targets">The target outputs.</param>
-    /// <remarks>
-    /// <para>
-    /// For Meta-SGD adapted models, training is typically done through the
-    /// meta-learning adaptation process rather than direct training.
-    /// This method delegates to the underlying model's training.
-    /// </para>
-    /// </remarks>
-    public void Train(TInput inputs, TOutput targets)
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
     {
-        _model.Train(inputs, targets);
+        return BaseModel.GetParameters();
     }
 
-    /// <summary>
-    /// Gets the model metadata.
-    /// </summary>
-    /// <returns>The metadata for this model.</returns>
-    public ModelMetadata<T> GetModelMetadata()
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
     {
-        return Metadata;
+        Guard.NotNull(parameters);
+        BaseModel.SetParameters(parameters);
     }
 
-    /// <summary>
-    /// Gets the current model parameters.
-    /// </summary>
-    /// <returns>The parameter vector.</returns>
-    public Vector<T> GetParameters()
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        return _model.GetParameters();
+        var model = BaseModel.WithParameters(parameters);
+        return new MetaSGDAdaptedModel<T, TInput, TOutput>(model, _optimizer, _options);
     }
 
-    /// <summary>
-    /// Sets the model parameters.
-    /// </summary>
-    /// <param name="parameters">The new parameters.</param>
-    public void SetParameters(Vector<T> parameters)
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
     {
-        _model.SetParameters(parameters);
+        return new MetaSGDAdaptedModel<T, TInput, TOutput>(BaseModel.DeepCopy(), _optimizer, _options);
     }
 }

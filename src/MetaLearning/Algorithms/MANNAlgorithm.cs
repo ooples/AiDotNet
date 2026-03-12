@@ -997,13 +997,11 @@ public class MANNMemoryStatistics
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Meta-Learning with Memory-Augmented Neural Networks", "https://arxiv.org/abs/1605.06065", Year = 2016, Authors = "Santoro et al.")]
-public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+public class MANNModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
-    private readonly IFullModel<T, TInput, TOutput> _controller;
     private readonly ExternalMemory<T> _memory;
     private readonly MANNOptions<T, TInput, TOutput> _options;
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the MANNModel.
@@ -1013,27 +1011,21 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
         ExternalMemory<T> memory,
         MANNOptions<T, TInput, TOutput> options,
         INumericOperations<T> numOps)
+        : base(controller)
     {
-        Guard.NotNull(controller);
-        _controller = controller;
         Guard.NotNull(memory);
         _memory = memory;
         Guard.NotNull(options);
         _options = options;
-        Guard.NotNull(numOps);
-        _numOps = numOps;
     }
-
-    /// <summary>Gets the model metadata.</summary>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
     /// Makes predictions using memory-augmented classification.
     /// </summary>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
         // Process input through controller
-        var controllerOutput = _controller.Predict(input);
+        var controllerOutput = BaseModel.Predict(input);
 
         // Generate read key
         var readKey = GenerateReadKey(controllerOutput);
@@ -1050,31 +1042,26 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
         return ConvertToOutput(prediction);
     }
 
-    /// <summary>
-    /// Training is not supported for adapted models.
-    /// </summary>
-    public void Train(TInput inputs, TOutput targets)
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => BaseModel.GetParameters();
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
     {
-        throw new NotSupportedException("Use the MANN algorithm to train.");
+        BaseModel.SetParameters(parameters ?? throw new ArgumentNullException(nameof(parameters)));
     }
 
-    /// <summary>
-    /// Parameter updates are not supported for adapted models.
-    /// </summary>
-    public void UpdateParameters(Vector<T> parameters)
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        throw new NotSupportedException("MANN parameters are updated during training.");
+        return new MANNModel<T, TInput, TOutput>(BaseModel, _memory, _options, NumOps);
     }
 
-    /// <summary>
-    /// Gets controller parameters.
-    /// </summary>
-    public Vector<T> GetParameters() => _controller.GetParameters();
-
-    /// <summary>
-    /// Gets model metadata.
-    /// </summary>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new MANNModel<T, TInput, TOutput>(BaseModel.DeepCopy(), _memory, _options, NumOps);
+    }
 
     private Vector<T> GenerateReadKey(TOutput output)
     {
@@ -1118,7 +1105,7 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
         for (int i = 0; i < _options.MemorySize; i++)
         {
             var memoryKey = _memory.GetKey(i);
-            T similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(queryKey, memoryKey));
+            T similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(queryKey, memoryKey));
             weights[i] = similarity;
         }
 
@@ -1132,24 +1119,24 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
         T maxVal = values[0];
         for (int i = 1; i < values.Length; i++)
         {
-            if (_numOps.ToDouble(values[i]) > _numOps.ToDouble(maxVal))
+            if (NumOps.ToDouble(values[i]) > NumOps.ToDouble(maxVal))
             {
                 maxVal = values[i];
             }
         }
 
-        T sumExp = _numOps.Zero;
+        T sumExp = NumOps.Zero;
         var expValues = new T[values.Length];
         for (int i = 0; i < values.Length; i++)
         {
-            T shifted = _numOps.Subtract(values[i], maxVal);
-            expValues[i] = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            sumExp = _numOps.Add(sumExp, expValues[i]);
+            T shifted = NumOps.Subtract(values[i], maxVal);
+            expValues[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
+            sumExp = NumOps.Add(sumExp, expValues[i]);
         }
 
         for (int i = 0; i < values.Length; i++)
         {
-            result[i] = _numOps.Divide(expValues[i], sumExp);
+            result[i] = NumOps.Divide(expValues[i], sumExp);
         }
 
         return result;
@@ -1179,10 +1166,10 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
         int stride = combinedFeatures.Length / _options.NumClasses;
         for (int c = 0; c < _options.NumClasses; c++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int i = c * stride; i < Math.Min((c + 1) * stride, combinedFeatures.Length); i++)
             {
-                sum = _numOps.Add(sum, combinedFeatures[i]);
+                sum = NumOps.Add(sum, combinedFeatures[i]);
             }
             prediction[c] = sum;
         }

@@ -726,12 +726,10 @@ internal static class CAVIAContextHelper<T>
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Fast Context Adaptation via Meta-Learning", "https://arxiv.org/abs/1810.03642", Year = 2019, Authors = "Luisa Zintgraf, Kyriacos Shiarlis, Vitaly Kurin, Katja Hofmann, Shimon Whiteson")]
-public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+public class CAVIAModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
-    private readonly IFullModel<T, TInput, TOutput> _bodyModel;
     private readonly Vector<T> _adaptedContext;
     private readonly CAVIAOptions<T, TInput, TOutput> _options;
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the CAVIAModel with adapted context.
@@ -739,174 +737,56 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <param name="bodyModel">The meta-learned body model (frozen during inference).</param>
     /// <param name="adaptedContext">The task-adapted context vector.</param>
     /// <param name="options">CAVIA configuration options.</param>
-    /// <param name="numOps">Numeric operations for type T.</param>
-    /// <exception cref="ArgumentNullException">Thrown when any required parameter is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This model is created by <see cref="CAVIAAlgorithm{T, TInput, TOutput}.Adapt"/>
-    /// after learning a task-specific context from the support set. You don't create this directly -
-    /// instead, call Adapt() with your few-shot examples and use the returned CAVIAModel for predictions.
-    ///
-    /// The model combines:
-    /// - The shared body model (learned across all tasks during meta-training)
-    /// - The adapted context (learned specifically for this task during adaptation)
-    ///
-    /// When you call Predict(), the context is automatically injected into the input before
-    /// passing it through the body model, so you use it like any normal model.
-    /// </para>
-    /// </remarks>
+    /// <param name="numOps">Numeric operations for type T (unused, provided for API compatibility).</param>
     public CAVIAModel(
         IFullModel<T, TInput, TOutput> bodyModel,
         Vector<T> adaptedContext,
         CAVIAOptions<T, TInput, TOutput> options,
         INumericOperations<T> numOps)
+        : base(bodyModel)
     {
-        Guard.NotNull(bodyModel);
-        _bodyModel = bodyModel;
         Guard.NotNull(adaptedContext);
         _adaptedContext = adaptedContext;
         Guard.NotNull(options);
         _options = options;
-        Guard.NotNull(numOps);
-        _numOps = numOps;
     }
-
-    /// <summary>
-    /// Gets the model metadata.
-    /// </summary>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
     /// Gets the adapted context vector for inspection or further processing.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The context vector provides a low-dimensional summary of the task.
-    /// It can be used for:
-    /// - Task clustering (similar tasks have similar contexts)
-    /// - Visualization (project context to 2D for analysis)
-    /// - Transfer (reuse context from a similar seen task)
-    /// </para>
-    /// </remarks>
     public Vector<T> AdaptedContext => _adaptedContext;
 
-    /// <summary>
-    /// Makes predictions by augmenting input with the adapted context and running through the body model.
-    /// </summary>
-    /// <param name="input">The input to classify or regress.</param>
-    /// <returns>Model predictions (class probabilities, regression values, etc.).</returns>
-    /// <remarks>
-    /// <para>
-    /// The prediction process is:
-    /// 1. Inject the adapted context into the input (using the configured injection mode)
-    /// 2. Pass the augmented input through the frozen body model
-    /// 3. Return the model's output
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This works just like any other model's Predict() method. The only
-    /// difference is that behind the scenes, your input is augmented with the task-specific context
-    /// before being processed. You don't need to worry about the context injection - it happens
-    /// automatically based on the configuration.
-    ///
-    /// Example usage:
-    /// <code>
-    /// // Adapt to a new task
-    /// var adaptedModel = caviaAlgorithm.Adapt(fewShotTask);
-    ///
-    /// // Use like any model - context injection is automatic
-    /// var predictions = adaptedModel.Predict(newInput);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public TOutput Predict(TInput input)
+    /// <inheritdoc/>
+    public override TOutput Predict(TInput input)
     {
-        // Augment input with adapted context
         var augmentedInput = AugmentInput(input, _adaptedContext);
-
-        // Forward through the body model
-        return _bodyModel.Predict(augmentedInput);
+        return BaseModel.Predict(augmentedInput);
     }
 
-    /// <summary>
-    /// Trains the model (not applicable for CAVIA inference models).
-    /// </summary>
-    /// <param name="inputs">Training inputs (unused).</param>
-    /// <param name="targets">Training targets (unused).</param>
-    /// <exception cref="NotSupportedException">Always thrown - CAVIA inference models are frozen.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> CAVIA inference models are "frozen" after adaptation - they can't be
-    /// trained further. If you need to adapt to a different task, call
-    /// <see cref="CAVIAAlgorithm{T, TInput, TOutput}.Adapt"/> again with the new task's support set.
-    /// </para>
-    /// </remarks>
-    public void Train(TInput inputs, TOutput targets)
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => BaseModel.GetParameters();
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
     {
-        throw new NotSupportedException(
-            "CAVIA inference models don't support training. " +
-            "Use CAVIAAlgorithm.Adapt() to create a new adapted model.");
+        Guard.NotNull(parameters);
+        BaseModel.SetParameters(parameters);
     }
 
-    /// <summary>
-    /// Updates model parameters (not applicable for CAVIA inference models).
-    /// </summary>
-    /// <param name="parameters">Parameters to set (unused).</param>
-    /// <exception cref="NotSupportedException">Always thrown - CAVIA inference models are frozen.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The adapted model's parameters (body + context) are fixed after
-    /// adaptation. To get a model with different parameters, create a new one via Adapt().
-    /// </para>
-    /// </remarks>
-    public void UpdateParameters(Vector<T> parameters)
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        throw new NotSupportedException("CAVIA inference models don't have directly trainable parameters.");
+        var model = BaseModel.WithParameters(parameters);
+        return new CAVIAModel<T, TInput, TOutput>(model, _adaptedContext, _options, NumOps);
     }
 
-    /// <summary>
-    /// Gets model parameters (not applicable for CAVIA inference models).
-    /// </summary>
-    /// <returns>This method always throws.</returns>
-    /// <exception cref="NotSupportedException">Always thrown - use <see cref="AdaptedContext"/> to inspect the context.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The adapted context can be inspected via the <see cref="AdaptedContext"/>
-    /// property. The body model's parameters are managed by the meta-learning algorithm.
-    /// </para>
-    /// </remarks>
-    public Vector<T> GetParameters()
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
     {
-        throw new NotSupportedException("CAVIA inference models don't expose parameters directly.");
+        return new CAVIAModel<T, TInput, TOutput>(
+            BaseModel.DeepCopy(), _adaptedContext.Clone(), _options, NumOps);
     }
 
-    /// <summary>
-    /// Gets metadata about this CAVIA inference model.
-    /// </summary>
-    /// <returns>Model metadata describing this adapted CAVIA model.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns descriptive information about the model, including
-    /// the fact that it's a CAVIA-adapted model with a specific context vector.
-    /// </para>
-    /// </remarks>
-    public ModelMetadata<T> GetModelMetadata()
-    {
-        return Metadata;
-    }
-
-    /// <summary>
-    /// Augments input by injecting context according to the configured injection mode.
-    /// </summary>
-    /// <param name="input">The original input to augment.</param>
-    /// <param name="context">The adapted context vector to inject.</param>
-    /// <returns>The augmented input with context information included.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is the same context injection used during adaptation, now applied
-    /// at inference time. The context is injected into every input before the model sees it,
-    /// so the model always processes inputs with the task-specific context information.
-    /// </para>
-    /// </remarks>
     private TInput AugmentInput(TInput input, Vector<T> context) =>
-        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _options.ContextInjectionMode, _numOps);
+        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _options.ContextInjectionMode, NumOps);
 }

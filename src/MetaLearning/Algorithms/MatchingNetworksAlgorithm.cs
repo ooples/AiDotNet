@@ -620,14 +620,12 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Matching Networks for One Shot Learning", "https://arxiv.org/abs/1606.04080", Year = 2016, Authors = "Oriol Vinyals, Charles Blundell, Timothy Lillicrap, Koray Kavukcuoglu, Daan Wierstra")]
-public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+public class MatchingNetworksModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
     protected static IEngine Engine => AiDotNetEngine.Current;
-    private readonly IFullModel<T, TInput, TOutput> _encoder;
     private readonly Matrix<T> _supportEmbeddings;
     private readonly Matrix<T> _supportLabelsOneHot;
     private readonly MatchingNetworksOptions<T, TInput, TOutput> _options;
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the MatchingNetworksModel.
@@ -638,32 +636,41 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
         TOutput supportLabels,
         MatchingNetworksOptions<T, TInput, TOutput> options,
         INumericOperations<T> numOps)
+        : base(encoder)
     {
-        Guard.NotNull(encoder);
-        _encoder = encoder;
         Guard.NotNull(options);
         _options = options;
-        Guard.NotNull(numOps);
-        _numOps = numOps;
 
         // Pre-compute support embeddings
-        var encodedOutput = _encoder.Predict(supportInputs);
+        var encodedOutput = BaseModel.Predict(supportInputs);
         _supportEmbeddings = ConvertToMatrix(encodedOutput);
 
         // Pre-compute one-hot labels
         _supportLabelsOneHot = ConvertLabelsToOneHot(supportLabels, _supportEmbeddings.Rows);
     }
 
-    /// <summary>Gets the model metadata.</summary>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+    /// <summary>
+    /// Private constructor for WithParameters/DeepCopy (avoids recomputing embeddings).
+    /// </summary>
+    private MatchingNetworksModel(
+        IFullModel<T, TInput, TOutput> encoder,
+        Matrix<T> supportEmbeddings,
+        Matrix<T> supportLabelsOneHot,
+        MatchingNetworksOptions<T, TInput, TOutput> options)
+        : base(encoder)
+    {
+        _supportEmbeddings = supportEmbeddings;
+        _supportLabelsOneHot = supportLabelsOneHot;
+        _options = options;
+    }
 
     /// <summary>
     /// Makes predictions using attention over support examples.
     /// </summary>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
         // Encode query
-        var encodedOutput = _encoder.Predict(input);
+        var encodedOutput = BaseModel.Predict(input);
         var queryEmbeddings = ConvertToMatrix(encodedOutput);
 
         int numQueries = queryEmbeddings.Rows;
@@ -679,12 +686,12 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
             // Weighted sum of support labels
             for (int c = 0; c < numClasses; c++)
             {
-                T classScore = _numOps.Zero;
+                T classScore = NumOps.Zero;
                 for (int s = 0; s < _supportEmbeddings.Rows; s++)
                 {
                     T labelValue = _supportLabelsOneHot[s, c];
                     T weight = attentionWeights[s];
-                    classScore = _numOps.Add(classScore, _numOps.Multiply(labelValue, weight));
+                    classScore = NumOps.Add(classScore, NumOps.Multiply(labelValue, weight));
                 }
                 predictions[q, c] = classScore;
             }
@@ -693,31 +700,31 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
         return ConvertToOutput(predictions);
     }
 
-    /// <summary>
-    /// Training is not supported for inference models.
-    /// </summary>
-    public void Train(TInput inputs, TOutput targets)
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => BaseModel.GetParameters();
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
     {
-        throw new NotSupportedException("Use the Matching Networks algorithm to train.");
+        BaseModel.SetParameters(parameters ?? throw new ArgumentNullException(nameof(parameters)));
     }
 
-    /// <summary>
-    /// Parameter updates are not supported for inference models.
-    /// </summary>
-    public void UpdateParameters(Vector<T> parameters)
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
-        throw new NotSupportedException("Matching Networks parameters are updated during training.");
+        return new MatchingNetworksModel<T, TInput, TOutput>(
+            BaseModel, _supportEmbeddings, _supportLabelsOneHot, _options);
     }
 
-    /// <summary>
-    /// Gets encoder parameters.
-    /// </summary>
-    public Vector<T> GetParameters() => _encoder.GetParameters();
-
-    /// <summary>
-    /// Gets model metadata.
-    /// </summary>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new MatchingNetworksModel<T, TInput, TOutput>(
+            BaseModel.DeepCopy(),
+            _supportEmbeddings.Clone(),
+            _supportLabelsOneHot.Clone(),
+            _options);
+    }
 
     private Vector<T> ComputeAttentionWeights(Vector<T> queryEmbedding)
     {
@@ -731,15 +738,15 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
             // Respect the AttentionFunction option (consistent with algorithm's ComputeAttentionWeights)
             T similarity = _options.AttentionFunction switch
             {
-                MatchingNetworksAttentionFunction.Cosine => _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding)),
+                MatchingNetworksAttentionFunction.Cosine => NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding)),
                 MatchingNetworksAttentionFunction.DotProduct => VectorHelper.DotProduct(queryEmbedding, supportEmbedding),
-                MatchingNetworksAttentionFunction.Euclidean => _numOps.Negate(VectorHelper.EuclideanDistance(queryEmbedding, supportEmbedding)),
-                _ => _numOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding))
+                MatchingNetworksAttentionFunction.Euclidean => NumOps.Negate(VectorHelper.EuclideanDistance(queryEmbedding, supportEmbedding)),
+                _ => NumOps.FromDouble(VectorHelper.CosineSimilarity(queryEmbedding, supportEmbedding))
             };
 
             if (Math.Abs(_options.Temperature - 1.0) >= 1e-10)
             {
-                similarity = _numOps.Divide(similarity, _numOps.FromDouble(_options.Temperature));
+                similarity = NumOps.Divide(similarity, NumOps.FromDouble(_options.Temperature));
             }
 
             weights[s] = similarity;
@@ -756,24 +763,24 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
         T maxVal = values[0];
         for (int i = 1; i < values.Length; i++)
         {
-            if (_numOps.ToDouble(values[i]) > _numOps.ToDouble(maxVal))
+            if (NumOps.ToDouble(values[i]) > NumOps.ToDouble(maxVal))
             {
                 maxVal = values[i];
             }
         }
 
-        T sumExp = _numOps.Zero;
+        T sumExp = NumOps.Zero;
         var expValues = new T[values.Length];
         for (int i = 0; i < values.Length; i++)
         {
-            T shifted = _numOps.Subtract(values[i], maxVal);
-            expValues[i] = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            sumExp = _numOps.Add(sumExp, expValues[i]);
+            T shifted = NumOps.Subtract(values[i], maxVal);
+            expValues[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
+            sumExp = NumOps.Add(sumExp, expValues[i]);
         }
 
         for (int i = 0; i < values.Length; i++)
         {
-            result[i] = _numOps.Divide(expValues[i], sumExp);
+            result[i] = NumOps.Divide(expValues[i], sumExp);
         }
 
         return result;
@@ -834,7 +841,7 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
             int classLabel = GetClassLabel(labels, i);
             if (classLabel >= 0 && classLabel < numClasses)
             {
-                matrix[i, classLabel] = _numOps.One;
+                matrix[i, classLabel] = NumOps.One;
             }
         }
 
@@ -844,10 +851,10 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
     private int GetClassLabel(TOutput output, int index)
     {
         if (output is Vector<T> vector && index < vector.Length)
-            return (int)_numOps.ToDouble(vector[index]);
+            return (int)NumOps.ToDouble(vector[index]);
 
         if (output is Tensor<T> tensor && tensor.Shape.Length >= 1 && index < tensor.Shape[0])
-            return (int)_numOps.ToDouble(tensor[new int[] { index }]);
+            return (int)NumOps.ToDouble(tensor[new int[] { index }]);
 
         return 0;
     }

@@ -305,35 +305,45 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
 }
 
 /// <summary>Adapted model for Neural Process family algorithms.</summary>
-internal class NeuralProcessModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
+internal class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private Vector<T> _params;
     private readonly Vector<T>? _contextRepresentation;
 
     public Vector<T>? AdaptedSupportFeatures => _contextRepresentation;
     public double[]? ParameterModulationFactors => null;
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     public NeuralProcessModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> parameters,
         Vector<T>? contextRepresentation)
+        : base(model)
     {
-        _model = model;
         _params = parameters;
         _contextRepresentation = contextRepresentation;
     }
 
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
-        _model.SetParameters(_params);
-        return _model.Predict(input);
+        BaseModel.SetParameters(_params);
+        return BaseModel.Predict(input);
     }
 
-    public void Train(TInput inputs, TOutput targets) =>
-        throw new NotSupportedException("Adapted meta-learning models do not support direct training.");
+    public override Vector<T> GetParameters() => _params;
 
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _params = parameters ?? throw new ArgumentNullException(nameof(parameters));
+    }
+
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new NeuralProcessModel<T, TInput, TOutput>(BaseModel, parameters, _contextRepresentation);
+    }
+
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new NeuralProcessModel<T, TInput, TOutput>(
+            BaseModel.DeepCopy(), _params.Clone(), _contextRepresentation?.Clone());
+    }
 }

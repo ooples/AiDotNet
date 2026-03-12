@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Models;
 using AiDotNet.Models;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -12,11 +13,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
-internal class AdaptedMetaModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
+internal class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _adaptedParams;
+    private Vector<T> _adaptedParams;
     private readonly Vector<T>? _supportFeatures;
     private readonly double[]? _modulationFactors;
 
@@ -26,16 +25,13 @@ internal class AdaptedMetaModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mo
     /// <inheritdoc/>
     public double[]? ParameterModulationFactors => _modulationFactors;
 
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-
     public AdaptedMetaModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> adaptedParams,
         Vector<T>? supportFeatures = null,
         double[]? modulationFactors = null)
+        : base(model)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
         _adaptedParams = adaptedParams ?? throw new ArgumentNullException(nameof(adaptedParams));
         _supportFeatures = supportFeatures;
         _modulationFactors = modulationFactors;
@@ -47,35 +43,55 @@ internal class AdaptedMetaModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mo
     /// replaced for prediction and restored afterward. External synchronization is
     /// required if multiple AdaptedMetaModel instances share the same underlying model.
     /// </remarks>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
-        var originalParams = _model.GetParameters();
+        var originalParams = BaseModel.GetParameters();
         try
         {
-            if (_modulationFactors != null && _modulationFactors.Length > 0)
+            if (_modulationFactors is not null && _modulationFactors.Length > 0)
             {
                 var modulated = new Vector<T>(_adaptedParams.Length);
                 for (int i = 0; i < _adaptedParams.Length; i++)
                     modulated[i] = NumOps.Multiply(_adaptedParams[i],
                         NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-                _model.SetParameters(modulated);
+                BaseModel.SetParameters(modulated);
             }
             else
             {
-                _model.SetParameters(_adaptedParams);
+                BaseModel.SetParameters(_adaptedParams);
             }
-            return _model.Predict(input);
+            return BaseModel.Predict(input);
         }
         finally
         {
-            _model.SetParameters(originalParams);
+            BaseModel.SetParameters(originalParams);
         }
     }
 
-    /// <summary>Training not supported on adapted models.</summary>
-    public void Train(TInput inputs, TOutput targets) =>
-        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => _adaptedParams;
 
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null)
+            throw new ArgumentNullException(nameof(parameters));
+        _adaptedParams = parameters;
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new AdaptedMetaModel<T, TInput, TOutput>(BaseModel, parameters, _supportFeatures, _modulationFactors);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        var clonedModel = BaseModel.DeepCopy();
+        var clonedParams = _adaptedParams.Clone();
+        var clonedFeatures = _supportFeatures?.Clone();
+        var clonedModulation = _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null;
+        return new AdaptedMetaModel<T, TInput, TOutput>(clonedModel, clonedParams, clonedFeatures, clonedModulation);
+    }
 }
