@@ -49,6 +49,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
 {
     private readonly double _learningRateValue;
+    private readonly int _innerIterations;
     private double _rhoMax = 1e+16;
 
     /// <inheritdoc/>
@@ -64,7 +65,8 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
     {
         ApplyOptions(options);
         _learningRateValue = options?.LearningRate ?? 0.001;
-        if (options?.MaxPenalty.HasValue == true) _rhoMax = options.MaxPenalty.Value;
+        _innerIterations = options?.InnerIterations ?? 30;
+        if (options?.MaxPenalty is { } maxPenalty) _rhoMax = maxPenalty;
     }
 
     /// <inheritdoc/>
@@ -91,16 +93,12 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
         T lr = NumOps.FromDouble(_learningRateValue);
         double rho = 1.0, alpha = 0.0, prevH = double.MaxValue;
 
-        // Number of inner gradient steps per outer augmented Lagrangian iteration.
-        // Balances convergence speed vs constraint enforcement granularity.
-        const int innerIterationsPerStep = 30;
-
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
         {
             // Temperature annealing: tau starts at 1.0, decreases to 0.1
             double tau = Math.Max(0.1, Math.Pow(0.95, outerIter));
 
-            for (int innerIter = 0; innerIter < innerIterationsPerStep; innerIter++)
+            for (int innerIter = 0; innerIter < _innerIterations; innerIter++)
             {
                 // Compute effective adjacency: W_eff[i,j] = W[i,j] * sigmoid(M[i,j] / tau)
                 var Weff = new Matrix<T>(d, d);

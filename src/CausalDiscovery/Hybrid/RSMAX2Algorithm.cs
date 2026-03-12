@@ -94,7 +94,7 @@ public class RSMAX2Algorithm<T> : HybridBase<T>
                 foreach (int candidate in candidates[target])
                 {
                     if (parentSets[target].Contains(candidate)) continue;
-                    if (WouldCreateCycle(parentSets, candidate, target, d)) continue;
+                    if (WouldCreateCycle(parentSets, candidate, target)) continue;
 
                     var oldScore = ComputeBIC(data, target, parentSets[target].ToList());
                     var newParents = new List<int>(parentSets[target]) { candidate };
@@ -288,7 +288,7 @@ public class RSMAX2Algorithm<T> : HybridBase<T>
         return residuals;
     }
 
-    private static bool WouldCreateCycle(HashSet<int>[] parents, int from, int to, int d)
+    private static bool WouldCreateCycle(HashSet<int>[] parents, int from, int to)
     {
         var visited = new HashSet<int>();
         var queue = new Queue<int>();

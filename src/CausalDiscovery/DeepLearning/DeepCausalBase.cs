@@ -40,14 +40,21 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     protected int MaxEpochs { get; set; } = 100;
 
     /// <summary>
+    /// Edge weight threshold for post-training pruning.
+    /// </summary>
+    protected double EdgeThreshold { get; set; } = 0.1;
+
+    /// <summary>
     /// Applies deep learning options.
     /// </summary>
     protected void ApplyDeepOptions(Models.Options.CausalDiscoveryOptions? options)
     {
         if (options == null) return;
         if (options.MaxIterations.HasValue) MaxEpochs = options.MaxIterations.Value;
+        if (options.MaxEpochs.HasValue) MaxEpochs = options.MaxEpochs.Value;
         if (options.LearningRate.HasValue) LearningRate = options.LearningRate.Value;
         if (options.HiddenUnits.HasValue) HiddenUnits = options.HiddenUnits.Value;
+        if (options.EdgeThreshold.HasValue) EdgeThreshold = options.EdgeThreshold.Value;
     }
 
 }

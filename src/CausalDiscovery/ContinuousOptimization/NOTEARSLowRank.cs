@@ -47,6 +47,9 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
 {
     private readonly double _learningRateValue;
+    private readonly int _maxRank;
+    private readonly int _innerIterations;
+    private readonly int? _seed;
     private double _rhoMax = 1e+16;
 
     /// <inheritdoc/>
@@ -62,7 +65,10 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
     {
         ApplyOptions(options);
         _learningRateValue = options?.LearningRate ?? 0.001;
-        if (options?.MaxPenalty.HasValue == true) _rhoMax = options.MaxPenalty.Value;
+        _maxRank = options?.MaxRank ?? 10;
+        _innerIterations = options?.InnerIterations ?? 20;
+        _seed = options?.Seed;
+        if (options?.MaxPenalty is { } maxPenalty) _rhoMax = maxPenalty;
     }
 
     /// <inheritdoc/>
@@ -76,13 +82,15 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         var X = StandardizeData(data);
 
         // Choose rank
-        int rank = Math.Min(d, 10);
+        int rank = Math.Min(d, _maxRank);
 
         // Initialize low-rank factors A, B (d x rank)
         var A = new Matrix<T>(d, rank);
         var B = new Matrix<T>(d, rank);
         T initScale = NumOps.FromDouble(0.01);
-        var rng = new Random(42);
+        var rng = _seed.HasValue
+            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
+            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
         for (int i = 0; i < d; i++)
             for (int r = 0; r < rank; r++)
             {
@@ -100,7 +108,7 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
         {
             // Inner optimization
-            for (int innerIter = 0; innerIter < 20; innerIter++)
+            for (int innerIter = 0; innerIter < _innerIterations; innerIter++)
             {
                 // Reconstruct W = A * B^T with diagonal zeroed
                 var W = ReconstructW(A, B, d, rank);

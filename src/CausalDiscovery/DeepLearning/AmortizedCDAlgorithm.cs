@@ -116,8 +116,7 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                         T sum = NumOps.Zero;
                         for (int f = 0; f < featDim; f++)
                             sum = NumOps.Add(sum, NumOps.Multiply(features[idx, f], W1[f, k]));
-                        double sv = NumOps.ToDouble(sum);
-                        hiddenCache[idx, k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
+                        hiddenCache[idx, k] = NumOps.FromDouble(Sigmoid(NumOps.ToDouble(sum)));
                     }
 
                     // Logit = hidden * W2
@@ -126,8 +125,7 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                         logit = NumOps.Add(logit, NumOps.Multiply(hiddenCache[idx, k], W2[k, 0]));
                     logits[i, j] = logit;
 
-                    double sv2 = NumOps.ToDouble(logit);
-                    P[i, j] = NumOps.FromDouble(sv2 > 20 ? 1.0 : sv2 < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv2)));
+                    P[i, j] = NumOps.FromDouble(Sigmoid(NumOps.ToDouble(logit)));
                 }
 
             // Compute NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
@@ -220,13 +218,11 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                     T sum = NumOps.Zero;
                     for (int f = 0; f < featDim; f++)
                         sum = NumOps.Add(sum, NumOps.Multiply(features[idx, f], W1[f, k]));
-                    double sv = NumOps.ToDouble(sum);
-                    T hid = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
+                    T hid = NumOps.FromDouble(Sigmoid(NumOps.ToDouble(sum)));
                     logit = NumOps.Add(logit, NumOps.Multiply(hid, W2[k, 0]));
                 }
 
-                double sv2 = NumOps.ToDouble(logit);
-                double prob = sv2 > 20 ? 1.0 : sv2 < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv2));
+                double prob = Sigmoid(NumOps.ToDouble(logit));
                 if (prob > NumOps.ToDouble(threshold))
                 {
                     T varI = cov[i, i];
@@ -241,6 +237,9 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
 
         return result;
     }
+
+    private static double Sigmoid(double x) =>
+        x > 20 ? 1.0 : x < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-x));
 
     /// <summary>
     /// Computes matrix exponential via Taylor series: exp(M) = I + M + M^2/2! + ... + M^k/k!

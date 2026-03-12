@@ -67,6 +67,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     private double _rhoMax = DEFAULT_RHO_MAX;
     private int _hiddenSize = DEFAULT_HIDDEN_SIZE;
     private double _sobolevWeight = DEFAULT_SOBOLEV_WEIGHT;
+    private readonly int? _seed;
 
     // MLP parameters per variable:
     // W1[j] is [d x h], b1[j] is [h], W2[j] is [h], b2[j] is scalar
@@ -93,11 +94,13 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     public NOTEARSSobolev(CausalDiscoveryOptions? options = null)
     {
         ApplyOptions(options);
-        if (options?.MaxPenalty.HasValue == true)
-            _rhoMax = options.MaxPenalty.Value;
-        if (options?.HiddenUnits.HasValue == true)
-            _hiddenSize = options.HiddenUnits.Value;
-        _sobolevWeight = options?.SparsityPenalty ?? DEFAULT_SOBOLEV_WEIGHT;
+        if (options?.MaxPenalty is { } maxPenalty)
+            _rhoMax = maxPenalty;
+        if (options?.HiddenUnits is { } hiddenUnits)
+            _hiddenSize = hiddenUnits;
+        _seed = options?.Seed;
+        // Sobolev weight is distinct from sparsity (Lambda1) — Lambda1 is set via ApplyOptions above.
+        _sobolevWeight = DEFAULT_SOBOLEV_WEIGHT;
     }
 
     /// <inheritdoc/>
@@ -169,8 +172,9 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
 
     private void InitializeMLPParameters(int d, int h)
     {
-        const int DefaultSeed = 42;
-        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(DefaultSeed);
+        var rng = _seed.HasValue
+            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
+            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
         double scale = Math.Sqrt(2.0 / d);
 
         _W1 = new Matrix<T>[d];

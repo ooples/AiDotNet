@@ -159,15 +159,25 @@ public class IGCIAlgorithm<T> : FunctionalBase<T>
         int n = values.Length;
         var result = new double[n];
 
-        // Compute ranks
+        // Compute ranks with average rank for ties
         var sorted = new int[n];
         for (int i = 0; i < n; i++) sorted[i] = i;
         Array.Sort(sorted, (a, b) => values[a].CompareTo(values[b]));
 
-        for (int rank = 0; rank < n; rank++)
+        int rank = 0;
+        while (rank < n)
         {
-            // Map rank to (0,1) using (rank + 0.5) / n
-            result[sorted[rank]] = (rank + 0.5) / n;
+            // Find the end of the tie group
+            int tieEnd = rank + 1;
+            while (tieEnd < n && Math.Abs(values[sorted[tieEnd]] - values[sorted[rank]]) < 1e-15)
+                tieEnd++;
+
+            // Assign average rank to all tied values
+            double avgRank = (rank + tieEnd - 1) / 2.0;
+            for (int k = rank; k < tieEnd; k++)
+                result[sorted[k]] = (avgRank + 0.5) / n;
+
+            rank = tieEnd;
         }
 
         return result;

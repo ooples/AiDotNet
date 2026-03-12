@@ -132,7 +132,7 @@ public class K2Algorithm<T> : ScoreBasedBase<T>
             }
         }
 
-        return ThresholdMatrix(W, 0.0); // K2 edges are already selected; keep all
+        return W;
     }
 
     /// <summary>
@@ -160,29 +160,84 @@ public class K2Algorithm<T> : ScoreBasedBase<T>
     }
 
     /// <summary>
-    /// Estimates the edge weight for parent→child using OLS regression coefficient.
+    /// Estimates the partial regression coefficient for parent→child, controlling for all other parents.
+    /// Uses multivariate OLS: beta = (X^T X)^{-1} X^T y, returning only the coefficient for the target parent.
     /// </summary>
     private double EstimateEdgeWeight(Matrix<T> data, int parent, int child, HashSet<int> allParents)
     {
         int n = data.Rows;
-        double meanP = 0, meanC = 0;
+        var parentList = allParents.ToArray();
+        int p = parentList.Length;
+
+        // Compute means
+        var means = new double[p];
+        double meanC = 0;
         for (int i = 0; i < n; i++)
         {
-            meanP += NumOps.ToDouble(data[i, parent]);
             meanC += NumOps.ToDouble(data[i, child]);
+            for (int j = 0; j < p; j++)
+                means[j] += NumOps.ToDouble(data[i, parentList[j]]);
         }
-        meanP /= n;
         meanC /= n;
+        for (int j = 0; j < p; j++) means[j] /= n;
 
-        double cov = 0, varP = 0;
+        // Build normal equations X^T X and X^T y (centered)
+        var XtX = new double[p, p];
+        var Xty = new double[p];
         for (int i = 0; i < n; i++)
         {
-            double dp = NumOps.ToDouble(data[i, parent]) - meanP;
-            double dc = NumOps.ToDouble(data[i, child]) - meanC;
-            cov += dp * dc;
-            varP += dp * dp;
+            double dy = NumOps.ToDouble(data[i, child]) - meanC;
+            var dx = new double[p];
+            for (int j = 0; j < p; j++)
+                dx[j] = NumOps.ToDouble(data[i, parentList[j]]) - means[j];
+            for (int a = 0; a < p; a++)
+            {
+                Xty[a] += dx[a] * dy;
+                for (int b = a; b < p; b++)
+                    XtX[a, b] += dx[a] * dx[b];
+            }
+        }
+        for (int a = 0; a < p; a++)
+        {
+            XtX[a, a] += 1e-10; // regularization
+            for (int b = a + 1; b < p; b++)
+                XtX[b, a] = XtX[a, b];
         }
 
-        return varP > 1e-10 ? cov / varP : 0;
+        // Solve via Gaussian elimination
+        var aug = new double[p, p + 1];
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = 0; j < p; j++) aug[i, j] = XtX[i, j];
+            aug[i, p] = Xty[i];
+        }
+        for (int col = 0; col < p; col++)
+        {
+            int maxRow = col;
+            for (int row = col + 1; row < p; row++)
+                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
+            if (maxRow != col)
+                for (int j = col; j <= p; j++)
+                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
+            double pivot = aug[col, col];
+            if (Math.Abs(pivot) < 1e-15) continue;
+            for (int row = col + 1; row < p; row++)
+            {
+                double factor = aug[row, col] / pivot;
+                for (int j = col; j <= p; j++) aug[row, j] -= factor * aug[col, j];
+            }
+        }
+        var beta = new double[p];
+        for (int row = p - 1; row >= 0; row--)
+        {
+            double sum = aug[row, p];
+            for (int j = row + 1; j < p; j++) sum -= aug[row, j] * beta[j];
+            double diag = aug[row, row];
+            beta[row] = Math.Abs(diag) > 1e-15 ? sum / diag : 0;
+        }
+
+        // Return coefficient for the requested parent
+        int parentIdx = Array.IndexOf(parentList, parent);
+        return parentIdx >= 0 ? beta[parentIdx] : 0;
     }
 }
