@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,15 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// <list type="bullet"><item>Paper: "What matters when building vision-language models?" (Laurencon et al., 2024)</item></list></para>
 /// <para><b>For Beginners:</b> IDEFICS2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("What matters when building vision-language models?", "https://arxiv.org/abs/2405.02246", Year = 2024, Authors = "Laurencon et al.")]
 public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly IDEFICS2Options _options; public override ModelOptions GetOptions() => _options;

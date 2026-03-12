@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,16 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// <list type="bullet"><item>Paper: "Generative Pretraining in Multimodality" (Sun et al., 2023)</item></list></para>
 /// <para><b>For Beginners:</b> Emu is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Generative Pretraining in Multimodality", "https://arxiv.org/abs/2307.05222", Year = 2023, Authors = "Sun et al.")]
 public class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly EmuOptions _options; public override ModelOptions GetOptions() => _options;

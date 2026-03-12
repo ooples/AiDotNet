@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,15 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// <list type="bullet"><item>Paper: "PaLI-3 Vision Language Models: Smaller, Faster, Stronger" (Chen et al., 2023)</item></list></para>
 /// <para><b>For Beginners:</b> PaLI3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PaLI-3 Vision Language Models: Smaller, Faster, Stronger", "https://arxiv.org/abs/2310.09199", Year = 2023, Authors = "Chen et al.")]
 public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly PaLI3Options _options; public override ModelOptions GetOptions() => _options;
