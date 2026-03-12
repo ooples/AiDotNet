@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
@@ -37,6 +38,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// similarity with embeddings or BERTScore for better accuracy.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public class AnswerSimilarityMetric<T> : RAGMetricBase<T>
 {
     /// <summary>
