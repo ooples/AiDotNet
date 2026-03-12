@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -46,6 +47,15 @@ namespace AiDotNet.Document.VisionLanguage;
 /// https://arxiv.org/abs/2104.12756
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("InfographicVQA", "https://arxiv.org/abs/2104.12756", Year = 2022, Authors = "Minesh Mathew, Viraj Bagal, Rubèn Tito, Dimosthenis Karatzas, Ernest Valveny, C.V. Jawahar")]
 public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly InfographicVQAOptions _options;

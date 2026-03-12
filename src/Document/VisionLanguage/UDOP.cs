@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -44,6 +45,18 @@ namespace AiDotNet.Document.VisionLanguage;
 /// https://arxiv.org/abs/2212.02623
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Unifying Vision, Text, and Layout for Universal Document Processing", "https://arxiv.org/abs/2212.02623", Year = 2023, Authors = "Zineng Tang, Ziyi Yang, Guoxin Wang, Yuwei Fang, Yang Liu, Chenguang Zhu, Michael Zeng, Cha Zhang, Mohit Bansal")]
 public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>, IDocumentClassifier<T>
 {
     private readonly UDOPOptions _options;
