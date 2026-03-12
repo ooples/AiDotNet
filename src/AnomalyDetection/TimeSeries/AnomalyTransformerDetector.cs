@@ -726,6 +726,14 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 {
                     dWq[p, k] += NumOps.ToDouble(projected[i, p]) * dQ_ik;
                 }
+
+                // Propagate gradient to dProjected through Q path:
+                // Q[i,:] = projected[i,:] * Wq, so dProjected[i,p] += dQ[i,k] * Wq[p,k]
+                for (int p = 0; p < _modelDim; p++)
+                {
+                    dProjected[i, p] = NumOps.Add(dProjected[i, p],
+                        NumOps.FromDouble(dQ_ik * NumOps.ToDouble(Wq[p, k])));
+                }
             }
 
             for (int j = 0; j < seqLen; j++)
@@ -737,6 +745,14 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                     for (int p = 0; p < _modelDim; p++)
                     {
                         dWk[p, k] += NumOps.ToDouble(projected[j, p]) * dK_jk;
+                    }
+
+                    // Propagate gradient to dProjected through K path:
+                    // K[j,:] = projected[j,:] * Wk, so dProjected[j,p] += dK[j,k] * Wk[p,k]
+                    for (int p = 0; p < _modelDim; p++)
+                    {
+                        dProjected[j, p] = NumOps.Add(dProjected[j, p],
+                            NumOps.FromDouble(dK_jk * NumOps.ToDouble(Wk[p, k])));
                     }
                 }
             }

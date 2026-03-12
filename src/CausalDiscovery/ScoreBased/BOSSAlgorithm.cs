@@ -17,7 +17,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 /// <para>
 /// <b>Algorithm:</b>
 /// <list type="number">
-/// <item>Initialize with a variable ordering (e.g., correlation-based)</item>
+/// <item>Initialize with a variable ordering based on marginal variance (ascending)</item>
 /// <item>For each variable v in the ordering:</item>
 /// <item>  Remove v from its current position</item>
 /// <item>  Try inserting v at every possible position (0 to d-1)</item>
@@ -66,7 +66,7 @@ public class BOSSAlgorithm<T> : ScoreBasedBase<T>
 
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
-        // Initialize ordering using correlation-based heuristic
+        // Initialize ordering using marginal variance (ascending — exogenous variables first)
         var ordering = new List<int>(Enumerable.Range(0, d));
         SortByMarginalVariance(data, ordering, n);
 

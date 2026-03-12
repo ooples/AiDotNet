@@ -96,8 +96,51 @@ public class GRaSPAlgorithm<T> : ScoreBasedBase<T>
                 ordering[pos] = v2;
                 ordering[pos + 1] = v1;
 
-                // Recompute parent sets for affected variables
-                var newParents = ComputeOptimalParents(data, ordering);
+                // Only recompute parent sets for the two swapped variables and their successors
+                // that could be affected, rather than recomputing all parent sets
+                var newParents = new HashSet<int>[d];
+                for (int k = 0; k < d; k++)
+                    newParents[k] = parentSets[k];
+
+                // Recompute only for variables at and after the swap position
+                // (predecessors' parent sets are unchanged since their predecessor sets didn't change)
+                for (int idx = pos; idx < d; idx++)
+                {
+                    int target = ordering[idx];
+                    var bestP = new HashSet<int>();
+                    double bestS = ComputeBIC(data, target, bestP);
+
+                    bool addImproved = true;
+                    while (addImproved && bestP.Count < MaxParents)
+                    {
+                        addImproved = false;
+                        int bestCand = -1;
+                        double bestCandScore = bestS;
+
+                        for (int predIdx = 0; predIdx < idx; predIdx++)
+                        {
+                            int candidate = ordering[predIdx];
+                            if (bestP.Contains(candidate)) continue;
+                            var testP = new HashSet<int>(bestP) { candidate };
+                            double score = ComputeBIC(data, target, testP);
+                            if (score > bestCandScore)
+                            {
+                                bestCandScore = score;
+                                bestCand = candidate;
+                            }
+                        }
+
+                        if (bestCand >= 0)
+                        {
+                            bestP.Add(bestCand);
+                            bestS = bestCandScore;
+                            addImproved = true;
+                        }
+                    }
+
+                    newParents[target] = bestP;
+                }
+
                 int newEdges = CountEdges(newParents, d);
                 double newScore = ComputeTotalScore(data, newParents, d);
 

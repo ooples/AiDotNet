@@ -12,7 +12,8 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// NTS-NOTEARS extends DYNOTEARS to handle nonstationary time series where the causal
 /// structure may change over time. It partitions the data into segments using a variance-based
 /// change-point detector, learns a separate NOTEARS-style DAG for each segment, and produces
-/// a summary graph that captures the union of causal structures weighted by segment length.
+/// a summary graph by taking the maximum absolute edge weight across segments, preserving
+/// regime-specific causal effects.
 /// </para>
 /// <para>
 /// <b>Algorithm:</b>

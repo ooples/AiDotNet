@@ -171,8 +171,8 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         }
 
         var result = ExtractAdjacency(W1, d, h);
-        // Threshold
-        T wThreshold = NumOps.FromDouble(0.3);
+        // Threshold using configurable EdgeThreshold from DeepCausalBase
+        T wThreshold = NumOps.FromDouble(EdgeThreshold);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
                 if (!NumOps.GreaterThan(NumOps.Abs(result[i, j]), wThreshold))
