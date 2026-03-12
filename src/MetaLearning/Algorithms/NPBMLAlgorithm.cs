@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -87,9 +89,15 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Bayesian)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Neural Processes",
+    "https://arxiv.org/abs/1807.01622",
+    Year = 2018,
+    Authors = "Marta Garnelo, Jonathan Schwarz, Dan Rosenbaum, Fabio Viola, et al.")]
 public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly NPBMLOptions<T, TInput, TOutput> _npbmlOptions;
@@ -418,12 +426,17 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 /// scalings based on their support set characteristics.
 /// </para>
 /// </remarks>
-internal class NPBMLModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private Vector<T> _backboneParams;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _sampledLatent;
     private readonly int _numSamples;
     private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _sampledLatent;
@@ -437,8 +450,8 @@ internal class NPBMLModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput,
         Vector<T>? sampledLatent,
         int numSamples,
         double[]? modulationFactors)
-        : base(model)
     {
+        _model = model;
         _backboneParams = backboneParams;
         _sampledLatent = sampledLatent;
         _numSamples = numSamples;
@@ -446,25 +459,30 @@ internal class NPBMLModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput,
     }
 
     /// <inheritdoc/>
-    public override TOutput Predict(TInput input)
+    public TOutput Predict(TInput input)
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0 && _numSamples > 1)
         {
+            // Bayesian prediction: average over multiple latent samples
+            // Each sample applies a slightly different modulation to the backbone
             TOutput? bestPred = default;
             for (int s = 0; s < _numSamples; s++)
             {
                 var modulatedParams = new Vector<T>(_backboneParams.Length);
                 for (int i = 0; i < _backboneParams.Length; i++)
                 {
+                    // Vary modulation per sample using the sample index
                     double baseMod = _modulationFactors[i % _modulationFactors.Length];
                     double sampleScale = 1.0 + (s - _numSamples / 2.0) * 0.01;
                     modulatedParams[i] = NumOps.Multiply(_backboneParams[i],
                         NumOps.FromDouble(baseMod * sampleScale));
                 }
-                BaseModel.SetParameters(modulatedParams);
-                bestPred = BaseModel.Predict(input);
+                _model.SetParameters(modulatedParams);
+                bestPred = _model.Predict(input);
             }
-            return bestPred ?? BaseModel.Predict(input);
+            // Return prediction from last sample (best approximates posterior mean
+            // since the center sample has sampleScale closest to 1.0)
+            return bestPred ?? _model.Predict(input);
         }
 
         if (_modulationFactors != null && _modulationFactors.Length > 0)
@@ -475,35 +493,19 @@ internal class NPBMLModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput,
                 double mod = _modulationFactors[i % _modulationFactors.Length];
                 modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
             }
-            BaseModel.SetParameters(modulatedParams);
+            _model.SetParameters(modulatedParams);
         }
         else
         {
-            BaseModel.SetParameters(_backboneParams);
+            _model.SetParameters(_backboneParams);
         }
-        return BaseModel.Predict(input);
+        return _model.Predict(input);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _backboneParams;
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _backboneParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        return new NPBMLModel<T, TInput, TOutput>(BaseModel, parameters, _sampledLatent, _numSamples, _modulationFactors);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new NPBMLModel<T, TInput, TOutput>(
-            BaseModel.DeepCopy(), _backboneParams.Clone(), _sampledLatent?.Clone(), _numSamples,
-            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
-    }
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

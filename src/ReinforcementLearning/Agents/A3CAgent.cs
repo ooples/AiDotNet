@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -36,6 +37,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.A3C;
 /// Famous for: DeepMind's breakthrough (2016), enables CPU-only training
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Asynchronous Methods for Deep Reinforcement Learning",
+    "https://arxiv.org/abs/1602.01783",
+    Year = 2016,
+    Authors = "Mnih, V., Badia, A. P., Mirza, M., Graves, A., Lillicrap, T., Harley, T., Silver, D., & Kavukcuoglu, K.")]
 public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private readonly A3COptions<T> _options;

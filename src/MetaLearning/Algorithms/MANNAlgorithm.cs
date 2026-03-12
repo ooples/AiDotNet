@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 using AiDotNet.Data.Structures;
 
@@ -94,10 +96,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning with Memory-Augmented Neural Networks", "https://arxiv.org/abs/1605.06065", Year = 2016, Authors = "Santoro et al.")]
+[ModelPaper("Meta-Learning with Memory-Augmented Neural Networks",
+    "https://arxiv.org/abs/1605.06065",
+    Year = 2016,
+    Authors = "Adam Santoro, Sergey Bartunov, Matthew Botvinick, Daan Wierstra, Timothy Lillicrap")]
 public class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MANNOptions<T, TInput, TOutput> _mannOptions;
@@ -991,17 +997,13 @@ public class MANNMemoryStatistics
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.MetaLearning)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning with Memory-Augmented Neural Networks", "https://arxiv.org/abs/1605.06065", Year = 2016, Authors = "Santoro et al.")]
-public class MANNModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
+    private readonly IFullModel<T, TInput, TOutput> _controller;
     private readonly ExternalMemory<T> _memory;
     private readonly MANNOptions<T, TInput, TOutput> _options;
+    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the MANNModel.
@@ -1011,21 +1013,27 @@ public class MANNModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         ExternalMemory<T> memory,
         MANNOptions<T, TInput, TOutput> options,
         INumericOperations<T> numOps)
-        : base(controller)
     {
+        Guard.NotNull(controller);
+        _controller = controller;
         Guard.NotNull(memory);
         _memory = memory;
         Guard.NotNull(options);
         _options = options;
+        Guard.NotNull(numOps);
+        _numOps = numOps;
     }
+
+    /// <summary>Gets the model metadata.</summary>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
     /// Makes predictions using memory-augmented classification.
     /// </summary>
-    public override TOutput Predict(TInput input)
+    public TOutput Predict(TInput input)
     {
         // Process input through controller
-        var controllerOutput = BaseModel.Predict(input);
+        var controllerOutput = _controller.Predict(input);
 
         // Generate read key
         var readKey = GenerateReadKey(controllerOutput);
@@ -1042,26 +1050,31 @@ public class MANNModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         return ConvertToOutput(prediction);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => BaseModel.GetParameters();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    /// <summary>
+    /// Training is not supported for adapted models.
+    /// </summary>
+    public void Train(TInput inputs, TOutput targets)
     {
-        BaseModel.SetParameters(parameters ?? throw new ArgumentNullException(nameof(parameters)));
+        throw new NotSupportedException("Use the MANN algorithm to train.");
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    /// <summary>
+    /// Parameter updates are not supported for adapted models.
+    /// </summary>
+    public void UpdateParameters(Vector<T> parameters)
     {
-        return new MANNModel<T, TInput, TOutput>(BaseModel, _memory, _options, NumOps);
+        throw new NotSupportedException("MANN parameters are updated during training.");
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new MANNModel<T, TInput, TOutput>(BaseModel.DeepCopy(), _memory, _options, NumOps);
-    }
+    /// <summary>
+    /// Gets controller parameters.
+    /// </summary>
+    public Vector<T> GetParameters() => _controller.GetParameters();
+
+    /// <summary>
+    /// Gets model metadata.
+    /// </summary>
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
 
     private Vector<T> GenerateReadKey(TOutput output)
     {
@@ -1105,7 +1118,7 @@ public class MANNModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         for (int i = 0; i < _options.MemorySize; i++)
         {
             var memoryKey = _memory.GetKey(i);
-            T similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(queryKey, memoryKey));
+            T similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(queryKey, memoryKey));
             weights[i] = similarity;
         }
 
@@ -1119,24 +1132,24 @@ public class MANNModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         T maxVal = values[0];
         for (int i = 1; i < values.Length; i++)
         {
-            if (NumOps.ToDouble(values[i]) > NumOps.ToDouble(maxVal))
+            if (_numOps.ToDouble(values[i]) > _numOps.ToDouble(maxVal))
             {
                 maxVal = values[i];
             }
         }
 
-        T sumExp = NumOps.Zero;
+        T sumExp = _numOps.Zero;
         var expValues = new T[values.Length];
         for (int i = 0; i < values.Length; i++)
         {
-            T shifted = NumOps.Subtract(values[i], maxVal);
-            expValues[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
-            sumExp = NumOps.Add(sumExp, expValues[i]);
+            T shifted = _numOps.Subtract(values[i], maxVal);
+            expValues[i] = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
+            sumExp = _numOps.Add(sumExp, expValues[i]);
         }
 
         for (int i = 0; i < values.Length; i++)
         {
-            result[i] = NumOps.Divide(expValues[i], sumExp);
+            result[i] = _numOps.Divide(expValues[i], sumExp);
         }
 
         return result;
@@ -1166,10 +1179,10 @@ public class MANNModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         int stride = combinedFeatures.Length / _options.NumClasses;
         for (int c = 0; c < _options.NumClasses; c++)
         {
-            T sum = NumOps.Zero;
+            T sum = _numOps.Zero;
             for (int i = c * stride; i < Math.Min((c + 1) * stride, combinedFeatures.Length); i++)
             {
-                sum = NumOps.Add(sum, combinedFeatures[i]);
+                sum = _numOps.Add(sum, combinedFeatures[i]);
             }
             prediction[c] = sum;
         }

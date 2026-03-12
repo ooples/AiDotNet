@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Models;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -90,10 +92,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("TADAM: Task Dependent Adaptive Metric for Improved Few-Shot Learning", "https://arxiv.org/abs/1805.10123", Year = 2018, Authors = "Boris Oreshkin, Pau Rodriguez Lopez, Alexandre Lacoste")]
+[ModelPaper("TADAM: Task Dependent Adaptive Metric for Improved Few-Shot Learning",
+    "https://arxiv.org/abs/1805.10123",
+    Year = 2018,
+    Authors = "Oreshkin, B. N., Rodriguez, P., & Lacoste, A.")]
 public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly TADAMOptions<T, TInput, TOutput> _tadamOptions;

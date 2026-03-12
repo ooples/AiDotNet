@@ -1,10 +1,12 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Models;
@@ -35,14 +37,19 @@ namespace AiDotNet.MetaLearning.Models;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Rapid Learning or Feature Reuse? Towards Understanding the Effectiveness of MAML", "https://arxiv.org/abs/1909.09157", Year = 2020, Authors = "Aniruddh Raghu, Maithra Raghu, Samy Bengio, Oriol Vinyals")]
-public class ANILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+[ModelPaper("Rapid Learning or Feature Reuse? Towards Understanding the Effectiveness of MAML",
+    "https://arxiv.org/abs/1909.09157",
+    Year = 2020,
+    Authors = "Raghu, A., Raghu, M., Bengio, S., & Vinyals, O.")]
+public class ANILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private Vector<T> _headWeights;
-    private Vector<T>? _headBias;
+    private readonly IFullModel<T, TInput, TOutput> _featureExtractor;
+    private readonly Vector<T> _headWeights;
+    private readonly Vector<T>? _headBias;
     private readonly ANILOptions<T, TInput, TOutput> _options;
 
     /// <summary>
@@ -58,14 +65,18 @@ public class ANILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         Vector<T> headWeights,
         Vector<T>? headBias,
         ANILOptions<T, TInput, TOutput> options)
-        : base(featureExtractor)
     {
+        Guard.NotNull(featureExtractor);
+        _featureExtractor = featureExtractor;
         Guard.NotNull(headWeights);
         _headWeights = headWeights;
         _headBias = headBias;
         Guard.NotNull(options);
         _options = options;
     }
+
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
     /// Gets the adapted head weights.
@@ -88,17 +99,35 @@ public class ANILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
     public int FeatureDimension => _options.FeatureDimension;
 
     /// <inheritdoc/>
-    public override TOutput Predict(TInput input)
+    public TOutput Predict(TInput input)
     {
-        var features = ExtractFeaturesFromBaseModel(input, _options.FeatureDimension);
+        // Extract features using frozen body
+        var features = ExtractFeatures(input);
+
+        // Apply adapted head
         var logits = ComputeLogits(features);
-        return ConvertVectorToOutput(logits);
+
+        // Convert to output type
+        return ConvertToOutput(logits);
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    public void Train(TInput inputs, TOutput targets)
     {
-        var bodyParams = BaseModel.GetParameters();
+        throw new NotSupportedException("Use the ANIL algorithm to train the model.");
+    }
+
+    /// <inheritdoc/>
+    public void UpdateParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException("ANIL model parameters are set during adaptation.");
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> GetParameters()
+    {
+        // Return combined body + head parameters
+        var bodyParams = _featureExtractor.GetParameters();
         int totalSize = bodyParams.Length + _headWeights.Length + (_headBias?.Length ?? 0);
         var combined = new Vector<T>(totalSize);
 
@@ -111,7 +140,7 @@ public class ANILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         {
             combined[idx++] = _headWeights[i];
         }
-        if (_headBias is not null)
+        if (_headBias != null)
         {
             for (int i = 0; i < _headBias.Length; i++)
             {
@@ -123,81 +152,132 @@ public class ANILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    public ModelMetadata<T> GetModelMetadata()
     {
-        Guard.NotNull(parameters);
-        var bodyParams = BaseModel.GetParameters();
-        int expectedLength = bodyParams.Length + _headWeights.Length + (_headBias?.Length ?? 0);
-        if (parameters.Length != expectedLength)
+        return Metadata;
+    }
+
+    /// <summary>
+    /// Extracts features from input using the frozen body.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the feature extractor returns an unsupported output type.
+    /// </exception>
+    private Vector<T> ExtractFeatures(TInput input)
+    {
+        var output = _featureExtractor.Predict(input);
+
+        if (output is Vector<T> vec)
         {
-            throw new ArgumentException(
-                $"Parameter count mismatch: expected {expectedLength}, got {parameters.Length}.",
-                nameof(parameters));
+            return vec;
         }
 
-        int idx = 0;
-        var newBodyParams = new Vector<T>(bodyParams.Length);
-        for (int i = 0; i < bodyParams.Length; i++)
+        if (output is Tensor<T> tensor)
         {
-            newBodyParams[i] = parameters[idx++];
+            return tensor.ToVector();
         }
-        BaseModel.SetParameters(newBodyParams);
 
-        for (int i = 0; i < _headWeights.Length; i++)
+        // Handle Matrix<T> by flattening the first row (for single examples)
+        // or the entire matrix (for batch processing)
+        if (output is Matrix<T> matrix)
         {
-            _headWeights[i] = parameters[idx++];
-        }
-        if (_headBias is not null)
-        {
-            for (int i = 0; i < _headBias.Length; i++)
+            if (matrix.Rows == 1)
             {
-                _headBias[i] = parameters[idx++];
+                // Single example: return the row as a vector
+                var result = new Vector<T>(matrix.Columns);
+                for (int j = 0; j < matrix.Columns; j++)
+                {
+                    result[j] = matrix[0, j];
+                }
+                return result;
+            }
+            else
+            {
+                // Multiple examples: flatten the entire matrix
+                var result = new Vector<T>(matrix.Rows * matrix.Columns);
+                int idx = 0;
+                for (int i = 0; i < matrix.Rows; i++)
+                {
+                    for (int j = 0; j < matrix.Columns; j++)
+                    {
+                        result[idx++] = matrix[i, j];
+                    }
+                }
+                return result;
             }
         }
+
+        // Handle T[] array
+        if (output is T[] array)
+        {
+            return new Vector<T>(array);
+        }
+
+        // Throw an informative exception instead of silently returning zeros
+        throw new InvalidOperationException(
+            $"Feature extractor returned unsupported output type '{output?.GetType().Name ?? "null"}'. " +
+            $"Expected Vector<{typeof(T).Name}>, Tensor<{typeof(T).Name}>, Matrix<{typeof(T).Name}>, or {typeof(T).Name}[]. " +
+            "Ensure the feature extractor model produces compatible output.");
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        var model = DeepCopy();
-        model.SetParameters(parameters);
-        return model;
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        var clonedBody = BaseModel.DeepCopy();
-        var clonedHeadWeights = _headWeights.Clone();
-        var clonedHeadBias = _headBias?.Clone();
-        return new ANILModel<T, TInput, TOutput>(clonedBody, clonedHeadWeights, clonedHeadBias, _options);
-    }
-
+    /// <summary>
+    /// Computes logits from features using adapted head parameters.
+    /// </summary>
     private Vector<T> ComputeLogits(Vector<T> features)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         var logits = new Vector<T>(_options.NumClasses);
+
         int featureDim = Math.Min(features.Length, _options.FeatureDimension);
 
         for (int c = 0; c < _options.NumClasses; c++)
         {
-            T sum = NumOps.Zero;
+            T sum = numOps.Zero;
+
             for (int f = 0; f < featureDim; f++)
             {
                 int weightIdx = c * _options.FeatureDimension + f;
                 if (weightIdx < _headWeights.Length)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(features[f], _headWeights[weightIdx]));
+                    sum = numOps.Add(sum, numOps.Multiply(features[f], _headWeights[weightIdx]));
                 }
             }
 
-            if (_headBias is not null && c < _headBias.Length)
+            if (_headBias != null && c < _headBias.Length)
             {
-                sum = NumOps.Add(sum, _headBias[c]);
+                sum = numOps.Add(sum, _headBias[c]);
             }
 
             logits[c] = sum;
         }
 
         return logits;
+    }
+
+    /// <summary>
+    /// Converts logits to the expected output type.
+    /// </summary>
+    private TOutput ConvertToOutput(Vector<T> logits)
+    {
+        if (typeof(TOutput) == typeof(Vector<T>))
+        {
+            return (TOutput)(object)logits;
+        }
+
+        // Handle Tensor<T>
+        if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            return (TOutput)(object)Tensor<T>.FromVector(logits);
+        }
+
+        // Handle T[]
+        if (typeof(TOutput) == typeof(T[]))
+        {
+            return (TOutput)(object)logits.ToArray();
+        }
+
+        throw new InvalidOperationException(
+            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
+            $"Supported types: Vector<T>, Tensor<T>, T[]");
     }
 }

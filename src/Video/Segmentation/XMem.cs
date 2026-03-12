@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -48,6 +51,16 @@ namespace AiDotNet.Video.Segmentation;
 /// https://arxiv.org/abs/2207.07115
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("XMem: Long-Term Video Object Segmentation with an Atkinson-Shiffrin Memory Model",
+    "https://arxiv.org/abs/2207.07115",
+    Year = 2022,
+    Authors = "Ho Kei Cheng, Alexander G. Schwing")]
 public class XMem<T> : NeuralNetworkBase<T>
 {
     private readonly XMemOptions _options;

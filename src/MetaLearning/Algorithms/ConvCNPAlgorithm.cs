@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -6,6 +7,7 @@ using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -13,10 +15,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <summary>Implementation of Convolutional Conditional Neural Process (Gordon et al., ICLR 2020).</summary>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
-[ModelTask(ModelTask.Regression)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Convolutional Conditional Neural Processes", "https://arxiv.org/abs/1910.13556", Year = 2020, Authors = "Gordon et al.")]
+[ModelPaper("Convolutional Conditional Neural Processes",
+    "https://arxiv.org/abs/1910.13556",
+    Year = 2020,
+    Authors = "Jonathan Gordon, Wessel P. Bruinsma, Andrew Y.K. Foong, et al.")]
 public class ConvCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly ConvCNPOptions<T, TInput, TOutput> _algoOptions;

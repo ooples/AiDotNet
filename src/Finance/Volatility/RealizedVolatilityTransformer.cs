@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -25,6 +27,13 @@ namespace AiDotNet.Finance.Volatility;
 /// This helps the model focus on recent shocks or patterns when predicting volatility.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
 public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatilityModel<T>
 {
     #region Native Mode Fields

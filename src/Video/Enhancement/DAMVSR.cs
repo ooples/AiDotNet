@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -43,6 +45,16 @@ namespace AiDotNet.Video.Enhancement;
 /// Super-Resolution" (SIGGRAPH 2025)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DAM-VSR: Disentanglement of Appearance and Motion for Video Super-Resolution",
+    "https://arxiv.org/abs/2501.02540",
+    Year = 2025,
+    Authors = "Kaichen Chi, Xin Li, Zhi-Song Liu, Wan-Chi Siu")]
 public class DAMVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

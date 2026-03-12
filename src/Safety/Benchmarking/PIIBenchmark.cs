@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Benchmarking;
 
@@ -23,6 +25,15 @@ namespace AiDotNet.Safety.Benchmarking;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Microsoft Presidio: Data Protection and De-identification SDK",
+    "https://github.com/microsoft/presidio",
+    Year = 2024,
+    Authors = "Microsoft")]
 public class PIIBenchmark<T> : SafetyBenchmarkBase<T>
 {
     /// <inheritdoc />

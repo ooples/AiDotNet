@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -31,6 +33,14 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Reliable Evaluation of Adversarial Robustness with an Ensemble of Diverse Parameter-Free Attacks", "https://arxiv.org/abs/2003.01690", Year = 2020, Authors = "Francesco Croce, Matthias Hein")]
 public class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOutput>
 {
     private readonly PGDAttack<T, TInput, TOutput> pgdAttack;

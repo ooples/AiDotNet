@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
@@ -12,6 +14,24 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class RWKV7LanguageModelTests
 {
+    private static NeuralNetworkArchitecture<float> CreateArch(int vocabSize = 100)
+    {
+        return new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.TextGeneration,
+            inputSize: vocabSize,
+            outputSize: vocabSize);
+    }
+
+    private static NeuralNetworkArchitecture<double> CreateDoubleArch(int vocabSize = 20)
+    {
+        return new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.TextGeneration,
+            inputSize: vocabSize,
+            outputSize: vocabSize);
+    }
+
     #region RWKV7Block Constructor Tests
 
     [Fact]
@@ -244,6 +264,7 @@ public class RWKV7LanguageModelTests
     public void Model_Constructor_ValidParameters_CreatesModel()
     {
         var model = new RWKV7LanguageModel<float>(
+            CreateArch(),
             vocabSize: 100, modelDimension: 32, numLayers: 2, numHeads: 4);
 
         Assert.Equal(100, model.VocabSize);
@@ -257,50 +278,51 @@ public class RWKV7LanguageModelTests
     public void Model_Constructor_ThrowsWhenVocabSizeNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(vocabSize: 0));
+            new RWKV7LanguageModel<float>(CreateArch(1), vocabSize: 0));
     }
 
     [Fact]
     public void Model_Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(vocabSize: 100, modelDimension: 0));
+            new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, modelDimension: 0));
     }
 
     [Fact]
     public void Model_Constructor_ThrowsWhenNumLayersNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(vocabSize: 100, numLayers: 0));
+            new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, numLayers: 0));
     }
 
     [Fact]
     public void Model_Constructor_ThrowsWhenNumHeadsNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(vocabSize: 100, numHeads: 0));
+            new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, numHeads: 0));
     }
 
     [Fact]
     public void Model_Constructor_ThrowsWhenDimensionNotDivisibleByHeads()
     {
         Assert.Throws<ArgumentException>(() =>
-            new RWKV7LanguageModel<float>(vocabSize: 100, modelDimension: 33, numHeads: 4));
+            new RWKV7LanguageModel<float>(CreateArch(), vocabSize: 100, modelDimension: 33, numHeads: 4));
     }
 
     [Fact]
     public void Model_SupportsTraining_ReturnsTrue()
     {
-        var model = new RWKV7LanguageModel<float>(30, 16, 2, 2);
+        var model = new RWKV7LanguageModel<float>(
+            CreateArch(30), 30, 16, 2, 2);
         Assert.True(model.SupportsTraining);
     }
 
     #endregion
 
-    #region RWKV7LanguageModel Forward Tests
+    #region RWKV7LanguageModel Predict Tests
 
     [Fact]
-    public void Model_Forward_3D_ProducesCorrectOutputShape()
+    public void Model_Predict_3D_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
         int seqLen = 4;
@@ -308,43 +330,46 @@ public class RWKV7LanguageModelTests
         int modelDim = 32;
 
         var model = new RWKV7LanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, numHeads: 4, maxSeqLength: seqLen);
 
         var input = CreateOneHotInput(batchSize, seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
 
         Assert.Equal(new[] { batchSize, seqLen, vocabSize }, output.Shape);
         Assert.False(ContainsNaN(output));
     }
 
     [Fact]
-    public void Model_Forward_2D_ProducesCorrectOutputShape()
+    public void Model_Predict_2D_ProducesCorrectOutputShape()
     {
         int seqLen = 4;
         int vocabSize = 50;
         int modelDim = 32;
 
         var model = new RWKV7LanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, numHeads: 4, maxSeqLength: seqLen);
 
         var input = CreateOneHotInput(1, seqLen, vocabSize).Reshape(seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
 
         Assert.Equal(new[] { seqLen, vocabSize }, output.Shape);
         Assert.False(ContainsNaN(output));
     }
 
     [Fact]
-    public void Model_Forward_ProducesNonTrivialOutput()
+    public void Model_Predict_ProducesNonTrivialOutput()
     {
         int seqLen = 4;
         int vocabSize = 20;
 
         var model = new RWKV7LanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
 
         var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
 
         var arr = output.ToArray();
         bool hasVariation = false;
@@ -364,49 +389,53 @@ public class RWKV7LanguageModelTests
     #region RWKV7LanguageModel Backward Tests
 
     [Fact]
-    public void Model_Backward_ProducesValidGradients()
+    public void Model_Backpropagate_ProducesValidGradients()
     {
         int seqLen = 4;
         int vocabSize = 30;
 
         var model = new RWKV7LanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
 
+        model.SetTrainingMode(true);
         var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
+        model.SetTrainingMode(true); // Re-enable after Predict set it to false
         var grad = CreateRandomTensor(output.Shape);
-        var inputGrad = model.Backward(grad);
+        var inputGrad = model.Backpropagate(grad);
 
         Assert.Equal(input.Shape, inputGrad.Shape);
         Assert.False(ContainsNaN(inputGrad));
     }
 
     [Fact]
-    public void Model_Backward_ThrowsWithoutForward()
+    public void Model_Backpropagate_ThrowsWithoutTrainingMode()
     {
-        var model = new RWKV7LanguageModel<float>(30, 16, 2, 2, maxSeqLength: 4);
+        var model = new RWKV7LanguageModel<float>(
+            CreateArch(30), 30, 16, 2, 2, maxSeqLength: 4);
         var grad = CreateRandomTensor(new[] { 1, 4, 30 });
-        Assert.Throws<InvalidOperationException>(() => model.Backward(grad));
+        Assert.Throws<InvalidOperationException>(() => model.Backpropagate(grad));
     }
 
     [Fact]
-    public void Model_FullTrainingStep_ForwardBackwardUpdate_NoErrors()
+    public void Model_Train_ForwardBackwardUpdate_NoErrors()
     {
         int seqLen = 4;
         int vocabSize = 20;
 
         var model = new RWKV7LanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
 
         var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output = model.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
-        model.Backward(grad);
-        model.UpdateParameters(0.001f);
+        var expected = CreateOneHotInput(1, seqLen, vocabSize, seed: 99);
+
+        model.Train(input, expected);
 
         model.ResetState();
-        var output2 = model.Forward(input);
-        Assert.Equal(output.Shape, output2.Shape);
+        var output2 = model.Predict(input);
+        Assert.Equal(new[] { 1, seqLen, vocabSize }, output2.Shape);
         Assert.False(ContainsNaN(output2));
     }
 
@@ -418,6 +447,7 @@ public class RWKV7LanguageModelTests
     public void Model_GetParameters_SetParameters_RoundTrip()
     {
         var model = new RWKV7LanguageModel<float>(
+            CreateArch(30),
             30, 16, numLayers: 2, numHeads: 2, maxSeqLength: 4);
 
         var params1 = model.GetParameters();
@@ -435,26 +465,29 @@ public class RWKV7LanguageModelTests
     [Fact]
     public void Model_SetParameters_ThrowsOnWrongLength()
     {
-        var model = new RWKV7LanguageModel<float>(30, 16, 2, 2, maxSeqLength: 4);
+        var model = new RWKV7LanguageModel<float>(
+            CreateArch(30), 30, 16, 2, 2, maxSeqLength: 4);
         Assert.Throws<ArgumentException>(() => model.SetParameters(new Vector<float>(10)));
     }
 
     [Fact]
-    public void Model_Forward_DeterministicWithSameParameters()
+    public void Model_Predict_DeterministicWithSameParameters()
     {
         int seqLen = 4;
         int vocabSize = 20;
 
         var model1 = new RWKV7LanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
         var model2 = new RWKV7LanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
 
         model2.SetParameters(model1.GetParameters());
 
         var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output1 = model1.Forward(input);
-        var output2 = model2.Forward(input);
+        var output1 = model1.Predict(input);
+        var output2 = model2.Predict(input);
 
         var arr1 = output1.ToArray();
         var arr2 = output2.ToArray();
@@ -467,206 +500,21 @@ public class RWKV7LanguageModelTests
 
     #endregion
 
-    #region RWKV7LanguageModel Sequential Generation
-
-    [Fact]
-    public void Model_GenerateStep_ProducesValidLogits()
-    {
-        int vocabSize = 20;
-        var model = new RWKV7LanguageModel<float>(vocabSize, 16, 2, 2, maxSeqLength: 8);
-        model.InitializeGeneration();
-
-        var token = new Tensor<float>(new[] { vocabSize });
-        token[5] = 1.0f;
-
-        var logits = model.GenerateStep(token);
-
-        Assert.Equal(new[] { vocabSize }, logits.Shape);
-        Assert.False(ContainsNaN(logits));
-    }
-
-    [Fact]
-    public void Model_GenerateStep_MultipleSteps_ProducesValidLogits()
-    {
-        int vocabSize = 20;
-        var model = new RWKV7LanguageModel<float>(vocabSize, 16, 2, 2, maxSeqLength: 8);
-        model.InitializeGeneration();
-
-        var random = new Random(42);
-        for (int step = 0; step < 4; step++)
-        {
-            var token = new Tensor<float>(new[] { vocabSize });
-            token[random.Next(vocabSize)] = 1.0f;
-
-            var logits = model.GenerateStep(token);
-
-            Assert.Equal(new[] { vocabSize }, logits.Shape);
-            Assert.False(ContainsNaN(logits));
-        }
-    }
-
-    [Fact]
-    public void Model_GenerateStep_ThrowsWithoutInit()
-    {
-        var model = new RWKV7LanguageModel<float>(20, 16, 2, 2, maxSeqLength: 4);
-        var token = new Tensor<float>(new[] { 20 });
-        token[0] = 1.0f;
-
-        Assert.Throws<InvalidOperationException>(() => model.GenerateStep(token));
-    }
-
-    [Fact]
-    public void Model_IsGenerating_FalseByDefault()
-    {
-        var model = new RWKV7LanguageModel<float>(20, 16, 2, 2, maxSeqLength: 4);
-        Assert.False(model.IsGenerating);
-    }
-
-    [Fact]
-    public void Model_InitializeGeneration_SetsIsGenerating()
-    {
-        var model = new RWKV7LanguageModel<float>(20, 16, 2, 2, maxSeqLength: 4);
-        model.InitializeGeneration();
-        Assert.True(model.IsGenerating);
-    }
-
-    [Fact]
-    public void Model_ResetState_ClearsGenerationMode()
-    {
-        var model = new RWKV7LanguageModel<float>(20, 16, 2, 2, maxSeqLength: 4);
-        model.InitializeGeneration();
-
-        var token = new Tensor<float>(new[] { 20 });
-        token[3] = 1.0f;
-        model.GenerateStep(token);
-
-        model.ResetState();
-        Assert.False(model.IsGenerating);
-    }
+    #region RWKV7LanguageModel State
 
     [Fact]
     public void Model_ResetState_AllowsReuse()
     {
-        var model = new RWKV7LanguageModel<float>(20, 16, 2, 2, maxSeqLength: 4);
+        var model = new RWKV7LanguageModel<float>(
+            CreateArch(20), 20, 16, 2, 2, maxSeqLength: 4);
         var input = CreateOneHotInput(1, 4, 20);
 
-        model.Forward(input);
+        model.Predict(input);
         model.ResetState();
 
-        var output = model.Forward(input);
+        var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.False(ContainsNaN(output));
-    }
-
-    #endregion
-
-    #region RWKV7LanguageModel Parallel vs Sequential Equivalence
-
-    [Fact]
-    public void Model_ParallelVsSequential_OutputEquivalence()
-    {
-        // Critical test: processing a full sequence in parallel mode (Forward)
-        // must produce the same output as processing tokens one-at-a-time in
-        // sequential mode (GenerateStep), since both should apply the same
-        // WKV-7 state evolution.
-        int vocabSize = 20;
-        int modelDim = 16;
-        int numLayers = 2;
-        int numHeads = 2;
-        int seqLen = 4;
-
-        var model = new RWKV7LanguageModel<float>(
-            vocabSize, modelDim, numLayers, numHeads, maxSeqLength: seqLen);
-
-        // Create a fixed input sequence (one-hot per position)
-        var tokens = new int[] { 3, 7, 12, 1 };
-        var input3D = new Tensor<float>(new[] { 1, seqLen, vocabSize });
-        for (int t = 0; t < seqLen; t++)
-            input3D[new[] { 0, t, tokens[t] }] = 1.0f;
-
-        // Mode 1: Parallel forward (full sequence at once)
-        var parallelOutput = model.Forward(input3D);
-        // Extract logits at last position
-        var parallelLastLogits = new float[vocabSize];
-        for (int v = 0; v < vocabSize; v++)
-            parallelLastLogits[v] = parallelOutput[new[] { 0, seqLen - 1, v }];
-
-        // Mode 2: Sequential generation (token by token)
-        // Must use same parameters
-        model.ResetState();
-        model.InitializeGeneration();
-
-        Tensor<float> seqLogits = new Tensor<float>(new[] { vocabSize });
-        for (int t = 0; t < seqLen; t++)
-        {
-            var tokenOneHot = new Tensor<float>(new[] { vocabSize });
-            tokenOneHot[tokens[t]] = 1.0f;
-            seqLogits = model.GenerateStep(tokenOneHot);
-        }
-
-        // Compare: the last-position logits from parallel should match
-        // the final step logits from sequential
-        var seqArr = seqLogits.ToArray();
-        float maxDiff = 0;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            float diff = MathF.Abs(parallelLastLogits[v] - seqArr[v]);
-            if (diff > maxDiff) maxDiff = diff;
-        }
-
-        // Allow small floating-point tolerance since operations are mathematically identical
-        // but may differ due to operation ordering
-        Assert.True(maxDiff < 1e-4f,
-            $"Parallel vs sequential max diff = {maxDiff:G6}. Outputs should be equivalent.");
-    }
-
-    [Fact]
-    public void Model_ParallelVsSequential_AllPositionsMatch()
-    {
-        // Verify equivalence at every position, not just the last one.
-        int vocabSize = 15;
-        int modelDim = 16;
-        int seqLen = 3;
-
-        var model = new RWKV7LanguageModel<float>(
-            vocabSize, modelDim, numLayers: 1, numHeads: 2, maxSeqLength: seqLen);
-
-        var tokens = new int[] { 2, 8, 11 };
-        var input3D = new Tensor<float>(new[] { 1, seqLen, vocabSize });
-        for (int t = 0; t < seqLen; t++)
-            input3D[new[] { 0, t, tokens[t] }] = 1.0f;
-
-        // Parallel
-        var parallelOutput = model.Forward(input3D);
-
-        // Sequential
-        model.ResetState();
-        model.InitializeGeneration();
-        var seqOutputs = new float[seqLen][];
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var tokenOneHot = new Tensor<float>(new[] { vocabSize });
-            tokenOneHot[tokens[t]] = 1.0f;
-            var logits = model.GenerateStep(tokenOneHot);
-            seqOutputs[t] = logits.ToArray();
-        }
-
-        // Compare each position
-        for (int t = 0; t < seqLen; t++)
-        {
-            float maxDiff = 0;
-            for (int v = 0; v < vocabSize; v++)
-            {
-                float parallelVal = parallelOutput[new[] { 0, t, v }];
-                float seqVal = seqOutputs[t][v];
-                float diff = MathF.Abs(parallelVal - seqVal);
-                if (diff > maxDiff) maxDiff = diff;
-            }
-
-            Assert.True(maxDiff < 1e-4f,
-                $"Position {t}: max diff = {maxDiff:G6}. Parallel and sequential should match.");
-        }
     }
 
     #endregion
@@ -674,21 +522,23 @@ public class RWKV7LanguageModelTests
     #region RWKV7LanguageModel Metadata
 
     [Fact]
-    public void Model_GetMetadata_ContainsExpectedKeys()
+    public void Model_GetModelMetadata_ContainsExpectedKeys()
     {
-        var model = new RWKV7LanguageModel<float>(100, 64, 4, 8, maxSeqLength: 32);
-        var metadata = model.GetMetadata();
+        var model = new RWKV7LanguageModel<float>(
+            CreateArch(100), 100, 64, 4, 8, maxSeqLength: 32);
+        var metadata = model.GetModelMetadata();
 
-        Assert.True(metadata.ContainsKey("VocabSize"));
-        Assert.True(metadata.ContainsKey("ModelDimension"));
-        Assert.True(metadata.ContainsKey("NumLayers"));
-        Assert.True(metadata.ContainsKey("NumHeads"));
-        Assert.True(metadata.ContainsKey("Architecture"));
-        Assert.Equal("100", metadata["VocabSize"]);
-        Assert.Equal("64", metadata["ModelDimension"]);
-        Assert.Equal("4", metadata["NumLayers"]);
-        Assert.Equal("8", metadata["NumHeads"]);
-        Assert.Equal("RWKV-7-Goose", metadata["Architecture"]);
+        Assert.Equal(ModelType.NeuralNetwork, metadata.ModelType);
+        Assert.True(metadata.AdditionalInfo.ContainsKey("VocabSize"));
+        Assert.True(metadata.AdditionalInfo.ContainsKey("ModelDimension"));
+        Assert.True(metadata.AdditionalInfo.ContainsKey("NumLayers"));
+        Assert.True(metadata.AdditionalInfo.ContainsKey("NumHeads"));
+        Assert.True(metadata.AdditionalInfo.ContainsKey("Architecture"));
+        Assert.Equal(100, metadata.AdditionalInfo["VocabSize"]);
+        Assert.Equal(64, metadata.AdditionalInfo["ModelDimension"]);
+        Assert.Equal(4, metadata.AdditionalInfo["NumLayers"]);
+        Assert.Equal(8, metadata.AdditionalInfo["NumHeads"]);
+        Assert.Equal("RWKV-7-Goose", metadata.AdditionalInfo["Architecture"]);
     }
 
     #endregion
@@ -696,34 +546,20 @@ public class RWKV7LanguageModelTests
     #region RWKV7LanguageModel Double Precision
 
     [Fact]
-    public void Model_Forward_Double_ProducesValidOutput()
+    public void Model_Predict_Double_ProducesValidOutput()
     {
         int seqLen = 4;
         int vocabSize = 20;
 
         var model = new RWKV7LanguageModel<double>(
+            CreateDoubleArch(vocabSize),
             vocabSize, 16, numLayers: 2, numHeads: 2, maxSeqLength: seqLen);
 
         var input = CreateOneHotDoubleInput(1, seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
 
         Assert.Equal(new[] { 1, seqLen, vocabSize }, output.Shape);
         Assert.False(ContainsNaNDouble(output));
-    }
-
-    [Fact]
-    public void Model_GenerateStep_Double_ProducesValidLogits()
-    {
-        int vocabSize = 20;
-        var model = new RWKV7LanguageModel<double>(vocabSize, 16, 2, 2, maxSeqLength: 8);
-        model.InitializeGeneration();
-
-        var token = new Tensor<double>(new[] { vocabSize });
-        token[5] = 1.0;
-
-        var logits = model.GenerateStep(token);
-        Assert.Equal(new[] { vocabSize }, logits.Shape);
-        Assert.False(ContainsNaNDouble(logits));
     }
 
     #endregion
@@ -737,10 +573,11 @@ public class RWKV7LanguageModelTests
         int vocabSize = 20;
 
         var model = new RWKV7LanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, 16, numLayers: 4, numHeads: 2, maxSeqLength: seqLen);
 
         var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
 
         var arr = output.ToArray();
         bool hasVariation = false;
@@ -822,6 +659,7 @@ public class RWKV7LanguageModelTests
         };
 
         var model = new RWKV7LanguageModel<float>(
+            CreateArch(options.VocabSize),
             options.VocabSize,
             options.ModelDimension,
             options.NumLayers,

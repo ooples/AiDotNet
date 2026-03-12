@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Tracking;
 
@@ -22,6 +25,15 @@ namespace AiDotNet.ComputerVision.Tracking;
 ///
 /// <para>Reference: Bewley et al., "Simple Online and Realtime Tracking", ICIP 2016</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Simple Online and Realtime Tracking",
+    "https://arxiv.org/abs/1602.00763",
+    Year = 2016,
+    Authors = "Alex Bewley, Zongyuan Ge, Lionel Ott, Fabio Ramos, Ben Upcroft")]
 public class SORT<T> : ObjectTrackerBase<T>
 {
     private readonly List<KalmanTrack<T>> _kalmanTracks;

@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -42,6 +45,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// - Training efficiency is important
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators",
+    "https://arxiv.org/abs/2003.10555",
+    Year = 2020,
+    Authors = "Kevin Clark, Minh-Thang Luong, Quoc V. Le, Christopher D. Manning")]
 public class ELECTRANER<T> : TransformerNERBase<T>
 {
     /// <summary>

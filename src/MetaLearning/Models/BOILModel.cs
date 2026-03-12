@@ -1,10 +1,12 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Models;
@@ -36,15 +38,22 @@ namespace AiDotNet.MetaLearning.Models;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("BOIL: Towards Representation Change for Few-shot Learning", "https://arxiv.org/abs/2008.08882", Year = 2021, Authors = "Jaehoon Oh, Hyungjun Yoo, ChangHwan Kim, Se-Young Yun")]
-public class BOILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+[ModelPaper("BOIL: Towards Representation Change for Few-shot Learning",
+    "https://arxiv.org/abs/2008.08882",
+    Year = 2021,
+    Authors = "Oh, J., Yoo, H., Kim, C., & Yun, S.")]
+public class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private Vector<T> _adaptedBodyParams;
-    private Vector<T> _headWeights;
-    private Vector<T>? _headBias;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    private readonly IFullModel<T, TInput, TOutput> _baseModel;
+    private readonly Vector<T> _adaptedBodyParams;
+    private readonly Vector<T> _headWeights;
+    private readonly Vector<T>? _headBias;
     private readonly BOILOptions<T, TInput, TOutput> _options;
 
     /// <summary>
@@ -62,8 +71,9 @@ public class BOILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         Vector<T> headWeights,
         Vector<T>? headBias,
         BOILOptions<T, TInput, TOutput> options)
-        : base(baseModel)
     {
+        Guard.NotNull(baseModel);
+        _baseModel = baseModel;
         Guard.NotNull(adaptedBodyParams);
         _adaptedBodyParams = adaptedBodyParams;
         Guard.NotNull(headWeights);
@@ -72,6 +82,9 @@ public class BOILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         Guard.NotNull(options);
         _options = options;
     }
+
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
     /// Gets the adapted body parameters.
@@ -99,17 +112,37 @@ public class BOILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
     public int FeatureDimension => _options.FeatureDimension;
 
     /// <inheritdoc/>
-    public override TOutput Predict(TInput input)
+    public TOutput Predict(TInput input)
     {
+        // Apply adapted body parameters to model
         ApplyAdaptedBodyParameters();
-        var features = ExtractFeaturesFromBaseModel(input, _options.FeatureDimension);
+
+        // Extract features using adapted body
+        var features = ExtractFeatures(input);
+
+        // Apply frozen head
         var logits = ComputeLogits(features);
-        return ConvertVectorToOutput(logits);
+
+        // Convert to output type
+        return ConvertToOutput(logits);
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    public void Train(TInput inputs, TOutput targets)
     {
+        throw new NotSupportedException("Use the BOIL algorithm to train the model.");
+    }
+
+    /// <inheritdoc/>
+    public void UpdateParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException("BOIL model parameters are set during adaptation.");
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> GetParameters()
+    {
+        // Return combined body + head parameters
         int totalSize = _adaptedBodyParams.Length + _headWeights.Length + (_headBias?.Length ?? 0);
         var combined = new Vector<T>(totalSize);
 
@@ -122,7 +155,7 @@ public class BOILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         {
             combined[idx++] = _headWeights[i];
         }
-        if (_headBias is not null)
+        if (_headBias != null)
         {
             for (int i = 0; i < _headBias.Length; i++)
             {
@@ -134,71 +167,59 @@ public class BOILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
     }
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    public ModelMetadata<T> GetModelMetadata()
     {
-        Guard.NotNull(parameters);
-        int expectedLength = _adaptedBodyParams.Length + _headWeights.Length + (_headBias?.Length ?? 0);
-        if (parameters.Length != expectedLength)
-        {
-            throw new ArgumentException(
-                $"Parameter count mismatch: expected {expectedLength}, got {parameters.Length}.",
-                nameof(parameters));
-        }
-
-        int idx = 0;
-        for (int i = 0; i < _adaptedBodyParams.Length; i++)
-        {
-            _adaptedBodyParams[i] = parameters[idx++];
-        }
-        for (int i = 0; i < _headWeights.Length; i++)
-        {
-            _headWeights[i] = parameters[idx++];
-        }
-        if (_headBias is not null)
-        {
-            for (int i = 0; i < _headBias.Length; i++)
-            {
-                _headBias[i] = parameters[idx++];
-            }
-        }
+        return Metadata;
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        var model = DeepCopy();
-        model.SetParameters(parameters);
-        return model;
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        var clonedBase = BaseModel.DeepCopy();
-        return new BOILModel<T, TInput, TOutput>(
-            clonedBase, _adaptedBodyParams.Clone(), _headWeights.Clone(),
-            _headBias?.Clone(), _options);
-    }
-
+    /// <summary>
+    /// Applies the adapted body parameters to the base model.
+    /// </summary>
     private void ApplyAdaptedBodyParameters()
     {
-        var currentParams = BaseModel.GetParameters();
+        var currentParams = _baseModel.GetParameters();
         var updatedParams = new Vector<T>(currentParams.Length);
 
+        // Apply adapted body parameters
         int copyLen = Math.Min(_adaptedBodyParams.Length, currentParams.Length);
         for (int i = 0; i < copyLen; i++)
         {
             updatedParams[i] = _adaptedBodyParams[i];
         }
 
+        // Keep head parameters from the original model
         for (int i = copyLen; i < currentParams.Length; i++)
         {
             updatedParams[i] = currentParams[i];
         }
 
-        BaseModel.SetParameters(updatedParams);
+        _baseModel.SetParameters(updatedParams);
     }
 
+    /// <summary>
+    /// Extracts features from input using the adapted body.
+    /// </summary>
+    private Vector<T> ExtractFeatures(TInput input)
+    {
+        var output = _baseModel.Predict(input);
+
+        if (output is Vector<T> vec)
+        {
+            return vec;
+        }
+
+        if (output is Tensor<T> tensor)
+        {
+            return tensor.ToVector();
+        }
+
+        // Return a default feature vector
+        return new Vector<T>(_options.FeatureDimension);
+    }
+
+    /// <summary>
+    /// Computes logits from features using frozen head parameters.
+    /// </summary>
     private Vector<T> ComputeLogits(Vector<T> features)
     {
         var logits = new Vector<T>(_options.NumClasses);
@@ -207,6 +228,7 @@ public class BOILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         for (int c = 0; c < _options.NumClasses; c++)
         {
             T sum = NumOps.Zero;
+
             for (int f = 0; f < featureDim; f++)
             {
                 int weightIdx = c * _options.FeatureDimension + f;
@@ -216,7 +238,7 @@ public class BOILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
                 }
             }
 
-            if (_headBias is not null && c < _headBias.Length)
+            if (_headBias != null && c < _headBias.Length)
             {
                 sum = NumOps.Add(sum, _headBias[c]);
             }
@@ -225,5 +247,30 @@ public class BOILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TO
         }
 
         return logits;
+    }
+
+    /// <summary>
+    /// Converts logits to the expected output type.
+    /// </summary>
+    private TOutput ConvertToOutput(Vector<T> logits)
+    {
+        if (typeof(TOutput) == typeof(Vector<T>))
+        {
+            return (TOutput)(object)logits;
+        }
+
+        if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            return (TOutput)(object)Tensor<T>.FromVector(logits);
+        }
+
+        if (typeof(TOutput) == typeof(T[]))
+        {
+            return (TOutput)(object)logits.ToArray();
+        }
+
+        throw new InvalidOperationException(
+            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
+            $"Supported types: Vector<T>, Tensor<T>, T[]");
     }
 }

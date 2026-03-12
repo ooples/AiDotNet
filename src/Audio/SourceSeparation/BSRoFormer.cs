@@ -34,11 +34,12 @@ namespace AiDotNet.Audio.SourceSeparation;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SourceSeparation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Music Source Separation with Band-Split RoFormer", "https://arxiv.org/abs/2309.02612", Year = 2023, Authors = "Wei-Tsung Lu, Ju-Chiang Wang, Qiuqiang Kong, Yun-Ning Hung")]
+[ModelPaper("Music Source Separation with Band-Split RNN", "https://doi.org/10.48550/arXiv.2309.02612", Year = 2023, Authors = "Wei-Tsung Lu, Ju-Chiang Wang, Qiuqiang Kong, Yun-Ning Hung")]
 public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     #region Fields

@@ -1,6 +1,8 @@
 using System.Linq;
 using System.Text;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -12,6 +14,7 @@ using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using AiDotNet.ProgramSynthesis.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Data.Sqlite;
 using TreeSitter;
 
@@ -41,6 +44,16 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// It's like having an AI programmer that can code based on your requirements!
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning to Synthesize Programs as Interpretable and Generalizable Policies",
+    "https://arxiv.org/abs/2108.13643",
+    Year = 2021,
+    Authors = "Dweep Trivedi, Jesse Zhang, Shao-Hua Sun, Joseph J. Lim")]
 public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthesizer<T>
 {
     private readonly NeuralProgramSynthesizerOptions _options;

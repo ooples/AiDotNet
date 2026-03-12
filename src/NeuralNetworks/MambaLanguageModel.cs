@@ -54,6 +54,9 @@ public class MambaLanguageModel<T> : NeuralNetworkBase<T>
     /// <summary>Gets the number of Mamba blocks.</summary>
     public int NumLayers => _numLayers;
 
+    /// <summary>Gets the SSM state dimension.</summary>
+    public int StateDimension => _stateDimension;
+
     #region Constructors
 
     public MambaLanguageModel(
@@ -69,6 +72,11 @@ public class MambaLanguageModel<T> : NeuralNetworkBase<T>
         : base(architecture,
             lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
     {
+        if (vocabSize <= 0) throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
+        if (modelDimension <= 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
+        if (numLayers <= 0) throw new ArgumentException($"Number of layers ({numLayers}) must be positive.", nameof(numLayers));
+        if (stateDimension <= 0) throw new ArgumentException($"State dimension ({stateDimension}) must be positive.", nameof(stateDimension));
+
         _options = options ?? new MambaOptions();
         Options = _options;
         _vocabSize = vocabSize;
@@ -116,6 +124,7 @@ public class MambaLanguageModel<T> : NeuralNetworkBase<T>
     {
         SetTrainingMode(true);
         var predictions = Predict(input);
+        SetTrainingMode(true); // Re-enable after Predict set it to false
         LastLoss = LossFunction.CalculateLoss(predictions.ToVector(), expectedOutput.ToVector());
         var outputGradients = LossFunction.CalculateDerivative(predictions.ToVector(), expectedOutput.ToVector());
         Backpropagate(Tensor<T>.FromVector(outputGradients));

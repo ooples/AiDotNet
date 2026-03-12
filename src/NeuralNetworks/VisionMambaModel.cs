@@ -150,6 +150,7 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
         if (patchSize <= 0) throw new ArgumentException($"Patch size ({patchSize}) must be positive.", nameof(patchSize));
         if (imageHeight % patchSize != 0) throw new ArgumentException($"Image height ({imageHeight}) must be divisible by patch size ({patchSize}).", nameof(imageHeight));
         if (imageWidth % patchSize != 0) throw new ArgumentException($"Image width ({imageWidth}) must be divisible by patch size ({patchSize}).", nameof(imageWidth));
+        if (numClasses <= 0) throw new ArgumentException($"Number of classes ({numClasses}) must be positive.", nameof(numClasses));
 
         _options = options ?? new VisionMambaOptions();
         Options = _options;
@@ -320,6 +321,7 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
     {
         SetTrainingMode(true);
         var predictions = Predict(input);
+        SetTrainingMode(true); // Re-enable after Predict set it to false
         LastLoss = LossFunction.CalculateLoss(predictions.ToVector(), expectedOutput.ToVector());
         var outputGradients = LossFunction.CalculateDerivative(predictions.ToVector(), expectedOutput.ToVector());
         Backpropagate(Tensor<T>.FromVector(outputGradients));

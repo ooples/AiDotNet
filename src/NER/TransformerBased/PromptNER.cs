@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -51,6 +54,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// the new type looks like, and the model can start recognizing it without extensive retraining.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PromptNER: Prompt Locating and Typing for Named Entity Recognition",
+    "https://arxiv.org/abs/2305.17104",
+    Year = 2023,
+    Authors = "Yongliang Shen, Zeqi Tan, Shuhui Wu, Wenqi Zhang, Rongsheng Zhang, Yadong Xi, Weiming Lu, Yueting Zhuang")]
 public class PromptNER<T> : TransformerNERBase<T>
 {
     /// <summary>

@@ -3,6 +3,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralRadianceFields.Interfaces;
 
 namespace AiDotNet.NeuralRadianceFields.Models;
@@ -128,6 +130,14 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// by Müller et al., ACM Transactions on Graphics 2022
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ThreeDGeneration)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Instant Neural Graphics Primitives with a Multiresolution Hash Encoding", "https://doi.org/10.1145/3528223.3530127", Year = 2022, Authors = "Thomas Müller, Alex Evans, Christoph Schied, Alexander Keller")]
 public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
 {
     private readonly InstantNGPOptions<T> _options;

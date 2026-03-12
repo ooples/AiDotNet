@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -59,6 +60,14 @@ namespace AiDotNet.Finance.Probabilistic;
 /// https://arxiv.org/abs/2403.01742
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Diffusion-TS: Interpretable Diffusion for General Time Series Generation", "https://arxiv.org/abs/2303.01164", Year = 2024, Authors = "Xinyu Yuan, Yan Qiao")]
 public class DiffusionTS<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

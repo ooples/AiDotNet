@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -76,9 +78,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Learning with Hypernetworks",
+    "https://arxiv.org/abs/1906.05838",
+    Year = 2019,
+    Authors = "Johannes von Oswald, Christian Henning, Benjamin F. Grewe, Joao Sacramento")]
 public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly HyperMAMLOptions<T, TInput, TOutput> _hyperMAMLOptions;
@@ -264,36 +271,18 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 }
 
 /// <summary>Adapted model wrapper for HyperMAML.</summary>
-internal class HyperMAMLModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+internal class HyperMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private Vector<T> _params;
-
-    public HyperMAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) : base(model)
-    {
-        _params = p;
-    }
-
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _params;
     /// <inheritdoc/>
-    public override TOutput Predict(TInput input) { BaseModel.SetParameters(_params); return BaseModel.Predict(input); }
-
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+    public HyperMAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
     /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _params;
-
+    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _params = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        return new HyperMAMLModel<T, TInput, TOutput>(BaseModel, parameters);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new HyperMAMLModel<T, TInput, TOutput>(BaseModel.DeepCopy(), _params.Clone());
-    }
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

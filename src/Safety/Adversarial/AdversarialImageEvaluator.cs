@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -31,6 +32,16 @@ namespace AiDotNet.Safety.Adversarial;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Feature Squeezing: Detecting Adversarial Examples in Deep Neural Networks",
+    "https://arxiv.org/abs/1704.01155",
+    Year = 2018,
+    Authors = "Weilin Xu, David Evans, Yanjun Qi")]
 public class AdversarialImageEvaluator<T> : IImageSafetyModule<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

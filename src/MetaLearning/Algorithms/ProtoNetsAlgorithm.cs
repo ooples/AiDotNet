@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 using AiDotNet.Data.Structures;
 
@@ -85,10 +87,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Prototypical Networks for Few-shot Learning", "https://arxiv.org/abs/1703.05175", Year = 2017, Authors = "Jake Snell, Kevin Swersky, Richard Zemel")]
+[ModelPaper("Prototypical Networks for Few-shot Learning",
+    "https://arxiv.org/abs/1703.05175",
+    Year = 2017,
+    Authors = "Snell, J., Swersky, K., & Zemel, R.")]
 public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ProtoNetsOptions<T, TInput, TOutput> _protoNetsOptions;
@@ -850,17 +856,13 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 /// It can classify new examples instantly by finding the nearest class prototype.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.MetaLearning)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Prototypical Networks for Few-shot Learning", "https://arxiv.org/abs/1703.05175", Year = 2017, Authors = "Jake Snell, Kevin Swersky, Richard Zemel")]
-public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
+    private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly Dictionary<int, Vector<T>> _classPrototypes;
     private readonly ProtoNetsOptions<T, TInput, TOutput> _options;
+    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the PrototypicalModel.
@@ -876,10 +878,13 @@ public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TI
         TOutput supportOutputs,
         ProtoNetsOptions<T, TInput, TOutput> options,
         INumericOperations<T> numOps)
-        : base(featureEncoder)
     {
+        Guard.NotNull(featureEncoder);
+        _featureEncoder = featureEncoder;
         Guard.NotNull(options);
         _options = options;
+        Guard.NotNull(numOps);
+        _numOps = numOps;
         _classPrototypes = new Dictionary<int, Vector<T>>();
 
         // Compute prototypes from support set
@@ -887,27 +892,19 @@ public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TI
     }
 
     /// <summary>
-    /// Private constructor for WithParameters/DeepCopy (avoids recomputing prototypes).
+    /// Gets the model metadata.
     /// </summary>
-    private PrototypicalModel(
-        IFullModel<T, TInput, TOutput> featureEncoder,
-        Dictionary<int, Vector<T>> classPrototypes,
-        ProtoNetsOptions<T, TInput, TOutput> options)
-        : base(featureEncoder)
-    {
-        _classPrototypes = classPrototypes;
-        _options = options;
-    }
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
     /// Makes predictions using prototype-based classification.
     /// </summary>
     /// <param name="input">The input to classify.</param>
     /// <returns>Predicted class probabilities.</returns>
-    public override TOutput Predict(TInput input)
+    public TOutput Predict(TInput input)
     {
         // Encode input to feature space
-        var features = BaseModel.Predict(input);
+        var features = _featureEncoder.Predict(input);
 
         if (_classPrototypes.Count == 0)
         {
@@ -958,30 +955,28 @@ public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TI
         return ConvertBatchToOutput(allProbabilities, classLabels, batchSize);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => BaseModel.GetParameters();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    /// <summary>
+    /// Trains the model (not applicable for prototype-based models).
+    /// </summary>
+    public void Train(TInput inputs, TOutput targets)
     {
-        BaseModel.SetParameters(parameters ?? throw new ArgumentNullException(nameof(parameters)));
+        throw new NotSupportedException("Prototype models don't support training. Compute new prototypes instead.");
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    /// <summary>
+    /// Updates model parameters (not applicable for prototype-based models).
+    /// </summary>
+    public void UpdateParameters(Vector<T> parameters)
     {
-        return new PrototypicalModel<T, TInput, TOutput>(BaseModel, _classPrototypes, _options);
+        throw new NotSupportedException("Prototype models don't have trainable parameters.");
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    /// <summary>
+    /// Gets model parameters (not applicable for prototype-based models).
+    /// </summary>
+    public Vector<T> GetParameters()
     {
-        var clonedPrototypes = new Dictionary<int, Vector<T>>();
-        foreach (var kvp in _classPrototypes)
-        {
-            clonedPrototypes[kvp.Key] = kvp.Value.Clone();
-        }
-        return new PrototypicalModel<T, TInput, TOutput>(BaseModel.DeepCopy(), clonedPrototypes, _options);
+        throw new NotSupportedException("Prototype models don't have trainable parameters.");
     }
 
     /// <summary>
@@ -990,7 +985,7 @@ public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TI
     private void ComputePrototypes(TInput supportInputs, TOutput supportOutputs)
     {
         // Encode support set
-        var encodedSupport = BaseModel.Predict(supportInputs);
+        var encodedSupport = _featureEncoder.Predict(supportInputs);
 
         // Convert to matrix
         var featureMatrix = ConvertToMatrix(encodedSupport);
@@ -1117,19 +1112,19 @@ public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TI
     {
         for (int i = 0; i < matrix.Rows; i++)
         {
-            T sumSquares = NumOps.Zero;
+            T sumSquares = _numOps.Zero;
             for (int j = 0; j < matrix.Columns; j++)
             {
-                sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(matrix[i, j], matrix[i, j]));
+                sumSquares = _numOps.Add(sumSquares, _numOps.Multiply(matrix[i, j], matrix[i, j]));
             }
 
-            T norm = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
+            T norm = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquares)));
 
-            if (NumOps.ToDouble(norm) > 1e-8)
+            if (_numOps.ToDouble(norm) > 1e-8)
             {
                 for (int j = 0; j < matrix.Columns; j++)
                 {
-                    matrix[i, j] = NumOps.Divide(matrix[i, j], norm);
+                    matrix[i, j] = _numOps.Divide(matrix[i, j], norm);
                 }
             }
         }
@@ -1149,18 +1144,18 @@ public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TI
     private T ComputeCosineDistance(Vector<T> a, Vector<T> b)
     {
         double similarity = VectorHelper.CosineSimilarity(a, b);
-        return NumOps.FromDouble(1.0 - similarity);
+        return _numOps.FromDouble(1.0 - similarity);
     }
 
     private T ComputeMahalanobisDistance(Vector<T> a, Vector<T> b)
     {
-        T sumSquares = NumOps.Zero;
+        T sumSquares = _numOps.Zero;
         for (int i = 0; i < a.Length; i++)
         {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(diff, diff));
+            T diff = _numOps.Subtract(a[i], b[i]);
+            sumSquares = _numOps.Add(sumSquares, _numOps.Multiply(diff, diff));
         }
-        return NumOps.Multiply(sumSquares, NumOps.FromDouble(_options.MahalanobisScaling));
+        return _numOps.Multiply(sumSquares, _numOps.FromDouble(_options.MahalanobisScaling));
     }
 
     private List<T> ApplySoftmax(List<T> distances)
@@ -1169,39 +1164,39 @@ public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TI
             return new List<T>();
 
         // Apply negative sign (smaller distance = higher probability)
-        var negDistances = distances.Select(d => NumOps.Negate(d)).ToList();
+        var negDistances = distances.Select(d => _numOps.Negate(d)).ToList();
 
         // Apply temperature scaling
         if (Math.Abs(_options.Temperature - 1.0) >= 1e-10)
         {
-            T temp = NumOps.FromDouble(_options.Temperature);
-            negDistances = negDistances.Select(d => NumOps.Divide(d, temp)).ToList();
+            T temp = _numOps.FromDouble(_options.Temperature);
+            negDistances = negDistances.Select(d => _numOps.Divide(d, temp)).ToList();
         }
 
         // Find max for numerical stability
         T maxDist = negDistances[0];
         foreach (var d in negDistances)
         {
-            if (NumOps.ToDouble(d) > NumOps.ToDouble(maxDist))
+            if (_numOps.ToDouble(d) > _numOps.ToDouble(maxDist))
                 maxDist = d;
         }
 
         // Compute exp values
         var expValues = negDistances.Select(d =>
         {
-            T shifted = NumOps.Subtract(d, maxDist);
-            return NumOps.FromDouble(Math.Exp(NumOps.ToDouble(shifted)));
+            T shifted = _numOps.Subtract(d, maxDist);
+            return _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
         }).ToList();
 
         // Sum exp values
-        T sumExp = NumOps.Zero;
+        T sumExp = _numOps.Zero;
         foreach (var e in expValues)
         {
-            sumExp = NumOps.Add(sumExp, e);
+            sumExp = _numOps.Add(sumExp, e);
         }
 
         // Normalize
-        return expValues.Select(e => NumOps.Divide(e, sumExp)).ToList();
+        return expValues.Select(e => _numOps.Divide(e, sumExp)).ToList();
     }
 
     private TOutput ConvertToOutput(List<T> probabilities, List<int> classLabels)
@@ -1265,17 +1260,17 @@ public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TI
             for (int i = 0; i < batchSize; i++)
             {
                 int maxIdx = 0;
-                double maxValD = NumOps.ToDouble(allProbabilities[i][0]);
+                double maxValD = _numOps.ToDouble(allProbabilities[i][0]);
                 for (int j = 1; j < numClasses; j++)
                 {
-                    double candidateD = NumOps.ToDouble(allProbabilities[i][j]);
+                    double candidateD = _numOps.ToDouble(allProbabilities[i][j]);
                     if (candidateD > maxValD)
                     {
                         maxValD = candidateD;
                         maxIdx = j;
                     }
                 }
-                predictions[i] = NumOps.FromDouble(classLabels[maxIdx]);
+                predictions[i] = _numOps.FromDouble(classLabels[maxIdx]);
             }
             return (TOutput)(object)predictions;
         }
@@ -1307,14 +1302,14 @@ public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TI
         {
             for (int i = 0; i < dimension; i++)
             {
-                mean[i] = NumOps.Add(mean[i], vector[i]);
+                mean[i] = _numOps.Add(mean[i], vector[i]);
             }
         }
 
-        T divisor = NumOps.FromDouble(vectors.Count);
+        T divisor = _numOps.FromDouble(vectors.Count);
         for (int i = 0; i < dimension; i++)
         {
-            mean[i] = NumOps.Divide(mean[i], divisor);
+            mean[i] = _numOps.Divide(mean[i], divisor);
         }
 
         return mean;
@@ -1326,18 +1321,26 @@ public class PrototypicalModel<T, TInput, TOutput> : MetaLearningModelBase<T, TI
         {
             if (index < vector.Length)
             {
-                return (int)NumOps.ToDouble(vector[index]);
+                return (int)_numOps.ToDouble(vector[index]);
             }
         }
         else if (output is Tensor<T> tensor)
         {
             if (tensor.Shape.Length >= 1 && index < tensor.Shape[0])
             {
-                return (int)NumOps.ToDouble(tensor[new int[] { index }]);
+                return (int)_numOps.ToDouble(tensor[new int[] { index }]);
             }
         }
 
         return 0;
     }
 
+    /// <summary>
+    /// Gets metadata about the model.
+    /// </summary>
+    /// <returns>Model metadata including information about prototypes.</returns>
+    public ModelMetadata<T> GetModelMetadata()
+    {
+        return Metadata;
+    }
 }

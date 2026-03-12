@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -51,6 +53,12 @@ namespace AiDotNet.ContinualLearning;
 ///
 /// <para><b>Reference:</b> Rusu, A.A. et al. "Progressive Neural Networks" (2016). arXiv.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Progressive Neural Networks", "https://arxiv.org/abs/1606.04671", Year = 2016, Authors = "Andrei A. Rusu, Neil C. Rabinowitz, Guillaume Desjardins, Hubert Soyer, James Kirkpatrick, Koray Kavukcuoglu, Razvan Pascanu, Raia Hadsell")]
 public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

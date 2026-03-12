@@ -1,5 +1,8 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -40,6 +43,15 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.SyntheticDataGenerator)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AIM: An Adaptive and Iterative Mechanism for Differentially Private Synthetic Data",
+    "https://arxiv.org/abs/2201.12677",
+    Year = 2022,
+    Authors = "Ryan McKenna, Gerome Miklau, Daniel Sheldon")]
 public class AIMGenerator<T> : SyntheticTabularGeneratorBase<T>
 {
     private readonly AIMOptions<T> _options;

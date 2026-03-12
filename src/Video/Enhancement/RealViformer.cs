@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -44,6 +46,17 @@ namespace AiDotNet.Video.Enhancement;
 /// Super-Resolution" (Zhang and Yao, ECCV 2024)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RealViformer: Investigating Attention for Real-World Video Super-Resolution",
+    "https://arxiv.org/abs/2407.13987",
+    Year = 2024,
+    Authors = "Yuehan Zhang, Angela Yao")]
 public class RealViformer<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

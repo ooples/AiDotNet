@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.TimeSeries;
 
@@ -25,6 +27,14 @@ namespace AiDotNet.TimeSeries;
 /// showing you how strong each frequency component is in your data.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Spectral Analysis and Time Series", "https://doi.org/10.1016/C2013-0-03566-2", Year = 1981, Authors = "M. B. Priestley")]
 public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -29,6 +31,13 @@ namespace AiDotNet.ContinualLearning;
 /// <para><b>Reference:</b> Lopez-Paz and Ranzato, "Gradient Episodic Memory for Continual
 /// Learning" (2017). NeurIPS.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Gradient Episodic Memory for Continual Learning", "https://arxiv.org/abs/1706.08840", Year = 2017, Authors = "David Lopez-Paz, Marc'Aurelio Ranzato")]
 public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

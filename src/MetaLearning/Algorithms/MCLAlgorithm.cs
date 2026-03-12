@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -80,9 +82,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Supervised Contrastive Learning",
+    "https://arxiv.org/abs/2004.11362",
+    Year = 2020,
+    Authors = "Prannay Khosla, Piotr Teterwak, Chen Wang, Aaron Sarna, Yonglong Tian, et al.")]
 public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MCLOptions<T, TInput, TOutput> _mclOptions;
@@ -361,11 +368,16 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 /// improving few-shot classification accuracy.
 /// </para>
 /// </remarks>
-internal class MCLModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+internal class MCLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private Vector<T> _backboneParams;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _projectedSupport;
     private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _projectedSupport;
@@ -378,15 +390,15 @@ internal class MCLModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, T
         Vector<T> backboneParams,
         Vector<T>? projectedSupport,
         double[]? modulationFactors)
-        : base(model)
     {
+        _model = model;
         _backboneParams = backboneParams;
         _projectedSupport = projectedSupport;
         _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
-    public override TOutput Predict(TInput input)
+    public TOutput Predict(TInput input)
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
@@ -396,35 +408,18 @@ internal class MCLModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, T
                 double mod = _modulationFactors[i % _modulationFactors.Length];
                 modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
             }
-            BaseModel.SetParameters(modulatedParams);
+            _model.SetParameters(modulatedParams);
         }
         else
         {
-            BaseModel.SetParameters(_backboneParams);
+            _model.SetParameters(_backboneParams);
         }
-        return BaseModel.Predict(input);
+        return _model.Predict(input);
     }
 
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
     /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _backboneParams;
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _backboneParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        return new MCLModel<T, TInput, TOutput>(BaseModel, parameters, _projectedSupport, _modulationFactors);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new MCLModel<T, TInput, TOutput>(
-            BaseModel.DeepCopy(), _backboneParams.Clone(), _projectedSupport?.Clone(),
-            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
-    }
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

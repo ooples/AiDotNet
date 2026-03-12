@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -46,6 +47,15 @@ namespace AiDotNet.Document.PixelToSequence;
 /// https://arxiv.org/abs/2308.13418
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Nougat: Neural Optical Understanding for Academic Documents", "https://doi.org/10.48550/arXiv.2308.13418", Year = 2023, Authors = "Lukas Blecher, Guillem Cucurull, Thomas Scialom, Robert Stojnic")]
 public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly NougatOptions _options;

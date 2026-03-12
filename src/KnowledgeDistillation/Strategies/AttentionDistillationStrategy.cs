@@ -1,6 +1,9 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
@@ -55,6 +58,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Jiao et al. (2020). TinyBERT: Distilling BERT for Natural Language Understanding. EMNLP.
 /// - Wang et al. (2020). MiniLM: Deep Self-Attention Distillation for Task-Agnostic Compression.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DistilBERT, a Distilled Version of BERT: Smaller, Faster, Cheaper and Lighter",
+    "https://arxiv.org/abs/1910.01108",
+    Year = 2019,
+    Authors = "Victor Sanh, Lysandre Debut, Julien Chaumond, Thomas Wolf")]
 public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIntermediateActivationStrategy<T>
 {
     private readonly string[] _attentionLayers;

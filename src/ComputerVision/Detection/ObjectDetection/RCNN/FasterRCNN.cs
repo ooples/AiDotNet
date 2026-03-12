@@ -3,9 +3,11 @@ using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 
@@ -29,6 +31,15 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 /// <para>Reference: Ren et al., "Faster R-CNN: Towards Real-Time Object Detection with
 /// Region Proposal Networks", NeurIPS 2015</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Faster R-CNN: Towards Real-Time Object Detection with Region Proposal Networks",
+    "https://arxiv.org/abs/1506.01497",
+    Year = 2015,
+    Authors = "Shaoqing Ren, Kaiming He, Ross Girshick, Jian Sun")]
 public class FasterRCNN<T> : ObjectDetectorBase<T>
 {
     private readonly RPN<T> _rpn;

@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -34,6 +36,13 @@ namespace AiDotNet.ContinualLearning;
 ///
 /// <para><b>Reference:</b> Chaudhry, A. et al. "Efficient Lifelong Learning with A-GEM" (2019). ICLR.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Efficient Lifelong Learning with A-GEM", "https://arxiv.org/abs/1812.00420", Year = 2019, Authors = "Arslan Chaudhry, Marc'Aurelio Ranzato, Marcus Rohrbach, Mohamed Elhoseiny")]
 public class AveragedGEM<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

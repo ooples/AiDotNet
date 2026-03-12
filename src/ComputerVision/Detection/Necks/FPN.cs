@@ -1,6 +1,9 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.Necks;
 
@@ -22,6 +25,15 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
 ///
 /// <para>Reference: Lin et al., "Feature Pyramid Networks for Object Detection", CVPR 2017</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Feature Pyramid Networks for Object Detection",
+    "https://arxiv.org/abs/1612.03144",
+    Year = 2017,
+    Authors = "Tsung-Yi Lin, Piotr Dollar, Ross Girshick, Kaiming He, Bharath Hariharan, Serge Belongie")]
 public class FPN<T> : NeckBase<T>
 {
     private readonly int _outputChannels;

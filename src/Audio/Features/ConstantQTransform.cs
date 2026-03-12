@@ -42,8 +42,10 @@ namespace AiDotNet.Audio.Features;
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.SignalProcessing)]
 [ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Low)]
+[ModelTask(ModelTask.SignalProcessing)]
+[ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("An Efficient Algorithm for the Calculation of a Constant Q Transform", "https://doi.org/10.1121/1.404385", Year = 1992, Authors = "Judith C. Brown, Miller S. Puckette")]
 public class ConstantQTransform<T>
 {
     private readonly INumericOperations<T> _numOps;

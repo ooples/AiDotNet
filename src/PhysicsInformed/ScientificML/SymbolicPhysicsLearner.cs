@@ -8,6 +8,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
+using AiDotNet.Attributes;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.ScientificML
@@ -52,6 +53,15 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// - Found new equations in materials science
     /// - Discovered patterns in quantum mechanics
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Distilling Free-Form Natural Laws from Experimental Data", "https://doi.org/10.1126/science.1165893", Year = 2009, Authors = "Michael Schmidt, Hod Lipson")]
     public class SymbolicPhysicsLearner<T>
     {
         private readonly INumericOperations<T> _numOps;

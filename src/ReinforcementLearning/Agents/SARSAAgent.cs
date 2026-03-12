@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
 namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
@@ -32,6 +35,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
 /// Famous for: Rummery & Niranjan 1994, on-policy TD control
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("On-line Q-learning Using Connectionist Systems",
+    "https://citeseerx.ist.psu.edu/doc/10.1.1.17.2539",
+    Year = 1994,
+    Authors = "Rummery, G. A. & Niranjan, M.")]
 public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private SARSAOptions<T> _options;

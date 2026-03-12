@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -27,6 +29,13 @@ namespace AiDotNet.ContinualLearning;
 ///
 /// <para><b>Reference:</b> Li and Hoiem, "Learning without Forgetting" (2017). IEEE TPAMI.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning without Forgetting", "https://doi.org/10.1109/TPAMI.2017.2773081", Year = 2017, Authors = "Zhizhong Li, Derek Hoiem")]
 public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

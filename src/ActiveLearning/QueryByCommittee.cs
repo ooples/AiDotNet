@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -26,6 +28,13 @@ namespace AiDotNet.ActiveLearning;
 ///
 /// <para><b>Reference:</b> Seung et al., "Query by Committee" (1992). COLT.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Query by Committee", "https://doi.org/10.1145/130385.130417", Year = 1992, Authors = "H. Sebastian Seung, Manfred Opper, Haim Sompolinsky")]
 public class QueryByCommittee<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

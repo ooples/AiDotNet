@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -62,6 +63,14 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/1707.01926
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.GraphAnalysis)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting", "https://arxiv.org/abs/1707.01926", Year = 2018, Authors = "Yaguang Li, Rose Yu, Cyrus Shahabi, Yan Liu")]
 public class DCRNN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

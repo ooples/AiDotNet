@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -38,6 +40,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleDQN;
 /// van Hasselt et al., "Deep Reinforcement Learning with Double Q-learning", 2015.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Reinforcement Learning with Double Q-learning",
+    "https://arxiv.org/abs/1509.06461",
+    Year = 2016,
+    Authors = "van Hasselt, H., Guez, A., & Silver, D.")]
 public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DoubleDQNOptions<T> _options;

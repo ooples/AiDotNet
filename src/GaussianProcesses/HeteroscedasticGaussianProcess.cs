@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.GaussianProcesses;
 
 /// <summary>
@@ -31,6 +34,13 @@ namespace AiDotNet.GaussianProcesses;
 /// - Any regression where uncertainty varies with input
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.GaussianProcess)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Most Likely Heteroscedastic Gaussian Process Regression", "https://doi.org/10.1145/1273496.1273546", Year = 2007, Authors = "Kristian Kersting, Christian Plagemann, Patrick Pfaff, Wolfram Burgard")]
 public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
 {
     /// <summary>

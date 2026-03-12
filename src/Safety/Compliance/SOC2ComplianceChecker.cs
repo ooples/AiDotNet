@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -37,6 +38,15 @@ namespace AiDotNet.Safety.Compliance;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AICPA SOC 2 Trust Services Criteria",
+    "https://www.aicpa.org/resources/landing/system-and-organization-controls-soc-suite-of-services",
+    Year = 2024,
+    Authors = "AICPA")]
 public class SOC2ComplianceChecker<T> : ITextSafetyModule<T>
 {
     private readonly SafetyConfig _config;

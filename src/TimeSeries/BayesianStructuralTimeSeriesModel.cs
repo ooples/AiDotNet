@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.TimeSeries;
 
@@ -39,6 +41,14 @@ namespace AiDotNet.TimeSeries;
 /// what's driving changes in addition to making predictions.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelTask(ModelTask.CausalInference)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Predicting the Present with Bayesian Structural Time Series", "https://doi.org/10.1214/14-AOAS788", Year = 2015, Authors = "Steven L. Scott, Hal R. Varian")]
 public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

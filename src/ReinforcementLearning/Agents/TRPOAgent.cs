@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -38,6 +39,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
 /// Famous for: OpenAI robotics, predecessor to PPO (which simplified TRPO)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Trust Region Policy Optimization",
+    "https://arxiv.org/abs/1502.05477",
+    Year = 2015,
+    Authors = "Schulman, J., Levine, S., Moritz, P., Jordan, M. I., & Abbeel, P.")]
 public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private TRPOOptions<T> _options;

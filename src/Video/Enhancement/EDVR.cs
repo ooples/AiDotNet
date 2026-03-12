@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -43,6 +46,16 @@ namespace AiDotNet.Video.Enhancement;
 /// https://arxiv.org/abs/1905.02716
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("EDVR: Video Restoration with Enhanced Deformable Convolutional Networks",
+    "https://arxiv.org/abs/1905.02716",
+    Year = 2019,
+    Authors = "Xintao Wang, Kelvin C.K. Chan, Ke Yu, Chao Dong, Chen Change Loy")]
 public class EDVR<T> : VideoSuperResolutionBase<T>
 {
     private readonly EDVROptions _options;

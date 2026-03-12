@@ -1,4 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -44,6 +47,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Bengio et al. (2009). Curriculum Learning. ICML.
 /// - Kumar et al. (2010). Self-paced Learning for Latent Variable Models.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Curriculum Learning",
+    "https://dl.acm.org/doi/10.1145/1553374.1553380",
+    Year = 2009,
+    Authors = "Yoshua Bengio, Jérôme Louradour, Ronan Collobert, Jason Weston")]
 public class EasyToHardCurriculumStrategy<T> : CurriculumDistillationStrategyBase<T>
 {
     /// <summary>

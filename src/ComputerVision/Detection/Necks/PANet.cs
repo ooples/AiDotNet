@@ -1,6 +1,9 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.Necks;
 
@@ -21,6 +24,15 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
 ///
 /// <para>Reference: Liu et al., "Path Aggregation Network for Instance Segmentation", CVPR 2018</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Path Aggregation Network for Instance Segmentation",
+    "https://arxiv.org/abs/1803.01534",
+    Year = 2018,
+    Authors = "Shu Liu, Lu Qi, Haifang Qin, Jianping Shi, Jiaya Jia")]
 public class PANet<T> : NeckBase<T>
 {
     private readonly int _outputChannels;

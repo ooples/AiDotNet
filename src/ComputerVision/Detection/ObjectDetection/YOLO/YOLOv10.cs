@@ -3,8 +3,11 @@ using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 
@@ -26,6 +29,15 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 ///
 /// <para>Reference: Wang et al., "YOLOv10: Real-Time End-to-End Object Detection", 2024</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("YOLOv10: Real-Time End-to-End Object Detection",
+    "https://arxiv.org/abs/2405.14458",
+    Year = 2024,
+    Authors = "Ao Wang, Hui Chen, Lihao Liu, Kai Chen, Zijia Lin, Jungong Han, Guiguang Ding")]
 public class YOLOv10<T> : ObjectDetectorBase<T>
 {
     private readonly YOLOv8Head<T> _head;

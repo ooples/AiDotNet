@@ -3,9 +3,11 @@ using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 
@@ -28,6 +30,15 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 /// <para>Reference: Cai and Vasconcelos, "Cascade R-CNN: Delving into High Quality Object Detection",
 /// CVPR 2018</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Cascade R-CNN: Delving into High Quality Object Detection",
+    "https://arxiv.org/abs/1712.00726",
+    Year = 2018,
+    Authors = "Zhaowei Cai, Nuno Vasconcelos")]
 public class CascadeRCNN<T> : ObjectDetectorBase<T>
 {
     private readonly RPN<T> _rpn;

@@ -44,6 +44,7 @@ namespace AiDotNet.Audio.Features;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Chroma Feature Extraction", "https://doi.org/10.1007/978-1-4419-6266-2", Year = 2011, Authors = "Meinard Müller")]
 public class ChromaExtractor<T> : AudioFeatureExtractorBase<T>
 {
     private readonly ShortTimeFourierTransform<T> _stft;

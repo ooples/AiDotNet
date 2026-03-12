@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
@@ -22,6 +25,16 @@ namespace AiDotNet.Video.Motion;
 /// FlowDiffuser applies diffusion models to optical flow estimation with iterative refinement, producing accurate and smooth flow fields.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FlowDiffuser: Advancing Optical Flow Estimation with Diffusion Models",
+    "https://arxiv.org/abs/2404.09117",
+    Year = 2024,
+    Authors = "Ao Luo, Xin Li, Fan Fang, Jiangyu Liu, Haoqiang Fan, Shuaicheng Liu")]
 public class FlowDiffuser<T> : OpticalFlowBase<T>
 {
     private readonly FlowDiffuserOptions _options;

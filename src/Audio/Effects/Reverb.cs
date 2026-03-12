@@ -1,6 +1,5 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Effects;
 
@@ -42,9 +41,10 @@ namespace AiDotNet.Audio.Effects;
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.SignalProcessing)]
-[ModelTask(ModelTask.Synthesis)]
+[ModelTask(ModelTask.Enhancement)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Natural Sounding Artificial Reverberation", "https://doi.org/10.17323/1613-9615-1962-1-2-1-18", Year = 1962, Authors = "Manfred R. Schroeder")]
 public class Reverb<T> : AudioEffectBase<T>
 {
     #region Configuration

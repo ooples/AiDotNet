@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -40,6 +42,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// <b>Reference:</b> "STMFNet: Spatio-Temporal Multi-Flow Network for Video Frame Interpolation" (2022)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("STMFNet: Spatio-Temporal Multi-Flow Network for Video Frame Interpolation",
+    "https://arxiv.org/abs/2111.15483",
+    Year = 2022,
+    Authors = "Duolikun Danier, Fan Zhang, David Bull")]
 public class STMFNet<T> : FrameInterpolationBase<T>
 {
     #region Fields

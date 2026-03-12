@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.TimeSeries;
 
 /// <summary>
@@ -26,6 +29,13 @@ namespace AiDotNet.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Forecasting Methods and Applications", "https://doi.org/10.1002/9781118619193", Year = 1998, Authors = "Spyros Makridakis, Steven C. Wheelwright, Rob J. Hyndman")]
 public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

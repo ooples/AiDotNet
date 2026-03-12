@@ -1,10 +1,12 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -64,10 +66,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Few-Shot Learning with Graph Neural Networks", "https://arxiv.org/abs/1711.04043", Year = 2018, Authors = "Garcia and Bruna")]
+[ModelPaper("Few-Shot Learning with Graph Neural Networks",
+    "https://arxiv.org/abs/1711.04043",
+    Year = 2018,
+    Authors = "Victor Garcia, Joan Bruna")]
 public class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly GNNMetaOptions<T, TInput, TOutput> _gnnOptions;

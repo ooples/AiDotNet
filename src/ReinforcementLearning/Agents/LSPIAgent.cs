@@ -1,4 +1,6 @@
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -12,6 +14,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// LSPI (Least-Squares Policy Iteration) agent using iterative policy improvement with LSTDQ.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Least-Squares Policy Iteration",
+    "https://www.jmlr.org/papers/v4/lagoudakis03a.html",
+    Year = 2003,
+    Authors = "Lagoudakis, M. G. & Parr, R.")]
 public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private LSPIOptions<T> _options;

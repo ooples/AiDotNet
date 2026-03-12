@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
@@ -22,6 +25,16 @@ namespace AiDotNet.Video.Motion;
 /// DKM uses dense kernelized matching to establish pixel-level correspondences between images for accurate geometry estimation.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DKM: Dense Kernelized Feature Matching for Geometry Estimation",
+    "https://arxiv.org/abs/2202.00667",
+    Year = 2023,
+    Authors = "Johan Edstedt, Ioannis Athanasiadis, Marten Wadenbäck, Michael Felsberg")]
 public class DKM<T> : OpticalFlowBase<T>
 {
     private readonly DKMOptions _options;

@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ReinforcementLearning.Policies.Exploration
 {
@@ -10,6 +13,16 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Maintains Beta distributions for each action and samples from posteriors.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+    [ModelCategory(ModelCategory.Bayesian)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelComplexity(ModelComplexity.Medium)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples",
+        "https://doi.org/10.2307/2332286",
+        Year = 1933,
+        Authors = "Thompson, W. R.")]
     public class ThompsonSamplingExploration<T> : ExplorationStrategyBase<T>
     {
         private readonly Dictionary<int, BetaDistribution> _actionDistributions;

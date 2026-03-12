@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -21,6 +23,13 @@ namespace AiDotNet.Preprocessing.FeatureSelection.NLP;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("A Statistical Interpretation of Term Specificity and Its Application in Retrieval", "https://doi.org/10.1108/eb026526", Year = 1972, Authors = "Karen Spärck Jones")]
 public class TfIdfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;

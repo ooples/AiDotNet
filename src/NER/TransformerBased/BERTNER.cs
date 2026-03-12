@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -59,6 +62,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// - You can accept higher latency compared to BiLSTM-CRF
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+    "https://arxiv.org/abs/1810.04805",
+    Year = 2019,
+    Authors = "Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova")]
 public class BERTNER<T> : TransformerNERBase<T>
 {
     /// <summary>

@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -39,6 +41,16 @@ namespace AiDotNet.Video.Enhancement;
 /// Super-Resolution" (2025)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RealisVSR: Detail-Enhanced Diffusion for Real-World 4K Video Super-Resolution",
+    "https://arxiv.org/abs/2502.00459",
+    Year = 2025,
+    Authors = "Chao Ma, Shangchen Zhou, Chen Change Loy")]
 public class RealisVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -28,6 +30,12 @@ namespace AiDotNet.ActiveLearning;
 /// <para><b>Complexity:</b> O(n × c) where n=pool size, c=number of classes.</para>
 /// <para><b>Reference:</b> Settles, B. (2012). "Active Learning." Morgan &amp; Claypool Publishers.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Active Learning", "https://doi.org/10.1007/978-3-031-01560-1", Year = 2012, Authors = "Burr Settles")]
 public class MarginSampling<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

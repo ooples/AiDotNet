@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -47,6 +50,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// inference, or when you want to deploy NER models without depending on PyTorch/TensorFlow.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("ONNX: Open Neural Network Exchange",
+    "https://arxiv.org/abs/1901.05350",
+    Year = 2019,
+    Authors = "Junjie Bai, Fang Lu, Ke Zhang, et al.")]
 public class ONNXNER<T> : TransformerNERBase<T>
 {
     /// <summary>

@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -38,6 +40,14 @@ namespace AiDotNet.ContinualLearning;
 /// <para><b>Reference:</b> Nguyen, C.V., Li, Y., Bui, T.D., and Turner, R.E.
 /// "Variational Continual Learning" (2018). ICLR.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.Regularization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Variational Continual Learning", "https://arxiv.org/abs/1710.10628", Year = 2018, Authors = "Cuong V. Nguyen, Yingzhen Li, Thang D. Bui, Richard E. Turner")]
 public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

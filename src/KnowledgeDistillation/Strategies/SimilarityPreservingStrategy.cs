@@ -1,13 +1,26 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
 /// <summary>
 /// Similarity-preserving distillation that preserves pairwise similarity structure.
 /// </summary>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Similarity-Preserving Knowledge Distillation",
+    "https://arxiv.org/abs/1907.09682",
+    Year = 2019,
+    Authors = "Frederick Tung, Greg Mori")]
 public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _similarityWeight;

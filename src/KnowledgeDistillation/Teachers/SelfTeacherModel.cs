@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
@@ -16,6 +19,16 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// <item><description><b>Model Mode:</b> Wraps an IJitCompilable model for dynamic predictions (JIT support available)</description></item>
 /// </list>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Born Again Neural Networks",
+    "https://arxiv.org/abs/1805.04770",
+    Year = 2018,
+    Authors = "Tommaso Furlanello, Zachary C. Lipton, Michael Tschannen, et al.")]
 public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private Vector<T>[]? _cachedPredictions;

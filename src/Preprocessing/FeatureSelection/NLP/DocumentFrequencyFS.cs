@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -20,6 +22,13 @@ namespace AiDotNet.Preprocessing.FeatureSelection.NLP;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.DimensionalityReduction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+[ModelPaper("Foundations of Statistical Natural Language Processing", "https://nlp.stanford.edu/fsnlp/", Year = 1999, Authors = "Christopher D. Manning, Hinrich Schütze")]
 public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;

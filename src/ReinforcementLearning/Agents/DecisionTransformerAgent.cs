@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -38,6 +39,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 /// Famous for: Berkeley/Meta research simplifying RL to sequence modeling
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Decision Transformer: Reinforcement Learning via Sequence Modeling",
+    "https://arxiv.org/abs/2106.01345",
+    Year = 2021,
+    Authors = "Chen, L., Lu, K., Rajeswaran, A., Lee, K., Grover, A., Laskin, M., Abbeel, P., Srinivas, A., & Mordatch, I.")]
 public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DecisionTransformerOptions<T> _options;

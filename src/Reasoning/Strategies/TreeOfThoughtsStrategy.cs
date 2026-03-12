@@ -1,6 +1,8 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Components;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Reasoning.Search;
 
 namespace AiDotNet.Reasoning.Strategies;
@@ -82,6 +84,13 @@ namespace AiDotNet.Reasoning.Strategies;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Agent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(string), typeof(string))]
+[ModelPaper("Tree of Thoughts: Deliberate Problem Solving with Large Language Models", "https://doi.org/10.48550/arXiv.2305.10601", Year = 2023, Authors = "Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L. Griffiths, Yuan Cao, Karthik Narasimhan")]
 public class TreeOfThoughtsStrategy<T> : ReasoningStrategyBase<T>
 {
     private readonly IThoughtGenerator<T> _generator;

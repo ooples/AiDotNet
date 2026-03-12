@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
@@ -12,10 +13,29 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// </summary>
 public class MambaLanguageModelTests
 {
+    private static NeuralNetworkArchitecture<float> CreateArch(int vocabSize = 100)
+    {
+        return new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.TextGeneration,
+            inputSize: vocabSize,
+            outputSize: vocabSize);
+    }
+
+    private static NeuralNetworkArchitecture<double> CreateDoubleArch(int vocabSize = 30)
+    {
+        return new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional,
+            NeuralNetworkTaskType.TextGeneration,
+            inputSize: vocabSize,
+            outputSize: vocabSize);
+    }
+
     [Fact]
     public void Constructor_ValidParameters_CreatesModel()
     {
         var model = new MambaLanguageModel<float>(
+            CreateArch(),
             vocabSize: 100, modelDimension: 32, numLayers: 2, stateDimension: 8);
 
         Assert.Equal(100, model.VocabSize);
@@ -28,32 +48,32 @@ public class MambaLanguageModelTests
     public void Constructor_ThrowsWhenVocabSizeNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new MambaLanguageModel<float>(vocabSize: 0));
+            new MambaLanguageModel<float>(CreateArch(1), vocabSize: 0));
     }
 
     [Fact]
     public void Constructor_ThrowsWhenModelDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new MambaLanguageModel<float>(vocabSize: 100, modelDimension: 0));
+            new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, modelDimension: 0));
     }
 
     [Fact]
     public void Constructor_ThrowsWhenNumLayersNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new MambaLanguageModel<float>(vocabSize: 100, numLayers: 0));
+            new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, numLayers: 0));
     }
 
     [Fact]
     public void Constructor_ThrowsWhenStateDimensionNotPositive()
     {
         Assert.Throws<ArgumentException>(() =>
-            new MambaLanguageModel<float>(vocabSize: 100, stateDimension: 0));
+            new MambaLanguageModel<float>(CreateArch(), vocabSize: 100, stateDimension: 0));
     }
 
     [Fact]
-    public void Forward_3D_ProducesCorrectOutputShape()
+    public void Predict_3D_ProducesCorrectOutputShape()
     {
         int batchSize = 2;
         int seqLen = 4;
@@ -61,80 +81,86 @@ public class MambaLanguageModelTests
         int modelDim = 32;
 
         var model = new MambaLanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
 
         var input = CreateOneHotInput(batchSize, seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
 
         Assert.Equal(new[] { batchSize, seqLen, vocabSize }, output.Shape);
         Assert.False(ContainsNaN(output));
     }
 
     [Fact]
-    public void Forward_2D_ProducesCorrectOutputShape()
+    public void Predict_2D_ProducesCorrectOutputShape()
     {
         int seqLen = 4;
         int vocabSize = 50;
         int modelDim = 32;
 
         var model = new MambaLanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
 
         var input = CreateOneHotInput(1, seqLen, vocabSize).Reshape(seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
 
         Assert.Equal(new[] { seqLen, vocabSize }, output.Shape);
         Assert.False(ContainsNaN(output));
     }
 
     [Fact]
-    public void Backward_ProducesValidGradients()
+    public void Backpropagate_ProducesValidGradients()
     {
         int seqLen = 4;
         int vocabSize = 50;
         int modelDim = 32;
 
         var model = new MambaLanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
 
+        model.SetTrainingMode(true);
         var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
+        model.SetTrainingMode(true); // Re-enable after Predict set it to false
         var grad = CreateRandomTensor(output.Shape);
-        var inputGrad = model.Backward(grad);
+        var inputGrad = model.Backpropagate(grad);
 
         Assert.Equal(input.Shape, inputGrad.Shape);
         Assert.False(ContainsNaN(inputGrad));
     }
 
     [Fact]
-    public void Backward_ThrowsWithoutForward()
+    public void Backpropagate_ThrowsWithoutTrainingMode()
     {
-        var model = new MambaLanguageModel<float>(50, 32, 2, 8, maxSeqLength: 4);
+        var model = new MambaLanguageModel<float>(
+            CreateArch(50), 50, 32, 2, 8, maxSeqLength: 4);
         var grad = CreateRandomTensor(new[] { 1, 4, 50 });
 
-        Assert.Throws<InvalidOperationException>(() => model.Backward(grad));
+        Assert.Throws<InvalidOperationException>(() => model.Backpropagate(grad));
     }
 
     [Fact]
-    public void FullTrainingStep_ForwardBackwardUpdate_NoErrors()
+    public void Train_ForwardBackwardUpdate_NoErrors()
     {
         int seqLen = 4;
         int vocabSize = 30;
         int modelDim = 16;
 
         var model = new MambaLanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
 
         var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output = model.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
-        model.Backward(grad);
-        model.UpdateParametersFromGradients(0.001f);
+        var expected = CreateOneHotInput(1, seqLen, vocabSize, seed: 99);
+
+        model.Train(input, expected);
 
         // Verify model still produces valid output after parameter update
         model.ResetState();
-        var output2 = model.Forward(input);
-        Assert.Equal(output.Shape, output2.Shape);
+        var output2 = model.Predict(input);
+        Assert.Equal(new[] { 1, seqLen, vocabSize }, output2.Shape);
         Assert.False(ContainsNaN(output2));
     }
 
@@ -142,6 +168,7 @@ public class MambaLanguageModelTests
     public void GetParameters_SetParameters_RoundTrip()
     {
         var model = new MambaLanguageModel<float>(
+            CreateArch(50),
             50, 32, numLayers: 2, stateDimension: 8, maxSeqLength: 4);
 
         var params1 = model.GetParameters();
@@ -161,27 +188,30 @@ public class MambaLanguageModelTests
     [Fact]
     public void SetParameters_ThrowsOnWrongLength()
     {
-        var model = new MambaLanguageModel<float>(50, 32, 2, 8, maxSeqLength: 4);
+        var model = new MambaLanguageModel<float>(
+            CreateArch(50), 50, 32, 2, 8, maxSeqLength: 4);
         Assert.Throws<ArgumentException>(() => model.SetParameters(new Vector<float>(10)));
     }
 
     [Fact]
-    public void Forward_DeterministicWithSameParameters()
+    public void Predict_DeterministicWithSameParameters()
     {
         int seqLen = 4;
         int vocabSize = 30;
         int modelDim = 16;
 
         var model1 = new MambaLanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
         var model2 = new MambaLanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
 
         model2.SetParameters(model1.GetParameters());
 
         var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output1 = model1.Forward(input);
-        var output2 = model2.Forward(input);
+        var output1 = model1.Predict(input);
+        var output2 = model2.Predict(input);
 
         var arr1 = output1.ToArray();
         var arr2 = output2.ToArray();
@@ -195,13 +225,14 @@ public class MambaLanguageModelTests
     [Fact]
     public void ResetState_AllowsReuse()
     {
-        var model = new MambaLanguageModel<float>(30, 16, 2, 4, maxSeqLength: 4);
+        var model = new MambaLanguageModel<float>(
+            CreateArch(30), 30, 16, 2, 4, maxSeqLength: 4);
         var input = CreateOneHotInput(1, 4, 30);
 
-        model.Forward(input);
+        model.Predict(input);
         model.ResetState();
 
-        var output = model.Forward(input);
+        var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.False(ContainsNaN(output));
     }
@@ -209,14 +240,16 @@ public class MambaLanguageModelTests
     [Fact]
     public void SupportsTraining_ReturnsTrue()
     {
-        var model = new MambaLanguageModel<float>(30, 16, 2, 4, maxSeqLength: 4);
+        var model = new MambaLanguageModel<float>(
+            CreateArch(30), 30, 16, 2, 4, maxSeqLength: 4);
         Assert.True(model.SupportsTraining);
     }
 
     [Fact]
     public void GetModelMetadata_ContainsExpectedKeys()
     {
-        var model = new MambaLanguageModel<float>(100, 64, 4, 16, maxSeqLength: 32);
+        var model = new MambaLanguageModel<float>(
+            CreateArch(100), 100, 64, 4, 16, maxSeqLength: 32);
         var metadata = model.GetModelMetadata();
 
         Assert.Equal(ModelType.NeuralNetwork, metadata.ModelType);
@@ -230,105 +263,20 @@ public class MambaLanguageModelTests
     }
 
     [Fact]
-    public void Forward_Double_ProducesValidOutput()
+    public void Predict_Double_ProducesValidOutput()
     {
         int seqLen = 4;
         int vocabSize = 30;
 
         var model = new MambaLanguageModel<double>(
+            CreateDoubleArch(vocabSize),
             vocabSize, 16, numLayers: 2, stateDimension: 4, maxSeqLength: seqLen);
 
         var input = CreateOneHotDoubleInput(1, seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
 
         Assert.Equal(new[] { 1, seqLen, vocabSize }, output.Shape);
         Assert.False(ContainsNaNDouble(output));
-    }
-
-    [Fact]
-    public void InitializeStateCache_CreatesCache()
-    {
-        var model = new MambaLanguageModel<float>(30, 16, 2, 4, maxSeqLength: 4);
-
-        var cache = model.InitializeStateCache();
-
-        Assert.NotNull(cache);
-        Assert.NotNull(model.StateCache);
-        Assert.Equal(0, cache.CachedLayerCount);
-        Assert.False(cache.CompressionEnabled);
-    }
-
-    [Fact]
-    public void InitializeStateCache_WithCompression_EnablesCompression()
-    {
-        var model = new MambaLanguageModel<float>(30, 16, 2, 4, maxSeqLength: 4);
-
-        var cache = model.InitializeStateCache(enableCompression: true, compressionBitWidth: 8);
-
-        Assert.True(cache.CompressionEnabled);
-    }
-
-    [Fact]
-    public void GenerateStep_ProducesValidLogits()
-    {
-        int vocabSize = 20;
-        var model = new MambaLanguageModel<float>(vocabSize, 16, 2, 4, maxSeqLength: 4);
-        model.InitializeStateCache();
-
-        // Create one-hot token
-        var token = new Tensor<float>(new[] { vocabSize });
-        token[5] = 1.0f; // Token index 5
-
-        var logits = model.GenerateStep(token);
-
-        Assert.Equal(new[] { vocabSize }, logits.Shape);
-        Assert.False(ContainsNaN(logits));
-    }
-
-    [Fact]
-    public void GenerateStep_MultipleSteps_ProducesValidLogits()
-    {
-        int vocabSize = 20;
-        var model = new MambaLanguageModel<float>(vocabSize, 16, 2, 4, maxSeqLength: 8);
-        model.InitializeStateCache();
-
-        var random = new Random(42);
-        for (int step = 0; step < 4; step++)
-        {
-            var token = new Tensor<float>(new[] { vocabSize });
-            token[random.Next(vocabSize)] = 1.0f;
-
-            var logits = model.GenerateStep(token);
-
-            Assert.Equal(new[] { vocabSize }, logits.Shape);
-            Assert.False(ContainsNaN(logits));
-        }
-    }
-
-    [Fact]
-    public void GenerateStep_ThrowsWithoutStateCache()
-    {
-        var model = new MambaLanguageModel<float>(20, 16, 2, 4, maxSeqLength: 4);
-        var token = new Tensor<float>(new[] { 20 });
-        token[0] = 1.0f;
-
-        Assert.Throws<InvalidOperationException>(() => model.GenerateStep(token));
-    }
-
-    [Fact]
-    public void ResetState_ClearsStateCache()
-    {
-        var model = new MambaLanguageModel<float>(20, 16, 2, 4, maxSeqLength: 4);
-        var cache = model.InitializeStateCache();
-
-        var token = new Tensor<float>(new[] { 20 });
-        token[3] = 1.0f;
-        model.GenerateStep(token);
-
-        model.ResetState();
-
-        // Cache should be reset (no cached layers)
-        Assert.Equal(0, cache.CachedLayerCount);
     }
 
     [Fact]
@@ -339,10 +287,11 @@ public class MambaLanguageModelTests
         int modelDim = 16;
 
         var model = new MambaLanguageModel<float>(
+            CreateArch(vocabSize),
             vocabSize, modelDim, numLayers: 4, stateDimension: 4, maxSeqLength: seqLen);
 
         var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output = model.Forward(input);
+        var output = model.Predict(input);
 
         // Output should not be all zeros or all same value
         var arr = output.ToArray();

@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -6,6 +7,7 @@ using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -13,9 +15,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <summary>Implementation of Steerable Conditional Neural Process (Holderrieth et al., 2021).</summary>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
-[ModelTask(ModelTask.Regression)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Equivariant Learning of Stochastic Fields",
+    "https://arxiv.org/abs/2106.10972",
+    Year = 2021,
+    Authors = "Peter Holderrieth, Michael J. Hutchinson, Yee Whye Teh")]
 public class SteerCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly SteerCNPOptions<T, TInput, TOutput> _algoOptions;

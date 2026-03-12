@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.GaussianProcesses;
 
 /// <summary>
@@ -35,6 +38,13 @@ namespace AiDotNet.GaussianProcesses;
 /// - For larger datasets, consider Sparse GP Classification (SVGP)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelCategory(ModelCategory.GaussianProcess)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Gaussian Processes for Machine Learning", "https://doi.org/10.7551/mitpress/3206.001.0001", Year = 2006, Authors = "Carl Edward Rasmussen, Christopher K. I. Williams")]
 public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
 {
     /// <summary>

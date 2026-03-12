@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -30,6 +31,17 @@ namespace AiDotNet.Safety.Multimodal;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MM-SafetyBench: A Benchmark for Safety Evaluation of Multimodal Large Language Models",
+    "https://arxiv.org/abs/2311.17600",
+    Year = 2024,
+    Authors = "Xin Liu, Yichen Zhu, Yunshi Lan, et al.")]
 public class MultimodalGuardrail<T> : MultimodalSafetyModuleBase<T>
 {
     private readonly IReadOnlyList<ITextSafetyModule<T>> _textModules;

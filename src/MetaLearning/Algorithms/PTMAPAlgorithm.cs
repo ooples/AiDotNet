@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -83,10 +85,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Leveraging the Feature Distribution in Transfer-based Few-Shot Learning", "https://arxiv.org/abs/2006.03806", Year = 2021, Authors = "Hu et al.")]
+[ModelPaper("Leveraging the Feature Distribution in Transfer-based Few-Shot Learning",
+    "https://arxiv.org/abs/2006.03806",
+    Year = 2021,
+    Authors = "Yuqing Hu, Vincent Gripon, Stephane Pateux")]
 public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly PTMAPOptions<T, TInput, TOutput> _ptmapOptions;
@@ -323,9 +329,11 @@ public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 /// are processed jointly for better transductive classification.
 /// </para>
 /// </remarks>
-internal class PTMAPModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+internal class PTMAPModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private Vector<T> _backboneParams;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _refinedWeights;
     private readonly double[]? _modulationFactors;
 
@@ -335,21 +343,27 @@ internal class PTMAPModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput,
     /// <inheritdoc/>
     public double[]? ParameterModulationFactors => _modulationFactors;
 
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
     public PTMAPModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
         Vector<T>? refinedWeights, double[]? modulationFactors)
-        : base(model)
     {
+        _model = model;
         _backboneParams = backboneParams;
         _refinedWeights = refinedWeights;
         _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
-    public override TOutput Predict(TInput input)
+    public TOutput Predict(TInput input)
     {
+        // Start from backbone parameters, optionally adjusted by refined MAP weights
         Vector<T> baseParams;
         if (_refinedWeights != null && _refinedWeights.Length > 0)
         {
+            // Use refined MAP weights to adjust backbone: blend refined transductive
+            // assignments into parameter modulation for query-time adaptation
             double sumAbs = 0;
             for (int i = 0; i < _refinedWeights.Length; i++)
                 sumAbs += Math.Abs(NumOps.ToDouble(_refinedWeights[i]));
@@ -371,35 +385,19 @@ internal class PTMAPModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput,
             for (int i = 0; i < baseParams.Length; i++)
                 modulated[i] = NumOps.Multiply(baseParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            BaseModel.SetParameters(modulated);
+            _model.SetParameters(modulated);
         }
         else
         {
-            BaseModel.SetParameters(baseParams);
+            _model.SetParameters(baseParams);
         }
-        return BaseModel.Predict(input);
+        return _model.Predict(input);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _backboneParams;
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _backboneParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        return new PTMAPModel<T, TInput, TOutput>(BaseModel, parameters, _refinedWeights, _modulationFactors);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new PTMAPModel<T, TInput, TOutput>(
-            BaseModel.DeepCopy(), _backboneParams.Clone(), _refinedWeights?.Clone(),
-            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
-    }
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

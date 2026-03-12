@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -40,6 +42,13 @@ namespace AiDotNet.ContinualLearning;
 /// Psychological Review. (Original concept); Rolnick et al. "Experience Replay for Continual
 /// Learning" (2019). NeurIPS. (Modern application)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Experience Replay for Continual Learning", "https://arxiv.org/abs/1811.11682", Year = 2019, Authors = "David Rolnick, Arun Ahuja, Jonathan Schwarz, Timothy Lillicrap, Gregory Wayne")]
 public class ExperienceReplay<T> : IContinualLearningStrategy<T>
 {
     /// <summary>

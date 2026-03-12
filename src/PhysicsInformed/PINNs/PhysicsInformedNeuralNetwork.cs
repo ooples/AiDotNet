@@ -12,6 +12,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed.PINNs
@@ -67,6 +69,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// They've revolutionized scientific machine learning by showing that deep learning
     /// can be guided by physics rather than just data.
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations", "https://doi.org/10.1016/j.jcp.2018.10.045", Year = 2019, Authors = "M. Raissi, P. Perdikaris, G.E. Karniadakis")]
     public class PhysicsInformedNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly PhysicsInformedNeuralNetworkOptions _options;

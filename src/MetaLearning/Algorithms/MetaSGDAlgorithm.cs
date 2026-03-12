@@ -1,10 +1,12 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 using AiDotNet.Data.Structures;
 
@@ -85,10 +87,15 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-SGD: Learning to Learn Quickly for Few-Shot Learning", "https://arxiv.org/abs/1707.09835", Year = 2017, Authors = "Zhenguo Li, Fengwei Zhou, Fei Chen, Hang Li")]
+[ModelPaper("Meta-SGD: Learning to Learn Quickly for Few-Shot Learning",
+    "https://arxiv.org/abs/1707.09835",
+    Year = 2017,
+    Authors = "Zhenguo Li, Fengwei Zhou, Fei Chen, Hang Li")]
 public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaSGDOptions<T, TInput, TOutput> _metaSGDOptions;
@@ -1092,14 +1099,9 @@ public class PerParameterOptimizer<T, TInput, TOutput>
 /// allowing for further adaptation or inspection of learned coefficients.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.MetaLearning)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-SGD: Learning to Learn Quickly for Few-Shot Learning", "https://arxiv.org/abs/1707.09835", Year = 2017, Authors = "Zhenguo Li, Fengwei Zhou, Fei Chen, Hang Li")]
-public class MetaSGDAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+public class MetaSGDAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
+    private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly PerParameterOptimizer<T, TInput, TOutput> _optimizer;
     private readonly MetaSGDOptions<T, TInput, TOutput> _options;
 
@@ -1113,8 +1115,9 @@ public class MetaSGDAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, 
         IFullModel<T, TInput, TOutput> model,
         PerParameterOptimizer<T, TInput, TOutput> optimizer,
         MetaSGDOptions<T, TInput, TOutput> options)
-        : base(model)
     {
+        Guard.NotNull(model);
+        _model = model;
         Guard.NotNull(optimizer);
         _optimizer = optimizer;
         Guard.NotNull(options);
@@ -1122,39 +1125,66 @@ public class MetaSGDAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, 
     }
 
     /// <summary>
+    /// Gets the model metadata.
+    /// </summary>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
+    /// <summary>
     /// Gets the per-parameter optimizer (for inspection or further adaptation).
     /// </summary>
     public PerParameterOptimizer<T, TInput, TOutput> Optimizer => _optimizer;
 
-    /// <inheritdoc/>
-    public override TOutput Predict(TInput input)
+    /// <summary>
+    /// Makes predictions using the adapted model.
+    /// </summary>
+    /// <param name="input">The input data.</param>
+    /// <returns>The model predictions.</returns>
+    public TOutput Predict(TInput input)
     {
-        return BaseModel.Predict(input);
+        return _model.Predict(input);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters()
+    /// <summary>
+    /// Trains the model on the given data.
+    /// </summary>
+    /// <param name="inputs">The input data.</param>
+    /// <param name="targets">The target outputs.</param>
+    /// <remarks>
+    /// <para>
+    /// For Meta-SGD adapted models, training is typically done through the
+    /// meta-learning adaptation process rather than direct training.
+    /// This method delegates to the underlying model's training.
+    /// </para>
+    /// </remarks>
+    public void Train(TInput inputs, TOutput targets)
     {
-        return BaseModel.GetParameters();
+        _model.Train(inputs, targets);
     }
 
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    /// <summary>
+    /// Gets the model metadata.
+    /// </summary>
+    /// <returns>The metadata for this model.</returns>
+    public ModelMetadata<T> GetModelMetadata()
     {
-        Guard.NotNull(parameters);
-        BaseModel.SetParameters(parameters);
+        return Metadata;
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    /// <summary>
+    /// Gets the current model parameters.
+    /// </summary>
+    /// <returns>The parameter vector.</returns>
+    public Vector<T> GetParameters()
     {
-        var model = BaseModel.WithParameters(parameters);
-        return new MetaSGDAdaptedModel<T, TInput, TOutput>(model, _optimizer, _options);
+        return _model.GetParameters();
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    /// <summary>
+    /// Sets the model parameters.
+    /// </summary>
+    /// <param name="parameters">The new parameters.</param>
+    public void SetParameters(Vector<T> parameters)
     {
-        return new MetaSGDAdaptedModel<T, TInput, TOutput>(BaseModel.DeepCopy(), _optimizer, _options);
+        _model.SetParameters(parameters);
     }
 }

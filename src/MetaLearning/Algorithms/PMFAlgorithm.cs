@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -40,10 +42,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Pushing the Limits of Simple Pipelines for Few-Shot Learning", "https://arxiv.org/abs/2204.07159", Year = 2022, Authors = "Hu et al.")]
+[ModelPaper("Pushing the Limits of Simple Pipelines for Few-Shot Learning: External Data and Fine-Tuning Make a Difference",
+    "https://arxiv.org/abs/2204.07305",
+    Year = 2022,
+    Authors = "Shell Xu Hu, Da Li, Jan Stuhmer, Minyoung Kim, Timothy M. Hospedales")]
 public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly PMFOptions<T, TInput, TOutput> _pmfOptions;
@@ -155,37 +161,21 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 }
 
 /// <summary>Adapted model wrapper for PMF.</summary>
-internal class PMFModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+internal class PMFModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private Vector<T> _params;
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _params;
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     public PMFModel(IFullModel<T, TInput, TOutput> model, Vector<T> adaptedParams)
-        : base(model)
-    {
-        _params = adaptedParams;
-    }
+    { _model = model; _params = adaptedParams; }
 
     /// <inheritdoc/>
-    public override TOutput Predict(TInput input) { BaseModel.SetParameters(_params); return BaseModel.Predict(input); }
-
+    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
     /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _params;
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _params = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        return new PMFModel<T, TInput, TOutput>(BaseModel, parameters);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new PMFModel<T, TInput, TOutput>(BaseModel.DeepCopy(), _params.Clone());
-    }
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

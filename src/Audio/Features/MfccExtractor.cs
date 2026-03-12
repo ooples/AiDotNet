@@ -42,6 +42,7 @@ namespace AiDotNet.Audio.Features;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Comparison of Parametric Representations for Monosyllabic Word Recognition in Continuously Spoken Sentences", "https://doi.org/10.1109/TASSP.1980.1163420", Year = 1980, Authors = "Steven B. Davis, Paul Mermelstein")]
 public class MfccExtractor<T> : AudioFeatureExtractorBase<T>
 {
     private readonly MelSpectrogram<T> _melSpectrogram;

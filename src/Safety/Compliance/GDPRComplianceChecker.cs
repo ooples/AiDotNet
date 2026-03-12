@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -37,6 +38,15 @@ namespace AiDotNet.Safety.Compliance;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GDPR (Regulation 2016/679)",
+    "https://eur-lex.europa.eu/eli/reg/2016/679",
+    Year = 2016,
+    Authors = "European Parliament and Council")]
 public class GDPRComplianceChecker<T> : ITextSafetyModule<T>
 {
     private readonly SafetyConfig _config;

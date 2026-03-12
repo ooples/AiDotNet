@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -64,6 +65,13 @@ namespace AiDotNet.Finance.Probabilistic;
 /// https://arxiv.org/abs/2106.10121
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("ScoreGrad: Multivariate Probabilistic Time Series Forecasting with Continuous Energy-based Generative Models", "https://arxiv.org/abs/2106.10121", Year = 2021, Authors = "Tijin Yan, Hongwei Zhang, Tong Zhou, Yufeng Zhan, Yuanqing Xia")]
 public class ScoreGrad<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -46,6 +47,14 @@ namespace AiDotNet.Document.Analysis.TableDetection;
 /// https://arxiv.org/abs/2110.00061
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PubTables-1M: Towards Comprehensive Table Extraction from Unstructured Documents", "https://doi.org/10.48550/arXiv.2110.00061", Year = 2022, Authors = "Brandon Smock, Rohith Pesala, Robin Abraham")]
 public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor<T>
 {
     private readonly TableTransformerOptions _options;

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using Newtonsoft.Json;
 
 namespace AiDotNet.TimeSeries;
@@ -30,6 +32,13 @@ namespace AiDotNet.TimeSeries;
 /// This makes TBATS particularly useful for complex forecasting problems where simpler methods fail.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Forecasting time series with complex seasonal patterns using exponential smoothing", "https://doi.org/10.1198/jasa.2011.tm09771", Year = 2011, Authors = "Alysha M. De Livera, Rob J. Hyndman, Ralph D. Snyder")]
 public class TBATSModel<T> : TimeSeriesModelBase<T>
 {
     /// <summary>

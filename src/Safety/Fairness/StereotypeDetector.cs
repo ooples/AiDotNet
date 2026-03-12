@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -29,6 +30,16 @@ namespace AiDotNet.Safety.Fairness;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("StereoSet: Measuring Stereotypical Bias in Pretrained Language Models",
+    "https://arxiv.org/abs/2004.09456",
+    Year = 2021,
+    Authors = "Moin Nadeem, Anna Bethke, Siva Reddy")]
 public class StereotypeDetector<T> : ITextSafetyModule<T>
 {
     private readonly double _threshold;

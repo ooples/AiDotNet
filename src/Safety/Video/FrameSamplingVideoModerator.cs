@@ -1,7 +1,9 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Safety.Image;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Video;
 
@@ -33,6 +35,16 @@ namespace AiDotNet.Safety.Video;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Efficient Video Understanding via Temporal Sampling Strategies",
+    "https://arxiv.org/abs/2312.14135",
+    Year = 2024,
+    Authors = "Various")]
 public class FrameSamplingVideoModerator<T> : VideoSafetyModuleBase<T>
 {
     private readonly CLIPImageSafetyClassifier<T> _imageClassifier;

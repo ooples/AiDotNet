@@ -39,8 +39,9 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.SourceSeparation)]
-[ModelComplexity(ModelComplexity.High)]
+[ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SCNet: Sparse Compression Network for Music Source Separation", "https://doi.org/10.48550/arXiv.2401.13276", Year = 2024, Authors = "Jiaqi Chen, Weijin Song, Hehe Fan, Yi Yang")]
 public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     #region Fields

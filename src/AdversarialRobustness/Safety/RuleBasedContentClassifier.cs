@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Serialization;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
@@ -20,6 +22,13 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 /// fast, interpretable, and doesn't require training data.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Automated Hate Speech Detection and the Problem of Offensive Language", "https://arxiv.org/abs/1703.04009", Year = 2017, Authors = "Thomas Davidson, Dana Warmsley, Michael Macy, Ingmar Weber")]
 public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
 {
     /// <summary>

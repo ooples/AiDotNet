@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -45,6 +47,17 @@ namespace AiDotNet.Video.Enhancement;
 /// Super-Resolution" (2025)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DualX-VSR: Dual Axial Spatial-Temporal Transformer for Video Super-Resolution",
+    "https://arxiv.org/abs/2501.07894",
+    Year = 2025,
+    Authors = "Pinle Qin, Jie Huang, Zhuo Chen, Rong Huang, Zechao Li")]
 public class DualXVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

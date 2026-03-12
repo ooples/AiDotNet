@@ -1,7 +1,10 @@
 using System.Collections.Generic;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -72,6 +75,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Tung & Mori (2019). Similarity-Preserving Knowledge Distillation. ICCV.
 /// - Peng et al. (2019). Correlation Congruence for Knowledge Distillation. ICCV.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Relational Knowledge Distillation",
+    "https://arxiv.org/abs/1904.05068",
+    Year = 2019,
+    Authors = "Wonpyo Park, Dongju Kim, Yan Lu, Minsu Cho")]
 public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _distanceWeight;

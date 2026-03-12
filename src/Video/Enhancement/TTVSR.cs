@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -45,6 +47,17 @@ namespace AiDotNet.Video.Enhancement;
 /// Super-Resolution" (Liu et al., ECCV 2022)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning Trajectory-Aware Transformer for Video Super-Resolution",
+    "https://arxiv.org/abs/2204.04216",
+    Year = 2022,
+    Authors = "Chengxu Liu, Huan Yang, Jianlong Fu, Xueming Qian")]
 public class TTVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

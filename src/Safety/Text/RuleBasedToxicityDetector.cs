@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Safety;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Text;
 
@@ -35,6 +37,16 @@ namespace AiDotNet.Safety.Text;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GPT-3.5/Llama 2 Achieving 80-90% Accuracy in Hate Speech Identification",
+    "https://arxiv.org/abs/2403.08035",
+    Year = 2024,
+    Authors = "Various")]
 public class RuleBasedToxicityDetector<T> : TextSafetyModuleBase<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);

@@ -1,14 +1,13 @@
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
-using AiDotNet.Helpers;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 using AiDotNet.Data.Structures;
 
@@ -102,10 +101,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Neural Turing Machines", "https://arxiv.org/abs/1410.5401", Year = 2014, Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
+[ModelPaper("Neural Turing Machines",
+    "https://arxiv.org/abs/1410.5401",
+    Year = 2014,
+    Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
 public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly NTMOptions<T, TInput, TOutput> _ntmOptions;
@@ -698,411 +701,12 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 }
 
 /// <summary>
-/// Adapter that wraps an <see cref="INTMController{T}"/> as an <see cref="IFullModel{T, TInput, TOutput}"/>,
-/// enabling NTM models to participate in the standard meta-learning model hierarchy.
-/// </summary>
-/// <typeparam name="T">The numeric type.</typeparam>
-/// <typeparam name="TInput">The input data type.</typeparam>
-/// <typeparam name="TOutput">The output data type.</typeparam>
-/// <remarks>
-/// <para>
-/// The NTM controller has its own interface (<see cref="INTMController{T}"/>) with NTM-specific
-/// methods (Forward, GenerateReadKeys, etc.) that don't map directly to <see cref="IFullModel{T, TInput, TOutput}"/>.
-/// This adapter bridges the gap by delegating parameter management to the controller and providing
-/// standalone prediction capability (controller-only, without external memory).
-/// </para>
-/// <para><b>For Beginners:</b> Think of this as a translator that lets the NTM controller
-/// speak the same "language" as all other models in the system. The full NTM system
-/// (controller + memory + read/write heads) is managed by <see cref="NTMModel{T, TInput, TOutput}"/>,
-/// which uses this adapter internally to satisfy the model hierarchy requirements.</para>
-/// </remarks>
-internal class NTMControllerAdapter<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
-{
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    private readonly INTMController<T> _controller;
-    private readonly NTMOptions<T, TInput, TOutput> _options;
-    private readonly ILossFunction<T> _defaultLossFunction;
-
-    /// <summary>
-    /// Gets the wrapped NTM controller for direct access to NTM-specific operations.
-    /// </summary>
-    internal INTMController<T> Controller => _controller;
-
-    /// <summary>
-    /// Initializes a new adapter wrapping the given NTM controller.
-    /// </summary>
-    /// <param name="controller">The NTM controller to wrap.</param>
-    /// <param name="options">NTM configuration options.</param>
-    public NTMControllerAdapter(INTMController<T> controller, NTMOptions<T, TInput, TOutput> options)
-    {
-        Guard.NotNull(controller);
-        _controller = controller;
-        Guard.NotNull(options);
-        _options = options;
-        _defaultLossFunction = options.LossFunction
-            ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification);
-    }
-
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-
-    /// <inheritdoc/>
-    public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
-
-    /// <summary>
-    /// Performs a standalone forward pass through the controller without external memory.
-    /// </summary>
-    /// <remarks>
-    /// This runs the controller with zero-initialized read contents and generates output
-    /// directly from the controller's hidden state. For full NTM inference with memory,
-    /// use <see cref="NTMModel{T, TInput, TOutput}.Predict"/> instead.
-    /// </remarks>
-    public TOutput Predict(TInput input)
-    {
-        var inputTensor = ConvertInputToTensor(input);
-
-        // Initialize empty read contents for standalone prediction
-        var readContents = new List<Tensor<T>>();
-        for (int i = 0; i < _options.NumReadHeads; i++)
-        {
-            readContents.Add(new Tensor<T>(new int[] { _options.MemoryWidth }));
-        }
-
-        // Concatenate input with read contents to match controller's expected input format
-        int inputSize = inputTensor.Shape.Length > 0 ? inputTensor.Shape[0] : 0;
-        int readSize = readContents.Sum(r => r.Shape.Length > 0 ? r.Shape[0] : 0);
-        var combinedInput = new Tensor<T>(new int[] { inputSize + readSize });
-        int idx = 0;
-        for (int i = 0; i < inputSize; i++)
-        {
-            combinedInput[idx++] = inputTensor[i];
-        }
-        foreach (var rc in readContents)
-        {
-            int size = rc.Shape.Length > 0 ? rc.Shape[0] : 0;
-            for (int i = 0; i < size; i++)
-            {
-                combinedInput[idx++] = rc[i];
-            }
-        }
-
-        var controllerOutput = _controller.Forward(combinedInput, readContents);
-        var output = _controller.GenerateOutput(controllerOutput, readContents);
-
-        return ConvertTensorToOutput(output);
-    }
-
-    /// <inheritdoc/>
-    public void Train(TInput input, TOutput expectedOutput)
-    {
-        throw new NotSupportedException(
-            "Direct training is not supported for NTMControllerAdapter. " +
-            "Use NTMAlgorithm to train the NTM system.");
-    }
-
-    /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
-
-    // --- IParameterizable ---
-
-    /// <inheritdoc/>
-    public Vector<T> GetParameters() => _controller.GetParameters();
-
-    /// <inheritdoc/>
-    public void SetParameters(Vector<T> parameters)
-    {
-        Guard.NotNull(parameters);
-        _controller.SetParameters(parameters);
-    }
-
-    /// <inheritdoc/>
-    public int ParameterCount => _controller.GetParameters().Length;
-
-    /// <inheritdoc/>
-    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        var newController = new LSTMNTMController<T, TInput, TOutput>(_options);
-        newController.SetParameters(parameters);
-        return new NTMControllerAdapter<T, TInput, TOutput>(newController, _options);
-    }
-
-    // --- ICloneable ---
-
-    /// <inheritdoc/>
-    public IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        var newController = new LSTMNTMController<T, TInput, TOutput>(_options);
-        newController.SetParameters(_controller.GetParameters());
-        return new NTMControllerAdapter<T, TInput, TOutput>(newController, _options);
-    }
-
-    /// <inheritdoc/>
-    public IFullModel<T, TInput, TOutput> Clone() => DeepCopy();
-
-    // --- IGradientComputable ---
-
-    /// <summary>
-    /// Computes gradients using finite difference approximation through the controller.
-    /// </summary>
-    /// <remarks>
-    /// Since the NTM controller uses custom LSTM computation that doesn't integrate with
-    /// automatic differentiation, this method uses forward-mode finite differences.
-    /// The NTMAlgorithm's training loop uses this for meta-gradient computation.
-    /// </remarks>
-    public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
-    {
-        var loss = lossFunction ?? _defaultLossFunction;
-        var parameters = _controller.GetParameters();
-        var gradients = new Vector<T>(parameters.Length);
-        double epsilon = 1e-7;
-
-        // Compute baseline prediction and loss
-        var basePrediction = Predict(input);
-        var basePredVector = OutputToVector(basePrediction);
-        var targetVector = OutputToVector(target);
-        T baseLoss = loss.CalculateLoss(basePredVector, targetVector);
-        double baseLossVal = NumOps.ToDouble(baseLoss);
-
-        // Finite difference gradient for each parameter
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            T original = parameters[i];
-            parameters[i] = NumOps.Add(original, NumOps.FromDouble(epsilon));
-            _controller.SetParameters(parameters);
-
-            var perturbedPrediction = Predict(input);
-            var perturbedPredVector = OutputToVector(perturbedPrediction);
-            T perturbedLoss = loss.CalculateLoss(perturbedPredVector, targetVector);
-            double perturbedLossVal = NumOps.ToDouble(perturbedLoss);
-
-            gradients[i] = NumOps.FromDouble((perturbedLossVal - baseLossVal) / epsilon);
-            parameters[i] = original;
-        }
-
-        // Restore original parameters
-        _controller.SetParameters(parameters);
-        return gradients;
-    }
-
-    /// <inheritdoc/>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        var parameters = _controller.GetParameters();
-        if (gradients.Length != parameters.Length)
-        {
-            throw new ArgumentException(
-                $"Gradient length mismatch: expected {parameters.Length}, got {gradients.Length}.",
-                nameof(gradients));
-        }
-
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            parameters[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
-
-        _controller.SetParameters(parameters);
-    }
-
-    // --- IModelSerializer ---
-
-    /// <inheritdoc/>
-    public byte[] Serialize()
-    {
-        var parameters = _controller.GetParameters();
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(parameters[i]));
-        }
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public void Deserialize(byte[] data)
-    {
-        Guard.NotNull(data);
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        int length = reader.ReadInt32();
-        var parameters = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _controller.SetParameters(parameters);
-    }
-
-    /// <inheritdoc/>
-    public void SaveModel(string filePath)
-    {
-        Guard.NotNullOrWhiteSpace(filePath);
-        File.WriteAllBytes(filePath, Serialize());
-    }
-
-    /// <inheritdoc/>
-    public void LoadModel(string filePath)
-    {
-        Guard.NotNullOrWhiteSpace(filePath);
-        Deserialize(File.ReadAllBytes(filePath));
-    }
-
-    // --- ICheckpointableModel ---
-
-    /// <inheritdoc/>
-    public void SaveState(Stream stream)
-    {
-        Guard.NotNull(stream);
-        var data = Serialize();
-        using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
-        writer.Write(data.Length);
-        writer.Write(data);
-    }
-
-    /// <inheritdoc/>
-    public void LoadState(Stream stream)
-    {
-        Guard.NotNull(stream);
-        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
-        int length = reader.ReadInt32();
-        var data = reader.ReadBytes(length);
-        Deserialize(data);
-    }
-
-    // --- IFeatureAware ---
-
-    /// <inheritdoc/>
-    public IEnumerable<int> GetActiveFeatureIndices()
-    {
-        // The controller processes all input dimensions
-        return Enumerable.Range(0, _options.MemoryWidth);
-    }
-
-    /// <inheritdoc/>
-    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
-    {
-        // NTM controller always processes all input dimensions;
-        // feature selection is not applicable to memory-augmented architectures
-    }
-
-    /// <inheritdoc/>
-    public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _options.MemoryWidth;
-
-    // --- IFeatureImportance ---
-
-    /// <inheritdoc/>
-    public Dictionary<string, T> GetFeatureImportance()
-    {
-        // NTM uses attention-based memory addressing; per-input-feature importance
-        // is not directly available. Return uniform importance across input dimensions.
-        var importance = new Dictionary<string, T>();
-        T uniformWeight = NumOps.FromDouble(1.0 / Math.Max(_options.MemoryWidth, 1));
-        for (int i = 0; i < _options.MemoryWidth; i++)
-        {
-            importance[$"feature_{i}"] = uniformWeight;
-        }
-        return importance;
-    }
-
-    // --- IJitCompilable ---
-
-    /// <inheritdoc/>
-    public bool SupportsJitCompilation => false;
-
-    /// <inheritdoc/>
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "JIT compilation is not supported for NTM controllers due to their " +
-            "dynamic memory access patterns and stateful LSTM computation.");
-    }
-
-    // --- Private helpers ---
-
-    private Tensor<T> ConvertInputToTensor(TInput input)
-    {
-        if (input is Tensor<T> tensor)
-            return tensor;
-
-        if (input is Vector<T> vector)
-        {
-            var result = new Tensor<T>(new int[] { vector.Length });
-            for (int i = 0; i < vector.Length; i++)
-            {
-                result[i] = vector[i];
-            }
-            return result;
-        }
-
-        return new Tensor<T>(new int[] { _options.MemoryWidth });
-    }
-
-    private TOutput ConvertTensorToOutput(Tensor<T> tensor)
-    {
-        if (typeof(TOutput) == typeof(Tensor<T>))
-            return (TOutput)(object)tensor;
-
-        if (typeof(TOutput) == typeof(Vector<T>))
-            return (TOutput)(object)tensor.ToVector();
-
-        return (TOutput)(object)tensor;
-    }
-
-    private Vector<T> OutputToVector(TOutput output)
-    {
-        if (output is Vector<T> vec)
-            return vec;
-
-        if (output is Tensor<T> tensor)
-            return tensor.ToVector();
-
-        if (output is Matrix<T> matrix)
-        {
-            var result = new Vector<T>(matrix.Rows * matrix.Columns);
-            int i = 0;
-            for (int r = 0; r < matrix.Rows; r++)
-            {
-                for (int c = 0; c < matrix.Columns; c++)
-                {
-                    result[i++] = matrix[r, c];
-                }
-            }
-            return result;
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot convert output type '{typeof(TOutput).Name}' to Vector<{typeof(T).Name}>.");
-    }
-}
-
-/// <summary>
 /// NTM model for inference with persistent memory.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
-/// <remarks>
-/// <para>
-/// This model encapsulates the full Neural Turing Machine inference pipeline: an LSTM controller
-/// processes inputs, generates addressing keys for external memory, reads from and writes to
-/// memory via attention-based heads, and produces output conditioned on both the controller
-/// state and retrieved memory contents.
-/// </para>
-/// <para><b>For Beginners:</b> A Neural Turing Machine is like a neural network with a
-/// "notebook" (external memory). The controller decides what to read from and write to the
-/// notebook, allowing the model to store and retrieve information across many timesteps.
-/// After adapting to a new task, the memory contains support set information that helps
-/// classify new examples.</para>
-/// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.MetaLearning)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Neural Turing Machines", "https://arxiv.org/abs/1410.5401", Year = 2014, Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
-public class NTMModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly INTMController<T> _controller;
     private readonly NTMMemory<T> _memory;
@@ -1120,8 +724,8 @@ public class NTMModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOu
         List<NTMReadHead<T>> readHeads,
         NTMWriteHead<T> writeHead,
         NTMOptions<T, TInput, TOutput> options)
-        : base(new NTMControllerAdapter<T, TInput, TOutput>(controller, options))
     {
+        Guard.NotNull(controller);
         _controller = controller;
         Guard.NotNull(memory);
         _memory = memory;
@@ -1140,10 +744,11 @@ public class NTMModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOu
         }
     }
 
-    /// <summary>
-    /// Performs a full NTM forward pass: controller processes input with memory read/write operations.
-    /// </summary>
-    public override TOutput Predict(TInput input)
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
+    /// <inheritdoc/>
+    public TOutput Predict(TInput input)
     {
         // Convert input to tensor format
         var inputTensor = ConvertInputToTensor(input);
@@ -1224,102 +829,6 @@ public class NTMModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOu
         }
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _controller.GetParameters();
-
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        Guard.NotNull(parameters);
-        _controller.SetParameters(parameters);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        var newController = new LSTMNTMController<T, TInput, TOutput>(_options);
-        newController.SetParameters(parameters);
-        return new NTMModel<T, TInput, TOutput>(
-            newController,
-            _memory.Clone(),
-            _readHeads.Select(rh => rh.Clone()).ToList(),
-            _writeHead.Clone(),
-            _options);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        var newController = new LSTMNTMController<T, TInput, TOutput>(_options);
-        newController.SetParameters(_controller.GetParameters());
-        return new NTMModel<T, TInput, TOutput>(
-            newController,
-            _memory.Clone(),
-            _readHeads.Select(rh => rh.Clone()).ToList(),
-            _writeHead.Clone(),
-            _options);
-    }
-
-    /// <summary>
-    /// Serializes the NTM controller parameters and memory configuration.
-    /// </summary>
-    /// <remarks>
-    /// Only the controller's learned parameters are serialized. Memory contents are transient
-    /// and reconstructed during adaptation via <see cref="NTMAlgorithm{T, TInput, TOutput}.Adapt"/>,
-    /// which processes the support set to initialize memory state.
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize controller parameters (the learned weights)
-        var controllerData = BaseModel.Serialize();
-        writer.Write(controllerData.Length);
-        writer.Write(controllerData);
-
-        // Serialize memory configuration for reconstruction
-        writer.Write(_memory.Size);
-        writer.Write(_memory.Width);
-        writer.Write(_readHeads.Count);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the NTM controller parameters and validates memory configuration.
-    /// </summary>
-    public override void Deserialize(byte[] data)
-    {
-        Guard.NotNull(data);
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize controller parameters
-        int controllerDataLen = reader.ReadInt32();
-        var controllerData = reader.ReadBytes(controllerDataLen);
-        BaseModel.Deserialize(controllerData);
-
-        // Read and validate memory configuration
-        int memSize = reader.ReadInt32();
-        int memWidth = reader.ReadInt32();
-        int numReadHeads = reader.ReadInt32();
-
-        if (memSize != _memory.Size || memWidth != _memory.Width)
-        {
-            throw new InvalidOperationException(
-                $"Memory configuration mismatch: serialized ({memSize}x{memWidth}) " +
-                $"vs current ({_memory.Size}x{_memory.Width}). " +
-                "Reconstruct the NTMModel with matching options before deserializing.");
-        }
-
-        if (numReadHeads != _readHeads.Count)
-        {
-            throw new InvalidOperationException(
-                $"Read head count mismatch: serialized {numReadHeads} vs current {_readHeads.Count}.");
-        }
-    }
-
     /// <summary>
     /// Converts input to tensor format.
     /// </summary>
@@ -1388,6 +897,30 @@ public class NTMModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOu
 
         // Default: return the tensor cast to TOutput
         return (TOutput)(object)tensor;
+    }
+
+    /// <inheritdoc/>
+    public void Train(TInput inputs, TOutput targets)
+    {
+        throw new NotSupportedException("Use the training algorithm to train NTM.");
+    }
+
+    /// <inheritdoc/>
+    public void UpdateParameters(Vector<T> parameters)
+    {
+        throw new NotSupportedException("NTM parameters are updated during training.");
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> GetParameters()
+    {
+        return _controller.GetParameters();
+    }
+
+    /// <inheritdoc/>
+    public ModelMetadata<T> GetModelMetadata()
+    {
+        return Metadata;
     }
 }
 

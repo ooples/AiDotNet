@@ -1,6 +1,9 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
@@ -22,6 +25,16 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 ///
 /// <para>Reference: Liu et al., "Swin Transformer: Hierarchical Vision Transformer using Shifted Windows", ICCV 2021</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Swin Transformer: Hierarchical Vision Transformer using Shifted Windows",
+    "https://arxiv.org/abs/2103.14030",
+    Year = 2021,
+    Authors = "Ze Liu, Yutong Lin, Yue Cao, Han Hu, Yixuan Wei, Zheng Zhang, Stephen Lin, Baining Guo")]
 public class SwinTransformer<T> : BackboneBase<T>
 {
     private readonly PatchEmbeddingBlock<T> _patchEmbed;

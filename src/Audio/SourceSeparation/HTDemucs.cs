@@ -35,11 +35,12 @@ namespace AiDotNet.Audio.SourceSeparation;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SourceSeparation)]
-[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Hybrid Transformers for Music Source Separation", "https://arxiv.org/abs/2211.08553", Year = 2023, Authors = "Simon Rouard, Francisco Massa, Alexandre Défossez")]
+[ModelPaper("Hybrid Transformers for Music Source Separation", "https://doi.org/10.1109/ICASSP49357.2023.10096956", Year = 2023, Authors = "Simon Rouard, Francisco Massa, Alexandre Défossez")]
 public class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     #region Fields

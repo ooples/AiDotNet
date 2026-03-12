@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -41,6 +42,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.DDPG;
 /// Lillicrap et al., "Continuous control with deep reinforcement learning", 2015.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Continuous Control with Deep Reinforcement Learning",
+    "https://arxiv.org/abs/1509.02971",
+    Year = 2016,
+    Authors = "Lillicrap, T. P., Hunt, J. J., Pritzel, A., Heess, N., Erez, T., Tassa, Y., Silver, D., & Wierstra, D.")]
 public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DDPGOptions<T> _options;

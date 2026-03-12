@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -92,10 +94,15 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning with Warped Gradient Descent", "https://arxiv.org/abs/1909.00025", Year = 2020, Authors = "Flennerhag et al.")]
+[ModelPaper("Meta-Learning with Warped Gradient Descent",
+    "https://arxiv.org/abs/1909.00025",
+    Year = 2020,
+    Authors = "Flennerhag, S., Rusu, A. A., Pascanu, R., Visin, F., Yin, H., & Hadsell, R.")]
 public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly WarpGradOptions<T, TInput, TOutput> _warpOptions;
@@ -577,46 +584,89 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 /// original model architecture and the task-specific parameters that were learned.
 /// </para>
 /// </remarks>
-internal class WarpGradModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
+internal class WarpGradModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private Vector<T> _adaptedParams;
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _adaptedParams;
+
+    /// <summary>
+    /// Gets metadata about the adapted WarpGrad model.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Stores information about this adapted model,
+    /// such as its type and performance metrics.
+    /// </para>
+    /// </remarks>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
     /// Creates a new WarpGrad adapted model wrapper.
     /// </summary>
     /// <param name="model">The base model with its architecture.</param>
     /// <param name="adaptedParams">The task-adapted parameters to use for inference.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This creates a "snapshot" of the model after it's been
+    /// adapted to a specific task. The adapted parameters encode what the model learned
+    /// from the task's few examples through warped gradient descent.
+    /// </para>
+    /// </remarks>
     public WarpGradModel(IFullModel<T, TInput, TOutput> model, Vector<T> adaptedParams)
-        : base(model)
     {
+        _model = model;
         _adaptedParams = adaptedParams;
     }
 
-    /// <inheritdoc/>
-    public override TOutput Predict(TInput input)
+    /// <summary>
+    /// Makes predictions using the task-adapted parameters.
+    /// </summary>
+    /// <param name="input">The input data to make predictions for.</param>
+    /// <returns>The model's predictions using task-adapted parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// Sets the adapted parameters on the model before prediction, ensuring that
+    /// the model uses the task-specific parameters learned through warped gradient descent.
+    /// </para>
+    /// <para><b>For Beginners:</b> This loads the task-specific parameters into the model
+    /// and then makes a prediction. The adapted parameters make the model specialized
+    /// for the task it was adapted to.
+    /// </para>
+    /// </remarks>
+    public TOutput Predict(TInput input)
     {
-        BaseModel.SetParameters(_adaptedParams);
-        return BaseModel.Predict(input);
+        _model.SetParameters(_adaptedParams);
+        return _model.Predict(input);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _adaptedParams;
+    /// <summary>
+    /// Training is not supported on an already-adapted WarpGrad model.
+    /// </summary>
+    /// <param name="inputs">Input data (not used).</param>
+    /// <param name="targets">Target data (not used).</param>
+    /// <remarks>
+    /// <para>
+    /// WarpGrad adapted models are inference-only. To further train, use the WarpGrad
+    /// algorithm's MetaTrain method to update the meta-parameters, then re-adapt.
+    /// </para>
+    /// <para><b>For Beginners:</b> Once a model has been adapted to a task, you can't
+    /// train it further through this interface. If you need to improve the model,
+    /// go back to the WarpGrad algorithm and run more meta-training iterations.
+    /// </para>
+    /// </remarks>
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
 
-    /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
+    /// <summary>
+    /// Gets metadata about the adapted WarpGrad model.
+    /// </summary>
+    /// <returns>Model metadata including architecture type and parameter count.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides information about the adapted model,
+    /// including that it was adapted using WarpGrad and how many parameters it has.
+    /// Useful for logging, debugging, and model management.
+    /// </para>
+    /// </remarks>
+    public ModelMetadata<T> GetModelMetadata()
     {
-        _adaptedParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        return new WarpGradModel<T, TInput, TOutput>(BaseModel, parameters);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new WarpGradModel<T, TInput, TOutput>(BaseModel.DeepCopy(), _adaptedParams.Clone());
+        return Metadata;
     }
 }

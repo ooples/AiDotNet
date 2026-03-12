@@ -1,6 +1,5 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Effects;
 
@@ -42,9 +41,11 @@ namespace AiDotNet.Audio.Effects;
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.SignalProcessing)]
-[ModelTask(ModelTask.Restoration)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SignalProcessing)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Digital Audio Signal Processing", "https://doi.org/10.1002/9780470680018", Year = 2008, Authors = "Udo Zölzer")]
 public class ParametricEqualizer<T> : AudioEffectBase<T>
 {
     #region Configuration

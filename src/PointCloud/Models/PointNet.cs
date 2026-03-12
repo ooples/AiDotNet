@@ -6,6 +6,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.PointCloud.Interfaces;
 using AiDotNet.PointCloud.Layers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using PointNetModelOptions = AiDotNet.PointCloud.Options.PointNetOptions;
 
 namespace AiDotNet.PointCloud.Models;
@@ -47,6 +49,14 @@ namespace AiDotNet.PointCloud.Models;
 /// by Qi et al., CVPR 2017
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Vector<>))]
+[ModelPaper("PointNet: Deep Learning on Point Sets for 3D Classification and Segmentation", "https://doi.org/10.48550/arXiv.1612.00593", Year = 2017, Authors = "Charles R. Qi, Hao Su, Kaichun Mo, Leonidas J. Guibas")]
 public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>
 {
     private readonly PointNetModelOptions _options;

@@ -1,6 +1,5 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Pitch;
 
@@ -40,8 +39,10 @@ namespace AiDotNet.Audio.Pitch;
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.SignalProcessing)]
 [ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.SignalProcessing)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("YIN, a Fundamental Frequency Estimator for Speech and Music", "https://doi.org/10.1121/1.1458024", Year = 2002, Authors = "Alain de Cheveigné, Hideki Kawahara")]
 public class YinPitchDetector<T> : PitchDetectorBase<T>
 {
     #region Configuration

@@ -1,8 +1,11 @@
 using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Weights;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.OCR.Recognition;
 
@@ -25,6 +28,16 @@ namespace AiDotNet.ComputerVision.OCR.Recognition;
 /// <para>Reference: Li et al., "TrOCR: Transformer-based Optical Character Recognition
 /// with Pre-trained Models", AAAI 2023</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models",
+    "https://arxiv.org/abs/2109.10282",
+    Year = 2023,
+    Authors = "Minghao Li, Tengchao Lv, Jingye Chen, Lei Cui, Yijuan Lu, Dinei Florencio, Cha Zhang, Zhoujun Li, Furu Wei")]
 public class TrOCR<T> : OCRBase<T>
 {
     private readonly Conv2D<T> _patchEmbed;

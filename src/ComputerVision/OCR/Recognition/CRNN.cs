@@ -2,8 +2,11 @@ using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Weights;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.OCR.Recognition;
 
@@ -26,6 +29,15 @@ namespace AiDotNet.ComputerVision.OCR.Recognition;
 /// <para>Reference: Shi et al., "An End-to-End Trainable Neural Network for
 /// Image-based Sequence Recognition and Its Application to Scene Text Recognition", TPAMI 2017</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("An End-to-End Trainable Neural Network for Image-based Sequence Recognition",
+    "https://arxiv.org/abs/1507.05717",
+    Year = 2017,
+    Authors = "Baoguang Shi, Xiang Bai, Cong Yao")]
 public class CRNN<T> : OCRBase<T>
 {
     private readonly Conv2D<T> _conv1;

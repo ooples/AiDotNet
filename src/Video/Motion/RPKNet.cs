@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
@@ -22,6 +25,16 @@ namespace AiDotNet.Video.Motion;
 /// RPKNet uses recurrent partial kernel processing with separable large kernels for variable multi-scale feature extraction in optical flow.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RPKNet: Regional Pooling Kernel Network for Optical Flow Estimation",
+    "https://arxiv.org/abs/2407.11506",
+    Year = 2024,
+    Authors = "Zhiqiang Yan, Jinqiu Sun, Yanning Zhang")]
 public class RPKNet<T> : OpticalFlowBase<T>
 {
     private readonly RPKNetOptions _options;

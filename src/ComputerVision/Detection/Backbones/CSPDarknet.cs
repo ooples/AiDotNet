@@ -1,4 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
 
@@ -19,6 +22,15 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 ///
 /// <para>Reference: Bochkovskiy et al., "YOLOv4: Optimal Speed and Accuracy of Object Detection"</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("YOLOv4: Optimal Speed and Accuracy of Object Detection",
+    "https://arxiv.org/abs/2004.10934",
+    Year = 2020,
+    Authors = "Alexey Bochkovskiy, Chien-Yao Wang, Hong-Yuan Mark Liao")]
 public class CSPDarknet<T> : BackboneBase<T>
 {
     private readonly List<CSPBlock<T>> _stages;

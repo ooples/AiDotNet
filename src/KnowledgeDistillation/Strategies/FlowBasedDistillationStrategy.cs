@@ -1,7 +1,10 @@
 using System;
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -9,6 +12,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// Flow-based distillation that matches the information flow between layers.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations (e.g., double, float).</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Gift from Knowledge Distillation: Fast Optimization, Network Minimization and Transfer Learning",
+    "https://arxiv.org/abs/1710.01878",
+    Year = 2017,
+    Authors = "Junho Yim, Donggyu Joo, Jihoon Bae, Junmo Kim")]
 public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _flowWeight;

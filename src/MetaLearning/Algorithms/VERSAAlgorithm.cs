@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -81,10 +83,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Learning Probabilistic Inference for Prediction", "https://arxiv.org/abs/1805.09921", Year = 2019, Authors = "Gordon et al.")]
+[ModelPaper("Meta-Learning Probabilistic Inference for Prediction",
+    "https://arxiv.org/abs/1805.09921",
+    Year = 2019,
+    Authors = "Gordon, J., Bronskill, J., Bauer, M., Nowozin, S., & Turner, R. E.")]
 public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly VERSAOptions<T, TInput, TOutput> _versaOptions;
@@ -385,9 +391,11 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 /// with classifier weights that were instantly produced by the amortization network.
 /// </para>
 /// </remarks>
-internal class VERSAModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+internal class VERSAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private Vector<T> _backboneParams;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _backboneParams;
     private readonly Vector<T> _classifierWeights;
     private readonly double[]? _modulationFactors;
 
@@ -397,24 +405,32 @@ internal class VERSAModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput,
     /// <inheritdoc/>
     public double[]? ParameterModulationFactors => _modulationFactors;
 
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
     public VERSAModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
         Vector<T> classifierWeights, double[]? modulationFactors)
-        : base(model)
     {
+        _model = model;
         _backboneParams = backboneParams;
         _classifierWeights = classifierWeights;
         _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
-    public override TOutput Predict(TInput input)
+    public TOutput Predict(TInput input)
     {
+        // Apply classifier weights as per-parameter modulation to the backbone.
+        // The amortized classifier weights encode task-specific adaptations learned
+        // from the support set, providing a richer signal than scalar modulation.
         var modulated = new Vector<T>(_backboneParams.Length);
         if (_classifierWeights.Length > 0)
         {
             for (int i = 0; i < _backboneParams.Length; i++)
             {
+                // Use classifier weights cyclically as per-parameter scaling
                 double cwScale = NumOps.ToDouble(_classifierWeights[i % _classifierWeights.Length]);
+                // Sigmoid to keep modulation in a stable range around 1.0
                 double modFactor = 0.5 + 0.5 / (1.0 + Math.Exp(-cwScale));
                 modulated[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(modFactor));
             }
@@ -424,30 +440,14 @@ internal class VERSAModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput,
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = _backboneParams[i];
         }
-        BaseModel.SetParameters(modulated);
-        return BaseModel.Predict(input);
+        _model.SetParameters(modulated);
+        return _model.Predict(input);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _backboneParams;
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _backboneParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        return new VERSAModel<T, TInput, TOutput>(BaseModel, parameters, _classifierWeights, _modulationFactors);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new VERSAModel<T, TInput, TOutput>(
-            BaseModel.DeepCopy(), _backboneParams.Clone(), _classifierWeights.Clone(),
-            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
-    }
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

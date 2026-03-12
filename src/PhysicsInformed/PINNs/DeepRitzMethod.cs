@@ -9,6 +9,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed.PINNs
@@ -55,6 +57,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// Both solve the same PDE, but Deep Ritz uses the variational (energy) formulation,
     /// which can be more natural and stable for certain problems.
     /// </remarks>
+    [ModelDomain(ModelDomain.Science)]
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.PhysicsInformed)]
+    [ModelTask(ModelTask.Regression)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("The Deep Ritz Method: A Deep Learning-Based Numerical Method for Solving Variational Problems", "https://doi.org/10.1007/s40304-018-0127-z", Year = 2018, Authors = "Weinan E, Bing Yu")]
     public class DeepRitzMethod<T> : NeuralNetworkBase<T>
     {
         private readonly DeepRitzMethodOptions _options;

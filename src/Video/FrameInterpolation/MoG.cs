@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -44,6 +46,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// <b>Reference:</b> "MoG: Motion-Aware Generative Frame Interpolation" (2025)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MoG: Motion-Aware Generative Frame Interpolation",
+    "https://arxiv.org/abs/2501.03782",
+    Year = 2025,
+    Authors = "Jianhui Wang, Yongqiang Zhang, Ying Tai")]
 public class MoG<T> : FrameInterpolationBase<T>
 {
     #region Fields

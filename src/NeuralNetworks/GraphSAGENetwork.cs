@@ -73,8 +73,6 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>

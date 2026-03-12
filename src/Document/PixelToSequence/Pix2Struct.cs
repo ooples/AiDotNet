@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -43,6 +44,15 @@ namespace AiDotNet.Document.PixelToSequence;
 /// https://arxiv.org/abs/2210.03347
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Pix2Struct: Screenshot Parsing as Pretraining for Visual Language Understanding", "https://doi.org/10.48550/arXiv.2210.03347", Year = 2023, Authors = "Kenton Lee, Mandar Joshi, Iulia Turc, Hexiang Hu, Fangyu Liu, Julian Eisenschlos, Urvashi Khandelwal, Peter Shaw, Ming-Wei Chang, Kristina Toutanova")]
 public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
     private readonly Pix2StructOptions _options;

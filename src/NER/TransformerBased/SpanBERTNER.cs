@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -40,6 +43,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// "Goldman Sachs" as single units, which directly helps with NER accuracy.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SpanBERT: Improving Pre-training by Representing and Predicting Spans",
+    "https://arxiv.org/abs/1907.10529",
+    Year = 2020,
+    Authors = "Mandar Joshi, Danqi Chen, Yinhan Liu, Daniel S. Weld, Luke Zettlemoyer, Omer Levy")]
 public class SpanBERTNER<T> : TransformerNERBase<T>
 {
     /// <summary>

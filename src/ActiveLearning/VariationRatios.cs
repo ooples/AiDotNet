@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -33,6 +35,13 @@ namespace AiDotNet.ActiveLearning;
 /// <para><b>Reference:</b> Freeman, L.C. (1965). "Elementary Applied Statistics: For Students
 /// in Behavioral Science."</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Elementary Applied Statistics: For Students in Behavioral Science", "https://books.google.com/books?id=0HtMAAAAMAAJ", Year = 1965, Authors = "Linton C. Freeman")]
 public class VariationRatios<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

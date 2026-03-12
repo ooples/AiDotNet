@@ -44,9 +44,6 @@ public class STDiTBlock<T> : LayerBase<T>
     private readonly LayerNormalizationLayer<T> _crossNorm;
     private readonly LayerNormalizationLayer<T> _ffnNorm;
 
-    // Intentionally shadows base class NumOps with static field for use in static AddTensors helper
-    private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private Tensor<T>? _lastInput;
     private Tensor<T>? _afterSpatial;
     private Tensor<T>? _afterTemporal;

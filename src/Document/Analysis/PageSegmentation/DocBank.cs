@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -48,6 +49,15 @@ namespace AiDotNet.Document.Analysis.PageSegmentation;
 /// https://arxiv.org/abs/2006.01038
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DocBank: A Benchmark for Document Layout Analysis", "https://doi.org/10.48550/arXiv.2006.01038", Year = 2020, Authors = "Minghao Li, Yiheng Xu, Lei Cui, Shaohan Huang, Furu Wei, Zhoujun Li, Ming Zhou")]
 public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
 {
     private readonly DocBankOptions _options;

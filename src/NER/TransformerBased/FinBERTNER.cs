@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -47,6 +50,17 @@ namespace AiDotNet.NER.TransformerBased;
 /// from financial text: company names, ticker symbols, financial figures, regulatory terms.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Finance)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FinBERT: Financial Sentiment Analysis with Pre-trained Language Models",
+    "https://arxiv.org/abs/1908.10063",
+    Year = 2019,
+    Authors = "Dogu Araci")]
 public class FinBERTNER<T> : TransformerNERBase<T>
 {
     /// <summary>

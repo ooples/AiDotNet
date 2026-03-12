@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -11,6 +13,15 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 /// Prioritized Sweeping agent that focuses planning on high-priority state-actions.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Prioritized Sweeping: Reinforcement Learning with Less Data and Less Time",
+    "https://doi.org/10.1023/A:1022635613229",
+    Year = 1993,
+    Authors = "Moore, A. W. & Atkeson, C. G.")]
 public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private PrioritizedSweepingOptions<T> _options;

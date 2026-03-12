@@ -1,9 +1,11 @@
 using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.TextDetection;
 
@@ -26,6 +28,15 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
 ///
 /// <para>Reference: Zhou et al., "EAST: An Efficient and Accurate Scene Text Detector", CVPR 2017</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("EAST: An Efficient and Accurate Scene Text Detector",
+    "https://arxiv.org/abs/1704.03155",
+    Year = 2017,
+    Authors = "Xinyu Zhou, Cong Yao, He Wen, Yuzhi Wang, Shuchang Zhou, Weiran He, Jiajun Liang")]
 public class EAST<T> : TextDetectorBase<T>
 {
     private readonly Conv2D<T> _mergeConv1;

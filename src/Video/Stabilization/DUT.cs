@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Stabilization;
@@ -25,6 +27,16 @@ namespace AiDotNet.Video.Stabilization;
 /// to produce smooth warping fields without requiring paired stable/unstable training data.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DUT: Learning Video Stabilization by Simply Watching Unstable Videos",
+    "https://arxiv.org/abs/2011.14574",
+    Year = 2022,
+    Authors = "Yufei Xu, Jing Zhang, Stephen J. Maybank, Dacheng Tao")]
 public class DUT<T> : VideoStabilizationBase<T>
 {
     private readonly DUTOptions _options;

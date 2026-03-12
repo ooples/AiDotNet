@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -55,6 +58,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// it can adapt to new entity types just by changing the instruction, without retraining.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("InstructionNER: A Multi-Task Instruction-Based Generative Framework for Few-shot NER",
+    "https://arxiv.org/abs/2203.03903",
+    Year = 2022,
+    Authors = "Liwen Wang, Rumei Li, Yang Yan, Yuanmeng Yan, Sirui Wang, Wei Wu, Weiran Xu")]
 public class InstructionNER<T> : TransformerNERBase<T>
 {
     /// <summary>

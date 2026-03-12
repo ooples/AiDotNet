@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -82,10 +84,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Empirical Bayes Transductive Meta-Learning with Synthetic Gradients", "https://arxiv.org/abs/2004.12696", Year = 2020, Authors = "Shell Xu Hu, Pablo Garcia Moreno, Yang Xiao, James Sherwood, Steph Sherwood, Andi Mayasari")]
+[ModelPaper("Transductive Information Maximization for Few-Shot Learning",
+    "https://arxiv.org/abs/2008.11297",
+    Year = 2020,
+    Authors = "Malik Boudiaf, Ziko Imtiaz Masud, Jerome Rony, Jose Dolz, Pablo Piantanida, Ismail Ben Ayed")]
 public class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly SIBOptions<T, TInput, TOutput> _sibOptions;
@@ -334,9 +340,11 @@ public class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 /// The centroids incorporate information from both support AND query examples.
 /// </para>
 /// </remarks>
-internal class SIBModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+internal class SIBModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private Vector<T> _backboneParams;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _centroids;
     private readonly double[]? _modulationFactors;
 
@@ -346,17 +354,20 @@ internal class SIBModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, T
     /// <inheritdoc/>
     public double[]? ParameterModulationFactors => _modulationFactors;
 
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
     public SIBModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
         Vector<T>? centroids, double[]? modulationFactors)
-        : base(model)
     {
+        _model = model;
         _backboneParams = backboneParams;
         _centroids = centroids;
         _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
-    public override TOutput Predict(TInput input)
+    public TOutput Predict(TInput input)
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
@@ -364,35 +375,19 @@ internal class SIBModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, T
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            BaseModel.SetParameters(modulated);
+            _model.SetParameters(modulated);
         }
         else
         {
-            BaseModel.SetParameters(_backboneParams);
+            _model.SetParameters(_backboneParams);
         }
-        return BaseModel.Predict(input);
+        return _model.Predict(input);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _backboneParams;
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _backboneParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        return new SIBModel<T, TInput, TOutput>(BaseModel, parameters, _centroids, _modulationFactors);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new SIBModel<T, TInput, TOutput>(
-            BaseModel.DeepCopy(), _backboneParams.Clone(), _centroids?.Clone(),
-            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
-    }
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

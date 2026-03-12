@@ -1,7 +1,10 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -65,6 +68,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Tian et al. (2020). Contrastive Representation Distillation. ICLR.
 /// - Chen et al. (2020). A Simple Framework for Contrastive Learning of Visual Representations. ICML.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Contrastive Representation Distillation",
+    "https://arxiv.org/abs/1910.10699",
+    Year = 2020,
+    Authors = "Yonglong Tian, Dilip Krishnan, Phillip Isola")]
 public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, IIntermediateActivationStrategy<T>
 {
     private readonly double _contrastiveWeight;

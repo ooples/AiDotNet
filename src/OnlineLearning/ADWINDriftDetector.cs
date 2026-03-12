@@ -1,4 +1,6 @@
 using AiDotNet.Helpers;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.OnlineLearning;
@@ -56,6 +58,13 @@ namespace AiDotNet.OnlineLearning;
 /// - Bifet &amp; Gavaldà (2007). "Learning from Time-Changing Data with Adaptive Windowing"
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelPaper("Learning from Time-Changing Data with Adaptive Windowing", "https://doi.org/10.1137/1.9781611972771.42", Year = 2007, Authors = "Albert Bifet, Ricard Gavaldà")]
 public class ADWINDriftDetector<T> : IDriftDetector<T>
 {
     /// <summary>

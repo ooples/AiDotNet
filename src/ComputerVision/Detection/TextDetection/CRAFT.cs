@@ -1,9 +1,11 @@
 using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.TextDetection;
 
@@ -25,6 +27,15 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
 ///
 /// <para>Reference: Baek et al., "Character Region Awareness for Text Detection", CVPR 2019</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Character Region Awareness for Text Detection",
+    "https://arxiv.org/abs/1904.01941",
+    Year = 2019,
+    Authors = "Youngmin Baek, Bado Lee, Dongyoon Han, Sangdoo Yun, Hwalsuk Lee")]
 public class CRAFT<T> : TextDetectorBase<T>
 {
     private readonly Conv2D<T> _upConv1;

@@ -1,8 +1,11 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.SpanBased;
 
@@ -60,6 +63,16 @@ namespace AiDotNet.NER.SpanBased;
 /// gaps) using the same unified approach.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Unified Named Entity Recognition as Word-Word Relation Classification",
+    "https://arxiv.org/abs/2112.10070",
+    Year = 2022,
+    Authors = "Jingye Li, Hao Fei, Jiang Liu, Shengqiong Wu, Meishan Zhang, Chong Teng, Donghong Ji, Fei Li")]
 public class W2NER<T> : SpanBasedNERBase<T>
 {
     /// <summary>

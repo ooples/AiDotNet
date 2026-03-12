@@ -1,4 +1,6 @@
 using AiDotNet.ActiveLearning.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -34,6 +36,13 @@ namespace AiDotNet.ActiveLearning;
 /// <para><b>Reference:</b> Settles, B. &amp; Craven, M. (2008). "An Analysis of Active Learning
 /// Strategies for Sequence Labeling Tasks."</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelCategory(ModelCategory.InstanceBased)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("An Analysis of Active Learning Strategies for Sequence Labeling Tasks", "https://aclanthology.org/D08-1112/", Year = 2008, Authors = "Burr Settles, Mark Craven")]
 public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;

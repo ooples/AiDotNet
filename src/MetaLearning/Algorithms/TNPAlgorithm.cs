@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -6,6 +7,7 @@ using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -13,10 +15,15 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <summary>Implementation of Transformer Neural Process (Nguyen & Grover, ICML 2023).</summary>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
-[ModelTask(ModelTask.Regression)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Transformer Neural Processes", "https://arxiv.org/abs/2207.04179", Year = 2023, Authors = "Nguyen and Grover")]
+[ModelPaper("Transformer Neural Processes: Uncertainty-Aware Meta Learning Via Sequence Modeling",
+    "https://arxiv.org/abs/2207.04179",
+    Year = 2023,
+    Authors = "Nguyen, T. & Grover, A.")]
 public class TNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly TNPOptions<T, TInput, TOutput> _algoOptions;

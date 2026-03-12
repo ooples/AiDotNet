@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -7,6 +8,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
@@ -34,10 +36,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Meta-Baseline: Exploring Simple Meta-Learning for Few-Shot Learning", "https://arxiv.org/abs/2003.04390", Year = 2021, Authors = "Chen et al.")]
+[ModelPaper("Meta-Baseline: Exploring Simple Meta-Learning for Few-Shot Learning",
+    "https://arxiv.org/abs/2003.04390",
+    Year = 2021,
+    Authors = "Yinbo Chen, Zhuang Liu, Huijuan Xu, Trevor Darrell, Xiaolong Wang")]
 public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaBaselineOptions<T, TInput, TOutput> _metaBaselineOptions;
@@ -118,9 +124,11 @@ public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 }
 
 /// <summary>Adapted model wrapper for Meta-Baseline with cosine-similarity classification.</summary>
-internal class MetaBaselineModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+internal class MetaBaselineModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private Vector<T> _params;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _params;
     private readonly Vector<T>? _supportPrototypes;
     private readonly double _temperature;
     private readonly double[]? _modulationFactors;
@@ -131,10 +139,13 @@ internal class MetaBaselineModel<T, TInput, TOutput> : MetaLearningModelBase<T, 
     /// <inheritdoc/>
     public double[]? ParameterModulationFactors => _modulationFactors;
 
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
     public MetaBaselineModel(IFullModel<T, TInput, TOutput> model, Vector<T> p,
         Vector<T>? supportPrototypes, double temperature, double[]? modulationFactors)
-        : base(model)
     {
+        _model = model;
         _params = p;
         _supportPrototypes = supportPrototypes;
         _temperature = Math.Max(temperature, 1e-10);
@@ -142,7 +153,7 @@ internal class MetaBaselineModel<T, TInput, TOutput> : MetaLearningModelBase<T, 
     }
 
     /// <inheritdoc/>
-    public override TOutput Predict(TInput input)
+    public TOutput Predict(TInput input)
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
@@ -150,35 +161,19 @@ internal class MetaBaselineModel<T, TInput, TOutput> : MetaLearningModelBase<T, 
             for (int i = 0; i < _params.Length; i++)
                 modulated[i] = NumOps.Multiply(_params[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            BaseModel.SetParameters(modulated);
+            _model.SetParameters(modulated);
         }
         else
         {
-            BaseModel.SetParameters(_params);
+            _model.SetParameters(_params);
         }
-        return BaseModel.Predict(input);
+        return _model.Predict(input);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameters() => _params;
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<T> parameters)
-    {
-        _params = parameters ?? throw new ArgumentNullException(nameof(parameters));
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-    {
-        return new MetaBaselineModel<T, TInput, TOutput>(BaseModel, parameters, _supportPrototypes, _temperature, _modulationFactors);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new MetaBaselineModel<T, TInput, TOutput>(
-            BaseModel.DeepCopy(), _params.Clone(), _supportPrototypes?.Clone(), _temperature,
-            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
-    }
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

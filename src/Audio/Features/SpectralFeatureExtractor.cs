@@ -42,6 +42,7 @@ namespace AiDotNet.Audio.Features;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("A Tutorial on Onset Detection in Music Signals", "https://doi.org/10.1109/TSP.2005.851331", Year = 2005, Authors = "Juan Pablo Bello, Laurent Daudet, Samer Abdallah, Chris Duxbury, Mike Davies, Mark B. Sandler")]
 public class SpectralFeatureExtractor<T> : AudioFeatureExtractorBase<T>
 {
     private readonly ShortTimeFourierTransform<T> _stft;

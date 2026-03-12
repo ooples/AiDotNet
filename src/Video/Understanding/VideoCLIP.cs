@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Models;
@@ -43,6 +46,19 @@ namespace AiDotNet.Video.Understanding;
 /// EMNLP 2021.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VideoCLIP: Contrastive Pre-training for Zero-shot Video-Text Understanding",
+    "https://arxiv.org/abs/2109.14084",
+    Year = 2021,
+    Authors = "Hu Xu, Gargi Ghosh, Po-Yao Huang, Dmytro Okhonko, Armen Aghajanyan, Florian Metze, Luke Zettlemoyer, Christoph Feichtenhofer")]
 public class VideoCLIP<T> : NeuralNetworkBase<T>
 {
     private readonly VideoCLIPVideoOptions _options;

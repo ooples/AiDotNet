@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -41,6 +42,16 @@ namespace AiDotNet.ReinforcementLearning.Agents.IQL;
 /// - Good for offline datasets with diverse quality
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Offline Reinforcement Learning with Implicit Q-Learning",
+    "https://arxiv.org/abs/2110.06169",
+    Year = 2022,
+    Authors = "Kostrikov, I., Nair, A., & Levine, S.")]
 public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private IQLOptions<T> _options;
