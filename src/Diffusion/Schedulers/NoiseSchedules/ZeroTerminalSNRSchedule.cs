@@ -1,7 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers.NoiseSchedules;
 
@@ -24,10 +23,6 @@ namespace AiDotNet.Diffusion.Schedulers.NoiseSchedules;
 /// Reference: Lin et al., "Common Diffusion Noise Schedules and Sample Steps are Flawed", WACV 2024
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class ZeroTerminalSNRSchedule<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

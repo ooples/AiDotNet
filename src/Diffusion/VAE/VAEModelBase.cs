@@ -3,7 +3,6 @@ using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.VAE;
 
@@ -22,10 +21,6 @@ namespace AiDotNet.Diffusion.VAE;
 /// They are essential for efficient latent diffusion models like Stable Diffusion.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 {
     /// <summary>

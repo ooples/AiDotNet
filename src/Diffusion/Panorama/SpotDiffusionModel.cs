@@ -7,7 +7,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Panorama;
 
@@ -27,10 +26,6 @@ namespace AiDotNet.Diffusion.Panorama;
 /// You describe each section separately and it blends them smoothly.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class SpotDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

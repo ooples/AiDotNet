@@ -1,6 +1,5 @@
 using AiDotNet.Helpers;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.MaskUtilities;
 
@@ -22,10 +21,6 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// edges and correct color blending between layers.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Segmentation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class AlphaCompositor<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

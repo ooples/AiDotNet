@@ -7,7 +7,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Control;
 
@@ -27,10 +26,6 @@ namespace AiDotNet.Diffusion.Control;
 /// type of control image you're providing, and it adapts automatically.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

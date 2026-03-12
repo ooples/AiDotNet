@@ -4,7 +4,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion;
 
@@ -31,10 +30,6 @@ namespace AiDotNet.Diffusion;
 /// 5. A vocoder converts the spectrogram back to audio
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, IAudioDiffusionModel<T>
 {
     /// <summary>

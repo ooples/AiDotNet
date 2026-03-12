@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Control;
 
@@ -31,10 +30,6 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Ye et al., "IP-Adapter: Text Compatible Image Prompt Adapter", 2023
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

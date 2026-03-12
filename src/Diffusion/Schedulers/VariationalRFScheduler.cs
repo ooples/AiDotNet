@@ -1,5 +1,4 @@
 using AiDotNet.Enums;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -19,10 +18,6 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// This scheduler adds just enough randomness to improve variety without hurting quality.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public sealed class VariationalRFScheduler<T> : NoiseSchedulerBase<T>
 {
     private readonly double _noiseScale;

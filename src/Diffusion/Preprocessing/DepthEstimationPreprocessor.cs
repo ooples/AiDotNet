@@ -1,6 +1,5 @@
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -25,10 +24,6 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// Reference: Ranftl et al., "Towards Robust Monocular Depth Estimation", IEEE TPAMI 2022
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class DepthEstimationPreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     /// <inheritdoc />

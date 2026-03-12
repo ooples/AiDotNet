@@ -2,7 +2,6 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.VAE;
 
@@ -35,10 +34,6 @@ namespace AiDotNet.Diffusion.VAE;
 /// The result is a high-resolution image reconstructed from the compressed latent.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class VAEDecoder<T> : LayerBase<T>
 {
     /// <summary>

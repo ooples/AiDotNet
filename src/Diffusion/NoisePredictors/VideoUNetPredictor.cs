@@ -5,7 +5,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -50,10 +49,6 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// - Temporal convolutions with kernel size 3 across frames
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 {
     /// <summary>

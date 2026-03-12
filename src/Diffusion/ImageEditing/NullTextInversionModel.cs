@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ImageEditing;
 
@@ -49,11 +48,6 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Mokady et al., "Null-text Inversion for Editing Real Images using Guided Diffusion Models", CVPR 2023
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Null-text Inversion for Editing Real Images using Guided Diffusion Models", "https://arxiv.org/abs/2211.09794", Year = 2023, Authors = "Mokady et al.")]
 public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Control;
 
@@ -46,10 +45,6 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Zavadski et al., "ControlNet-XS", 2024
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

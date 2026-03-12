@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ImageEditing;
 
@@ -49,10 +48,6 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Kawar et al., "Imagic: Text-Based Real Image Editing with Diffusion Models", CVPR 2023
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class ImagicModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

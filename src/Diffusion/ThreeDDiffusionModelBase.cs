@@ -3,7 +3,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion;
 
@@ -35,10 +34,6 @@ namespace AiDotNet.Diffusion;
 /// 3. Score Distillation: Use 2D diffusion knowledge to guide 3D optimization
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>, I3DDiffusionModel<T>
 {
     /// <summary>

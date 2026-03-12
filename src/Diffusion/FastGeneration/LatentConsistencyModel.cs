@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.FastGeneration;
 
@@ -77,10 +76,6 @@ namespace AiDotNet.Diffusion.FastGeneration;
 ///     seed: 42);
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

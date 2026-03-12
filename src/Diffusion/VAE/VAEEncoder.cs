@@ -3,7 +3,6 @@ using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.VAE;
 
@@ -37,10 +36,6 @@ namespace AiDotNet.Diffusion.VAE;
 /// in a compressed form suitable for diffusion.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class VAEEncoder<T> : LayerBase<T>
 {
     /// <summary>

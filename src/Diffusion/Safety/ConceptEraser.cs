@@ -1,7 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Safety;
 
@@ -27,10 +26,6 @@ namespace AiDotNet.Diffusion.Safety;
 /// Reference: Gandikota et al., "Erasing Concepts from Diffusion Models", ICCV 2023
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class ConceptEraser<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

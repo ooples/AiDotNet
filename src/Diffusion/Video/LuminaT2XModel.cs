@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Video;
 
@@ -48,10 +47,6 @@ namespace AiDotNet.Diffusion.Video;
 /// Reference: Gao et al., "Lumina-T2X: Transforming Text into Any Modality", 2024
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

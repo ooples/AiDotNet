@@ -7,7 +7,6 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -73,11 +72,6 @@ namespace AiDotNet.Diffusion.Audio;
 /// SaveWav(dogBark, "dog_bark.wav", sampleRate: 16000);
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://arxiv.org/abs/2301.12503", Year = 2023, Authors = "Liu et al.")]
 public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

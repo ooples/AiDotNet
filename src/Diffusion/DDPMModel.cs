@@ -3,7 +3,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion;
 
@@ -42,11 +41,6 @@ namespace AiDotNet.Diffusion;
 /// <b>Reference:</b> "Denoising Diffusion Probabilistic Models" by Ho et al., 2020
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239", Year = 2020, Authors = "Ho et al.")]
 public class DDPMModel<T> : DiffusionModelBase<T>
 {
     #region Fields

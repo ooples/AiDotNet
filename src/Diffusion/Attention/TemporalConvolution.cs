@@ -1,7 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Attention;
 
@@ -25,10 +24,6 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Optionally causal (only looking at past frames) for streaming generation
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class TemporalConvolution<T> : LayerBase<T>
 {
     private readonly int _channels;

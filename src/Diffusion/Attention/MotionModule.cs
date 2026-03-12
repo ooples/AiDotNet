@@ -2,7 +2,6 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Attention;
 
@@ -30,10 +29,6 @@ namespace AiDotNet.Diffusion.Attention;
 /// temporal parameters to be trained without disrupting the spatial generation quality.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class MotionModule<T> : LayerBase<T>
 {
     private readonly int _channels;

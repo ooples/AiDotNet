@@ -3,7 +3,6 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -29,10 +28,6 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Gao et al., "Lumina-T2X: Transforming Text into Any Modality with Flow Matching", 2024
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class FlagDiTPredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

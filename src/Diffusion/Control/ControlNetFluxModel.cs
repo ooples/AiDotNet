@@ -8,7 +8,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Control;
 
@@ -28,10 +27,6 @@ namespace AiDotNet.Diffusion.Control;
 /// so this specialized version ensures control signals work correctly with FLUX.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
 {
     private const int FLUX_LATENT_CHANNELS = 16;

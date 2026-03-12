@@ -1,5 +1,4 @@
 using AiDotNet.Enums;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -24,10 +23,6 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// The default values are research-backed and work well for most cases.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public sealed class SchedulerConfig<T>
 {
     /// <summary>

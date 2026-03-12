@@ -1,7 +1,6 @@
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -23,10 +22,6 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// copying the exact arrangement.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class ContentShufflePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     private readonly int _blockSize;

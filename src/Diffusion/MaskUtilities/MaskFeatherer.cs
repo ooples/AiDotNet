@@ -1,7 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.MaskUtilities;
 
@@ -21,10 +20,6 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// so the transition is gradual, producing more natural-looking inpainting results.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Segmentation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class MaskFeatherer<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

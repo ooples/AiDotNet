@@ -1,5 +1,4 @@
 using AiDotNet.Enums;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -22,10 +21,6 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// Reference: Xue et al., "SA-Solver: Stochastic Adams Solver for Fast Training of Diffusion Models", NeurIPS 2023
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public sealed class SASolverScheduler<T> : NoiseSchedulerBase<T>
 {
     private readonly int _order;

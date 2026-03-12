@@ -5,7 +5,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.VAE;
 
@@ -50,10 +49,6 @@ namespace AiDotNet.Diffusion.VAE;
 /// - Output: [batch, 3, H, W] reconstructed image
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class StandardVAE<T> : VAEModelBase<T>
 {
     /// <summary>

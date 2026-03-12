@@ -3,7 +3,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion;
 
@@ -30,10 +29,6 @@ namespace AiDotNet.Diffusion;
 /// - Frame interpolation: Increase frame rate smoothly
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, IVideoDiffusionModel<T>
 {
     /// <summary>

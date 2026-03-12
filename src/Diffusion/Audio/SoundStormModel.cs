@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -88,10 +87,6 @@ namespace AiDotNet.Diffusion.Audio;
 ///     guidanceScale: 1.0);
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class SoundStormModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

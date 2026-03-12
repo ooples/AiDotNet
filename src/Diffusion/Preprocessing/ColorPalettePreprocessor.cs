@@ -1,6 +1,5 @@
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -20,10 +19,6 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// that match the color scheme of your original.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class ColorPalettePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     private readonly int _numColors;

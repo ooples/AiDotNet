@@ -1,6 +1,5 @@
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -22,10 +21,6 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// Reference: Cao et al., "OpenPose: Realtime Multi-Person 2D Pose Estimation", IEEE TPAMI 2019
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     /// <inheritdoc />

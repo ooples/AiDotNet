@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.SuperResolution;
 
@@ -97,10 +96,6 @@ namespace AiDotNet.Diffusion.SuperResolution;
 ///     height: 512);
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.ConvolutionalNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class SDUpscalerModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

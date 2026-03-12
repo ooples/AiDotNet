@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ImageEditing;
 
@@ -49,10 +48,6 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Zhang et al., "MagicBrush: A Manually Annotated Dataset for Instruction-Guided Image Editing", NeurIPS 2024
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class MagicBrushModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

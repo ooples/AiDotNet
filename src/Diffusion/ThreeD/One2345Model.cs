@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ThreeD;
 
@@ -84,10 +83,6 @@ namespace AiDotNet.Diffusion.ThreeD;
 ///     guidanceScale: 3.0);
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class One2345Model<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

@@ -1,7 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.MaskUtilities;
 
@@ -21,10 +20,6 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// of the masked region outward. Often used with erosion for mask cleanup.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Segmentation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class MaskDilation<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

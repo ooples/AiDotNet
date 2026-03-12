@@ -11,7 +11,6 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -76,10 +75,6 @@ namespace AiDotNet.Diffusion.Audio;
 ///     alpha: 0.5);
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class RiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

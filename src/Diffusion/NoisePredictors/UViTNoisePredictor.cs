@@ -5,7 +5,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -39,10 +38,6 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Bao et al., "All are Worth Words: A ViT Backbone for Diffusion Models", CVPR 2023
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

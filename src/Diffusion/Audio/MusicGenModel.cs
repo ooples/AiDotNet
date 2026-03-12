@@ -7,7 +7,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -70,10 +69,6 @@ namespace AiDotNet.Diffusion.Audio;
 ///     preservationStrength: 0.7);
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class MusicGenModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

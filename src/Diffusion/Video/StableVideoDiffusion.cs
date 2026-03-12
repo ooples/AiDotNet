@@ -6,7 +6,6 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Video;
 
@@ -74,10 +73,6 @@ namespace AiDotNet.Diffusion.Video;
 /// SaveVideo(dynamicVideo, "output.mp4");
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
 {
     /// <summary>

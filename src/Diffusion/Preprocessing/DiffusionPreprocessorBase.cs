@@ -1,7 +1,6 @@
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -27,10 +26,6 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// The output becomes the "blueprint" that guides image generation.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public abstract class DiffusionPreprocessorBase<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

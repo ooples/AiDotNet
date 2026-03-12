@@ -1,6 +1,5 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.VAE;
 
@@ -54,10 +53,6 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class AutoencoderKL<T> : VAEModelBase<T>
 {
     /// <summary>

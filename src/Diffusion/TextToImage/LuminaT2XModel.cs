@@ -7,7 +7,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.TextToImage;
 
@@ -50,10 +49,6 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// Resolution, and Duration via Flow-based Large Diffusion Transformers", 2024
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

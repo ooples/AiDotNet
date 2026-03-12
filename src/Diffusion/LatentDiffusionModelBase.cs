@@ -5,7 +5,6 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion;
 
@@ -24,10 +23,6 @@ namespace AiDotNet.Diffusion;
 /// (for guided generation from text or images).
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
 public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILatentDiffusionModel<T>
 {
     /// <summary>

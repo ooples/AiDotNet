@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.SuperResolution;
 
@@ -100,10 +99,6 @@ namespace AiDotNet.Diffusion.SuperResolution;
 ///     numInferenceSteps: 25);
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.ConvolutionalNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

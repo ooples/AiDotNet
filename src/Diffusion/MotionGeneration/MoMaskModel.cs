@@ -7,7 +7,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.MotionGeneration;
 
@@ -30,10 +29,6 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 /// Reference: Guo et al., "MoMask: Generative Masked Modeling of 3D Human Motions", CVPR 2024
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class MoMaskModel<T> : LatentDiffusionModelBase<T>
 {
     /// <summary>

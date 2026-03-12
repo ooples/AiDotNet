@@ -8,7 +8,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ThreeD;
 
@@ -72,11 +71,6 @@ namespace AiDotNet.Diffusion.ThreeD;
 ///     guidanceScale: 100.0);
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("MVDream: Multi-view Diffusion for 3D Generation", "https://arxiv.org/abs/2308.16512", Year = 2023, Authors = "Shi et al.")]
 public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

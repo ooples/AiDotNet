@@ -7,7 +7,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.MotionGeneration;
 
@@ -30,10 +29,6 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 /// Reference: Zhang et al., "MotionDiffuse: Text-Driven Human Motion Generation with Diffusion Model", 2024
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
 {
     /// <summary>

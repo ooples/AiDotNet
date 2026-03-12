@@ -8,7 +8,6 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.TextToImage;
 
@@ -54,11 +53,6 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// Reference: Balaji et al., "eDiff-I: Text-to-Image Diffusion Models with an Ensemble of Expert Denoisers", 2022
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("eDiff-I: Text-to-Image Diffusion Models with an Ensemble of Expert Denoisers", "https://arxiv.org/abs/2211.01324", Year = 2023, Authors = "Balaji et al.")]
 public class EDiffIModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

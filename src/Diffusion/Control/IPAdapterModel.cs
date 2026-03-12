@@ -10,7 +10,6 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Control;
 
@@ -74,11 +73,6 @@ namespace AiDotNet.Diffusion.Control;
 ///     imageWeights: new[] { 0.8, 0.5 });
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2308.06721", Year = 2023, Authors = "Ye et al.")]
 public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

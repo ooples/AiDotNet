@@ -8,7 +8,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Control;
 
@@ -28,10 +27,6 @@ namespace AiDotNet.Diffusion.Control;
 /// is specially designed to inject control signals into the transformer blocks.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.High)]
 public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
 {
     private const int SD3_LATENT_CHANNELS = 16;

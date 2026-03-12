@@ -1,7 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -31,10 +30,6 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// Reference: Zhai et al., "Sigmoid Loss for Language Image Pre-Training", ICCV 2023
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class SigLIPTextConditioner<T> : TextConditioningBase<T>
 {
     private readonly Vector<T> _textProjection;
