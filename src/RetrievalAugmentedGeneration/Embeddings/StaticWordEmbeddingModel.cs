@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -27,6 +28,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 /// - Good baselines for simple tasks
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly Dictionary<string, Vector<T>> _wordVectors;
