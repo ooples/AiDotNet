@@ -62,6 +62,11 @@ public class NoCurlAlgorithm<T> : ContinuousOptimizationBase<T>
         ApplyOptions(options);
     }
 
+    /// <summary>
+    /// Minimum variance threshold for numerical stability in division operations.
+    /// </summary>
+    private const double NumericalStabilityEpsilon = 1e-10;
+
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
@@ -121,7 +126,7 @@ public class NoCurlAlgorithm<T> : ContinuousOptimizationBase<T>
 
                 // OLS weight: w = S[parent, target] / S[parent, parent]
                 T sParent = S[parent, parent];
-                if (NumOps.ToDouble(sParent) < 1e-10) continue;
+                if (NumOps.ToDouble(sParent) < NumericalStabilityEpsilon) continue;
 
                 T rawWeight = NumOps.Divide(S[parent, target], sParent);
                 T absWeight = NumOps.FromDouble(Math.Abs(NumOps.ToDouble(rawWeight)));
@@ -179,7 +184,7 @@ public class NoCurlAlgorithm<T> : ContinuousOptimizationBase<T>
             {
                 int parent = ordering[predIdx];
                 T spp = S[parent, parent];
-                if (NumOps.ToDouble(spp) < 1e-10) continue;
+                if (NumOps.ToDouble(spp) < NumericalStabilityEpsilon) continue;
 
                 T spt = S[parent, target];
                 // Variance reduction from parent: spt^2 / spp

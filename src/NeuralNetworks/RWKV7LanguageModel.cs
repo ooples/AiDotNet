@@ -53,6 +53,12 @@ public class RWKV7LanguageModel<T> : NeuralNetworkBase<T>
     /// <summary>Gets the number of RWKV-7 blocks.</summary>
     public int NumLayers => _numLayers;
 
+    /// <summary>Gets the number of attention heads.</summary>
+    public int NumHeads => _numHeads;
+
+    /// <summary>Gets the FFN dimension multiplier.</summary>
+    public double FFNMultiplier => _ffnMultiplier;
+
     #region Constructors
 
     public RWKV7LanguageModel(
@@ -68,6 +74,12 @@ public class RWKV7LanguageModel<T> : NeuralNetworkBase<T>
         : base(architecture,
             lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
     {
+        if (vocabSize <= 0) throw new ArgumentException($"Vocabulary size ({vocabSize}) must be positive.", nameof(vocabSize));
+        if (modelDimension <= 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
+        if (numLayers <= 0) throw new ArgumentException($"Number of layers ({numLayers}) must be positive.", nameof(numLayers));
+        if (numHeads <= 0) throw new ArgumentException($"Number of heads ({numHeads}) must be positive.", nameof(numHeads));
+        if (modelDimension % numHeads != 0) throw new ArgumentException($"Model dimension ({modelDimension}) must be divisible by number of heads ({numHeads}).", nameof(modelDimension));
+
         _options = options ?? new RWKV7Options();
         Options = _options;
         _vocabSize = vocabSize;
@@ -115,6 +127,7 @@ public class RWKV7LanguageModel<T> : NeuralNetworkBase<T>
     {
         SetTrainingMode(true);
         var predictions = Predict(input);
+        SetTrainingMode(true); // Re-enable after Predict set it to false
         LastLoss = LossFunction.CalculateLoss(predictions.ToVector(), expectedOutput.ToVector());
         var outputGradients = LossFunction.CalculateDerivative(predictions.ToVector(), expectedOutput.ToVector());
         Backpropagate(Tensor<T>.FromVector(outputGradients));
