@@ -1,10 +1,13 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Generation;
@@ -38,6 +41,17 @@ namespace AiDotNet.Video.Generation;
 /// - Progressive training strategy
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Open-Sora: Democratizing Efficient Video Production for All",
+    "https://arxiv.org/abs/2412.00131",
+    Year = 2024,
+    Authors = "Zangwei Zheng, Xiangyu Peng, Tianji Yang, Chenhui Shen, Shenggui Li, Hongxin Liu, Yukun Zhou, Tianyi Li, Yang You")]
 public class OpenSora<T> : NeuralNetworkBase<T>
 {
     private readonly OpenSoraOptions _options;

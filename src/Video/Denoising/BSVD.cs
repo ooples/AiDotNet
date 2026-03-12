@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Denoising;
@@ -25,6 +27,16 @@ namespace AiDotNet.Video.Denoising;
 /// latent buffers for constant-memory operation regardless of video length.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Blind Spot Video Denoising: Bidirectional Streaming for Real-Time Video Denoising",
+    "https://arxiv.org/abs/2206.03428",
+    Year = 2022,
+    Authors = "Zhenyue Qi, Yiran Zhong, Dongwei Ren, Wangmeng Zuo")]
 public class BSVD<T> : VideoDenoisingBase<T>
 {
     private readonly BSVDOptions _options;

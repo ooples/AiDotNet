@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -60,6 +63,16 @@ namespace AiDotNet.Video;
 /// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data",
+    "https://arxiv.org/abs/2107.10833",
+    Year = 2021,
+    Authors = "Xintao Wang, Liangbin Xie, Chao Dong, Ying Shan")]
 public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 {
     private readonly RealESRGANOptions _options;

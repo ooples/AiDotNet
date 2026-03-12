@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Denoising;
@@ -25,6 +27,16 @@ namespace AiDotNet.Video.Denoising;
 /// awareness, avoiding expensive optical flow or attention.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("An Efficient Recurrent Architecture for Video Denoising via Temporal Shift",
+    "https://arxiv.org/abs/2106.10948",
+    Year = 2021,
+    Authors = "Marco Maggioni, Yibin Huang, Cheng Li, Yongming Rao, Jiwen Lu, Jie Zhou")]
 public class ShiftNet<T> : VideoDenoisingBase<T>
 {
     private readonly ShiftNetOptions _options;

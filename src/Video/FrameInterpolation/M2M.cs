@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -45,6 +47,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// (Hu et al., CVPR 2022)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Many-to-many Splatting for Efficient Video Frame Interpolation",
+    "https://arxiv.org/abs/2204.03513",
+    Year = 2022,
+    Authors = "Ping Hu, Simon Niklaus, Stan Sclaroff, Kate Saenko")]
 public class M2M<T> : FrameInterpolationBase<T>
 {
     #region Fields

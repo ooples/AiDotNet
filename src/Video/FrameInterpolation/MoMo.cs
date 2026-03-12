@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -43,6 +45,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// <b>Reference:</b> "MoMo: Momentum Diffusion Model for Bi-Directional Flow" (2024)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MoMo: Momentum Diffusion Model for Bi-Directional Video Frame Interpolation",
+    "https://arxiv.org/abs/2404.07547",
+    Year = 2024,
+    Authors = "Xiang Zhang, Zekun Xu, Fuhai Chen, Li Song")]
 public class MoMo<T> : FrameInterpolationBase<T>
 {
     #region Fields

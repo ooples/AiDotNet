@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Inpainting;
@@ -25,6 +27,16 @@ namespace AiDotNet.Video.Inpainting;
 /// that maintains temporal consistency across the full sequence.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AVID: Any-Length Video Inpainting with Diffusion Model",
+    "https://arxiv.org/abs/2312.03816",
+    Year = 2024,
+    Authors = "Zhixing Zhang, Bichen Wu, Xiaoyan Wang, Yaqiao Luo, Zijian He, Peter Vajda, Dimitris Metaxas, Licheng Yu")]
 public class AVID<T> : VideoInpaintingBase<T>
 {
     private readonly AVIDOptions _options;

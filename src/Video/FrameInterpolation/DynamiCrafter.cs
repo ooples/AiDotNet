@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -42,6 +44,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// <b>Reference:</b> "DynamiCrafter: Animating Open-domain Images with Video Diffusion Priors" (2024)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DynamiCrafter: Animating Open-domain Images with Video Diffusion Priors",
+    "https://arxiv.org/abs/2310.12190",
+    Year = 2024,
+    Authors = "Jinbo Xing, Menghan Xia, Yong Zhang, Haoxin Chen, Wangbo Yu, Hanyuan Liu, Gongye Liu, Xintao Wang, Ying Shan, Tien-Tsin Wong")]
 public class DynamiCrafter<T> : FrameInterpolationBase<T>
 {
     #region Fields

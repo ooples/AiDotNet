@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -39,6 +42,17 @@ namespace AiDotNet.Video.ActionRecognition;
 /// NeurIPS 2022.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VideoMAE: Masked Autoencoders are Data-Efficient Learners for Self-Supervised Video Pre-Training",
+    "https://arxiv.org/abs/2203.12602",
+    Year = 2022,
+    Authors = "Zhan Tong, Yibing Song, Jue Wang, Limin Wang")]
 public class VideoMAE<T> : NeuralNetworkBase<T>
 {
     private readonly VideoMAEOptions _options;

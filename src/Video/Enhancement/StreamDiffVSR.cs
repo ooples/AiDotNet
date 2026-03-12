@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -38,6 +40,16 @@ namespace AiDotNet.Video.Enhancement;
 /// (Li et al., 2025)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Stream-DiffVSR: Low-Latency Streamable Diffusion-based Video Super-Resolution",
+    "https://arxiv.org/abs/2501.14727",
+    Year = 2025,
+    Authors = "Guanlin Li, Jianyi Wang, Shangchen Zhou, Chen Change Loy")]
 public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

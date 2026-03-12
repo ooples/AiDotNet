@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
@@ -37,6 +40,16 @@ namespace AiDotNet.Video.Motion;
 /// ECCV 2020.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RAFT: Recurrent All-Pairs Field Transforms for Optical Flow",
+    "https://arxiv.org/abs/2003.12039",
+    Year = 2020,
+    Authors = "Zachary Teed, Jia Deng")]
 public class RAFT<T> : OpticalFlowBase<T>
 {
     private readonly RAFTOptions _options;

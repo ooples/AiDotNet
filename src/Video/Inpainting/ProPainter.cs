@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Inpainting;
@@ -36,6 +39,17 @@ namespace AiDotNet.Video.Inpainting;
 /// ICCV 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("ProPainter: Improving Propagation and Transformer for Video Inpainting",
+    "https://arxiv.org/abs/2309.03897",
+    Year = 2023,
+    Authors = "Shangchen Zhou, Chongyi Li, Kelvin C.K. Chan, Chen Change Loy")]
 public class ProPainter<T> : VideoInpaintingBase<T>
 {
     private readonly ProPainterOptions _options;

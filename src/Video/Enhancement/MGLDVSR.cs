@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -43,6 +45,16 @@ namespace AiDotNet.Video.Enhancement;
 /// (Yang et al., 2024)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MGLD-VSR: Motion-Guided Latent Diffusion for Video Super-Resolution",
+    "https://arxiv.org/abs/2312.00853",
+    Year = 2024,
+    Authors = "Yang Zheng, Xiaoming Zhu, Jianlong Wu, Liqiang Nie")]
 public class MGLDVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

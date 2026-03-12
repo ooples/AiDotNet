@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -39,6 +41,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// <b>Reference:</b> "PerVFI: Perception-Oriented Video Frame Interpolation" (2024)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PerVFI: Perception-Oriented Video Frame Interpolation via Asymmetric Blending",
+    "https://arxiv.org/abs/2404.06692",
+    Year = 2024,
+    Authors = "Guangyang Wu, Xin Tao, Changlin Li, Wenyi Wang, Xiaohong Liu, Qingqing Zheng")]
 public class PerVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields

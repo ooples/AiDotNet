@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Denoising;
@@ -25,6 +27,16 @@ namespace AiDotNet.Video.Denoising;
 /// parameter reduction while maintaining quality.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LiteDVDNet: A Lightweight Deep Video Denoising Network",
+    "https://arxiv.org/abs/2004.08569",
+    Year = 2020,
+    Authors = "Matias Tassano, Julie Delon, Thomas Veit")]
 public class LiteDVDNet<T> : VideoDenoisingBase<T>
 {
     private readonly LiteDVDNetOptions _options;

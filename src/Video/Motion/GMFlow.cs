@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
-using AiDotNet.Video.Options;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
 
@@ -36,6 +39,17 @@ namespace AiDotNet.Video.Motion;
 /// CVPR 2022.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GMFlow: Learning Optical Flow via Global Matching",
+    "https://arxiv.org/abs/2111.13680",
+    Year = 2022,
+    Authors = "Haofei Xu, Jing Zhang, Jianfei Cai, Hamid Rezatofighi, Dacheng Tao")]
 public class GMFlow<T> : OpticalFlowBase<T>
 {
     private readonly GMFlowOptions _options;

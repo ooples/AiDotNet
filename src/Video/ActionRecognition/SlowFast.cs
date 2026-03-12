@@ -1,9 +1,12 @@
 using System.IO;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -46,6 +49,16 @@ namespace AiDotNet.Video.ActionRecognition;
 /// https://arxiv.org/abs/1812.03982
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SlowFast Networks for Video Recognition",
+    "https://arxiv.org/abs/1812.03982",
+    Year = 2019,
+    Authors = "Christoph Feichtenhofer, Haoqi Fan, Jitendra Malik, Kaiming He")]
 public class SlowFast<T> : NeuralNetworkBase<T>
 {
     private readonly SlowFastOptions _options;

@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -41,6 +43,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// (Niklaus &amp; Liu, CVPR 2020)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Softmax Splatting for Video Frame Interpolation",
+    "https://arxiv.org/abs/2003.05534",
+    Year = 2020,
+    Authors = "Simon Niklaus, Feng Liu")]
 public class SoftSplat<T> : FrameInterpolationBase<T>
 {
     #region Fields

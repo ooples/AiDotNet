@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -41,6 +43,17 @@ namespace AiDotNet.Video.Enhancement;
 /// Video Restoration" (Wang et al., 2025)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SeedVR: Seeding Infinity in Diffusion Transformer Towards Generic Video Restoration",
+    "https://arxiv.org/abs/2501.01320",
+    Year = 2025,
+    Authors = "Jianyi Wang, Kelvin C.K. Chan, Shangchen Zhou, Chen Change Loy")]
 public class SeedVR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

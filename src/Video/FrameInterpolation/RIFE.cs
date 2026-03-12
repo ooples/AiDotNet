@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -35,6 +38,16 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// ECCV 2022.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RIFE: Real-Time Intermediate Flow Estimation for Video Frame Interpolation",
+    "https://arxiv.org/abs/2011.06294",
+    Year = 2022,
+    Authors = "Zhewei Huang, Tianyuan Zhang, Wen Heng, Boxin Shi, Shuchang Zhou")]
 public class RIFE<T> : FrameInterpolationBase<T>
 {
     private readonly RIFEOptions _options;

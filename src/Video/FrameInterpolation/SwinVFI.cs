@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
@@ -39,6 +41,17 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// <b>Reference:</b> "SwinVFI: Swin Transformer-based Video Frame Interpolation" (2022)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Video Frame Interpolation with Transformer",
+    "https://arxiv.org/abs/2205.07230",
+    Year = 2022,
+    Authors = "Liying Lu, Ruizheng Wu, Huaijia Lin, Jiangbo Lu, Jiaya Jia")]
 public class SwinVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields

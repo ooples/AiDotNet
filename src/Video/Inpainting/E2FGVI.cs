@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Inpainting;
@@ -31,6 +34,16 @@ namespace AiDotNet.Video.Inpainting;
 /// - Temporal consistency enforcement
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Towards An End-to-End Framework for Flow-Guided Video Inpainting",
+    "https://arxiv.org/abs/2204.02663",
+    Year = 2022,
+    Authors = "Zhen Li, Cheng-Ze Lu, Jianhua Qin, Chun-Le Guo, Ming-Ming Cheng")]
 public class E2FGVI<T> : VideoInpaintingBase<T>
 {
     private readonly E2FGVIOptions _options;

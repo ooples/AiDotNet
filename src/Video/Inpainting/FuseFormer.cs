@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Inpainting;
@@ -25,6 +27,17 @@ namespace AiDotNet.Video.Inpainting;
 /// local texture details and global structure across frames for high-quality inpainting.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FuseFormer: Fusing Fine-Grained Information in Transformers for Video Inpainting",
+    "https://arxiv.org/abs/2109.02974",
+    Year = 2021,
+    Authors = "Rui Liu, Hanming Deng, Yangyi Huang, Xiaoyu Shi, Lewei Lu, Wenxiu Sun, Xiaogang Wang, Jifeng Dai, Hongsheng Li")]
 public class FuseFormer<T> : VideoInpaintingBase<T>
 {
     private readonly FuseFormerOptions _options;

@@ -1,10 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Stabilization;
@@ -25,6 +27,16 @@ namespace AiDotNet.Video.Stabilization;
 /// intentional cinematographic movements while removing distracting shake near gaze targets.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Generalized Adaptive Video Stabilization",
+    "https://arxiv.org/abs/2501.06868",
+    Year = 2025,
+    Authors = "Donghao Zhang")]
 public class GaVS<T> : VideoStabilizationBase<T>
 {
     private readonly GaVSOptions _options;

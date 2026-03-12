@@ -1,9 +1,12 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
@@ -22,6 +25,16 @@ namespace AiDotNet.Video.Motion;
 /// MemFlow augments flow estimation with an explicit memory module that aggregates historical motion information for improved temporal consistency.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MemFlow: Optical Flow Estimation and Prediction with Memory",
+    "https://arxiv.org/abs/2404.04808",
+    Year = 2024,
+    Authors = "Qiaole Dong, Yanwei Fu")]
 public class MemFlow<T> : OpticalFlowBase<T>
 {
     private readonly MemFlowOptions _options;

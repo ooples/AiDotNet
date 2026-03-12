@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -48,6 +51,16 @@ namespace AiDotNet.Video.Matting;
 /// https://arxiv.org/abs/2108.11515
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Robust High-Resolution Video Matting with Temporal Guidance",
+    "https://arxiv.org/abs/2108.11515",
+    Year = 2021,
+    Authors = "Shanchuan Lin, Linjie Yang, Imran Saleemi, Soumyadip Sengupta")]
 public class RVM<T> : NeuralNetworkBase<T>
 {
     private readonly RVMOptions _options;

@@ -1,8 +1,11 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
@@ -59,6 +62,17 @@ namespace AiDotNet.Video.ActionRecognition;
 /// https://arxiv.org/abs/2102.05095
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Is Space-Time Attention All You Need for Video Understanding?",
+    "https://arxiv.org/abs/2102.05095",
+    Year = 2021,
+    Authors = "Gedas Bertasius, Heng Wang, Lorenzo Torresani")]
 public class TimeSformer<T> : NeuralNetworkBase<T>
 {
     private readonly TimeSformerOptions _options;

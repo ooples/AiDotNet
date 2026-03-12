@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -5,6 +6,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -42,6 +44,16 @@ namespace AiDotNet.Video.Enhancement;
 /// (Zhuang et al., 2025)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FlashVSR: Efficient Real-Time Video Super-Resolution via One-Step Diffusion",
+    "https://arxiv.org/abs/2501.10918",
+    Year = 2025,
+    Authors = "Jianyi Zhuang, Hengjian Li, Ying Tai")]
 public class FlashVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields

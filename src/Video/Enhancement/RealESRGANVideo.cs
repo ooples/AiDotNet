@@ -1,9 +1,11 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -44,6 +46,16 @@ namespace AiDotNet.Video.Enhancement;
 /// Synthetic Data" (Wang et al., 2022)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data",
+    "https://arxiv.org/abs/2107.10833",
+    Year = 2021,
+    Authors = "Xintao Wang, Liangbin Xie, Chao Dong, Ying Shan")]
 public class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
