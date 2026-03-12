@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <list type="bullet"><item>Paper: "LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking" (Microsoft, 2022)</item></list></para>
 /// <para><b>For Beginners:</b> LayoutLMv3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking", "https://arxiv.org/abs/2204.08387", Year = 2022, Authors = "Huang et al.")]
 public class LayoutLMv3<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly LayoutLMv3Options _options; public override ModelOptions GetOptions() => _options;

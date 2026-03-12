@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <list type="bullet"><item>Paper: "Nougat: Neural Optical Understanding for Academic Documents" (Meta, 2023)</item></list></para>
 /// <para><b>For Beginners:</b> Nougat is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Nougat: Neural Optical Understanding for Academic Documents", "https://arxiv.org/abs/2308.13418", Year = 2023, Authors = "Blecher et al.")]
 public class Nougat<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly NougatOptions _options; public override ModelOptions GetOptions() => _options;

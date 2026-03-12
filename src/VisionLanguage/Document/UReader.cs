@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <list type="bullet"><item>Paper: "UReader: Universal OCR-free Visually-situated Language Understanding" (2024)</item></list></para>
 /// <para><b>For Beginners:</b> UReader is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("UReader: Universal OCR-free Visually-situated Language Understanding", "https://arxiv.org/abs/2310.05126", Year = 2024, Authors = "Ye et al.")]
 public class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly UReaderOptions _options; public override ModelOptions GetOptions() => _options;

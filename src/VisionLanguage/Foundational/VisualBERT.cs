@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,14 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// <list type="bullet"><item>Paper: "VisualBERT: A Simple and Performant Baseline for Vision and Language" (Li et al., 2019)</item></list></para>
 /// <para><b>For Beginners:</b> VisualBERT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VisualBERT: A Simple and Performant Baseline for Vision and Language", "https://arxiv.org/abs/1908.03557", Year = 2019, Authors = "Li et al.")]
 public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly VisualBERTOptions _options; public override ModelOptions GetOptions() => _options;

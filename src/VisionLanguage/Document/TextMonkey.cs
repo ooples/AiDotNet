@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <list type="bullet"><item>Paper: "TextMonkey: An OCR-Free Large Multimodal Model for Understanding Document" (HUST, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> TextMonkey is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TextMonkey: An OCR-Free Large Multimodal Model for Understanding Document", "https://arxiv.org/abs/2403.04473", Year = 2024, Authors = "Liu et al.")]
 public class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly TextMonkeyOptions _options; public override ModelOptions GetOptions() => _options;

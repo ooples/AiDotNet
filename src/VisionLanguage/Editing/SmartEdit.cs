@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// <list type="bullet"><item>Paper: "SmartEdit: Exploring Complex Instruction-based Image Editing with Multimodal LLMs" (2024)</item></list></para>
 /// <para><b>For Beginners:</b> SmartEdit is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SmartEdit: Exploring Complex Instruction-based Image Editing with Multimodal LLMs", "https://arxiv.org/abs/2312.06739", Year = 2024, Authors = "Huang et al.")]
 public class SmartEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly SmartEditOptions _options; public override ModelOptions GetOptions() => _options;

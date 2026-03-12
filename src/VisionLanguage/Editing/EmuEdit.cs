@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,13 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// <list type="bullet"><item>Paper: "Emu Edit: Precise Image Editing via Recognition and Generation Tasks" (Meta, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> EmuEdit is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Emu Edit: Precise Image Editing via Recognition and Generation Tasks", "https://arxiv.org/abs/2311.10089", Year = 2024, Authors = "Sheynin et al.")]
 public class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly EmuEditOptions _options; public override ModelOptions GetOptions() => _options;

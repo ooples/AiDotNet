@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <list type="bullet"><item>Paper: "DocPedia: Unleashing the Power of Large Multimodal Model in the Frequency Domain" (2024)</item></list></para>
 /// <para><b>For Beginners:</b> DocPedia is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DocPedia: Unleashing the Power of Large Multimodal Model in the Frequency Domain", "https://arxiv.org/abs/2311.11810", Year = 2024, Authors = "Feng et al.")]
 public class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly DocPediaOptions _options; public override ModelOptions GetOptions() => _options;

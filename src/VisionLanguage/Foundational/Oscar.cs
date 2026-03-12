@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,15 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// <list type="bullet"><item>Paper: "Oscar: Object-Semantics Aligned Pre-training for Vision-Language Tasks" (Li et al., ECCV 2020)</item></list></para>
 /// <para><b>For Beginners:</b> Oscar is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Oscar: Object-Semantics Aligned Pre-training for Vision-Language Tasks", "https://arxiv.org/abs/2004.06165", Year = 2020, Authors = "Li et al.")]
 public class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly OscarOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <list type="bullet"><item>Paper: "Surya: Multi-language OCR Toolkit" (Datalab, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> Surya is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Surya: Multi-language OCR Toolkit", "https://github.com/VikParuchuri/surya", Year = 2024, Authors = "Paruchuri")]
 public class Surya<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly SuryaOptions _options; public override ModelOptions GetOptions() => _options;

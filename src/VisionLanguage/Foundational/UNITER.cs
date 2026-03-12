@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,14 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// <list type="bullet"><item>Paper: "UNITER: UNiversal Image-TExt Representation Learning" (Chen et al., ECCV 2020)</item></list></para>
 /// <para><b>For Beginners:</b> UNITER is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("UNITER: UNiversal Image-TExt Representation Learning", "https://arxiv.org/abs/1909.11740", Year = 2020, Authors = "Chen et al.")]
 public class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly UNITEROptions _options; public override ModelOptions GetOptions() => _options;
