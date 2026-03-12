@@ -1,4 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -36,6 +39,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - 0.0 = consistently incorrect
 /// Temperature inversely proportional to performance.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Distilling the Knowledge in a Neural Network",
+    "https://arxiv.org/abs/1503.02531",
+    Year = 2015,
+    Authors = "Geoffrey Hinton, Oriol Vinyals, Jeff Dean")]
 public class AccuracyBasedAdaptiveStrategy<T> : AdaptiveDistillationStrategyBase<T>
 {
     /// <summary>

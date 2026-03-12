@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
@@ -18,6 +21,16 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// Curriculum decisions (which samples to show, how to adjust temperature/alpha) belong
 /// in the strategy or trainer layer.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Curriculum Learning",
+    "https://dl.acm.org/doi/10.1145/1553374.1553380",
+    Year = 2009,
+    Authors = "Yoshua Bengio, Jérôme Louradour, Ronan Collobert, Jason Weston")]
 public class CurriculumTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private readonly ITeacherModel<Vector<T>, Vector<T>> _baseTeacher;

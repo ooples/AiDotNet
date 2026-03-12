@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
 
@@ -41,6 +44,16 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// - You et al. (2017). Learning from Multiple Teacher Networks. KDD.
 /// - Fukuda et al. (2017). Efficient Knowledge Distillation from an Ensemble of Teachers.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Distilling the Knowledge in a Neural Network",
+    "https://arxiv.org/abs/1503.02531",
+    Year = 2015,
+    Authors = "Geoffrey Hinton, Oriol Vinyals, Jeff Dean")]
 public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private readonly ITeacherModel<Vector<T>, Vector<T>>[] _teachers;

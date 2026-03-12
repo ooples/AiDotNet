@@ -1,6 +1,9 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -35,6 +38,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Variational Knowledge Distillation (Ahn et al., 2019)
 /// - Bayesian Dark Knowledge (Balan et al., 2015)</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Variational Information Distillation for Knowledge Transfer",
+    "https://arxiv.org/abs/1904.05835",
+    Year = 2019,
+    Authors = "Sungsoo Ahn, Shell Xu Hu, Andreas Damianou, et al.")]
 public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _variationalWeight;

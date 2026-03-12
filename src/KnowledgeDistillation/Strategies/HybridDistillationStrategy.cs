@@ -1,5 +1,8 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -25,6 +28,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - More robust than single-strategy distillation
 /// - Commonly used in SOTA models like TinyBERT, MobileBERT</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Distilling the Knowledge in a Neural Network",
+    "https://arxiv.org/abs/1503.02531",
+    Year = 2015,
+    Authors = "Geoffrey Hinton, Oriol Vinyals, Jeff Dean")]
 public class HybridDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly (IDistillationStrategy<T> Strategy, double Weight)[] _strategies;

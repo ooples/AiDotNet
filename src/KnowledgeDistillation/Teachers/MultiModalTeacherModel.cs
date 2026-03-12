@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
@@ -8,6 +11,16 @@ namespace AiDotNet.KnowledgeDistillation.Teachers;
 /// <summary>
 /// Multi-modal teacher that combines multiple input modalities (vision, text, audio).
 /// </summary>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Distilling the Knowledge in a Neural Network",
+    "https://arxiv.org/abs/1503.02531",
+    Year = 2015,
+    Authors = "Geoffrey Hinton, Oriol Vinyals, Jeff Dean")]
 public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 {
     private readonly ITeacherModel<Vector<T>, Vector<T>>[] _modalityTeachers;

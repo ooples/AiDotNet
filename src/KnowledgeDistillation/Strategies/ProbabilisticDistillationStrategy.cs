@@ -1,6 +1,9 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -27,6 +30,16 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// <para><b>Research Basis:</b> Based on probabilistic knowledge distillation and Bayesian neural networks.
 /// Particularly useful for uncertainty quantification and ensemble distillation.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Distilling the Knowledge in a Neural Network",
+    "https://arxiv.org/abs/1503.02531",
+    Year = 2015,
+    Authors = "Geoffrey Hinton, Oriol Vinyals, Jeff Dean")]
 public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
 {
     private readonly double _distributionWeight;

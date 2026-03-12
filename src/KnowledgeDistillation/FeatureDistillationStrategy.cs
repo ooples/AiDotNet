@@ -1,6 +1,9 @@
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation;
@@ -40,6 +43,16 @@ namespace AiDotNet.KnowledgeDistillation;
 /// <para><b>References:</b>
 /// - Romero, A., et al. (2014). FitNets: Hints for Thin Deep Nets. arXiv:1412.6550</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FitNets: Hints for Thin Deep Nets",
+    "https://arxiv.org/abs/1412.6550",
+    Year = 2015,
+    Authors = "Adriana Romero, Nicolas Ballas, Samira Ebrahimi Kahou, et al.")]
 public class FeatureDistillationStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
