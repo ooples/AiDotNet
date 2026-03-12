@@ -58,6 +58,8 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
     public PartitionMCMCAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyBayesianOptions(options);
+        if (NumSamples < 1)
+            NumSamples = 1000;
         _maxParents = options?.MaxParents ?? 5;
         _burnIn = Math.Max(NumSamples / 5, 100);
     }
@@ -111,6 +113,7 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
         }
 
         var result = new Matrix<T>(d, d);
+        if (sampleCount == 0) return result;
         T sampleCountT = NumOps.FromDouble(sampleCount);
         T halfT = NumOps.FromDouble(0.5);
         for (int i = 0; i < d; i++)

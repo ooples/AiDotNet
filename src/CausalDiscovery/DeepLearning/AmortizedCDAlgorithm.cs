@@ -60,7 +60,7 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int h = Math.Min(HiddenUnits, 10);
+        int h = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -130,8 +130,17 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                     P[i, j] = NumOps.FromDouble(sv2 > 20 ? 1.0 : sv2 < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv2)));
                 }
 
-            // Reconstruction loss using covariance: ||cov - P * cov||_F^2 (simplified)
-            // Gradient w.r.t. P[i,j]: data-fit + acyclicity
+            // Compute NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+            var PSquared = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    PSquared[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
+            var expWW = MatrixExponentialTaylor(PSquared, d);
+            T hValPrev = NumOps.Zero;
+            for (int i = 0; i < d; i++)
+                hValPrev = NumOps.Add(hValPrev, expWW[i, i]);
+            hValPrev = NumOps.Subtract(hValPrev, NumOps.FromDouble(d));
+
             var gW1 = new Matrix<T>(featDim, h);
             var gW2 = new Matrix<T>(h, 1);
 
@@ -146,9 +155,11 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                     T absCorr = NumOps.Abs(corr[i, j]);
                     T dataGrad = NumOps.Subtract(pij, absCorr);
 
-                    // Acyclicity gradient
-                    T acycGrad = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
-                        NumOps.FromDouble(2));
+                    // Acyclicity gradient: d/dP[i,j] of (alpha * h + rho/2 * h^2)
+                    // where h = tr(exp(P∘P)) - d, gradient = (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+                    T acycGrad = NumOps.Multiply(
+                        NumOps.Add(alpha, NumOps.Multiply(rho, hValPrev)),
+                        NumOps.Multiply(expWW[j, i], NumOps.Multiply(pij, NumOps.FromDouble(2))));
 
                     T totalGradP = NumOps.Add(dataGrad, acycGrad);
 
@@ -188,13 +199,9 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
             for (int k = 0; k < h; k++)
                 W2[k, 0] = NumOps.Subtract(W2[k, 0], NumOps.Multiply(lr, gW2[k, 0]));
 
-            // Update augmented Lagrangian
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    if (i != j) hVal = NumOps.Add(hVal, NumOps.Multiply(P[i, j], P[i, j]));
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            // Update augmented Lagrangian with NOTEARS h(P) = tr(exp(P∘P)) - d
+            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValPrev));
+            if (NumOps.GreaterThan(hValPrev, NumOps.FromDouble(0.25)))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
@@ -231,6 +238,48 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                     }
                 }
             }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes matrix exponential via Taylor series: exp(M) = I + M + M^2/2! + ... + M^k/k!
+    /// Used for NOTEARS acyclicity constraint h(W) = tr(exp(W∘W)) - d.
+    /// </summary>
+    private Matrix<T> MatrixExponentialTaylor(Matrix<T> M, int d, int terms = 10)
+    {
+        // result = I
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            result[i, i] = NumOps.One;
+
+        // power = I initially, accumulate M^k / k!
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            power[i, i] = NumOps.One;
+
+        for (int k = 1; k <= terms; k++)
+        {
+            // power = power * M
+            var next = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int l = 0; l < d; l++)
+                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, l], M[l, j]));
+                    next[i, j] = sum;
+                }
+            power = next;
+
+            // result += power / k!
+            T factorial = NumOps.FromDouble(1.0);
+            for (int f = 2; f <= k; f++)
+                factorial = NumOps.Multiply(factorial, NumOps.FromDouble(f));
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    result[i, j] = NumOps.Add(result[i, j], NumOps.Divide(power[i, j], factorial));
+        }
 
         return result;
     }
