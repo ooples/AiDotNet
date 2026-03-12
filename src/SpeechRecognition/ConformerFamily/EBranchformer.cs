@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -24,6 +25,12 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// Achieves SOTA on LibriSpeech with ESPnet (WER 2.1%/4.2% clean/other).
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("E-Branchformer: Branchformer with Enhanced Merging for Speech Recognition", "https://arxiv.org/abs/2210.00077", Year = 2022, Authors = "Kim et al.")]
 public class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly EBranchformerOptions _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -24,6 +25,12 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// Achieves similar accuracy to standard Conformer with ~30% fewer FLOPs.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Efficient Conformer: Progressive Downsampling and Grouped Attention for Automatic Speech Recognition", "https://arxiv.org/abs/2109.01163", Year = 2021, Authors = "Burchi and Vielzeuf")]
 public class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly EfficientConformerOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,12 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// These changes reduce compute by ~30% while matching or exceeding Conformer accuracy.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Squeezeformer: An Efficient Transformer for Automatic Speech Recognition", "https://arxiv.org/abs/2206.00888", Year = 2022, Authors = "Kim et al.")]
 public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SqueezeformerOptions _options; public override ModelOptions GetOptions() => _options;

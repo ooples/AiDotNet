@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// E-Branchformer enhances the Branchformer architecture with an improved merging strategy. Instead of simple concatenation and gating, E-Branchformer uses a point-wise feed-forward module with depthwise convolution for branch merging. The enhanced merge module allows richer interaction between the attention and convolution branch outputs. E-Branchformer achieves the best reported results among non-Whisper models on LibriSpeech and is the default encoder in ESPnet.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("E-Branchformer: Branchformer with Enhanced Merging for Speech Recognition", "https://arxiv.org/abs/2210.00077", Year = 2023, Authors = "Kim et al.")]
 public class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CTCEBranchformerOptions _options; public override ModelOptions GetOptions() => _options;

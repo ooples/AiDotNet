@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,14 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// Qwen3-ASR integrates a speech encoder with Qwen3's language model for instruction-following ASR. The architecture uses a Conformer audio encoder with a linear adapter projecting into Qwen3's embedding space. The LLM decoder enables flexible output: transcription, translation, summarization, and spoken language understanding via natural language prompts. Supports 50+ languages inheriting Qwen3's multilingual capabilities.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Qwen3-ASR Technical Report", "https://qwenlm.github.io/blog/qwen3/", Year = 2025, Authors = "Qwen Team")]
 public class Qwen3ASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Qwen3ASROptions _options; public override ModelOptions GetOptions() => _options;

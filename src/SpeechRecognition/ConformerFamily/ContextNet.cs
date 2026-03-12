@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -24,6 +25,12 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// with an RNN-T decoder for streaming ASR. Achieves WER 1.9%/3.9% on LibriSpeech.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("ContextNet: Improving Convolutional Neural Networks for Automatic Speech Recognition with Global Context", "https://arxiv.org/abs/2005.03191", Year = 2020, Authors = "Han et al.")]
 public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ContextNetOptions _options;

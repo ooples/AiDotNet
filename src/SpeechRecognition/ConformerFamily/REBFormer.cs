@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -24,6 +25,12 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// The RWKV branch captures global context with O(n) complexity instead of O(n^2).
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("REB-former: RWKV-Enhanced E-Branchformer for Speech Recognition", "https://arxiv.org/abs/2501.13986", Year = 2025, Authors = "Song et al.")]
 public class REBFormer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly REBFormerOptions _options; public override ModelOptions GetOptions() => _options;

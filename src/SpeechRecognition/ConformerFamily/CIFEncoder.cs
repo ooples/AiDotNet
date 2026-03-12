@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -24,6 +25,12 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// This enables non-autoregressive decoding (like Paraformer) while maintaining monotonic alignment.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CIF: Continuous Integrate-and-Fire for End-to-End Speech Recognition", "https://arxiv.org/abs/1905.11235", Year = 2020, Authors = "Dong and Xu")]
 public class CIFEncoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CIFEncoderOptions _options; public override ModelOptions GetOptions() => _options;
