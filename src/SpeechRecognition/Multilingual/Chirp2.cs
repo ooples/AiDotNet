@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,13 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// Chirp 2 improves on the original Chirp with enhanced multilingual capabilities, better handling of accented speech, and improved robustness to background noise. The model uses an updated USM encoder with more training data and improved fine-tuning strategies. Supports 120+ languages with particular improvements for low-resource languages.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
 public class Chirp2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Chirp2Options _options; public override ModelOptions GetOptions() => _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,14 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// USM (Universal Speech Model) is Google's 2B-parameter multilingual ASR model trained on 12M hours of unlabeled speech and 28B text sentences. It uses BEST-RQ for self-supervised pre-training, followed by universal speech-text pre-training that aligns speech and text representations. The model supports 100+ languages and achieves state-of-the-art on many benchmarks. Key innovation: speech-text joint pre-training enables zero-shot ASR for unseen languages.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
 public class USM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly USMOptions _options; public override ModelOptions GetOptions() => _options;
