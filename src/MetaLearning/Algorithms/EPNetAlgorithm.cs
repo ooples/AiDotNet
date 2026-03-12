@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -74,6 +75,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Embedding Propagation: Smoother Manifold for Few-Shot Classification. CVPR 2020.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Embedding Propagation: Smoother Manifold for Few-Shot Classification", "https://arxiv.org/abs/2003.04557", Year = 2020, Authors = "Rodriguez et al.")]
 public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly EPNetOptions<T, TInput, TOutput> _epnetOptions;

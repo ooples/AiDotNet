@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -10,6 +11,11 @@ using AiDotNet.Data.Structures;
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>Implementation of Convolutional Neural Process (Foong et al., 2020).</summary>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class ConvNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly ConvNPOptions<T, TInput, TOutput> _algoOptions;

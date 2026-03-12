@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -44,6 +45,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Bayesian Model-Agnostic Meta-Learning", "https://arxiv.org/abs/1806.03836", Year = 2018, Authors = "Jaesik Yoon, Taesup Kim, Ousmane Dia, Sungwoong Kim, Yoshua Bengio, Sungjin Ahn")]
 public class BMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly BMAMLOptions<T, TInput, TOutput> _algoOptions;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -10,6 +11,11 @@ using AiDotNet.Data.Structures;
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>Implementation of Steerable Conditional Neural Process (Holderrieth et al., 2021).</summary>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SteerCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly SteerCNPOptions<T, TInput, TOutput> _algoOptions;

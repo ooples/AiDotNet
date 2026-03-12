@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -13,6 +14,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Implementation of Attentive Neural Process (ANP) (Kim et al., ICLR 2019).
 /// Adds cross-attention from targets to context for better predictions on top of NP.
 /// </summary>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Attentive Neural Processes", "https://arxiv.org/abs/1901.05761", Year = 2019, Authors = "Kim et al.")]
 public class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly ANPOptions<T, TInput, TOutput> _anpOptions;

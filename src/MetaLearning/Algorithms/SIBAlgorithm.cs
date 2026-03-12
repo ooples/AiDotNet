@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -79,6 +80,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Leveraging the Feature Distribution in Transfer-based Few-Shot Learning.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Empirical Bayes Transductive Meta-Learning with Synthetic Gradients", "https://arxiv.org/abs/2004.12696", Year = 2020, Authors = "Shell Xu Hu, Pablo Garcia Moreno, Yang Xiao, James Sherwood, Steph Sherwood, Andi Mayasari")]
 public class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly SIBOptions<T, TInput, TOutput> _sibOptions;

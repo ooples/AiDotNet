@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -35,6 +36,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-FDMixup: Cross-Domain Few-Shot Learning Guided by Labeled Target Data", "https://arxiv.org/abs/2107.11978", Year = 2021, Authors = "Xu et al.")]
 public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaFDMixupOptions<T, TInput, TOutput> _algoOptions;

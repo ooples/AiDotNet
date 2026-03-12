@@ -251,5 +251,11 @@ public enum ModelTask
     /// Assigns inputs to one of three or more categories.
     /// Example: classifying images as cats, dogs, or birds.
     /// </summary>
-    MultiClassClassification
+    MultiClassClassification,
+
+    /// <summary>
+    /// Learns optimal actions through interaction with an environment to maximize cumulative reward.
+    /// Example: training an agent to play a game or navigate a maze.
+    /// </summary>
+    ReinforcementLearning
 }

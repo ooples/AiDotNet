@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -64,6 +65,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Meta-Learning with Differentiable Convex Optimization. CVPR 2019.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Learning with Differentiable Convex Optimization", "https://arxiv.org/abs/1904.03758", Year = 2019, Authors = "Kwonjoon Lee, Subhransu Maji, Avinash Ravichandran, Stefano Soatto")]
 public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaOptNetOptions<T, TInput, TOutput> _metaOptNetOptions;

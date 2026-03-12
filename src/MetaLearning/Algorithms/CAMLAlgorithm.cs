@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -74,6 +75,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Re, C., &amp; Thrun, S. (2023). Context-Aware Meta-Learning. NeurIPS 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Context-Aware Meta-Learning", "https://arxiv.org/abs/2310.10971", Year = 2023, Authors = "Fifty et al.")]
 public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly CAMLOptions<T, TInput, TOutput> _camlOptions;

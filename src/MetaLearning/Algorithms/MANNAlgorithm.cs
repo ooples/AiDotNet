@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -91,6 +92,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Meta-Learning with Memory-Augmented Neural Networks. ICML.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Learning with Memory-Augmented Neural Networks", "https://arxiv.org/abs/1605.06065", Year = 2016, Authors = "Santoro et al.")]
 public class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MANNOptions<T, TInput, TOutput> _mannOptions;
@@ -984,6 +991,12 @@ public class MANNMemoryStatistics
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Learning with Memory-Augmented Neural Networks", "https://arxiv.org/abs/1605.06065", Year = 2016, Authors = "Santoro et al.")]
 public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static IEngine Engine => AiDotNetEngine.Current;

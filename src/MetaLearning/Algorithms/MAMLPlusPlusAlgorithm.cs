@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -89,6 +90,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// How to Train Your MAML. ICLR 2019.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("How to Train Your MAML", "https://arxiv.org/abs/1810.09502", Year = 2019, Authors = "Antreas Antoniou, Harrison Edwards, Amos Storkey")]
 public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MAMLPlusPlusOptions<T, TInput, TOutput> _mamlOptions;

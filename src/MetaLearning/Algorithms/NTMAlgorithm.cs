@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
@@ -96,6 +97,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// - Differentiable memory operations
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Neural Turing Machines", "https://arxiv.org/abs/1410.5401", Year = 2014, Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
 public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly NTMOptions<T, TInput, TOutput> _ntmOptions;
@@ -693,6 +700,12 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Neural Turing Machines", "https://arxiv.org/abs/1410.5401", Year = 2014, Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
 public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly INTMController<T> _controller;

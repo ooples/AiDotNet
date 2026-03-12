@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -31,6 +32,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Meta-Baseline: Exploring Simple Meta-Learning for Few-Shot Learning. ICLR 2021.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Baseline: Exploring Simple Meta-Learning for Few-Shot Learning", "https://arxiv.org/abs/2003.04390", Year = 2021, Authors = "Chen et al.")]
 public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaBaselineOptions<T, TInput, TOutput> _metaBaselineOptions;

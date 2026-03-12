@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -82,6 +83,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// DPGN: Distribution Propagation Graph Network for Few-Shot Learning. CVPR 2020.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DPGN: Distribution Propagation Graph Network for Few-Shot Learning", "https://arxiv.org/abs/2003.14247", Year = 2020, Authors = "Yang et al.")]
 public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly DPGNOptions<T, TInput, TOutput> _dpgnOptions;

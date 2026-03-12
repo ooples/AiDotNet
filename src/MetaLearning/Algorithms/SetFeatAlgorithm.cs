@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -75,6 +76,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Matching Feature Sets for Few-Shot Image Classification. CVPR 2022.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Matching Feature Sets for Few-Shot Image Classification", "https://arxiv.org/abs/2204.00949", Year = 2022, Authors = "Afrasiyabi et al.")]
 public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly SetFeatOptions<T, TInput, TOutput> _setFeatOptions;

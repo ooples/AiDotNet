@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -62,6 +63,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Laplacian Regularized Few-Shot Learning. ICML 2020.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Laplacian Regularized Few-Shot Learning", "https://arxiv.org/abs/2006.15486", Year = 2020, Authors = "Imtiaz Masud Ziko, Jose Dolz, Eric Granger, Ismail Ben Ayed")]
 public class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly LaplacianShotOptions<T, TInput, TOutput> _lapShotOptions;

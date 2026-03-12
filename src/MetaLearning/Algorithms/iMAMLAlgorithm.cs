@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -53,6 +54,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Meta-learning with implicit gradients.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Learning with Implicit Gradients", "https://arxiv.org/abs/1909.04630", Year = 2019, Authors = "Rajeswaran et al.")]
 public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly iMAMLOptions<T, TInput, TOutput> _imamlOptions;

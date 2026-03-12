@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -50,6 +51,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// On first-order meta-learning algorithms.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("On First-Order Meta-Learning Algorithms", "https://arxiv.org/abs/1803.02999", Year = 2018, Authors = "Alex Nichol, Joshua Achiam, John Schulman")]
 public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ReptileOptions<T, TInput, TOutput> _reptileOptions;

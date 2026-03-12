@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -59,6 +60,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// BOIL: Towards Representation Change for Few-shot Learning.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BOIL: Towards Representation Change for Few-shot Learning", "https://arxiv.org/abs/2008.08882", Year = 2021, Authors = "Jaehoon Oh, Hyungjun Yoo, ChangHwan Kim, Se-Young Yun")]
 public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly BOILOptions<T, TInput, TOutput> _boilOptions;

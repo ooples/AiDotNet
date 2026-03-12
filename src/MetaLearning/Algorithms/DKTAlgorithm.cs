@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -87,6 +88,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Bayesian Meta-Learning for the Few-Shot Setting via Deep Kernels. ICLR 2020.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Kernel Transfer in Gaussian Processes for Few-shot Learning", "https://arxiv.org/abs/1910.05199", Year = 2020, Authors = "Massimiliano Patacchiola, Jack Turner, Elliot J. Crowley, Michael O'Boyle, Amos Storkey")]
 public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly DKTOptions<T, TInput, TOutput> _dktOptions;

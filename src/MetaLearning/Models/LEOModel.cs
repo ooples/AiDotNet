@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -29,13 +30,16 @@ namespace AiDotNet.MetaLearning.Models;
 /// <item>The adapted latent code itself (useful for further fine-tuning)</item>
 /// </list>
 /// </remarks>
-public class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Learning with Latent Embedding Optimization", "https://arxiv.org/abs/1807.05960", Year = 2019, Authors = "Andrei A. Rusu, Dushyant Rao, Jakub Sygnowski, Oriol Vinyals, Razvan Pascanu, Simon Osindero, Raia Hadsell")]
+public class LEOModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
-    private readonly Vector<T> _classifierParams;
-    private readonly Vector<T> _latentCode;
+    private Vector<T> _classifierParams;
+    private Vector<T> _latentCode;
     private readonly LEOOptions<T, TInput, TOutput> _options;
 
     /// <summary>
@@ -51,9 +55,8 @@ public class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
         Vector<T> classifierParams,
         Vector<T> latentCode,
         LEOOptions<T, TInput, TOutput> options)
+        : base(featureEncoder)
     {
-        Guard.NotNull(featureEncoder);
-        _featureEncoder = featureEncoder;
         Guard.NotNull(classifierParams);
         _classifierParams = classifierParams;
         Guard.NotNull(latentCode);
@@ -61,9 +64,6 @@ public class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
         Guard.NotNull(options);
         _options = options;
     }
-
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
     /// Gets the adapted classifier parameters.
@@ -86,34 +86,17 @@ public class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
     public int NumClasses => _options.NumClasses;
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
-        // Extract features using the encoder
-        var embeddings = ExtractEmbeddings(input);
-
-        // Apply classifier
+        var embeddings = ExtractFeaturesFromBaseModel(input, _options.EmbeddingDimension);
         var logits = ComputeLogits(embeddings);
-
-        return ConvertToOutput(logits);
+        return ConvertVectorToOutput(logits);
     }
 
     /// <inheritdoc/>
-    public void Train(TInput inputs, TOutput targets)
+    public override Vector<T> GetParameters()
     {
-        throw new NotSupportedException("Use the LEO algorithm to train the model.");
-    }
-
-    /// <inheritdoc/>
-    public void UpdateParameters(Vector<T> parameters)
-    {
-        throw new NotSupportedException("LEO model parameters are set during adaptation.");
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> GetParameters()
-    {
-        // Return combined feature encoder + classifier parameters + latent code
-        var encoderParams = _featureEncoder.GetParameters();
+        var encoderParams = BaseModel.GetParameters();
         int totalSize = encoderParams.Length + _classifierParams.Length + _latentCode.Length;
         var combined = new Vector<T>(totalSize);
 
@@ -135,34 +118,52 @@ public class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
     }
 
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata()
+    public override void SetParameters(Vector<T> parameters)
     {
-        return Metadata;
-    }
-
-    /// <summary>
-    /// Extracts embeddings from input using the feature encoder.
-    /// </summary>
-    private Vector<T> ExtractEmbeddings(TInput input)
-    {
-        var output = _featureEncoder.Predict(input);
-
-        if (output is Vector<T> vec)
+        Guard.NotNull(parameters);
+        var encoderParams = BaseModel.GetParameters();
+        int expectedLength = encoderParams.Length + _classifierParams.Length + _latentCode.Length;
+        if (parameters.Length != expectedLength)
         {
-            return vec;
+            throw new ArgumentException(
+                $"Parameter count mismatch: expected {expectedLength}, got {parameters.Length}.",
+                nameof(parameters));
         }
 
-        if (output is Tensor<T> tensor)
+        int idx = 0;
+        var newEncoderParams = new Vector<T>(encoderParams.Length);
+        for (int i = 0; i < encoderParams.Length; i++)
         {
-            return tensor.ToVector();
+            newEncoderParams[i] = parameters[idx++];
         }
+        BaseModel.SetParameters(newEncoderParams);
 
-        return new Vector<T>(_options.EmbeddingDimension);
+        for (int i = 0; i < _classifierParams.Length; i++)
+        {
+            _classifierParams[i] = parameters[idx++];
+        }
+        for (int i = 0; i < _latentCode.Length; i++)
+        {
+            _latentCode[i] = parameters[idx++];
+        }
     }
 
-    /// <summary>
-    /// Computes logits from embeddings using classifier parameters.
-    /// </summary>
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        var model = DeepCopy();
+        model.SetParameters(parameters);
+        return model;
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        var clonedEncoder = BaseModel.DeepCopy();
+        return new LEOModel<T, TInput, TOutput>(
+            clonedEncoder, _classifierParams.Clone(), _latentCode.Clone(), _options);
+    }
+
     private Vector<T> ComputeLogits(Vector<T> embeddings)
     {
         var logits = new Vector<T>(_options.NumClasses);
@@ -183,32 +184,5 @@ public class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
         }
 
         return logits;
-    }
-
-    /// <summary>
-    /// Converts logits to the expected output type.
-    /// </summary>
-    private TOutput ConvertToOutput(Vector<T> logits)
-    {
-        if (typeof(TOutput) == typeof(Vector<T>))
-        {
-            return (TOutput)(object)logits;
-        }
-
-        // Handle Tensor<T>
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            return (TOutput)(object)Tensor<T>.FromVector(logits);
-        }
-
-        // Handle T[]
-        if (typeof(TOutput) == typeof(T[]))
-        {
-            return (TOutput)(object)logits.ToArray();
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
-            $"Supported types: Vector<T>, Tensor<T>, T[]");
     }
 }

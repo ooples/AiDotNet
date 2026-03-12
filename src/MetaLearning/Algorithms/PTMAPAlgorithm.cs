@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -80,6 +81,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Leveraging the Feature Distribution in Transfer-based Few-Shot Learning. ICLR 2021.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Leveraging the Feature Distribution in Transfer-based Few-Shot Learning", "https://arxiv.org/abs/2006.03806", Year = 2021, Authors = "Hu et al.")]
 public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly PTMAPOptions<T, TInput, TOutput> _ptmapOptions;

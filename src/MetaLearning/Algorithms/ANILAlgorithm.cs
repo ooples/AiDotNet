@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -64,6 +65,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Rapid Learning or Feature Reuse? Towards Understanding the Effectiveness of MAML.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Rapid Learning or Feature Reuse? Towards Understanding the Effectiveness of MAML", "https://arxiv.org/abs/1909.09157", Year = 2020, Authors = "Aniruddh Raghu, Maithra Raghu, Samy Bengio, Oriol Vinyals")]
 public class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ANILOptions<T, TInput, TOutput> _anilOptions;

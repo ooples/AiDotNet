@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -75,6 +76,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Matching Networks for One Shot Learning. NeurIPS.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Matching Networks for One Shot Learning", "https://arxiv.org/abs/1606.04080", Year = 2016, Authors = "Oriol Vinyals, Charles Blundell, Timothy Lillicrap, Koray Kavukcuoglu, Daan Wierstra")]
 public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MatchingNetworksOptions<T, TInput, TOutput> _matchingOptions;
@@ -607,6 +614,12 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 /// and provides fast classification using attention over support examples.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Matching Networks for One Shot Learning", "https://arxiv.org/abs/1606.04080", Year = 2016, Authors = "Oriol Vinyals, Charles Blundell, Timothy Lillicrap, Koray Kavukcuoglu, Daan Wierstra")]
 public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     protected static IEngine Engine => AiDotNetEngine.Current;

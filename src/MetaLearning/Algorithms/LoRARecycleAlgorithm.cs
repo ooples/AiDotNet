@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -44,6 +45,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// followed by adapter selection and fusion.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LoRA-Recycle: Recycling Low-Rank Adaptation for Efficient Training", "https://arxiv.org/abs/2311.14540", Year = 2025, Authors = "Hu et al.")]
 public class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly LoRARecycleOptions<T, TInput, TOutput> _algoOptions;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -75,6 +76,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Information Maximization for Few-Shot Learning. NeurIPS 2020.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Transductive Information Maximization For Few-Shot Learning", "https://arxiv.org/abs/2008.11297", Year = 2020, Authors = "Malik Boudiaf, Imtiaz Masud Ziko, Jerome Rony, Jose Dolz, Pablo Piantanida, Ismail Ben Ayed")]
 public class TIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly TIMOptions<T, TInput, TOutput> _timOptions;

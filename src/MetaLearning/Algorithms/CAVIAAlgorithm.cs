@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -90,6 +91,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Fast Context Adaptation via Meta-Learning. ICML 2019.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Fast Context Adaptation via Meta-Learning", "https://arxiv.org/abs/1810.03642", Year = 2019, Authors = "Luisa Zintgraf, Kyriacos Shiarlis, Vitaly Kurin, Katja Hofmann, Shimon Whiteson")]
 public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly CAVIAOptions<T, TInput, TOutput> _caviaOptions;
@@ -713,6 +720,12 @@ internal static class CAVIAContextHelper<T>
 /// just like any other model: call Predict() with new examples.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Fast Context Adaptation via Meta-Learning", "https://arxiv.org/abs/1810.03642", Year = 2019, Authors = "Luisa Zintgraf, Kyriacos Shiarlis, Vitaly Kurin, Katja Hofmann, Shimon Whiteson")]
 public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _bodyModel;

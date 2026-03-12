@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -87,6 +88,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 ///    more complex tasks at the cost of computation.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning to Compare: Relation Network for Few-Shot Learning", "https://arxiv.org/abs/1711.06025", Year = 2018, Authors = "Flood Sung, Yongxin Yang, Li Zhang, Tao Xiang, Philip H.S. Torr, Timothy M. Hospedales")]
 public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly RelationNetworkOptions<T, TInput, TOutput> _relationOptions;

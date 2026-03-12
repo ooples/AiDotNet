@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -76,6 +77,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Rethinking Generalization in Few-Shot Classification. ECCV 2022.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Rethinking Generalization in Few-Shot Classification", "https://arxiv.org/abs/2206.07267", Year = 2022, Authors = "Hiller et al.")]
 public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly FewTUREOptions<T, TInput, TOutput> _fewTUREOptions;

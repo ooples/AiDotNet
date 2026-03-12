@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -10,6 +11,11 @@ using AiDotNet.Data.Structures;
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>Implementation of Equivariant Conditional Neural Process (Kawano et al., 2021).</summary>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class EquivCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly EquivCNPOptions<T, TInput, TOutput> _algoOptions;

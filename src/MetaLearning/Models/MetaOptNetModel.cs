@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -28,13 +29,16 @@ namespace AiDotNet.MetaLearning.Models;
 /// <item>The temperature parameter for scaling predictions</item>
 /// </list>
 /// </remarks>
-public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Learning with Differentiable Convex Optimization", "https://arxiv.org/abs/1904.03758", Year = 2019, Authors = "Kwonjoon Lee, Subhransu Maji, Avinash Ravichandran, Stefano Soatto")]
+public class MetaOptNetModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
-    private readonly Matrix<T> _classifierWeights;
-    private readonly T _temperature;
+    private Matrix<T> _classifierWeights;
+    private T _temperature;
     private readonly MetaOptNetOptions<T, TInput, TOutput> _options;
 
     /// <summary>
@@ -50,16 +54,14 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
         Matrix<T> classifierWeights,
         T temperature,
         MetaOptNetOptions<T, TInput, TOutput> options)
+        : base(featureEncoder)
     {
-        Guard.NotNull(featureEncoder);
-        _featureEncoder = featureEncoder;
         Guard.NotNull(classifierWeights);
         _classifierWeights = classifierWeights;
         _temperature = temperature;
         Guard.NotNull(options);
         _options = options;
 
-        // Validate embedding dimension
         if (options.EmbeddingDimension <= 0)
         {
             throw new ArgumentException(
@@ -67,7 +69,6 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
                 nameof(options));
         }
 
-        // Validate classifier weights match expected dimensions
         if (classifierWeights.Rows != options.NumClasses)
         {
             throw new ArgumentException(
@@ -82,9 +83,6 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
                 nameof(classifierWeights));
         }
     }
-
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
     /// Gets the classifier weights.
@@ -102,46 +100,29 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
     public int NumClasses => _options.NumClasses;
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
-        // Extract features
         var embeddings = ExtractEmbeddings(input);
 
-        // Normalize if configured
         if (_options.NormalizeEmbeddings)
         {
             embeddings = NormalizeEmbeddings(embeddings);
         }
 
-        // Compute logits
         var logits = ComputeLogits(embeddings);
 
-        // Apply temperature scaling
         if (_options.UseLearnedTemperature)
         {
             logits = ScaleByTemperature(logits);
         }
 
-        return ConvertToOutput(logits);
+        return ConvertVectorToOutput(logits);
     }
 
     /// <inheritdoc/>
-    public void Train(TInput inputs, TOutput targets)
+    public override Vector<T> GetParameters()
     {
-        throw new NotSupportedException("Use the MetaOptNet algorithm to train the model.");
-    }
-
-    /// <inheritdoc/>
-    public void UpdateParameters(Vector<T> parameters)
-    {
-        throw new NotSupportedException("MetaOptNet model parameters are set during adaptation.");
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> GetParameters()
-    {
-        // Return combined encoder + classifier parameters
-        var encoderParams = _featureEncoder.GetParameters();
+        var encoderParams = BaseModel.GetParameters();
         int classifierSize = _classifierWeights.Rows * _classifierWeights.Columns;
         int totalSize = encoderParams.Length + classifierSize + 1; // +1 for temperature
 
@@ -165,21 +146,66 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
     }
 
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata()
+    public override void SetParameters(Vector<T> parameters)
     {
-        return Metadata;
+        Guard.NotNull(parameters);
+        var encoderParams = BaseModel.GetParameters();
+        int classifierSize = _classifierWeights.Rows * _classifierWeights.Columns;
+        int expectedLength = encoderParams.Length + classifierSize + 1;
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"Parameter count mismatch: expected {expectedLength}, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int idx = 0;
+        var newEncoderParams = new Vector<T>(encoderParams.Length);
+        for (int i = 0; i < encoderParams.Length; i++)
+        {
+            newEncoderParams[i] = parameters[idx++];
+        }
+        BaseModel.SetParameters(newEncoderParams);
+
+        for (int i = 0; i < _classifierWeights.Rows; i++)
+        {
+            for (int j = 0; j < _classifierWeights.Columns; j++)
+            {
+                _classifierWeights[i, j] = parameters[idx++];
+            }
+        }
+        _temperature = parameters[idx];
     }
 
-    /// <summary>
-    /// Extracts embeddings from input using the feature encoder.
-    /// </summary>
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        var model = DeepCopy();
+        model.SetParameters(parameters);
+        return model;
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        var clonedEncoder = BaseModel.DeepCopy();
+        var clonedWeights = new Matrix<T>(_classifierWeights.Rows, _classifierWeights.Columns);
+        for (int i = 0; i < _classifierWeights.Rows; i++)
+        {
+            for (int j = 0; j < _classifierWeights.Columns; j++)
+            {
+                clonedWeights[i, j] = _classifierWeights[i, j];
+            }
+        }
+        return new MetaOptNetModel<T, TInput, TOutput>(clonedEncoder, clonedWeights, _temperature, _options);
+    }
+
     private Matrix<T> ExtractEmbeddings(TInput input)
     {
-        var output = _featureEncoder.Predict(input);
+        var output = BaseModel.Predict(input);
 
         if (output is Vector<T> vec)
         {
-            // Convert vector to matrix
             int numSamples = Math.Max(1, vec.Length / _options.EmbeddingDimension);
             var matrix = new Matrix<T>(numSamples, _options.EmbeddingDimension);
             for (int i = 0; i < numSamples; i++)
@@ -212,9 +238,6 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
         return new Matrix<T>(1, _options.EmbeddingDimension);
     }
 
-    /// <summary>
-    /// Normalizes embeddings to unit norm.
-    /// </summary>
     private Matrix<T> NormalizeEmbeddings(Matrix<T> embeddings)
     {
         var normalized = new Matrix<T>(embeddings.Rows, embeddings.Columns);
@@ -237,9 +260,6 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
         return normalized;
     }
 
-    /// <summary>
-    /// Computes logits using classifier weights.
-    /// </summary>
     private Vector<T> ComputeLogits(Matrix<T> embeddings)
     {
         var logits = new Vector<T>(embeddings.Rows * _classifierWeights.Columns);
@@ -261,9 +281,6 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
         return logits;
     }
 
-    /// <summary>
-    /// Scales logits by temperature.
-    /// </summary>
     private Vector<T> ScaleByTemperature(Vector<T> logits)
     {
         var scaled = new Vector<T>(logits.Length);
@@ -272,32 +289,5 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
             scaled[i] = NumOps.Divide(logits[i], _temperature);
         }
         return scaled;
-    }
-
-    /// <summary>
-    /// Converts logits to the expected output type.
-    /// </summary>
-    private TOutput ConvertToOutput(Vector<T> logits)
-    {
-        if (typeof(TOutput) == typeof(Vector<T>))
-        {
-            return (TOutput)(object)logits;
-        }
-
-        // Handle Tensor<T>
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            return (TOutput)(object)Tensor<T>.FromVector(logits);
-        }
-
-        // Handle T[]
-        if (typeof(TOutput) == typeof(T[]))
-        {
-            return (TOutput)(object)logits.ToArray();
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
-            $"Supported types: Vector<T>, Tensor<T>, T[]");
     }
 }

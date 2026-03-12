@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -78,6 +79,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Meta-Learning Probabilistic Inference for Prediction. ICLR 2019.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Learning Probabilistic Inference for Prediction", "https://arxiv.org/abs/1805.09921", Year = 2019, Authors = "Gordon et al.")]
 public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly VERSAOptions<T, TInput, TOutput> _versaOptions;

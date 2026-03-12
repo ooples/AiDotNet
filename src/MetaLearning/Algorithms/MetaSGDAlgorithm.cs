@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -82,6 +83,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Meta-SGD: Learning to Learn Quickly for Few-Shot Learning.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-SGD: Learning to Learn Quickly for Few-Shot Learning", "https://arxiv.org/abs/1707.09835", Year = 2017, Authors = "Zhenguo Li, Fengwei Zhou, Fei Chen, Hang Li")]
 public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaSGDOptions<T, TInput, TOutput> _metaSGDOptions;
@@ -1085,6 +1092,12 @@ public class PerParameterOptimizer<T, TInput, TOutput>
 /// allowing for further adaptation or inspection of learned coefficients.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-SGD: Learning to Learn Quickly for Few-Shot Learning", "https://arxiv.org/abs/1707.09835", Year = 2017, Authors = "Zhenguo Li, Fengwei Zhou, Fei Chen, Hang Li")]
 public class MetaSGDAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;

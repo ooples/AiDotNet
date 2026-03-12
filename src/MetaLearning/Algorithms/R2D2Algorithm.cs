@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -97,6 +98,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Meta-learning with Differentiable Closed-form Solvers. ICLR 2019.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-learning with differentiable closed-form solvers", "https://arxiv.org/abs/1805.08136", Year = 2019, Authors = "Luca Bertinetto, Joao F. Henriques, Philip Torr, Andrea Vedaldi")]
 public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly R2D2Options<T, TInput, TOutput> _r2d2Options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -25,15 +26,17 @@ namespace AiDotNet.MetaLearning.Models;
 /// scaled distances to these prototypes.
 /// </para>
 /// </remarks>
-public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("TADAM: Task dependent adaptive metric for improved few-shot learning", "https://arxiv.org/abs/1805.10123", Year = 2018, Authors = "Boris Oreshkin, Pau Rodriguez Lopez, Alexandre Lacoste")]
+public class TADAMModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    protected static IEngine Engine => AiDotNetEngine.Current;
-
-    private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly Dictionary<int, Tensor<T>> _prototypes;
-    private readonly Vector<T> _metricScale;
-    private readonly T _temperature;
+    private Vector<T> _metricScale;
+    private T _temperature;
     private readonly TADAMOptions<T, TInput, TOutput> _options;
 
     /// <summary>
@@ -51,9 +54,8 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         Vector<T> metricScale,
         T temperature,
         TADAMOptions<T, TInput, TOutput> options)
+        : base(featureEncoder)
     {
-        Guard.NotNull(featureEncoder);
-        _featureEncoder = featureEncoder;
         Guard.NotNull(prototypes);
         _prototypes = prototypes;
         Guard.NotNull(metricScale);
@@ -64,37 +66,61 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     }
 
     /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-
-    /// <inheritdoc/>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
-        // Encode the input using the feature encoder
-        var encoderOutput = _featureEncoder.Predict(input);
+        var encoderOutput = BaseModel.Predict(input);
         var queryEmbedding = ConversionsHelper.ConvertToVector<T, TOutput>(encoderOutput);
 
-        // Optionally normalize the embedding
         if (_options.NormalizeEmbeddings)
         {
             queryEmbedding = VectorHelper.Normalize(queryEmbedding);
         }
 
-        // Compute scaled distances to each prototype
         var distances = ComputeScaledDistances(queryEmbedding);
-
-        // Convert distances to logits (negative distances scaled by temperature)
         var logits = ComputeLogits(distances);
-
-        // Apply softmax to get class probabilities
         var probabilities = ApplySoftmax(logits);
-
-        // Convert to output type
-        return ConvertToOutput(probabilities);
+        return ConvertVectorToOutput(probabilities);
     }
 
-    /// <summary>
-    /// Computes scaled distances from the query to each class prototype.
-    /// </summary>
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        return BaseModel.GetParameters();
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        Guard.NotNull(parameters);
+        BaseModel.SetParameters(parameters);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        var model = DeepCopy();
+        model.SetParameters(parameters);
+        return model;
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        var clonedEncoder = BaseModel.DeepCopy();
+        var clonedPrototypes = new Dictionary<int, Tensor<T>>();
+        foreach (var kvp in _prototypes)
+        {
+            var clonedTensor = new Tensor<T>(kvp.Value.Shape);
+            for (int i = 0; i < kvp.Value.Length; i++)
+            {
+                clonedTensor.SetFlat(i, kvp.Value.GetFlat(i));
+            }
+            clonedPrototypes[kvp.Key] = clonedTensor;
+        }
+        return new TADAMModel<T, TInput, TOutput>(
+            clonedEncoder, clonedPrototypes, _metricScale.Clone(), _temperature, _options);
+    }
+
     private Vector<T> ComputeScaledDistances(Vector<T> query)
     {
         var distances = new Vector<T>(_options.NumClasses);
@@ -114,9 +140,6 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         return distances;
     }
 
-    /// <summary>
-    /// Computes the scaled Euclidean distance between query and prototype.
-    /// </summary>
     private T ComputeScaledDistance(Vector<T> query, Tensor<T> prototype)
     {
         T distanceSum = NumOps.Zero;
@@ -127,7 +150,6 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
             T diff = NumOps.Subtract(query[i], prototype.GetFlat(i));
             T scaledDiff = diff;
 
-            // Apply metric scaling if available
             if (_options.UseMetricScaling && i < _metricScale.Length)
             {
                 scaledDiff = NumOps.Multiply(diff, _metricScale[i]);
@@ -139,21 +161,17 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         return distanceSum;
     }
 
-    /// <summary>
-    /// Converts distances to logits using temperature scaling.
-    /// </summary>
     private Vector<T> ComputeLogits(Vector<T> distances)
     {
         var logits = new Vector<T>(distances.Length);
         double temp = NumOps.ToDouble(_temperature);
         if (temp < 1e-10)
         {
-            temp = 1.0; // Avoid division by zero
+            temp = 1.0;
         }
 
         for (int i = 0; i < distances.Length; i++)
         {
-            // Logit = -distance / temperature (negative because closer = higher probability)
             double distValue = NumOps.ToDouble(distances[i]);
             logits[i] = NumOps.FromDouble(-distValue / temp);
         }
@@ -161,14 +179,10 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         return logits;
     }
 
-    /// <summary>
-    /// Applies softmax to convert logits to probabilities.
-    /// </summary>
     private Vector<T> ApplySoftmax(Vector<T> logits)
     {
         var probabilities = new Vector<T>(logits.Length);
 
-        // Find max for numerical stability
         T maxLogit = logits[0];
         for (int i = 1; i < logits.Length; i++)
         {
@@ -178,7 +192,6 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
             }
         }
 
-        // Compute exp(logit - max) and sum
         T sum = NumOps.Zero;
         for (int i = 0; i < logits.Length; i++)
         {
@@ -187,7 +200,6 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
             sum = NumOps.Add(sum, probabilities[i]);
         }
 
-        // Normalize
         if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
             for (int i = 0; i < probabilities.Length; i++)
@@ -197,73 +209,5 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         }
 
         return probabilities;
-    }
-
-    /// <summary>
-    /// Converts probability vector to the expected output type.
-    /// </summary>
-    private TOutput ConvertToOutput(Vector<T> probabilities)
-    {
-        if (typeof(TOutput) == typeof(Vector<T>))
-        {
-            return (TOutput)(object)probabilities;
-        }
-
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            return (TOutput)(object)ConversionsHelper.VectorToTensor(probabilities, new int[] { probabilities.Length });
-        }
-
-        // Fallback: return the argmax as a scalar
-        int predictedClass = 0;
-        T maxProb = probabilities[0];
-        for (int i = 1; i < probabilities.Length; i++)
-        {
-            if (NumOps.GreaterThan(probabilities[i], maxProb))
-            {
-                maxProb = probabilities[i];
-                predictedClass = i;
-            }
-        }
-
-        var result = new Vector<T>(1);
-        result[0] = NumOps.FromDouble(predictedClass);
-        if (result is TOutput output)
-        {
-            return output;
-        }
-
-        if (probabilities is TOutput prob)
-        {
-            return prob;
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot convert prediction result to output type {typeof(TOutput).Name}. " +
-            $"Supported types are Vector<T> and Tensor<T>.");
-    }
-
-    /// <inheritdoc/>
-    public void Train(TInput inputs, TOutput targets)
-    {
-        throw new NotSupportedException("Use the training algorithm to train TADAM.");
-    }
-
-    /// <inheritdoc/>
-    public void UpdateParameters(Vector<T> parameters)
-    {
-        throw new NotSupportedException("TADAM parameters are updated during training.");
-    }
-
-    /// <inheritdoc/>
-    public Vector<T> GetParameters()
-    {
-        return _featureEncoder.GetParameters();
-    }
-
-    /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata()
-    {
-        return Metadata;
     }
 }

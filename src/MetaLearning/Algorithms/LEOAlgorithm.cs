@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -60,6 +61,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Meta-Learning with Latent Embedding Optimization. ICLR 2019.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Meta-Learning with Latent Embedding Optimization", "https://arxiv.org/abs/1807.05960", Year = 2019, Authors = "Andrei A. Rusu, Dushyant Rao, Jakub Sygnowski, Oriol Vinyals, Razvan Pascanu, Simon Osindero, Raia Hadsell")]
 public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly LEOOptions<T, TInput, TOutput> _leoOptions;

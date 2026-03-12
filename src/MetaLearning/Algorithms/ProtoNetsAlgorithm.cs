@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -82,6 +83,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Prototypical Networks for Few-shot Learning.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Prototypical Networks for Few-shot Learning", "https://arxiv.org/abs/1703.05175", Year = 2017, Authors = "Jake Snell, Kevin Swersky, Richard Zemel")]
 public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ProtoNetsOptions<T, TInput, TOutput> _protoNetsOptions;
@@ -843,6 +850,12 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 /// It can classify new examples instantly by finding the nearest class prototype.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Prototypical Networks for Few-shot Learning", "https://arxiv.org/abs/1703.05175", Year = 2017, Authors = "Jake Snell, Kevin Swersky, Richard Zemel")]
 public class PrototypicalModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static IEngine Engine => AiDotNetEngine.Current;

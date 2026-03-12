@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -37,6 +38,12 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// Pushing the Limits of Simple Pipelines for Few-Shot Learning. ICLR 2022.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Pushing the Limits of Simple Pipelines for Few-Shot Learning", "https://arxiv.org/abs/2204.07159", Year = 2022, Authors = "Hu et al.")]
 public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly PMFOptions<T, TInput, TOutput> _pmfOptions;

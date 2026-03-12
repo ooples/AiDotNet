@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -48,6 +49,14 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// steps as desired without backpropagating through the full chain.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MetaDiff: Meta-Learning with Conditional Diffusion for Few-Shot Learning", "https://arxiv.org/abs/2307.16424", Year = 2024, Authors = "Zhang et al.")]
 public class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaDiffOptions<T, TInput, TOutput> _algoOptions;
