@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// Moonshine Base is the smallest variant of the Moonshine family at 27M parameters, optimized for edge deployment on resource-constrained devices. The model uses a 4-layer encoder and 4-layer decoder with 288-dim embeddings. Despite its small size, Moonshine Base achieves usable accuracy for voice commands and short-form transcription, running at 10x real-time on Raspberry Pi 4 and supporting on-device wake word + transcription pipelines.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Moonshine: Speech Recognition for Live Transcription and Voice Commands", "https://arxiv.org/abs/2410.15608", Year = 2024, Authors = "Useful Sensors")]
 public class MoonshineBase<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly MoonshineBaseOptions _options; public override ModelOptions GetOptions() => _options;
