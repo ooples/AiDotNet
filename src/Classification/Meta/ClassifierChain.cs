@@ -36,9 +36,12 @@ namespace AiDotNet.Classification.Meta;
 /// - Error propagation (early mistakes affect later predictions)
 /// </para>
 /// </remarks>
-// Metadata attributes intentionally omitted: Train(Matrix<T>, Vector<T>) path silently
-// discards caller labels by reassigning to 0..numClasses-1. Re-add after fixing label
-// preservation in the single-label training path.
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class ClassifierChain<T> : MetaClassifierBase<T>
 {
     /// <summary>
@@ -109,11 +112,15 @@ public class ClassifierChain<T> : MetaClassifierBase<T>
         NumClasses = yMultiLabel.Columns;
         TaskType = ClassificationTaskType.MultiLabel;
 
-        // Create class labels (0 to NumClasses-1)
-        ClassLabels = new Vector<T>(NumClasses);
-        for (int c = 0; c < NumClasses; c++)
+        // Only set class labels to 0..N-1 indices if not already set by Train()
+        // This preserves caller labels when Train(x, y) calls TrainMultiLabel
+        if (ClassLabels is null || ClassLabels.Length != NumClasses)
         {
-            ClassLabels[c] = NumOps.FromDouble(c);
+            ClassLabels = new Vector<T>(NumClasses);
+            for (int c = 0; c < NumClasses; c++)
+            {
+                ClassLabels[c] = NumOps.FromDouble(c);
+            }
         }
 
         // Determine chain order

@@ -42,9 +42,16 @@ namespace AiDotNet.Classification.Ensemble;
 /// - Consider subsample less than 1.0 for regularization
 /// </para>
 /// </remarks>
-// Metadata attributes intentionally omitted: training uses simplified stump fitting
-// instead of full gradient boosting tree construction. Re-add after implementing
-// proper tree fitting with gradient and Hessian-based leaf values.
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.Classifier)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Greedy Function Approximation: A Gradient Boosting Machine",
+    "https://doi.org/10.1214/aos/1013203451",
+    Year = 2001,
+    Authors = "Jerome H. Friedman")]
 public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
 {
     /// <summary>
@@ -207,44 +214,54 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
             tree.Train(xSample, residualClasses);
             Estimators.Add(tree);
 
-            // Compute mean residual values for each predicted class (leaf)
-            // This approximates regression tree behavior by using actual residual magnitudes
+            // Compute Newton-Raphson leaf values per leaf region
+            // For log loss: leaf_value = sum(residuals) / sum(p * (1 - p))
+            // where residuals = y - p (negative gradient) and p*(1-p) is the Hessian
             var samplePreds = tree.Predict(xSample);
-            T sumClass0 = NumOps.Zero, sumClass1 = NumOps.Zero;
-            int countClass0 = 0, countClass1 = 0;
+            T sumResid0 = NumOps.Zero, sumResid1 = NumOps.Zero;
+            T sumHessian0 = NumOps.Zero, sumHessian1 = NumOps.Zero;
 
             for (int i = 0; i < residualsSample.Length; i++)
             {
+                // Get the probability for this sample to compute Hessian
+                int origIdx = sampleIndices[i];
+                T prob = Sigmoid(fValues[origIdx]);
+                T hessian = NumOps.Multiply(prob, NumOps.Subtract(NumOps.One, prob));
+                // Clamp hessian for numerical stability
+                if (NumOps.Compare(hessian, NumOps.FromDouble(1e-10)) < 0)
+                {
+                    hessian = NumOps.FromDouble(1e-10);
+                }
+
                 if (NumOps.Compare(samplePreds[i], NumOps.One) == 0)
                 {
-                    sumClass1 = NumOps.Add(sumClass1, residualsSample[i]);
-                    countClass1++;
+                    sumResid1 = NumOps.Add(sumResid1, residualsSample[i]);
+                    sumHessian1 = NumOps.Add(sumHessian1, hessian);
                 }
                 else
                 {
-                    sumClass0 = NumOps.Add(sumClass0, residualsSample[i]);
-                    countClass0++;
+                    sumResid0 = NumOps.Add(sumResid0, residualsSample[i]);
+                    sumHessian0 = NumOps.Add(sumHessian0, hessian);
                 }
             }
 
-            // Compute mean residuals for each class (with fallback to 0 if no samples)
-            T meanClass0 = countClass0 > 0
-                ? NumOps.Divide(sumClass0, NumOps.FromDouble(countClass0))
+            // Newton step: sum(gradient) / sum(hessian) per leaf region
+            T leafVal0 = NumOps.Compare(sumHessian0, NumOps.FromDouble(1e-10)) > 0
+                ? NumOps.Divide(sumResid0, sumHessian0)
                 : NumOps.Zero;
-            T meanClass1 = countClass1 > 0
-                ? NumOps.Divide(sumClass1, NumOps.FromDouble(countClass1))
+            T leafVal1 = NumOps.Compare(sumHessian1, NumOps.FromDouble(1e-10)) > 0
+                ? NumOps.Divide(sumResid1, sumHessian1)
                 : NumOps.Zero;
 
-            _leafResidualMeans.Add(new[] { meanClass0, meanClass1 });
+            _leafResidualMeans.Add(new[] { leafVal0, leafVal1 });
 
-            // Update predictions using actual mean residuals instead of fixed values
+            // Update predictions using Newton-step leaf values
             var treePreds = tree.Predict(x);
             for (int i = 0; i < n; i++)
             {
-                // Use actual mean residual for the predicted class
                 T treeOutput = NumOps.Compare(treePreds[i], NumOps.One) == 0
-                    ? meanClass1
-                    : meanClass0;
+                    ? leafVal1
+                    : leafVal0;
                 fValues[i] = NumOps.Add(fValues[i], NumOps.Multiply(lr, treeOutput));
             }
         }

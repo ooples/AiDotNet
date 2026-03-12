@@ -39,9 +39,17 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 /// Reference: Box, G.E.P., Jenkins, G.M. (1970). "Time Series Analysis: Forecasting and Control."
 /// </para>
 /// </remarks>
-// Metadata attributes intentionally omitted: ApplyDifferencing lacks boundary guard
-// for d >= X.Rows, which can cause index-out-of-range. Re-add after fixing differencing
-// validation and adding proper ARIMA parameter estimation.
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.TimeSeries)]
+[ModelCategory(ModelCategory.TimeSeriesModel)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Time Series Analysis: Forecasting and Control",
+    "https://doi.org/10.1002/9781118619193",
+    Year = 1970,
+    Authors = "George E.P. Box, Gwilym M. Jenkins")]
 public class ARIMADetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _p;
@@ -116,6 +124,22 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
         }
 
         int n = X.Rows;
+
+        // Validate differencing order won't exhaust all samples
+        int minSamplesRequired = _d + Math.Max(_p, _q) + 1;
+        if (n <= _d)
+        {
+            throw new ArgumentException(
+                $"Differencing order d={_d} requires at least {_d + 1} samples, but only {n} provided.",
+                nameof(X));
+        }
+
+        if (n < minSamplesRequired)
+        {
+            throw new ArgumentException(
+                $"ARIMA({_p},{_d},{_q}) requires at least {minSamplesRequired} samples, but only {n} provided.",
+                nameof(X));
+        }
 
         // Extract values
         var values = new double[n];
