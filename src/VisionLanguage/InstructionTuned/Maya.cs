@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Maya: An Instruction Finetuned Multilingual Multimodal Model" (2024)</item></list></para>
 /// <para><b>For Beginners:</b> Maya is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Maya: An Instruction Finetuned Multilingual Multimodal Model", "https://arxiv.org/abs/2412.07112", Year = 2024, Authors = "Gupta et al.")]
 public class Maya<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MayaOptions _options; public override ModelOptions GetOptions() => _options;

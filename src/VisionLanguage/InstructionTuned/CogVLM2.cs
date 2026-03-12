@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,15 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "CogVLM2: Visual Language Models for Image and Video Understanding" (Hong et al., 2024)</item></list></para>
 /// <para><b>For Beginners:</b> CogVLM2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CogVLM2: Visual Language Models for Image and Video Understanding", "https://arxiv.org/abs/2408.16500", Year = 2024, Authors = "Hong et al.")]
 public class CogVLM2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly CogVLM2Options _options; public override ModelOptions GetOptions() => _options;

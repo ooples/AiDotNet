@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models" (Zhu et al., 2023)</item></list></para>
 /// <para><b>For Beginners:</b> MiniGPT4 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models", "https://arxiv.org/abs/2304.10592", Year = 2023, Authors = "Zhu et al.")]
 public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniGPT4Options _options; public override ModelOptions GetOptions() => _options;

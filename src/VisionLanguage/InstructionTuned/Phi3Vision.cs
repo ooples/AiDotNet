@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone" (Abdin et al., 2024)</item></list></para>
 /// <para><b>For Beginners:</b> Phi3Vision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone", "https://arxiv.org/abs/2404.14219", Year = 2024, Authors = "Abdin et al.")]
 public class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Phi3VisionOptions _options; public override ModelOptions GetOptions() => _options;

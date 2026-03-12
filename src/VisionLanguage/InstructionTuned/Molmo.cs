@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Molmo and PixMo: Open Weights and Open Data for State-of-the-Art Multimodal Models" (AI2, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> Molmo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Molmo and PixMo: Open Weights and Open Data for State-of-the-Art Multimodal Models", "https://arxiv.org/abs/2409.17146", Year = 2024, Authors = "Deitke et al.")]
 public class Molmo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MolmoOptions _options; public override ModelOptions GetOptions() => _options;

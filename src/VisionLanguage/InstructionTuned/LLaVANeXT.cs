@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "LLaVA-NeXT: Improved reasoning, OCR, and world knowledge" (Liu et al., 2024)</item></list></para>
 /// <para><b>For Beginners:</b> LLaVANeXT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LLaVA-NeXT: Improved reasoning, OCR, and world knowledge", "https://arxiv.org/abs/2408.03326", Year = 2024, Authors = "Liu et al.")]
 public class LLaVANeXT<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly LLaVANeXTOptions _options; public override ModelOptions GetOptions() => _options;

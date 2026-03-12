@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,15 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Expanding Performance Boundaries of Open-Source Multimodal Models with InternVL 2.5" (Chen et al., 2024)</item></list></para>
 /// <para><b>For Beginners:</b> InternVL25 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Expanding Performance Boundaries of Open-Source Multimodal Models with InternVL 2.5", "https://arxiv.org/abs/2412.05819", Year = 2024, Authors = "Chen et al.")]
 public class InternVL25<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly InternVL25Options _options; public override ModelOptions GetOptions() => _options;

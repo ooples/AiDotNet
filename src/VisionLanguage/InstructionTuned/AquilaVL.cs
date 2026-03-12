@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "AquilaVL: Advanced Vision-Language Model" (BAAI, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> AquilaVL is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AquilaVL: Advanced Vision-Language Model", "https://huggingface.co/BAAI/Aquila-VL-2B", Year = 2024, Authors = "BAAI")]
 public class AquilaVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly AquilaVLOptions _options; public override ModelOptions GetOptions() => _options;

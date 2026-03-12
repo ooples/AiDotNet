@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond" (Bai et al., 2023)</item></list></para>
 /// <para><b>For Beginners:</b> QwenVL is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond", "https://arxiv.org/abs/2308.12966", Year = 2023, Authors = "Bai et al.")]
 public class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly QwenVLOptions _options; public override ModelOptions GetOptions() => _options;

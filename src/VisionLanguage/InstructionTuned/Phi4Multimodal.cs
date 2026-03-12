@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,15 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Phi-4-Multimodal Technical Report" (Microsoft, 2025)</item></list></para>
 /// <para><b>For Beginners:</b> Phi4Multimodal is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Phi-4-Multimodal Technical Report", "https://arxiv.org/abs/2503.01743", Year = 2025, Authors = "Abdin et al.")]
 public class Phi4Multimodal<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Phi4MultimodalOptions _options; public override ModelOptions GetOptions() => _options;

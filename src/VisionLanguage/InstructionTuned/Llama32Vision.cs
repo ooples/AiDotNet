@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,15 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "The Llama 3 Herd of Models" (Meta, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> Llama32Vision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("The Llama 3 Herd of Models", "https://arxiv.org/abs/2407.21783", Year = 2024, Authors = "Grattafiori et al.")]
 public class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Llama32VisionOptions _options; public override ModelOptions GetOptions() => _options;

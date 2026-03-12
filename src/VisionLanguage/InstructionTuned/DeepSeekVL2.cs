@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,15 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "DeepSeek-VL2: Mixture-of-Experts Vision-Language Models for Advanced Multimodal Understanding" (Wu et al., 2024)</item></list></para>
 /// <para><b>For Beginners:</b> DeepSeekVL2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DeepSeek-VL2: Mixture-of-Experts Vision-Language Models for Advanced Multimodal Understanding", "https://arxiv.org/abs/2412.10302", Year = 2024, Authors = "Wu et al.")]
 public class DeepSeekVL2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly DeepSeekVL2Options _options; public override ModelOptions GetOptions() => _options;
