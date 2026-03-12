@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -18,6 +19,10 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// it gets better results with fewer steps compared to uniform spacing.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class DiscretizedRFScheduler<T> : NoiseSchedulerBase<T>
 {
     public DiscretizedRFScheduler(SchedulerConfig<T> config) : base(config) { }

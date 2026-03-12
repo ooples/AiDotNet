@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -21,6 +22,10 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// Reference: Albergo et al., "Stochastic Interpolants: A Unifying Framework for Flows and Diffusions", 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class StochasticInterpolantScheduler<T> : NoiseSchedulerBase<T>
 {
     private readonly double _stochasticity;

@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -40,6 +41,10 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// <b>Reference:</b> Raffel et al., "Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer", JMLR 2020
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class T5TextConditioner<T> : TextConditioningBase<T>
 {
     /// <summary>

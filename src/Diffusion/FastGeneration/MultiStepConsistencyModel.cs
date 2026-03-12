@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.FastGeneration;
 
@@ -32,6 +33,10 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Based on Consistency Models (Song et al., 2023) with multi-step extensions
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class MultiStepConsistencyModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

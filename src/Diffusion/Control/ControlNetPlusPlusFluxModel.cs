@@ -8,6 +8,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Control;
 
@@ -27,6 +28,10 @@ namespace AiDotNet.Diffusion.Control;
 /// powerful architecture for the best possible control over generated images.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
 {
     private const int FLUX_LATENT_CHANNELS = 16;

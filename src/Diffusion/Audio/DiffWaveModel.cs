@@ -10,6 +10,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -70,6 +71,11 @@ namespace AiDotNet.Diffusion.Audio;
 /// var vocodedAudio = diffWave.GenerateFromMelSpectrogram(melSpec);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("DiffWave: A Versatile Diffusion Model for Audio Synthesis", "https://arxiv.org/abs/2009.09761", Year = 2021, Authors = "Kong et al.")]
 public class DiffWaveModel<T> : DiffusionModelBase<T>
 {
     #region Constants

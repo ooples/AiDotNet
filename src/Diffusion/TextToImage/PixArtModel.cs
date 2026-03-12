@@ -9,6 +9,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.TextToImage;
 
@@ -91,6 +92,10 @@ namespace AiDotNet.Diffusion.TextToImage;
 ///     count: 4);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class PixArtModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

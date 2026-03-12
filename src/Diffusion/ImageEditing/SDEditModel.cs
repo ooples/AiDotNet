@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ImageEditing;
 
@@ -49,6 +50,11 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Meng et al., "SDEdit: Guided Image Synthesis and Editing with Stochastic Differential Equations", ICLR 2022
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("SDEdit: Guided Image Synthesis and Editing with Stochastic Differential Equations", "https://arxiv.org/abs/2108.01073", Year = 2022, Authors = "Meng et al.")]
 public class SDEditModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

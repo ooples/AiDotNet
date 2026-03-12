@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -23,6 +24,10 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// extend this base class.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
 {
     /// <summary>

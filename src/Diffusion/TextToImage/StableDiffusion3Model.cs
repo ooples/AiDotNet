@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.TextToImage;
 
@@ -85,6 +86,11 @@ namespace AiDotNet.Diffusion.TextToImage;
 ///     seed: 42);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", "https://arxiv.org/abs/2403.03206", Year = 2024, Authors = "Esser et al.")]
 public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

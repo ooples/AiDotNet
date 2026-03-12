@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Control;
 
@@ -26,6 +27,10 @@ namespace AiDotNet.Diffusion.Control;
 /// it works as a real QR code, but the image looks like art rather than a plain barcode.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

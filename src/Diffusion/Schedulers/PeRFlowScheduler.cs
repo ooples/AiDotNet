@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -21,6 +22,10 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// Reference: Yan et al., "PeRFlow: Piecewise Rectified Flow as Universal Plug-and-Play Accelerator", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class PeRFlowScheduler<T> : NoiseSchedulerBase<T>
 {
     private readonly int _numSegments;

@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -38,6 +39,10 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> Luo et al., "Latent Consistency Models: Synthesizing High-Resolution Images with Few-Step Inference", 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class LCMScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>

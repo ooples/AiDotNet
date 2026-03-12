@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -28,6 +29,10 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// Reference: Tschannen et al., "SigLIP 2: Scaling Up Multilingual Vision-Language Models", 2025
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class SigLIP2TextConditioner<T> : TextConditioningBase<T>
 {
     private readonly Vector<T> _textProjection;

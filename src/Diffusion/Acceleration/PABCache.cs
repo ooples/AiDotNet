@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.Diffusion.Acceleration;
 
 /// <summary>
@@ -20,6 +21,10 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// This pyramid of broadcast intervals achieves significant speedup with minimal quality loss.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class PABCache<T>
 {
     private readonly int _spatialBroadcastInterval;

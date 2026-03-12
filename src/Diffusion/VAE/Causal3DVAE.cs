@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.VAE;
 
@@ -31,6 +32,10 @@ namespace AiDotNet.Diffusion.VAE;
 /// - Typical compression: 8x spatial, 4x temporal
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class Causal3DVAE<T> : VAEModelBase<T>
 {
     private readonly int _inputChannels;

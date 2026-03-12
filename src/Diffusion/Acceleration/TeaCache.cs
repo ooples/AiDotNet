@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.Diffusion.Acceleration;
 
 /// <summary>
@@ -22,6 +23,10 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// - Achieves 2-3x speedup on typical 50-step diffusion sampling
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class TeaCache<T>
 {
     private readonly double _reuseThreshold;

@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers.NoiseSchedules;
 
@@ -23,6 +24,10 @@ namespace AiDotNet.Diffusion.Schedulers.NoiseSchedules;
 /// Reference: Originally proposed by Nicholas Guttenberg, widely adopted in SD community
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class OffsetNoiseSchedule<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

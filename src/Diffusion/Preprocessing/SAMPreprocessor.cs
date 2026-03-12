@@ -1,5 +1,6 @@
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -22,6 +23,10 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// Reference: Kirillov et al., "Segment Anything", ICCV 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class SAMPreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     private readonly double _edgeThreshold;

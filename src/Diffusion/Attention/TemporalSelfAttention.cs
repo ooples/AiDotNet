@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Attention;
 
@@ -29,6 +30,10 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Output: same shape as input with temporal information mixed
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class TemporalSelfAttention<T> : LayerBase<T>
 {
     private readonly int _channels;

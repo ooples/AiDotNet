@@ -1,6 +1,7 @@
 using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Guidance;
 
@@ -20,6 +21,10 @@ namespace AiDotNet.Diffusion.Guidance;
 /// lighter guidance at the end (to keep fine details natural).
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class DynamicCFGScheduler<T> : IGuidanceMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

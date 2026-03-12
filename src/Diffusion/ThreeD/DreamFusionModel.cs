@@ -11,6 +11,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ThreeD;
 
@@ -53,6 +54,10 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// - Supports mesh extraction via marching cubes
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

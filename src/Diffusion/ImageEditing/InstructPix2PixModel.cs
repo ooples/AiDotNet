@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ImageEditing;
 
@@ -86,6 +87,11 @@ namespace AiDotNet.Diffusion.ImageEditing;
 ///     guidanceScale: 7.5);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("InstructPix2Pix: Learning to Follow Image Editing Instructions", "https://arxiv.org/abs/2211.09800", Year = 2023, Authors = "Brooks et al.")]
 public class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

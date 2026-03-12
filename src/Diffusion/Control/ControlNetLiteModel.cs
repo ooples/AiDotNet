@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Control;
 
@@ -26,6 +27,10 @@ namespace AiDotNet.Diffusion.Control;
 /// less precise control signal adherence.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

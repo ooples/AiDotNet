@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.StyleTransfer;
 
@@ -30,6 +31,10 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// Reference: Rout et al., "RB-Modulation: Training-Free Personalization of Diffusion Models using Stochastic Optimal Control", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class RBModulationModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

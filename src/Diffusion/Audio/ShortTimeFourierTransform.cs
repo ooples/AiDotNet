@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -37,6 +38,10 @@ namespace AiDotNet.Diffusion.Audio;
 /// ```
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class ShortTimeFourierTransform<T>
 {
     /// <summary>

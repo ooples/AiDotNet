@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Memory;
 
@@ -36,6 +37,10 @@ namespace AiDotNet.Diffusion.Memory;
 /// - Each GPU only holds part of the model
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class DiffusionMemoryManager<T>
 {
     /// <summary>

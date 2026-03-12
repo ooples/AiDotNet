@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -75,6 +76,10 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 ///     contextDim: 4096);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 {
     #region Fields

@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.MaskUtilities;
 
@@ -20,6 +21,10 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 /// could select "sky" to create a mask that covers only the sky region for replacement.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class MaskFromSegmentation<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

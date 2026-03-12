@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Safety;
 
@@ -25,6 +26,10 @@ namespace AiDotNet.Diffusion.Safety;
 /// Reference: Lu et al., "SCORE: Selective Concept Obliteration for Responsible Editing", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class SCOREFramework<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

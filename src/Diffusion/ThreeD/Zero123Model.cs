@@ -11,6 +11,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ThreeD;
 
@@ -73,6 +74,11 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// var views = zero123.Generate360Views(inputImage, numViews: 8);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Zero-1-to-3: Zero-shot One Image to 3D Object", "https://arxiv.org/abs/2303.11328", Year = 2023, Authors = "Liu et al.")]
 public class Zero123Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

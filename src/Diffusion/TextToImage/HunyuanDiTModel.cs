@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.TextToImage;
 
@@ -55,6 +56,10 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// with Fine-Grained Chinese Understanding", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -38,6 +39,10 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// <b>Reference:</b> Radford et al., "Learning Transferable Visual Models From Natural Language Supervision", ICML 2021
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class CLIPTextConditioner<T> : TextConditioningBase<T>
 {
     /// <summary>

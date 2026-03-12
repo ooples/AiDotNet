@@ -2,6 +2,7 @@ using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Guidance;
 
@@ -24,6 +25,10 @@ namespace AiDotNet.Diffusion.Guidance;
 /// Reference: Lin et al., "Common Diffusion Noise Schedules and Sample Steps are Flawed", 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class RescaledCFG<T> : IGuidanceMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

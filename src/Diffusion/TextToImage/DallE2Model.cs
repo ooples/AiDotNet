@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.TextToImage;
 
@@ -77,6 +78,11 @@ namespace AiDotNet.Diffusion.TextToImage;
 ///     seed: 42);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Hierarchical Text-Conditional Image Generation with CLIP Latents", "https://arxiv.org/abs/2204.06125", Year = 2022, Authors = "Ramesh et al.")]
 public class DallE2Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

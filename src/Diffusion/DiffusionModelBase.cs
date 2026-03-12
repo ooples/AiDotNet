@@ -11,6 +11,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion;
 
@@ -34,6 +35,10 @@ namespace AiDotNet.Diffusion;
 /// Specific diffusion models (like DDPM, Latent Diffusion) extend this base to implement
 /// their unique noise prediction architectures.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape
 {
     /// <summary>

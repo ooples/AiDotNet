@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.Diffusion.Schedulers;
 
 /// <summary>
@@ -35,6 +36,10 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> "Pseudo Numerical Methods for Diffusion Models on Manifolds" by Liu et al., 2022
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class PNDMScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>

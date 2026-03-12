@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ImageEditing;
 
@@ -81,6 +82,10 @@ namespace AiDotNet.Diffusion.ImageEditing;
 ///     guidanceScale: 7.5);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class PromptToPromptModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

@@ -10,6 +10,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.TextToImage;
 
@@ -24,6 +25,11 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// text rendering, style control, and high-quality image generation at multiple sizes.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Improving Image Generation with Better Captions", "https://arxiv.org/abs/2310.16825", Year = 2023, Authors = "Betker et al.")]
 public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 {
     #region Constants

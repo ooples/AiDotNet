@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
 using AiDotNet.Validation;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -43,6 +44,10 @@ namespace AiDotNet.Diffusion.Audio;
 /// ```
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class GriffinLim<T>
 {
     /// <summary>

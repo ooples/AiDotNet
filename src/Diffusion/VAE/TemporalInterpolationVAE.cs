@@ -3,6 +3,7 @@ using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.VAE;
 
@@ -31,6 +32,10 @@ namespace AiDotNet.Diffusion.VAE;
 /// - Interpolation uses bidirectional temporal attention and flow estimation
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class TemporalInterpolationVAE<T> : VAEModelBase<T>
 {
     private readonly int _inputChannels;

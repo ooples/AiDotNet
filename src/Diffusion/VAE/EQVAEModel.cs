@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.VAE;
 
@@ -29,6 +30,10 @@ namespace AiDotNet.Diffusion.VAE;
 /// Generative Image Modeling", 2025
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class EQVAEModel<T> : VAEModelBase<T>
 {
     private const double EQVAE_LATENT_SCALE = 0.18215;

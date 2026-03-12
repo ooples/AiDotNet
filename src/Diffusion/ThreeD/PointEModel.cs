@@ -8,6 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ThreeD;
 
@@ -73,6 +74,11 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// ExportToPLY(pointCloud, "chair.ply");
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Point-E: A System for Generating 3D Point Clouds from Complex Prompts", "https://arxiv.org/abs/2212.08751", Year = 2022, Authors = "Nichol et al.")]
 public class PointEModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

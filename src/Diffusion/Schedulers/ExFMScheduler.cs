@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -18,6 +19,10 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// forms. This produces sharper images with the same number of total steps.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class ExFMScheduler<T> : NoiseSchedulerBase<T>
 {
     public ExFMScheduler(SchedulerConfig<T> config) : base(config) { }

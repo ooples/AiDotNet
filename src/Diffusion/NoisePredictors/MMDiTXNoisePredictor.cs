@@ -7,6 +7,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -34,6 +35,10 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Esser et al., "Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", ICML 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

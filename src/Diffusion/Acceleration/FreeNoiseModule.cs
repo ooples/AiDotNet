@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Acceleration;
 
@@ -23,6 +24,10 @@ namespace AiDotNet.Diffusion.Acceleration;
 /// This maintains temporal consistency across windows while extending generation length.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class FreeNoiseModule<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

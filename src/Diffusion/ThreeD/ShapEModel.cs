@@ -8,6 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.ThreeD;
 
@@ -86,6 +87,11 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// ExportToOBJ(mesh, "car.obj");
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Shap-E: Generating Conditional 3D Implicit Functions", "https://arxiv.org/abs/2305.02463", Year = 2023, Authors = "Jun and Nichol")]
 public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

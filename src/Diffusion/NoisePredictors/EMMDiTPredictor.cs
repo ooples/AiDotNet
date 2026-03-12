@@ -3,6 +3,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -34,6 +35,10 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Based on MMDiT architecture with parameter-efficient design
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class EMMDiTPredictor<T> : NoisePredictorBase<T>
 {
     private const int EMMDIT_HIDDEN_SIZE = 1024;

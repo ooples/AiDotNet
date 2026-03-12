@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -33,6 +34,11 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> Lu et al., "DPM-Solver++: Fast Solver for Guided Sampling of Diffusion Probabilistic Models", 2022
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("DPM-Solver: A Fast ODE Solver for Diffusion Probabilistic Model Sampling", "https://arxiv.org/abs/2206.00927", Year = 2022, Authors = "Lu et al.")]
 public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>

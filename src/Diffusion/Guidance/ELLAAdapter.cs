@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Guidance;
 
@@ -22,6 +23,10 @@ namespace AiDotNet.Diffusion.Guidance;
 /// Reference: Hu et al., "ELLA: Equip Diffusion Models with LLM for Enhanced Semantic Alignment", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class ELLAAdapter<T> : IGuidanceMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

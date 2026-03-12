@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.Diffusion.Schedulers;
 
 /// <summary>
@@ -31,6 +32,11 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> "Denoising Diffusion Implicit Models" by Song et al., 2020
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("Denoising Diffusion Implicit Models", "https://arxiv.org/abs/2010.02502", Year = 2021, Authors = "Song et al.")]
 public sealed class DDIMScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>

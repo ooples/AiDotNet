@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Video.VideoEditing;
 
@@ -33,6 +34,10 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 /// - Supports I2V: No | T2V: Yes | V2V: Yes
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class InstructVid2VidModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

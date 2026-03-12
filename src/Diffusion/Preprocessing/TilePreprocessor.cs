@@ -1,5 +1,6 @@
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Preprocessing;
 
@@ -19,6 +20,10 @@ namespace AiDotNet.Diffusion.Preprocessing;
 /// the AI add sharp details. It's commonly used for upscaling and detail enhancement.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class TilePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
     private readonly int _blurRadius;

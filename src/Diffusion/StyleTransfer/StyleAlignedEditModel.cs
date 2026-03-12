@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.StyleTransfer;
 
@@ -29,6 +30,10 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// Reference: Hertz et al., "Style Aligned Image Generation via Shared Attention", CVPR 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class StyleAlignedEditModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

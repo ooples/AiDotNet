@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Memory;
 
@@ -40,6 +41,10 @@ namespace AiDotNet.Diffusion.Memory;
 /// ```
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class ActivationPool<T> : IDisposable
 {
     /// <summary>

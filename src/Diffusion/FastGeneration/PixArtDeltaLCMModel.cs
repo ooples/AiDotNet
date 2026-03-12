@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.FastGeneration;
 
@@ -32,6 +33,10 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Chen et al., "PixArt-delta: Fast and Controllable Image Generation with Latent Consistency Models", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class PixArtDeltaLCMModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

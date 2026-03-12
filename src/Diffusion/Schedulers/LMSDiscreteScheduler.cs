@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -32,6 +33,10 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// <b>Reference:</b> Based on Adams-Bashforth multi-step ODE methods applied to diffusion.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class LMSDiscreteScheduler<T> : NoiseSchedulerBase<T>
 {
     private Vector<T>? _sigmas;

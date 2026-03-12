@@ -3,6 +3,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -28,6 +29,10 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Genmo, "Mochi 1: A New SOTA in Open-Source Video Generation", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

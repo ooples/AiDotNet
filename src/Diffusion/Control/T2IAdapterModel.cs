@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Control;
 
@@ -83,6 +84,11 @@ namespace AiDotNet.Diffusion.Control;
 ///     seed: 42);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("T2I-Adapter: Learning Adapters to Dig out More Controllable Ability for Text-to-Image Diffusion Models", "https://arxiv.org/abs/2302.08453", Year = 2023, Authors = "Mou et al.")]
 public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

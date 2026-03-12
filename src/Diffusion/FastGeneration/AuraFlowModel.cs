@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.FastGeneration;
 
@@ -46,6 +47,10 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Fal.ai, "AuraFlow v0.3", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
 public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

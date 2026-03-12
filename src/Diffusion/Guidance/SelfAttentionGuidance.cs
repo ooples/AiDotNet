@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Diffusion.Guidance;
 
@@ -23,6 +24,10 @@ namespace AiDotNet.Diffusion.Guidance;
 /// Reference: Hong et al., "Improving Sample Quality of Diffusion Models Using Self-Attention Guidance", ICCV 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class SelfAttentionGuidance<T> : IGuidanceMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
