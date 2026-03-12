@@ -1,3 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Audio.Pitch;
 
 /// <summary>
@@ -33,6 +37,11 @@ namespace AiDotNet.Audio.Pitch;
 /// - Frame size: Longer frames = lower min pitch, more latency
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class YinPitchDetector<T> : PitchDetectorBase<T>
 {
     #region Configuration

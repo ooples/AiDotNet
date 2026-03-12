@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -38,6 +40,11 @@ namespace AiDotNet.Audio.Localization;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SoundLocalizer<T> : IDisposable
 {
     private readonly INumericOperations<T> _numOps;

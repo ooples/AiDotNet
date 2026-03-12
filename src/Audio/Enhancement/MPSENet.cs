@@ -33,6 +33,12 @@ namespace AiDotNet.Audio.Enhancement;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Denoising)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MP-SENet: A Speech Enhancement Model with Parallel Denoising of Magnitude and Phase Spectra", "https://arxiv.org/abs/2305.13686", Year = 2023, Authors = "Ye-Xin Lu, Yang Ai, Zhen-Hua Ling")]
 public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     #region Fields

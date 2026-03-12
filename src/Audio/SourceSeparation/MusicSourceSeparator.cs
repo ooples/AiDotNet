@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -41,6 +43,11 @@ namespace AiDotNet.Audio.SourceSeparation;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.SourceSeparation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     #region Fields

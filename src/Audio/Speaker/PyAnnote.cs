@@ -35,6 +35,13 @@ namespace AiDotNet.Audio.Speaker;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Powerset Multi-Class Cross Entropy Loss for Neural Speaker Diarization", "https://arxiv.org/abs/2312.05014", Year = 2023, Authors = "Alexis Plaquet, Hervé Bredin")]
 public class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
 {
     #region Fields

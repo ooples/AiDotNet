@@ -36,6 +36,12 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelTask(ModelTask.Translation)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     #region Fields

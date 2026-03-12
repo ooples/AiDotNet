@@ -1,5 +1,7 @@
 using System;
 using System.Numerics;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -37,6 +39,11 @@ namespace AiDotNet.Audio.Features;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class ConstantQTransform<T>
 {
     private readonly INumericOperations<T> _numOps;

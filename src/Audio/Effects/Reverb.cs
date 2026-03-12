@@ -1,3 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Audio.Effects;
 
 /// <summary>
@@ -36,6 +40,11 @@ namespace AiDotNet.Audio.Effects;
 /// - Low-pass filter for damping (natural high-frequency absorption)
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.Synthesis)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class Reverb<T> : AudioEffectBase<T>
 {
     #region Configuration

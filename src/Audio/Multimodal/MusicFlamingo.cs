@@ -35,6 +35,12 @@ namespace AiDotNet.Audio.Multimodal;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
     #region Fields

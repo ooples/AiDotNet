@@ -59,6 +59,12 @@ namespace AiDotNet.Audio.AudioLDM;
 /// Reference: "AudioLDM: Text-to-Audio Generation with Latent Diffusion Models" by Liu et al., 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://arxiv.org/abs/2301.12503", Year = 2023, Authors = "Haohe Liu, Zehua Chen, Yi Yuan, Xinhao Mei, Xubo Liu, Danilo Mandic, Wenwu Wang, Mark D. Plumbley")]
 public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     #region Fields

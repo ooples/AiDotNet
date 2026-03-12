@@ -34,6 +34,12 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Transformer-based Music Auto-tagging with Data Augmentation", "https://arxiv.org/abs/2104.09587", Year = 2021, Authors = "Minz Won, Keunwoo Choi, Xavier Serra")]
 public class MusicTaggingTransformer<T> : AudioNeuralNetworkBase<T>
 {
     #region Fields

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -35,6 +37,11 @@ namespace AiDotNet.Audio.Features;
 /// </code>
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.SignalProcessing)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class MfccExtractor<T> : AudioFeatureExtractorBase<T>
 {
     private readonly MelSpectrogram<T> _melSpectrogram;
