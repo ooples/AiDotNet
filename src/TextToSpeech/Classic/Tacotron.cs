@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -20,6 +22,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> /// Tacotron: sequence-to-sequence attention-based TTS with CBHG encoder and autoregressive decoder.
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Tacotron: Towards End-to-End Speech Synthesis", "https://arxiv.org/abs/1703.10135", Year = 2017, Authors = "Wang et al.")]
 public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly TacotronOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,4 +1,14 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.Tokenization; using AiDotNet.Tokenization.Interfaces; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.Classic;
 /// <summary>
 /// AdaSpeech: adaptive TTS for custom voice with acoustic condition modeling and conditional layer normalization.
@@ -10,6 +20,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> /// AdaSpeech: adaptive TTS for custom voice with acoustic condition modeling and conditional layer normalization.
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AdaSpeech: Adaptive Text to Speech for Custom Voice", "https://arxiv.org/abs/2103.00993", Year = 2021, Authors = "Chen et al.")]
 public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AdaSpeechOptions _options; public override ModelOptions GetOptions() => _options;

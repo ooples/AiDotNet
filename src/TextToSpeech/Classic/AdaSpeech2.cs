@@ -1,4 +1,14 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.Tokenization; using AiDotNet.Tokenization.Interfaces; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.Classic;
 /// <summary>
 /// AdaSpeech 2: adaptive TTS that leverages untranscribed speech via mel-to-phoneme pipeline.
@@ -10,6 +20,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> /// AdaSpeech 2: adaptive TTS that leverages untranscribed speech via mel-to-phoneme pipeline.
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AdaSpeech 2: Adaptive Text to Speech with Untranscribed Data", "https://arxiv.org/abs/2104.09715", Year = 2021, Authors = "Yan et al.")]
 public class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AdaSpeech2Options _options; public override ModelOptions GetOptions() => _options;

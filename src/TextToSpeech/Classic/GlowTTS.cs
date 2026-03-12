@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -20,6 +22,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> /// Glow-TTS: flow-based generative model for non-autoregressive TTS with monotonic alignment search (MAS).
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Glow-TTS: A Generative Flow for Text-to-Speech via Monotonic Alignment Search", "https://arxiv.org/abs/2005.11129", Year = 2020, Authors = "Kim et al.")]
 public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly GlowTTSOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -20,6 +22,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> /// AlignTTS: alignment-free non-autoregressive TTS using feed-forward transformer with mix density network alignment.
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AlignTTS: Efficient Feed-Forward Text-to-Speech Model without Explicit Alignment", "https://arxiv.org/abs/2003.01950", Year = 2020, Authors = "Zeng et al.")]
 public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AlignTTSOptions _options; public override ModelOptions GetOptions() => _options;

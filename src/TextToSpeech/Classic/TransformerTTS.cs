@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -20,6 +22,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> /// Transformer TTS: multi-head self-attention based acoustic model replacing RNNs with transformers.
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Neural Speech Synthesis with Transformer Network", "https://arxiv.org/abs/1809.08895", Year = 2019, Authors = "Li et al.")]
 public class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly TransformerTTSOptions _options; public override ModelOptions GetOptions() => _options;
