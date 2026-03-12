@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.InformationTheoretic;
@@ -12,6 +13,16 @@ namespace AiDotNet.CausalDiscovery.InformationTheoretic;
 /// The Kraskov-Stoegbauer-Grassberger (KSG) estimator computes mutual information
 /// using nearest-neighbor distances in the joint and marginal spaces. It's non-parametric
 /// and works well for both linear and nonlinear dependencies.
+/// </para>
+/// <para>
+/// <b>Algorithm (KSG Algorithm 1):</b>
+/// <list type="number">
+/// <item>For each point, find its k-th nearest neighbor in the joint (X,Y) space using Chebyshev distance</item>
+/// <item>Let epsilon_i = distance to k-th neighbor in joint space</item>
+/// <item>Count n_x(i) = number of points with |x_j - x_i| &lt; epsilon_i</item>
+/// <item>Count n_y(i) = number of points with |y_j - y_i| &lt; epsilon_i</item>
+/// <item>MI = psi(k) - &lt;psi(n_x + 1) + psi(n_y + 1)&gt; + psi(N)</item>
+/// </list>
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> Most MI estimators assume the data follows a specific distribution
@@ -41,12 +52,205 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
 
-    public KraskovMIAlgorithm(CausalDiscoveryOptions? options = null) { ApplyInfoOptions(options); }
+    private readonly double _threshold;
+
+    public KraskovMIAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        ApplyInfoOptions(options);
+        _threshold = options?.EdgeThreshold ?? 0.1;
+    }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        var baseline = new ConstraintBased.PCAlgorithm<T>();
-        return baseline.DiscoverStructure(data).AdjacencyMatrix;
+        int n = data.Rows;
+        int d = data.Columns;
+        int k = Math.Min(KNeighbors, n - 1);
+
+        if (n < k + 2 || d < 2) return new Matrix<T>(d, d);
+
+        var result = new Matrix<T>(d, d);
+
+        // Compute KSG mutual information for each pair
+        for (int i = 0; i < d; i++)
+        {
+            for (int j = i + 1; j < d; j++)
+            {
+                double mi = ComputeKSGMutualInformation(data, i, j, n, k);
+
+                if (mi > _threshold)
+                {
+                    // Assign direction via asymmetry: compare conditional MI
+                    // MI(i→j) vs MI(j→i) using residual-based direction test
+                    double dirScore = ComputeDirectionScore(data, i, j, n);
+
+                    T miVal = NumOps.FromDouble(mi);
+                    if (dirScore > 0)
+                        result[i, j] = miVal;
+                    else if (dirScore < 0)
+                        result[j, i] = miVal;
+                    else
+                    {
+                        // Undetermined: place in both
+                        result[i, j] = miVal;
+                        result[j, i] = miVal;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private double ComputeKSGMutualInformation(Matrix<T> data, int col1, int col2, int n, int k)
+    {
+        // Extract column vectors
+        var x = new double[n];
+        var y = new double[n];
+        for (int t = 0; t < n; t++)
+        {
+            x[t] = NumOps.ToDouble(data[t, col1]);
+            y[t] = NumOps.ToDouble(data[t, col2]);
+        }
+
+        // For each point, find k-th nearest neighbor distance in joint space (Chebyshev/max norm)
+        // Then count marginal neighbors within that distance
+        double sumPsiNx = 0, sumPsiNy = 0;
+
+        for (int i = 0; i < n; i++)
+        {
+            // Compute Chebyshev distances to all other points in joint space
+            var jointDists = new double[n];
+            for (int j = 0; j < n; j++)
+            {
+                if (j == i) { jointDists[j] = double.MaxValue; continue; }
+                jointDists[j] = Math.Max(Math.Abs(x[j] - x[i]), Math.Abs(y[j] - y[i]));
+            }
+
+            // Find k-th nearest neighbor distance
+            double epsilon = FindKthSmallest(jointDists, n, k);
+
+            // Count marginal neighbors within epsilon
+            int nx = 0, ny = 0;
+            for (int j = 0; j < n; j++)
+            {
+                if (j == i) continue;
+                if (Math.Abs(x[j] - x[i]) < epsilon) nx++;
+                if (Math.Abs(y[j] - y[i]) < epsilon) ny++;
+            }
+
+            sumPsiNx += Digamma(nx + 1);
+            sumPsiNy += Digamma(ny + 1);
+        }
+
+        // MI = psi(k) - <psi(nx+1) + psi(ny+1)> / N + psi(N)
+        double mi = Digamma(k) - (sumPsiNx + sumPsiNy) / n + Digamma(n);
+        return Math.Max(mi, 0); // MI is non-negative
+    }
+
+    private double ComputeDirectionScore(Matrix<T> data, int i, int j, int n)
+    {
+        // Direction via entropy-based asymmetry:
+        // If i→j, then H(Y|X) < H(X|Y) approximately
+        // Use residual variance ratio as proxy
+
+        // Compute variance-based conditional entropy proxy
+        var xVec = new Vector<T>(n);
+        var yVec = new Vector<T>(n);
+        for (int t = 0; t < n; t++)
+        {
+            xVec[t] = data[t, i];
+            yVec[t] = data[t, j];
+        }
+
+        // Compute means
+        T nT = NumOps.FromDouble(n);
+        T sumX = NumOps.Zero, sumY = NumOps.Zero;
+        for (int t = 0; t < n; t++)
+        {
+            sumX = NumOps.Add(sumX, xVec[t]);
+            sumY = NumOps.Add(sumY, yVec[t]);
+        }
+        T meanX = NumOps.Divide(sumX, nT);
+        T meanY = NumOps.Divide(sumY, nT);
+
+        // Center
+        var centX = new Vector<T>(n);
+        var centY = new Vector<T>(n);
+        for (int t = 0; t < n; t++)
+        {
+            centX[t] = NumOps.Subtract(xVec[t], meanX);
+            centY[t] = NumOps.Subtract(yVec[t], meanY);
+        }
+
+        // Regression X→Y: beta = cov(X,Y)/var(X), residual var = var(Y) - beta^2*var(X)
+        T covXY = Engine.DotProduct(centX, centY);
+        T varX = Engine.DotProduct(centX, centX);
+        T varY = Engine.DotProduct(centY, centY);
+
+        double dVarX = Math.Max(NumOps.ToDouble(varX), 1e-15);
+        double dVarY = Math.Max(NumOps.ToDouble(varY), 1e-15);
+        double dCovXY = NumOps.ToDouble(covXY);
+
+        // Residual variance for X→Y direction
+        double betaXY = dCovXY / dVarX;
+        double resVarXY = dVarY - betaXY * betaXY * dVarX;
+
+        // Residual variance for Y→X direction
+        double betaYX = dCovXY / dVarY;
+        double resVarYX = dVarX - betaYX * betaYX * dVarY;
+
+        // Lower residual variance = better fit = more likely causal direction
+        return Math.Log(Math.Max(resVarYX, 1e-15)) - Math.Log(Math.Max(resVarXY, 1e-15));
+    }
+
+    private static double FindKthSmallest(double[] arr, int n, int k)
+    {
+        // Simple partial sort to find k-th smallest (excluding MaxValue sentinels)
+        var sorted = new double[k];
+        for (int i = 0; i < k; i++) sorted[i] = double.MaxValue;
+
+        for (int i = 0; i < n; i++)
+        {
+            if (arr[i] >= sorted[k - 1]) continue;
+            sorted[k - 1] = arr[i];
+
+            // Bubble down to maintain sorted order
+            for (int j = k - 1; j > 0 && sorted[j] < sorted[j - 1]; j--)
+                (sorted[j], sorted[j - 1]) = (sorted[j - 1], sorted[j]);
+        }
+
+        return sorted[k - 1];
+    }
+
+    private static double Digamma(int x)
+    {
+        // Digamma function approximation for positive integers
+        // psi(x) = -gamma + sum_{k=1}^{x-1} 1/k for integer x
+        if (x <= 0) return -0.5772156649; // Euler-Mascheroni for x=0
+
+        double result = -0.5772156649015329; // Euler-Mascheroni constant
+        for (int k = 1; k < x; k++)
+            result += 1.0 / k;
+
+        return result;
+    }
+
+    private static double Digamma(double x)
+    {
+        // Asymptotic series for non-integer x
+        if (x <= 0) return -0.5772156649;
+
+        double result = 0;
+        while (x < 6)
+        {
+            result -= 1.0 / x;
+            x += 1;
+        }
+
+        result += Math.Log(x) - 1.0 / (2.0 * x);
+        double x2 = 1.0 / (x * x);
+        result -= x2 * (1.0 / 12.0 - x2 * (1.0 / 120.0 - x2 / 252.0));
+        return result;
     }
 }
