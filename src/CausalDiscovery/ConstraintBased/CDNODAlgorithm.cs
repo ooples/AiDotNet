@@ -174,9 +174,8 @@ public class CDNODAlgorithm<T> : ConstraintBasedBase<T>
             {
                 if (!adj[i, j]) continue;
 
-                if (oriented[i, j])
-                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputePartialCorr(data, i, j, [])));
-                else if (!oriented[j, i])
+                // Include edge if oriented i→j or undirected (skip if oriented j→i)
+                if (!oriented[j, i])
                     W[i, j] = NumOps.FromDouble(Math.Abs(ComputePartialCorr(data, i, j, [])));
             }
         }
@@ -208,10 +207,58 @@ public class CDNODAlgorithm<T> : ConstraintBasedBase<T>
                     }
                     if (oriented[i, j]) continue;
 
+                    // Meek Rule 2: i — j and i → k → j ⇒ orient i → j
                     for (int k = 0; k < d; k++)
                     {
                         if (k == i || k == j) continue;
                         if (oriented[i, k] && oriented[k, j])
+                        {
+                            oriented[i, j] = true;
+                            changed = true;
+                            break;
+                        }
+                    }
+                    if (oriented[i, j]) continue;
+
+                    // Meek Rule 3: i — j, i — k1, i — k2, k1 → j, k2 → j, k1 and k2 non-adjacent
+                    bool rule3Applied = false;
+                    for (int k1 = 0; k1 < d && !rule3Applied; k1++)
+                    {
+                        if (k1 == i || k1 == j) continue;
+                        if (!adj[i, k1] || oriented[i, k1] || oriented[k1, i]) continue; // i — k1 undirected
+                        if (!oriented[k1, j]) continue; // k1 → j
+
+                        for (int k2 = k1 + 1; k2 < d && !rule3Applied; k2++)
+                        {
+                            if (k2 == i || k2 == j) continue;
+                            if (!adj[i, k2] || oriented[i, k2] || oriented[k2, i]) continue; // i — k2 undirected
+                            if (!oriented[k2, j]) continue; // k2 → j
+                            if (adj[k1, k2]) continue; // k1, k2 must be non-adjacent
+
+                            oriented[i, j] = true;
+                            changed = true;
+                            rule3Applied = true;
+                        }
+                    }
+                    if (oriented[i, j]) continue;
+
+                    // Meek Rule 4: i — j, i — k, k → l → j ⇒ orient i → j
+                    for (int k = 0; k < d; k++)
+                    {
+                        if (k == i || k == j) continue;
+                        if (!adj[i, k] || oriented[i, k] || oriented[k, i]) continue; // i — k undirected
+
+                        bool found = false;
+                        for (int l = 0; l < d; l++)
+                        {
+                            if (l == i || l == j || l == k) continue;
+                            if (oriented[k, l] && oriented[l, j])
+                            {
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (found)
                         {
                             oriented[i, j] = true;
                             changed = true;

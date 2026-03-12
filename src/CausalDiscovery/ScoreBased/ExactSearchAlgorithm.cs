@@ -105,9 +105,11 @@ public class ExactSearchAlgorithm<T> : ScoreBasedBase<T>
                 bestLocalScore[v, s] = double.NegativeInfinity;
 
                 // The subset S with all elements as parents
-                var parentsOfS = BitmaskToSet(s);
-                if (parentsOfS.Count <= MaxParents)
+                // Use popcount to avoid allocating when set exceeds MaxParents
+                int bitCount = BitCount(s);
+                if (bitCount <= MaxParents)
                 {
+                    var parentsOfS = BitmaskToSet(s);
                     double score = ComputeBIC(data, v, parentsOfS);
                     if (score > bestLocalScore[v, s])
                     {
@@ -187,6 +189,16 @@ public class ExactSearchAlgorithm<T> : ScoreBasedBase<T>
         }
 
         return W;
+    }
+
+    /// <summary>
+    /// Counts the number of set bits in an integer (population count).
+    /// </summary>
+    private static int BitCount(int n)
+    {
+        int count = 0;
+        while (n != 0) { count++; n &= n - 1; }
+        return count;
     }
 
     /// <summary>

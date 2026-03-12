@@ -20,7 +20,7 @@ namespace AiDotNet.CausalDiscovery.InformationTheoretic;
 /// <item>For each pair (X→Y), construct lagged variables: Y_past (lag 1..L of Y), X_past (lag 1..L of X)</item>
 /// <item>Compute TE(X→Y) = H(Y_future | Y_past) - H(Y_future | Y_past, X_past)</item>
 /// <item>Using Gaussian approximation: TE = 0.5 * log(var(Y_future|Y_past) / var(Y_future|Y_past,X_past))</item>
-/// <item>Apply significance threshold: only keep edges where TE exceeds threshold</item>
+/// <item>Apply score threshold: only keep edges where TE exceeds threshold</item>
 /// <item>Direction is inherent: TE(X→Y) ≠ TE(Y→X) in general</item>
 /// </list>
 /// </para>
@@ -60,7 +60,7 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
     public TransferEntropyAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyInfoOptions(options);
-        _maxLag = options?.MaxIterations ?? 2;
+        _maxLag = options?.MaxLag ?? 2;
         _threshold = options?.EdgeThreshold ?? 0.05;
         if (_maxLag < 1)
             throw new ArgumentException("MaxIterations (lag) must be at least 1.");

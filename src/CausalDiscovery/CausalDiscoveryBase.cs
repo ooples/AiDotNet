@@ -31,8 +31,9 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
 
     /// <summary>
     /// Gets the global execution engine for accelerated vector/matrix operations.
+    /// Subclasses should prefer using specific helper methods (e.g., DotProduct) when available.
     /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
+    private protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <inheritdoc/>
     public abstract string Name { get; }

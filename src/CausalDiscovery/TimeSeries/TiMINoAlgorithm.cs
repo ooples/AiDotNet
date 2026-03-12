@@ -65,8 +65,6 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         int effectiveN = n - MaxLag;
         if (effectiveN < 2 * MaxLag + 3 || d < 2) return new Matrix<T>(d, d);
 
-        var cov = ComputeCovarianceMatrix(data);
-        T eps = NumOps.FromDouble(1e-10);
         var result = new Matrix<T>(d, d);
 
         for (int i = 0; i < d; i++)
@@ -75,27 +73,23 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
                 if (i == j) continue;
 
                 // Test direction i→j: fit model and check residual independence
-                double hsicIJ = FitAndComputeHSIC(data, i, j, n);
+                var (hsicIJ, betaIJ) = FitAndComputeHSIC(data, i, j, n);
                 // Test direction j→i
-                double hsicJI = FitAndComputeHSIC(data, j, i, n);
+                var (hsicJI, _) = FitAndComputeHSIC(data, j, i, n);
 
                 // Lower HSIC = more independent residuals = correct causal direction
                 if (hsicIJ < hsicJI && hsicIJ < 0.1)
                 {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(0.1)))
-                            result[i, j] = weight;
-                    }
+                    // Use the fitted lag coefficient as the edge weight
+                    if (Math.Abs(betaIJ) > 0.1)
+                        result[i, j] = NumOps.FromDouble(betaIJ);
                 }
             }
 
         return result;
     }
 
-    private double FitAndComputeHSIC(Matrix<T> data, int cause, int target, int n)
+    private (double hsic, double beta) FitAndComputeHSIC(Matrix<T> data, int cause, int target, int n)
     {
         int effectiveN = n - MaxLag;
         int p = 2 * MaxLag; // lags of cause + lags of target
@@ -144,7 +138,7 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         T covCT = Engine.DotProduct(centC, centT);
 
         if (!NumOps.GreaterThan(varC, NumOps.FromDouble(1e-10)))
-            return 1.0; // Can't fit model
+            return (1.0, 0.0); // Can't fit model
 
         T beta = NumOps.Divide(covCT, varC);
 
@@ -162,6 +156,6 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         double denom = Math.Sqrt(Math.Max(dVarR, 1e-15) * Math.Max(dVarC, 1e-15));
         double corrResidual = dCovRC / denom;
 
-        return corrResidual * corrResidual; // Squared correlation as HSIC proxy
+        return (corrResidual * corrResidual, NumOps.ToDouble(beta)); // Squared correlation as HSIC proxy
     }
 }
