@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,14 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// SPIRAL learns perturbation-invariant speech representations through self-supervised pre-training. The model uses a teacher-student framework where the student must produce similar representations for different augmented views of the same speech. Data augmentations include speed perturbation, SpecAugment, and noise addition. The invariance objective encourages robust representations that transfer well to downstream ASR tasks.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SPIRAL: Self-supervised Perturbation-Invariant Representation Learning for Speech Pre-Training", "https://arxiv.org/abs/2201.10207", Year = 2022, Authors = "Huang et al.")]
 public class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SPIRALOptions _options; public override ModelOptions GetOptions() => _options;

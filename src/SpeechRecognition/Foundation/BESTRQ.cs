@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,14 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// BEST-RQ simplifies self-supervised speech pre-training by replacing learned codebooks with a fixed random-projection quantizer. Input speech features are projected by a random matrix and nearest-neighbor quantized to provide targets for masked prediction. This eliminates the complex codebook learning of wav2vec 2.0 and the iterative clustering of HuBERT, while achieving competitive ASR performance. The simplicity enables efficient pre-training at scale.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Self-supervised Learning with Random-Projection Quantizer for Speech Recognition", "https://arxiv.org/abs/2202.01855", Year = 2022, Authors = "Chiu et al.")]
 public class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly BESTRQOptions _options; public override ModelOptions GetOptions() => _options;
