@@ -183,11 +183,9 @@ public class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
 }
 
 /// <summary>Adapted model wrapper for Open-MAML with OOD rejection.</summary>
-internal class OpenMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
+internal class OpenMAMLModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private Vector<T> _params;
     private readonly double _threshold;
     private readonly Vector<T>? _supportFeatures;
 
@@ -197,42 +195,52 @@ internal class OpenMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
     /// <inheritdoc/>
     public double[]? ParameterModulationFactors => _threshold > 0 ? [_threshold] : null;
 
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-
     public OpenMAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> p,
         double threshold, Vector<T>? supportFeatures)
+        : base(model)
     {
-        _model = model;
         _params = p;
         _threshold = threshold;
         _supportFeatures = supportFeatures;
     }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
-        // Apply threshold-based confidence scaling: higher threshold -> more conservative
-        // Scale parameters by (1 - threshold * dampening) to reduce confidence for OOD
         if (_threshold > 0 && _threshold < 1.0)
         {
             double confidenceScale = 1.0 - _threshold * 0.1;
             var scaled = new Vector<T>(_params.Length);
             for (int i = 0; i < _params.Length; i++)
                 scaled[i] = NumOps.Multiply(_params[i], NumOps.FromDouble(confidenceScale));
-            _model.SetParameters(scaled);
+            BaseModel.SetParameters(scaled);
         }
         else
         {
-            _model.SetParameters(_params);
+            BaseModel.SetParameters(_params);
         }
-        return _model.Predict(input);
+        return BaseModel.Predict(input);
     }
 
-    /// <summary>Training not supported on adapted models.</summary>
-    public void Train(TInput inputs, TOutput targets) =>
-        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => _params;
 
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _params = parameters ?? throw new ArgumentNullException(nameof(parameters));
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new OpenMAMLModel<T, TInput, TOutput>(BaseModel, parameters, _threshold, _supportFeatures);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new OpenMAMLModel<T, TInput, TOutput>(
+            BaseModel.DeepCopy(), _params.Clone(), _threshold, _supportFeatures?.Clone());
+    }
 }

@@ -356,17 +356,12 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 /// making predictions task-specific based on the confidence structure of the support set.
 /// </para>
 /// </remarks>
-internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
+internal class DPGNModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _backboneParams;
+    private Vector<T> _backboneParams;
     private readonly Vector<T>? _refinedFeatures;
     private readonly Vector<T>? _refinedDistributions;
     private readonly double[]? _modulationFactors;
-
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _refinedFeatures;
@@ -380,8 +375,8 @@ internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
         Vector<T>? refinedFeatures,
         Vector<T>? refinedDistributions,
         double[]? modulationFactors)
+        : base(model)
     {
-        _model = model;
         _backboneParams = backboneParams;
         _refinedFeatures = refinedFeatures;
         _refinedDistributions = refinedDistributions;
@@ -389,29 +384,45 @@ internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
     }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            // Apply distribution-confidence-based parameter modulation
             var modulatedParams = new Vector<T>(_backboneParams.Length);
             for (int i = 0; i < _backboneParams.Length; i++)
             {
                 double mod = _modulationFactors[i % _modulationFactors.Length];
                 modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
             }
-            _model.SetParameters(modulatedParams);
+            BaseModel.SetParameters(modulatedParams);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            BaseModel.SetParameters(_backboneParams);
         }
-        return _model.Predict(input);
+        return BaseModel.Predict(input);
     }
 
-    /// <summary>Training not supported on adapted models.</summary>
-    public void Train(TInput inputs, TOutput targets) =>
-        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    public override Vector<T> GetParameters() => _backboneParams;
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _backboneParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new DPGNModel<T, TInput, TOutput>(BaseModel, parameters, _refinedFeatures, _refinedDistributions, _modulationFactors);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new DPGNModel<T, TInput, TOutput>(
+            BaseModel.DeepCopy(), _backboneParams.Clone(), _refinedFeatures?.Clone(), _refinedDistributions?.Clone(),
+            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
+    }
 }

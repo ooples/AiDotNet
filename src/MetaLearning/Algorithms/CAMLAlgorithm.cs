@@ -289,11 +289,9 @@ public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 /// and the context module adjusts prototypes based on the specific task context.
 /// </para>
 /// </remarks>
-internal class CAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
+internal class CAMLModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _backboneParams;
+    private Vector<T> _backboneParams;
     private readonly Vector<T>? _adaptedPrototypes;
     private readonly double[]? _modulationFactors;
 
@@ -303,20 +301,17 @@ internal class CAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
     /// <inheritdoc/>
     public double[]? ParameterModulationFactors => _modulationFactors;
 
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-
     public CAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
         Vector<T>? adaptedPrototypes, double[]? modulationFactors)
+        : base(model)
     {
-        _model = model;
         _backboneParams = backboneParams;
         _adaptedPrototypes = adaptedPrototypes;
         _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
@@ -324,19 +319,35 @@ internal class CAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            BaseModel.SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            BaseModel.SetParameters(_backboneParams);
         }
-        return _model.Predict(input);
+        return BaseModel.Predict(input);
     }
 
-    /// <summary>Training not supported on adapted models.</summary>
-    public void Train(TInput inputs, TOutput targets) =>
-        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => _backboneParams;
 
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _backboneParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new CAMLModel<T, TInput, TOutput>(BaseModel, parameters, _adaptedPrototypes, _modulationFactors);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new CAMLModel<T, TInput, TOutput>(
+            BaseModel.DeepCopy(), _backboneParams.Clone(), _adaptedPrototypes?.Clone(),
+            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
+    }
 }

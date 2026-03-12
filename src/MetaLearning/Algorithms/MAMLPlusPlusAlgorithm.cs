@@ -510,13 +510,9 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 /// holds the adapted parameters. Use it to make predictions on that task.
 /// </para>
 /// </remarks>
-internal class MAMLPlusPlusModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class MAMLPlusPlusModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
-    private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _adaptedParams;
-
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+    private Vector<T> _adaptedParams;
 
     /// <summary>
     /// Creates a new MAML++ adapted model.
@@ -524,24 +520,36 @@ internal class MAMLPlusPlusModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
     /// <param name="model">The base model architecture.</param>
     /// <param name="adaptedParams">Task-adapted parameters.</param>
     public MAMLPlusPlusModel(IFullModel<T, TInput, TOutput> model, Vector<T> adaptedParams)
+        : base(model)
     {
-        _model = model;
         _adaptedParams = adaptedParams;
     }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
-        _model.SetParameters(_adaptedParams);
-        return _model.Predict(input);
+        BaseModel.SetParameters(_adaptedParams);
+        return BaseModel.Predict(input);
     }
 
-    /// <summary>
-    /// Training is not supported on adapted models. Use MAML++ MetaTrain for further training.
-    /// </summary>
-    public void Train(TInput inputs, TOutput targets) =>
-        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => _adaptedParams;
 
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _adaptedParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new MAMLPlusPlusModel<T, TInput, TOutput>(BaseModel, parameters);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new MAMLPlusPlusModel<T, TInput, TOutput>(BaseModel.DeepCopy(), _adaptedParams.Clone());
+    }
 }

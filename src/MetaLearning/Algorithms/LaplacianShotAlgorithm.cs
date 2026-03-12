@@ -306,11 +306,9 @@ public class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 /// using the graph Laplacian, where similar query examples receive similar predictions.
 /// </para>
 /// </remarks>
-internal class LaplacianShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
+internal class LaplacianShotModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _backboneParams;
+    private Vector<T> _backboneParams;
     private readonly Vector<T>? _refinedWeights;
     private readonly double[]? _modulationFactors;
 
@@ -320,20 +318,17 @@ internal class LaplacianShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
     /// <inheritdoc/>
     public double[]? ParameterModulationFactors => _modulationFactors;
 
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-
     public LaplacianShotModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
         Vector<T>? refinedWeights, double[]? modulationFactors)
+        : base(model)
     {
-        _model = model;
         _backboneParams = backboneParams;
         _refinedWeights = refinedWeights;
         _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
@@ -341,19 +336,35 @@ internal class LaplacianShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            BaseModel.SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            BaseModel.SetParameters(_backboneParams);
         }
-        return _model.Predict(input);
+        return BaseModel.Predict(input);
     }
 
-    /// <summary>Training not supported on adapted models.</summary>
-    public void Train(TInput inputs, TOutput targets) =>
-        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => _backboneParams;
 
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _backboneParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new LaplacianShotModel<T, TInput, TOutput>(BaseModel, parameters, _refinedWeights, _modulationFactors);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new LaplacianShotModel<T, TInput, TOutput>(
+            BaseModel.DeepCopy(), _backboneParams.Clone(), _refinedWeights?.Clone(),
+            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
+    }
 }

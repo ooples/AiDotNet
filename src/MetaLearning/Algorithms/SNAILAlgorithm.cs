@@ -696,11 +696,9 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 /// based on the support examples it has already "read."
 /// </para>
 /// </remarks>
-internal class SNAILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
+internal class SNAILModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _backboneParams;
+    private Vector<T> _backboneParams;
     private readonly List<Vector<T>> _tcBlockParams;
     private readonly List<Vector<T>> _attentionBlockParams;
     private readonly Vector<T> _taskRepresentation;
@@ -712,9 +710,6 @@ internal class SNAILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     /// <inheritdoc/>
     public double[]? ParameterModulationFactors => _modulationFactors;
 
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-
     public SNAILModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
@@ -722,8 +717,8 @@ internal class SNAILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
         List<Vector<T>> attentionBlockParams,
         Vector<T> taskRepresentation,
         double[]? modulationFactors)
+        : base(model)
     {
-        _model = model;
         _backboneParams = backboneParams;
         _tcBlockParams = tcBlockParams;
         _attentionBlockParams = attentionBlockParams;
@@ -732,7 +727,7 @@ internal class SNAILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
@@ -740,19 +735,38 @@ internal class SNAILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            BaseModel.SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            BaseModel.SetParameters(_backboneParams);
         }
-        return _model.Predict(input);
+        return BaseModel.Predict(input);
     }
 
-    /// <summary>Training not supported on adapted models.</summary>
-    public void Train(TInput inputs, TOutput targets) =>
-        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => _backboneParams;
 
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _backboneParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new SNAILModel<T, TInput, TOutput>(BaseModel, parameters, _tcBlockParams, _attentionBlockParams, _taskRepresentation, _modulationFactors);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new SNAILModel<T, TInput, TOutput>(
+            BaseModel.DeepCopy(), _backboneParams.Clone(),
+            _tcBlockParams.Select(v => v.Clone()).ToList(),
+            _attentionBlockParams.Select(v => v.Clone()).ToList(),
+            _taskRepresentation.Clone(),
+            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
+    }
 }

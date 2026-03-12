@@ -155,21 +155,37 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 }
 
 /// <summary>Adapted model wrapper for PMF.</summary>
-internal class PMFModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class PMFModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
-    private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+    private Vector<T> _params;
 
     public PMFModel(IFullModel<T, TInput, TOutput> model, Vector<T> adaptedParams)
-    { _model = model; _params = adaptedParams; }
+        : base(model)
+    {
+        _params = adaptedParams;
+    }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
-    /// <summary>Training not supported on adapted models.</summary>
-    public void Train(TInput inputs, TOutput targets) =>
-        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
+    public override TOutput Predict(TInput input) { BaseModel.SetParameters(_params); return BaseModel.Predict(input); }
+
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    public override Vector<T> GetParameters() => _params;
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _params = parameters ?? throw new ArgumentNullException(nameof(parameters));
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new PMFModel<T, TInput, TOutput>(BaseModel, parameters);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new PMFModel<T, TInput, TOutput>(BaseModel.DeepCopy(), _params.Clone());
+    }
 }

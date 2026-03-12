@@ -354,16 +354,11 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 /// cross-attention between classes for context-aware classification.
 /// </para>
 /// </remarks>
-internal class SetFeatModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
+internal class SetFeatModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _backboneParams;
+    private Vector<T> _backboneParams;
     private readonly Vector<T>? _setEncodedFeatures;
     private readonly double[]? _modulationFactors;
-
-    /// <inheritdoc/>
-    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _setEncodedFeatures;
@@ -376,15 +371,15 @@ internal class SetFeatModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
         Vector<T> backboneParams,
         Vector<T>? setEncodedFeatures,
         double[]? modulationFactors)
+        : base(model)
     {
-        _model = model;
         _backboneParams = backboneParams;
         _setEncodedFeatures = setEncodedFeatures;
         _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
@@ -394,19 +389,35 @@ internal class SetFeatModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
                 double mod = _modulationFactors[i % _modulationFactors.Length];
                 modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
             }
-            _model.SetParameters(modulatedParams);
+            BaseModel.SetParameters(modulatedParams);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            BaseModel.SetParameters(_backboneParams);
         }
-        return _model.Predict(input);
+        return BaseModel.Predict(input);
     }
 
-    /// <summary>Training not supported on adapted models.</summary>
-    public void Train(TInput inputs, TOutput targets) =>
-        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => _backboneParams;
 
     /// <inheritdoc/>
-    public ModelMetadata<T> GetModelMetadata() => Metadata;
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _backboneParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        return new SetFeatModel<T, TInput, TOutput>(BaseModel, parameters, _setEncodedFeatures, _modulationFactors);
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        return new SetFeatModel<T, TInput, TOutput>(
+            BaseModel.DeepCopy(), _backboneParams.Clone(), _setEncodedFeatures?.Clone(),
+            _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null);
+    }
 }
