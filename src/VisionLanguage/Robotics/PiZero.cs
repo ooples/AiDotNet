@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <list type="bullet"><item>Paper: "pi-zero: A Zero-Shot Robot Policy with Flow Matching (Physical Intelligence, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> PiZero is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Robotics)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("pi0: A Vision-Language-Action Flow Model for General Robot Control", "https://arxiv.org/abs/2410.24164", Year = 2024, Authors = "Black et al.")]
 public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly PiZeroOptions _options; public override ModelOptions GetOptions() => _options;

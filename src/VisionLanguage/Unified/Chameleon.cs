@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <list type="bullet"><item>Paper: "Chameleon: Mixed-Modal Early-Fusion Foundation Models" (Meta, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> Chameleon is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Chameleon: Mixed-Modal Early-Fusion Foundation Models", "https://arxiv.org/abs/2405.09818", Year = 2024, Authors = "Meta")]
 public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly ChameleonOptions _options; public override ModelOptions GetOptions() => _options;

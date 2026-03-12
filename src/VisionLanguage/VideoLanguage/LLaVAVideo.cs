@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -19,6 +20,16 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <list type="bullet"><item>Paper: "Video Instruction Tuning With Synthetic Data" (ByteDance, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> LLaVAVideo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Video Instruction Tuning With Synthetic Data", "https://arxiv.org/abs/2410.02713", Year = 2024, Authors = "Zhang et al.")]
 public class LLaVAVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly LLaVAVideoOptions _options; public override ModelOptions GetOptions() => _options;

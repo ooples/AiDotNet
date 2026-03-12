@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <list type="bullet"><item>Paper: "Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling" (DeepSeek, 2025)</item></list></para>
 /// <para><b>For Beginners:</b> JanusPro is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling", "https://arxiv.org/abs/2501.17811", Year = 2025, Authors = "Chen et al.")]
 public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly JanusProOptions _options; public override ModelOptions GetOptions() => _options;

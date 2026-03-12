@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <list type="bullet"><item>Paper: "VideoLLaMA 2: Advancing Spatial-Temporal Modeling" (Alibaba, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> VideoLLaMA2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VideoLLaMA 2: Advancing Spatial-Temporal Modeling and Audio Understanding in Video-LLMs", "https://arxiv.org/abs/2406.07476", Year = 2024, Authors = "Cheng et al.")]
 public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoLLaMA2Options _options; public override ModelOptions GetOptions() => _options;

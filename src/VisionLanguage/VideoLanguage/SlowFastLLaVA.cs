@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -19,6 +20,16 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <list type="bullet"><item>Paper: "SlowFast-LLaVA: A Strong Training-Free Baseline for Video Large Language Models" (Meta, 2025)</item></list></para>
 /// <para><b>For Beginners:</b> SlowFastLLaVA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SlowFast-LLaVA: A Strong Training-Free Baseline for Video Large Language Models", "https://arxiv.org/abs/2407.15841", Year = 2025, Authors = "Xu et al.")]
 public class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly SlowFastLLaVAOptions _options; public override ModelOptions GetOptions() => _options;

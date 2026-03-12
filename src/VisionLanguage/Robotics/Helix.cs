@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <list type="bullet"><item>Paper: "Helix: A Vision-Language-Action Model for Humanoid Robots (Figure AI, 2025)"</item></list></para>
 /// <para><b>For Beginners:</b> Helix is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Robotics)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Helix: A Vision-Language-Action Model for Generalist Humanoid Control", "https://arxiv.org/abs/2502.07092", Year = 2025, Authors = "Figure AI")]
 public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly HelixOptions _options; public override ModelOptions GetOptions() => _options;

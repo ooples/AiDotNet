@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <list type="bullet"><item>Paper: "GR00T N1: An Open Foundation Model for Generalist Humanoid Robots (NVIDIA, 2025)"</item></list></para>
 /// <para><b>For Beginners:</b> GR00TN1 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Robotics)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GR00T N1: An Open Foundation Model for Generalist Humanoid Robots", "https://arxiv.org/abs/2503.14734", Year = 2025, Authors = "NVIDIA")]
 public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly GR00TN1Options _options; public override ModelOptions GetOptions() => _options;

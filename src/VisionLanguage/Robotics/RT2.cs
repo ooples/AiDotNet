@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <list type="bullet"><item>Paper: "RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control (Google DeepMind, 2023)"</item></list></para>
 /// <para><b>For Beginners:</b> RT2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Robotics)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control", "https://arxiv.org/abs/2307.15818", Year = 2023, Authors = "Brohan et al.")]
 public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly RT2Options _options; public override ModelOptions GetOptions() => _options;
