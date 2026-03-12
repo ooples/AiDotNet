@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -44,6 +47,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// Use DeBERTa-NER when you want the highest possible accuracy and can afford the compute cost.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DeBERTa: Decoding-enhanced BERT with Disentangled Attention",
+    "https://arxiv.org/abs/2006.03654",
+    Year = 2021,
+    Authors = "Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen")]
 public class DeBERTaNER<T> : TransformerNERBase<T>
 {
     /// <summary>

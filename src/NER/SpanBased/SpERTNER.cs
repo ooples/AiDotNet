@@ -1,8 +1,11 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.SpanBased;
 
@@ -51,6 +54,16 @@ namespace AiDotNet.NER.SpanBased;
 /// between entities (e.g., "born in" between a person and a location).
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Span-based Joint Entity and Relation Extraction with Transformer Pre-training",
+    "https://arxiv.org/abs/1909.07755",
+    Year = 2020,
+    Authors = "Markus Eberts, Adrian Ulges")]
 public class SpERTNER<T> : SpanBasedNERBase<T>
 {
     /// <summary>

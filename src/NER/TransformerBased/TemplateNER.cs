@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -50,6 +53,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// because the model already understands language from pre-training.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Template-Based Named Entity Recognition Using BART",
+    "https://arxiv.org/abs/2106.01760",
+    Year = 2021,
+    Authors = "Leyang Cui, Yu Wu, Jian Liu, Sen Yang, Yue Zhang")]
 public class TemplateNER<T> : TransformerNERBase<T>
 {
     /// <summary>

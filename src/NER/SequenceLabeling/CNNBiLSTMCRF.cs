@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -8,6 +9,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.SequenceLabeling;
 
@@ -93,6 +95,15 @@ namespace AiDotNet.NER.SequenceLabeling;
 /// - You need fast training and inference compared to BERT-based models
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("End-to-end Sequence Labeling via Bi-directional LSTM-CNNs-CRF",
+    "https://arxiv.org/abs/1603.01354",
+    Year = 2016,
+    Authors = "Xuezhe Ma, Eduard Hovy")]
 public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields

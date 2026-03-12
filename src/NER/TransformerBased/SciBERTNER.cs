@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -39,6 +42,17 @@ namespace AiDotNet.NER.TransformerBased;
 /// science domains. For purely biomedical NER, BioBERT or PubMedBERT may perform slightly better.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Science)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SciBERT: A Pretrained Language Model for Scientific Text",
+    "https://arxiv.org/abs/1903.10676",
+    Year = 2019,
+    Authors = "Iz Beltagy, Kyle Lo, Arman Cohan")]
 public class SciBERTNER<T> : TransformerNERBase<T>
 {
     /// <summary>

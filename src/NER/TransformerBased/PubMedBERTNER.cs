@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -55,6 +58,17 @@ namespace AiDotNet.NER.TransformerBased;
 /// disease names, gene names, and protein names from research papers and clinical text.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Domain-Specific Language Model Pretraining for Biomedical Natural Language Processing",
+    "https://arxiv.org/abs/2007.15779",
+    Year = 2021,
+    Authors = "Yu Gu, Robert Tinn, Hao Cheng, Michael Lucas, Naoto Usuyama, Xiaodong Liu, Tristan Naumann, Jianfeng Gao, Hoifung Poon")]
 public class PubMedBERTNER<T> : TransformerNERBase<T>
 {
     /// <summary>

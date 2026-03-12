@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -48,6 +51,17 @@ namespace AiDotNet.NER.TransformerBased;
 /// are critical when processing real clinical data.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Publicly Available Clinical BERT Embeddings",
+    "https://arxiv.org/abs/1904.03323",
+    Year = 2019,
+    Authors = "Emily Alsentzer, John Murphy, William Boag, Wei-Hung Weng, Di Jindi, Tristan Naumann, Matthew McDermott")]
 public class ClinicalBERTNER<T> : TransformerNERBase<T>
 {
     /// <summary>

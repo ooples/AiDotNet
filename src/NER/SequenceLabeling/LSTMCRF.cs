@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -8,6 +9,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.SequenceLabeling;
 
@@ -58,6 +60,15 @@ namespace AiDotNet.NER.SequenceLabeling;
 /// - Edge/mobile deployment where compute is limited
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Bidirectional LSTM-CRF Models for Sequence Tagging",
+    "https://arxiv.org/abs/1508.01991",
+    Year = 2015,
+    Authors = "Zhiheng Huang, Wei Xu, Kai Yu")]
 public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields

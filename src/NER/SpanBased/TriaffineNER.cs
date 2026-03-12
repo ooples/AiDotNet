@@ -1,8 +1,11 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.SpanBased;
 
@@ -58,6 +61,16 @@ namespace AiDotNet.NER.SpanBased;
 /// the same way but have different content, like "Bank of America" vs "Bank of the River."
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Fusing Heterogeneous Factors with Triaffine Mechanism for Nested Named Entity Recognition",
+    "https://arxiv.org/abs/2110.07480",
+    Year = 2022,
+    Authors = "Zheng Yuan, Chuanqi Tan, Songfang Huang, Fei Huang")]
 public class TriaffineNER<T> : SpanBasedNERBase<T>
 {
     /// <summary>

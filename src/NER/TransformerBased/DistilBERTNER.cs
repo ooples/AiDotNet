@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -40,6 +43,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// maximum) accuracy, especially for production deployments with latency requirements.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+    "https://arxiv.org/abs/1910.01108",
+    Year = 2019,
+    Authors = "Victor Sanh, Lysandre Debut, Julien Chaumond, Thomas Wolf")]
 public class DistilBERTNER<T> : TransformerNERBase<T>
 {
     /// <summary>

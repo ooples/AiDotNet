@@ -1,8 +1,11 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.SpanBased;
 
@@ -62,6 +65,15 @@ namespace AiDotNet.NER.SpanBased;
 /// "New York University" (organization). Each step helps the next, building up like a pyramid.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Pyramid: A Layered Model for Nested Named Entity Recognition",
+    "https://arxiv.org/abs/2006.00333",
+    Year = 2020,
+    Authors = "Jue Wang, Lidan Shou, Ke Chen, Gang Chen")]
 public class PyramidNER<T> : SpanBasedNERBase<T>
 {
     /// <summary>

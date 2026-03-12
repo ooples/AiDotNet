@@ -1,6 +1,9 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.TransformerBased;
 
@@ -37,6 +40,17 @@ namespace AiDotNet.NER.TransformerBased;
 /// drugs, genes, proteins, chemicals). Also consider PubMedBERT for even better biomedical NER.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BioBERT: a pre-trained biomedical language representation model for biomedical text mining",
+    "https://arxiv.org/abs/1901.08746",
+    Year = 2020,
+    Authors = "Jinhyuk Lee, Wonjin Yoon, Sungdong Kim, Donghyeon Kim, Sunkyu Kim, Chan Ho So, Jaewoo Kang")]
 public class BioBERTNER<T> : TransformerNERBase<T>
 {
     /// <summary>
