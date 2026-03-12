@@ -1,6 +1,9 @@
 using System.IO;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.Necks;
 
@@ -22,6 +25,15 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
 ///
 /// <para>Reference: Tan et al., "EfficientDet: Scalable and Efficient Object Detection", CVPR 2020</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("EfficientDet: Scalable and Efficient Object Detection",
+    "https://arxiv.org/abs/1911.09070",
+    Year = 2020,
+    Authors = "Mingxing Tan, Ruoming Pang, Quoc V. Le")]
 public class BiFPN<T> : NeckBase<T>
 {
     private readonly int _outputChannels;

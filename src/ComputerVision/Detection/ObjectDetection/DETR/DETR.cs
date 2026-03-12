@@ -4,10 +4,12 @@ using System.Threading.Tasks;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 
@@ -29,6 +31,16 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 ///
 /// <para>Reference: Carion et al., "End-to-End Object Detection with Transformers", ECCV 2020</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("End-to-End Object Detection with Transformers",
+    "https://arxiv.org/abs/2005.12872",
+    Year = 2020,
+    Authors = "Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, Sergey Zagoruyko")]
 public class DETR<T> : ObjectDetectorBase<T>
 {
     private readonly DETREncoder<T> _encoder;

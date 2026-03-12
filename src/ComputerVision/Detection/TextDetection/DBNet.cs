@@ -1,9 +1,11 @@
 using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.TextDetection;
 
@@ -27,6 +29,15 @@ namespace AiDotNet.ComputerVision.Detection.TextDetection;
 /// <para>Reference: Liao et al., "Real-time Scene Text Detection with Differentiable
 /// Binarization", AAAI 2020</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Real-time Scene Text Detection with Differentiable Binarization",
+    "https://arxiv.org/abs/1911.08947",
+    Year = 2020,
+    Authors = "Minghui Liao, Zhaoyi Wan, Cong Yao, Kai Chen, Xiang Bai")]
 public class DBNet<T> : TextDetectorBase<T>
 {
     private readonly Conv2D<T> _inConv;

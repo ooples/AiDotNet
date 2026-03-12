@@ -3,8 +3,11 @@ using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 
@@ -26,6 +29,15 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 ///
 /// <para>Reference: Wang et al., "YOLOv9: Learning What You Want to Learn Using Programmable Gradient Information", 2024</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("YOLOv9: Learning What You Want to Learn Using Programmable Gradient Information",
+    "https://arxiv.org/abs/2402.13616",
+    Year = 2024,
+    Authors = "Chien-Yao Wang, I-Hau Yeh, Hong-Yuan Mark Liao")]
 public class YOLOv9<T> : ObjectDetectorBase<T>
 {
     private readonly YOLOv8Head<T> _head;
