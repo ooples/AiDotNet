@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -7,6 +9,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.ProgramSynthesis.Engines;
@@ -35,6 +38,17 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// This deeper understanding helps with tasks like bug detection and code optimization.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.GraphAnalysis)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GraphCodeBERT: Pre-training Code Representations with Data Flow",
+    "https://arxiv.org/abs/2009.08366",
+    Year = 2021,
+    Authors = "Daya Guo, Shuo Ren, Shuai Lu, Zhangyin Feng, Duyu Tang, Shujie Liu, Long Zhou, Nan Duan, Alexey Svyatkovskiy, Shengyu Fu, Michele Tufano, Shao Kun Deng, Colin Clement, Dawn Drain, Neel Sundaresan, Jian Yin, Daxin Jiang, Ming Zhou")]
 public class GraphCodeBERT<T> : CodeModelBase<T>
 {
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

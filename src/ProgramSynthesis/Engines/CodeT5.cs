@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -7,6 +9,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.ProgramSynthesis.Engines;
@@ -37,6 +40,16 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// Think of it as both a reader and a writer, not just a reader.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CodeT5: Identifier-aware Unified Pre-trained Encoder-Decoder Models for Code Understanding and Generation",
+    "https://arxiv.org/abs/2109.00859",
+    Year = 2021,
+    Authors = "Yue Wang, Weishi Wang, Shafiq Joty, Steven C.H. Hoi")]
 public class CodeT5<T> : CodeModelBase<T>
 {
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

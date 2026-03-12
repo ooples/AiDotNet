@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -7,6 +9,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.ProgramSynthesis.Engines;
@@ -36,6 +39,16 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// patterns of good programming, just like you learn language by reading books.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CodeBERT: A Pre-Trained Model for Programming and Natural Languages",
+    "https://arxiv.org/abs/2002.08155",
+    Year = 2020,
+    Authors = "Zhangyin Feng, Daya Guo, Duyu Tang, Nan Duan, Xiaocheng Feng, Ming Gong, Linjun Shou, Bing Qin, Ting Liu, Daxin Jiang, Ming Zhou")]
 public class CodeBERT<T> : CodeModelBase<T>
 {
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
