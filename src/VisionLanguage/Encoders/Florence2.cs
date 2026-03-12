@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -23,6 +24,17 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "Florence-2: Advancing a Unified Representation for a Variety of Vision Tasks" (Xiao et al., 2024)</item></list></para>
 /// <para><b>For Beginners:</b> Florence2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Florence-2: Advancing a Unified Representation for a Variety of Vision Tasks", "https://arxiv.org/abs/2311.06242", Year = 2024, Authors = "Xiao et al.")]
 public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly Florence2Options _options; public override ModelOptions GetOptions() => _options;

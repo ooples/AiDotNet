@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -28,6 +29,14 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>For Beginners:</b> FLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Scaling Language-Image Pre-training via Masking", "https://arxiv.org/abs/2212.00794", Year = 2022, Authors = "Li et al.")]
 public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly FLIPOptions _options;

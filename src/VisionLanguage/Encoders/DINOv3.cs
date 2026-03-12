@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -22,6 +23,15 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "DINOv3: Self-Supervised Vision at Scale" (Meta, 2025)</item></list></para>
 /// <para><b>For Beginners:</b> DINOv3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DINOv3: Self-Supervised Vision at Scale", "https://arxiv.org/abs/2503.08936", Year = 2025, Authors = "Meta")]
 public class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly DINOv3Options _options; public override ModelOptions GetOptions() => _options;

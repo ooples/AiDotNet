@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -22,6 +23,14 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "Segment Anything" (Kirillov et al., 2023)</item></list></para>
 /// <para><b>For Beginners:</b> SAM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Segment Anything", "https://arxiv.org/abs/2304.02643", Year = 2023, Authors = "Kirillov et al.")]
 public class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SAMOptions _options; public override ModelOptions GetOptions() => _options;

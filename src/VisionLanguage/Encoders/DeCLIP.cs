@@ -1,4 +1,13 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.Tokenization; using AiDotNet.Tokenization.Interfaces; using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.VisionLanguage.Interfaces;
 
 namespace AiDotNet.VisionLanguage.Encoders;
 
@@ -15,6 +24,14 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "Supervision Exists Everywhere: A Data-Efficient Contrastive Language-Image Pre-training Paradigm" (Li et al., ICLR 2022)</item></list></para>
 /// <para><b>For Beginners:</b> DeCLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Supervision Exists Everywhere: A Data-Efficient Contrastive Language-Image Pre-training Paradigm", "https://arxiv.org/abs/2110.05208", Year = 2022, Authors = "Li et al.")]
 public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly DeCLIPOptions _options; public override ModelOptions GetOptions() => _options;

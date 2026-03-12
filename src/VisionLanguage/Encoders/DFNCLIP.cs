@@ -1,4 +1,13 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.Tokenization; using AiDotNet.Tokenization.Interfaces; using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.VisionLanguage.Interfaces;
 
 namespace AiDotNet.VisionLanguage.Encoders;
 
@@ -16,6 +25,14 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "Data Filtering Networks" (Fang et al., 2023)</item></list></para>
 /// <para><b>For Beginners:</b> DFNCLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Data Filtering Networks", "https://arxiv.org/abs/2309.17425", Year = 2023, Authors = "Fang et al.")]
 public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly DFNCLIPOptions _options; public override ModelOptions GetOptions() => _options;

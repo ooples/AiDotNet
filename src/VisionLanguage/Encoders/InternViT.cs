@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -22,6 +23,14 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "InternVL: Scaling up Vision Foundation Models and Aligning for Generic Visual-Linguistic Tasks" (Chen et al., 2024)</item></list></para>
 /// <para><b>For Beginners:</b> InternViT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("InternVL: Scaling up Vision Foundation Models and Aligning for Generic Visual-Linguistic Tasks", "https://arxiv.org/abs/2312.14238", Year = 2024, Authors = "Chen et al.")]
 public class InternViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly InternViTOptions _options; public override ModelOptions GetOptions() => _options;

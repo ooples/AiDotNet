@@ -1,4 +1,13 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.Tokenization; using AiDotNet.Tokenization.Interfaces; using AiDotNet.VisionLanguage.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.VisionLanguage.Interfaces;
 
 namespace AiDotNet.VisionLanguage.Encoders;
 
@@ -16,6 +25,15 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "RemoteCLIP: A Vision Language Foundation Model for Remote Sensing" (Liu et al., 2023)</item></list></para>
 /// <para><b>For Beginners:</b> RemoteCLIP is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Science)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RemoteCLIP: A Vision Language Foundation Model for Remote Sensing", "https://arxiv.org/abs/2306.11029", Year = 2023, Authors = "Liu et al.")]
 public class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly RemoteCLIPOptions _options; public override ModelOptions GetOptions() => _options;

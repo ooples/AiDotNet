@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -23,6 +24,13 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale" (Dosovitskiy et al., ICLR 2021)</item></list></para>
 /// <para><b>For Beginners:</b> ViT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale", "https://arxiv.org/abs/2010.11929", Year = 2021, Authors = "Dosovitskiy et al.")]
 public class ViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly ViTOptions _options; public override ModelOptions GetOptions() => _options;
