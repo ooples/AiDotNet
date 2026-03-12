@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// <b>Reference:</b> Xu et al., "PIDNet: A Real-time Semantic Segmentation Network Inspired by PID Controllers", CVPR 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PIDNet: A Real-time Semantic Segmentation Network Inspired by PID Controllers", "https://arxiv.org/abs/2206.02066", Year = 2023, Authors = "Jiacong Xu, Zixiang Xiong, Shankar P. Bhatt")]
 public class PIDNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly PIDNetOptions _options;
