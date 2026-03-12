@@ -91,12 +91,16 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
         T lr = NumOps.FromDouble(_learningRateValue);
         double rho = 1.0, alpha = 0.0, prevH = double.MaxValue;
 
+        // Number of inner gradient steps per outer augmented Lagrangian iteration.
+        // Balances convergence speed vs constraint enforcement granularity.
+        const int innerIterationsPerStep = 30;
+
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
         {
             // Temperature annealing: tau starts at 1.0, decreases to 0.1
             double tau = Math.Max(0.1, Math.Pow(0.95, outerIter));
 
-            for (int innerIter = 0; innerIter < 30; innerIter++)
+            for (int innerIter = 0; innerIter < innerIterationsPerStep; innerIter++)
             {
                 // Compute effective adjacency: W_eff[i,j] = W[i,j] * sigmoid(M[i,j] / tau)
                 var Weff = new Matrix<T>(d, d);
@@ -147,7 +151,7 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
                     Wfinal[i, j] = NumOps.Multiply(W[i, j],
-                                   NumOps.FromDouble(Sigmoid(NumOps.ToDouble(M[i, j]) / Math.Max(0.1, Math.Pow(0.95, outerIter)))));
+                                   NumOps.FromDouble(Sigmoid(NumOps.ToDouble(M[i, j]) / tau)));
 
             var (hVal, _) = ComputeNOTEARSConstraint(Wfinal);
             alpha += rho * hVal;
