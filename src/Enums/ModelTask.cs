@@ -239,5 +239,17 @@ public enum ModelTask
     /// Reduces the number of features or dimensions in data while preserving structure.
     /// Example: projecting high-dimensional data to 2D for visualization using PCA or t-SNE.
     /// </summary>
-    DimensionalityReduction
+    DimensionalityReduction,
+
+    /// <summary>
+    /// Assigns inputs to one of exactly two categories.
+    /// Example: spam vs. not spam, positive vs. negative sentiment.
+    /// </summary>
+    BinaryClassification,
+
+    /// <summary>
+    /// Assigns inputs to one of three or more categories.
+    /// Example: classifying images as cats, dogs, or birds.
+    /// </summary>
+    MultiClassClassification
 }

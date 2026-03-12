@@ -40,6 +40,7 @@ namespace AiDotNet.Classification.Meta;
 [ModelCategory(ModelCategory.Classifier)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.MultiClassClassification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class ClassifierChain<T> : MetaClassifierBase<T>

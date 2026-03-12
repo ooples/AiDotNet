@@ -41,6 +41,7 @@ namespace AiDotNet.AnomalyDetection.Linear;
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]

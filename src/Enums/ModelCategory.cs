@@ -227,5 +227,11 @@ public enum ModelCategory
     /// A model that uses optimization algorithms to find optimal parameters.
     /// Examples: genetic algorithm regression, evolutionary strategies, simulated annealing.
     /// </summary>
-    Optimization
+    Optimization,
+
+    /// <summary>
+    /// A model designed specifically for detecting anomalies, outliers, or unusual patterns.
+    /// Examples: Isolation Forest, One-Class SVM, Elliptic Envelope, MCD, autoencoders for AD.
+    /// </summary>
+    AnomalyDetection
 }

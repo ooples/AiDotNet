@@ -52,6 +52,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.Classifier)]
 [ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.BinaryClassification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Using Random Forest to Learn Imbalanced Data",

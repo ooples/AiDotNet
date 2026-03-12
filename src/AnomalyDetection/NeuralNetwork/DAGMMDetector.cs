@@ -45,6 +45,7 @@ namespace AiDotNet.AnomalyDetection.NeuralNetwork;
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Autoencoder)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]

@@ -46,6 +46,7 @@ namespace AiDotNet.Classification.Ensemble;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.Classifier)]
 [ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.BinaryClassification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Greedy Function Approximation: A Gradient Boosting Machine",
