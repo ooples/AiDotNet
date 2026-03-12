@@ -39,14 +39,9 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 /// Reference: Box, G.E.P., Jenkins, G.M. (1970). "Time Series Analysis: Forecasting and Control."
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.TimeSeries)]
-[ModelCategory(ModelCategory.TimeSeriesModel)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.AnomalyDetection)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
+// Metadata attributes intentionally omitted: ApplyDifferencing lacks boundary guard
+// for d >= X.Rows, which can cause index-out-of-range. Re-add after fixing differencing
+// validation and adding proper ARIMA parameter estimation.
 public class ARIMADetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _p;

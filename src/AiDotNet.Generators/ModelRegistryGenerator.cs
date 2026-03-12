@@ -101,6 +101,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         if (candidates.IsDefaultOrEmpty)
         {
             EmitEmptyRegistry(context);
+            EmitDiscoveryManifest(context, candidates, new HashSet<string>());
             return;
         }
 
@@ -118,12 +119,13 @@ public class ModelRegistryGenerator : IIncrementalGenerator
             inputAttrSymbol is null)
         {
             EmitEmptyRegistry(context);
+            EmitDiscoveryManifest(context, candidates, new HashSet<string>());
             return;
         }
 
         var entries = new List<ModelEntryData>();
         var seen = new HashSet<string>();
-        var annotatedNames = new HashSet<string>();
+        var manifestAnnotatedNames = new HashSet<string>();
 
         foreach (var modelClass in candidates)
         {
@@ -141,11 +143,16 @@ public class ModelRegistryGenerator : IIncrementalGenerator
                 domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
                 complexityAttrSymbol, inputAttrSymbol, paperAttrSymbol);
 
-            // Only include fully-annotated models to avoid default enum values
+            // Track models with at least one metadata attribute for manifest progress
+            if (entry.HasAnyMetadata)
+            {
+                manifestAnnotatedNames.Add(fullName);
+            }
+
+            // Only include fully-annotated models in the registry to avoid default enum values
             if (entry.HasAllRequiredMetadata)
             {
                 entries.Add(entry);
-                annotatedNames.Add(fullName);
             }
         }
 
@@ -155,7 +162,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         EmitRegistry(context, entries);
 
         // Emit discovery manifest listing ALL concrete IFullModel classes with file paths
-        EmitDiscoveryManifest(context, candidates, annotatedNames);
+        EmitDiscoveryManifest(context, candidates, manifestAnnotatedNames);
     }
 
     private static ModelEntryData ExtractMetadata(
@@ -521,6 +528,8 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("        new Lazy<Dictionary<ModelComplexity, List<ModelMetadataEntry>>>(BuildByComplexity);");
         sb.AppendLine("    private static readonly Lazy<Dictionary<string, ModelMetadataEntry>> _byTypeName =");
         sb.AppendLine("        new Lazy<Dictionary<string, ModelMetadataEntry>>(BuildByTypeName);");
+        sb.AppendLine("    private static readonly Lazy<Dictionary<string, List<ModelMetadataEntry>>> _byClassName =");
+        sb.AppendLine("        new Lazy<Dictionary<string, List<ModelMetadataEntry>>>(BuildByClassName);");
         sb.AppendLine();
 
         // BuildByDomain
@@ -612,6 +621,23 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
 
+        // BuildByClassName
+        sb.AppendLine("    private static Dictionary<string, List<ModelMetadataEntry>> BuildByClassName()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var dict = new Dictionary<string, List<ModelMetadataEntry>>(StringComparer.Ordinal);");
+        sb.AppendLine("        foreach (var entry in All)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (!dict.TryGetValue(entry.ClassName, out var list))");
+        sb.AppendLine("            {");
+        sb.AppendLine("                list = new List<ModelMetadataEntry>();");
+        sb.AppendLine("                dict[entry.ClassName] = list;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            list.Add(entry);");
+        sb.AppendLine("        }");
+        sb.AppendLine("        return dict;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
         // Query methods
         EmitLazyQueryMethod(sb, "GetByDomain", "ModelDomain", "domain", "_byDomain");
         EmitLazyQueryMethod(sb, "GetByCategory", "ModelCategory", "category", "_byCategory");
@@ -632,13 +658,9 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <summary>Gets all metadata entries matching a short class name.</summary>");
         sb.AppendLine("    public static IReadOnlyList<ModelMetadataEntry> GetByClassName(string className)");
         sb.AppendLine("    {");
-        sb.AppendLine("        var results = new List<ModelMetadataEntry>();");
-        sb.AppendLine("        foreach (var entry in All)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            if (string.Equals(entry.ClassName, className, StringComparison.Ordinal))");
-        sb.AppendLine("                results.Add(entry);");
-        sb.AppendLine("        }");
-        sb.AppendLine("        return results;");
+        sb.AppendLine("        if (_byClassName.Value.TryGetValue(className, out var list))");
+        sb.AppendLine("            return list;");
+        sb.AppendLine("        return Array.Empty<ModelMetadataEntry>();");
         sb.AppendLine("    }");
 
         sb.AppendLine("}");

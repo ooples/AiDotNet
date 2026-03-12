@@ -40,11 +40,8 @@ namespace AiDotNet.AnomalyDetection.Linear;
 /// Rousseeuw, P.J., Driessen, K.V. (1999). "A Fast Algorithm for the Minimum Covariance Determinant Estimator."
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.AnomalyDetection)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+// Metadata attributes intentionally omitted: implementation uses simplified Fast-MCD
+// that falls back to full-sample covariance. Re-add after implementing proper C-step iteration.
 public class MCDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _supportFraction;

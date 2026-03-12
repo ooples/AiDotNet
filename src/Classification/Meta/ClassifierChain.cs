@@ -36,12 +36,9 @@ namespace AiDotNet.Classification.Meta;
 /// - Error propagation (early mistakes affect later predictions)
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.Ensemble)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Classifier Chains for Multi-Label Classification", "https://doi.org/10.1007/s10994-011-5256-5", Year = 2011, Authors = "Jesse Read, Bernhard Pfahringer, Geoff Holmes, Eibe Frank")]
+// Metadata attributes intentionally omitted: Train(Matrix<T>, Vector<T>) path silently
+// discards caller labels by reassigning to 0..numClasses-1. Re-add after fixing label
+// preservation in the single-label training path.
 public class ClassifierChain<T> : MetaClassifierBase<T>
 {
     /// <summary>

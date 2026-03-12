@@ -43,6 +43,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Mining Top-n Local Outliers in Large Databases", "https://doi.org/10.1145/1150402.1150438", Year = 2006, Authors = "Wen Jin, Anthony K. H. Tung, Jiawei Han, Wei Wang")]
 public class INFLODetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;

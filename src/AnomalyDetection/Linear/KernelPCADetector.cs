@@ -46,6 +46,7 @@ namespace AiDotNet.AnomalyDetection.Linear;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Nonlinear Component Analysis as a Kernel Eigenvalue Problem", "https://doi.org/10.1162/089976698300017467", Year = 1998, Authors = "Bernhard Scholkopf, Alexander Smola, Klaus-Robert Muller")]
 public class KernelPCADetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _gamma;

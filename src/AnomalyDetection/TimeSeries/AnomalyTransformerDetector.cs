@@ -42,15 +42,9 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 /// "Anomaly Transformer: Time Series Anomaly Detection with Association Discrepancy." ICLR.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelDomain(ModelDomain.TimeSeries)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelCategory(ModelCategory.TimeSeriesModel)]
-[ModelTask(ModelTask.AnomalyDetection)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Anomaly Transformer: Time Series Anomaly Detection with Association Discrepancy", "https://doi.org/10.48550/arXiv.2110.02642", Year = 2022, Authors = "Jiehui Xu, Haixu Wu, Jianmin Wang, Mingsheng Long")]
+// Metadata attributes intentionally omitted: attention backpropagation uses simplified
+// gradient approximation instead of proper softmax Jacobian. Re-add after implementing
+// full association discrepancy with proper attention gradient computation.
 public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _modelDim;

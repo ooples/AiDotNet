@@ -42,13 +42,9 @@ namespace AiDotNet.Classification.Ensemble;
 /// - Consider subsample less than 1.0 for regularization
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.Ensemble)]
-[ModelCategory(ModelCategory.DecisionTree)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Greedy Function Approximation: A Gradient Boosting Machine", "https://doi.org/10.1214/aos/1013203451", Year = 2001, Authors = "Jerome H. Friedman")]
+// Metadata attributes intentionally omitted: training uses simplified stump fitting
+// instead of full gradient boosting tree construction. Re-add after implementing
+// proper tree fitting with gradient and Hessian-based leaf values.
 public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
 {
     /// <summary>

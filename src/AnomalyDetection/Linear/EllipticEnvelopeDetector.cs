@@ -39,11 +39,8 @@ namespace AiDotNet.AnomalyDetection.Linear;
 /// Covariance Determinant Estimator." Technometrics.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.AnomalyDetection)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+// Metadata attributes intentionally omitted: implementation uses simplified MCD,
+// not the full Fast-MCD algorithm. Re-add after implementing proper Fast-MCD.
 public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _supportFraction;

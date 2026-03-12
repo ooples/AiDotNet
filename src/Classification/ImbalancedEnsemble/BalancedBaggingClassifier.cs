@@ -55,12 +55,9 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.Ensemble)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-[ModelPaper("Roughly Balanced Bagging for Imbalanced Data", "https://doi.org/10.1007/s11222-008-9094-6", Year = 2009, Authors = "Shohei Hido, Hisashi Kashima")]
+// Metadata attributes intentionally omitted: SetParameters() and ApplyGradients() are
+// empty placeholders, ComputeGradients() returns synthetic zero gradients. Re-add after
+// implementing proper gradient-based parameter updates.
 public class BalancedBaggingClassifier<T> : ClassifierBase<T>
 {
     /// <summary>

@@ -1,5 +1,3 @@
-using AiDotNet.Attributes;
-using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
