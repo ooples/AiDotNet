@@ -1,8 +1,10 @@
+using AiDotNet.Attributes;
 using AiDotNet.AutoML;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Finance.AutoML;
 
@@ -20,6 +22,16 @@ namespace AiDotNet.Finance.AutoML;
 /// It tries several finance models and chooses the one that scores best on your data.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Forecasting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AutoML: A Survey of the State-of-the-Art",
+    "https://arxiv.org/abs/1908.00709",
+    Year = 2021,
+    Authors = "Xin He, Kaiyong Zhao, Xiaowen Chu")]
 public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor<T>>
 {
     private readonly FinancialAutoMLOptions<T> _options;
