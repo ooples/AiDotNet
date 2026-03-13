@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Compression;
 
 /// <summary>
@@ -21,6 +23,11 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// Gradient Descent." EMNLP 2017.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("Sparse Communication for Distributed Gradient Descent", "https://arxiv.org/abs/1704.05021", Year = 2017, Authors = "Aji and Heafield")]
 public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _compressionRatio;

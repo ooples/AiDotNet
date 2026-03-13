@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.BackdoorDefense;
 
 /// <summary>
@@ -23,6 +25,11 @@ namespace AiDotNet.FederatedLearning.BackdoorDefense;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Neural Cleanse: Identifying and Mitigating Backdoor Attacks in Neural Networks", "https://arxiv.org/abs/1902.06531", Year = 2019, Authors = "Wang et al.")]
 public class NeuralCleanseDetector<T> : Infrastructure.FederatedLearningComponentBase<T>, IBackdoorDetector<T>
 {
     private readonly double _anomalyThreshold;

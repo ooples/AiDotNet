@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Alignment;
 
 /// <summary>
@@ -22,6 +24,11 @@ namespace AiDotNet.FederatedLearning.Alignment;
 /// <para>Reference: Federated RLHF for Privacy-Preserving LLM Alignment (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class FederatedRLHF<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly FederatedRLHFOptions _options;
