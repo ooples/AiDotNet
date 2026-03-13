@@ -1886,7 +1886,6 @@ public class AdversarialRobustnessIntegrationTests
         {
             return new ModelMetadata<double>
             {
-                ModelType = ModelType.None,
                 Description = "Mock classification model for testing"
             };
         }

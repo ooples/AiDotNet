@@ -934,7 +934,7 @@ public class ExpressionTreeIntegrationTests
 
         var metadata = add.GetModelMetadata();
 
-        Assert.Equal(ModelType.ExpressionTree, metadata.ModelType);
+
         Assert.Equal(1, metadata.FeatureCount);
         Assert.Equal(5, metadata.Complexity);
     }

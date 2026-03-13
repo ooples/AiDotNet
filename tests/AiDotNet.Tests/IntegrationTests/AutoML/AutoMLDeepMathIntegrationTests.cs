@@ -217,7 +217,7 @@ public class AutoMLDeepMathIntegrationTests
         var result = new TrialResult
         {
             TrialId = 42,
-            CandidateModelType = ModelType.SimpleRegression,
+            CandidateModelType = typeof(AiDotNet.Regression.SimpleRegression<>),
             Score = 0.95,
             Duration = TimeSpan.FromSeconds(30),
             Timestamp = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
@@ -266,7 +266,7 @@ public class AutoMLDeepMathIntegrationTests
         var original = new TrialResult
         {
             TrialId = 5,
-            CandidateModelType = ModelType.AutoML,
+            CandidateModelType = typeof(AiDotNet.AutoML.AutoMLModelBase<,,>),
             Score = 0.92,
             Duration = TimeSpan.FromMinutes(2),
             Timestamp = DateTime.UtcNow,
@@ -319,7 +319,7 @@ public class AutoMLDeepMathIntegrationTests
         var original = new TrialResult
         {
             TrialId = 10,
-            CandidateModelType = ModelType.SimpleRegression,
+            CandidateModelType = typeof(AiDotNet.Regression.SimpleRegression<>),
             Score = 0.99,
             Duration = TimeSpan.FromHours(1),
             Success = true,

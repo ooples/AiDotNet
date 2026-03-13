@@ -252,7 +252,7 @@ public class MambaLanguageModelTests
             CreateArch(100), 100, 64, 4, 16, maxSeqLength: 32);
         var metadata = model.GetModelMetadata();
 
-        Assert.Equal(ModelType.NeuralNetwork, metadata.ModelType);
+
         Assert.True(metadata.AdditionalInfo.ContainsKey("VocabSize"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("ModelDimension"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("NumLayers"));

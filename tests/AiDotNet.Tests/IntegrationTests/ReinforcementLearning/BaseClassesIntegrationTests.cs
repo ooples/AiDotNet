@@ -252,7 +252,6 @@ public class BaseClassesIntegrationTests
         {
             return new ModelMetadata<double>
             {
-                ModelType = ModelType.ReinforcementLearning,
                 FeatureCount = FeatureCount
             };
         }
@@ -353,7 +352,6 @@ public class BaseClassesIntegrationTests
         {
             return new ModelMetadata<double>
             {
-                ModelType = ModelType.ReinforcementLearning,
                 FeatureCount = FeatureCount
             };
         }

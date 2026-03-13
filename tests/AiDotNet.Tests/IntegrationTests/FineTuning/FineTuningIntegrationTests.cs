@@ -76,7 +76,6 @@ public class FineTuningIntegrationTests
         {
             return new ModelMetadata<double>
             {
-                ModelType = ModelType.NeuralNetwork
             };
         }
 

@@ -67,7 +67,7 @@ public class AgentHyperparameterApplicatorTests
             ["max_depth"] = 15
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(2, result.Applied.Count);
@@ -85,7 +85,7 @@ public class AgentHyperparameterApplicatorTests
             ["LearningRate"] = 0.05
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(300, options.NumberOfTrees);
@@ -101,7 +101,7 @@ public class AgentHyperparameterApplicatorTests
             ["random_seed"] = 42
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(42, options.Seed);
@@ -116,7 +116,7 @@ public class AgentHyperparameterApplicatorTests
             ["LearningRate"] = 1  // int provided, double expected
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(1.0, options.LearningRate);
@@ -131,7 +131,7 @@ public class AgentHyperparameterApplicatorTests
             ["NumberOfTrees"] = 200.0  // double provided, int expected
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(200, options.NumberOfTrees);
@@ -146,7 +146,7 @@ public class AgentHyperparameterApplicatorTests
             ["UseIntercept"] = false
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.False(options.UseIntercept);
@@ -161,7 +161,7 @@ public class AgentHyperparameterApplicatorTests
             ["SomeStringParam"] = "custom_value"
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal("custom_value", options.SomeStringParam);
@@ -180,7 +180,7 @@ public class AgentHyperparameterApplicatorTests
             ["completely_unknown_param"] = 42
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.False(result.HasAppliedParameters);
         Assert.Single(result.Skipped);
@@ -197,7 +197,7 @@ public class AgentHyperparameterApplicatorTests
             ["unknown_param"] = "value"
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.Single(result.Applied);
         Assert.Single(result.Skipped);
@@ -217,7 +217,7 @@ public class AgentHyperparameterApplicatorTests
             ["n_estimators"] = 50000  // Above max of 10000
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(50000, options.NumberOfTrees);
@@ -234,7 +234,7 @@ public class AgentHyperparameterApplicatorTests
             ["n_estimators"] = 0  // Below min of 1
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(0, options.NumberOfTrees);
@@ -252,7 +252,7 @@ public class AgentHyperparameterApplicatorTests
         var (model, _) = CreateTestModel();
         var hyperparams = new Dictionary<string, object>();
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.False(result.HasAppliedParameters);
         Assert.Empty(result.Applied);
@@ -327,7 +327,7 @@ public class AgentHyperparameterApplicatorTests
             ["unknown_param"] = "value"
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
         var summary = result.GetSummary();
 
         Assert.Contains("Applied", summary);
@@ -358,7 +358,7 @@ public class AgentHyperparameterApplicatorTests
             ["numberoftrees"] = 250  // lowercase version of NumberOfTrees
         };
 
-        var result = _applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = _applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(250, options.NumberOfTrees);

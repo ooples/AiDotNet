@@ -42,7 +42,6 @@ internal sealed class FakeCodeModel : CodeModelBase<double>
     {
         return new ModelMetadata<double>
         {
-            ModelType = ModelType.Transformer,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", nameof(FakeCodeModel) },

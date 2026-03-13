@@ -178,7 +178,6 @@ public class MockNeuralNetwork : INeuralNetwork<double>
         return new ModelMetadata<double>
         {
             Name = "MockNeuralNetwork",
-            ModelType = Enums.ModelType.None,
             FeatureCount = _parameters.Length,
             Complexity = 1
         };

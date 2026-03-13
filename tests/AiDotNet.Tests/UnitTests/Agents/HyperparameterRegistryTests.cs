@@ -1,5 +1,5 @@
 using AiDotNet.Agents;
-using AiDotNet.Enums;
+using AiDotNet.Regression;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.Agents;
@@ -21,7 +21,7 @@ public class HyperparameterRegistryTests
     [InlineData("min_samples_split", "MinSamplesSplit")]
     public void GetPropertyName_RandomForest_ReturnsCorrectMapping(string llmName, string expectedProperty)
     {
-        var result = _registry.GetPropertyName(ModelType.RandomForest, llmName);
+        var result = _registry.GetPropertyName(typeof(RandomForestRegression<>), llmName);
 
         Assert.Equal(expectedProperty, result);
     }
@@ -34,7 +34,7 @@ public class HyperparameterRegistryTests
     [InlineData("subsample_ratio", "SubsampleRatio")]
     public void GetPropertyName_GradientBoosting_ReturnsCorrectMapping(string llmName, string expectedProperty)
     {
-        var result = _registry.GetPropertyName(ModelType.GradientBoosting, llmName);
+        var result = _registry.GetPropertyName(typeof(GradientBoostingRegression<>), llmName);
 
         Assert.Equal(expectedProperty, result);
     }
@@ -42,8 +42,8 @@ public class HyperparameterRegistryTests
     [Fact]
     public void GetPropertyName_DecisionTree_HasMaxDepthAndMinSamples()
     {
-        Assert.Equal("MaxDepth", _registry.GetPropertyName(ModelType.DecisionTree, "max_depth"));
-        Assert.Equal("MinSamplesSplit", _registry.GetPropertyName(ModelType.DecisionTree, "min_samples_split"));
+        Assert.Equal("MaxDepth", _registry.GetPropertyName(typeof(DecisionTreeRegression<>), "max_depth"));
+        Assert.Equal("MinSamplesSplit", _registry.GetPropertyName(typeof(DecisionTreeRegression<>), "min_samples_split"));
     }
 
     #endregion
@@ -58,7 +58,7 @@ public class HyperparameterRegistryTests
     [InlineData("batchsize", "BatchSize")]
     public void GetPropertyName_NeuralNetwork_ReturnsCorrectMapping(string llmName, string expectedProperty)
     {
-        var result = _registry.GetPropertyName(ModelType.NeuralNetworkRegression, llmName);
+        var result = _registry.GetPropertyName(typeof(NeuralNetworkRegression<>), llmName);
 
         Assert.Equal(expectedProperty, result);
     }
@@ -72,7 +72,7 @@ public class HyperparameterRegistryTests
     [InlineData("polynomial_degree", "Degree")]
     public void GetPropertyName_PolynomialRegression_ReturnsCorrectMapping(string llmName, string expectedProperty)
     {
-        var result = _registry.GetPropertyName(ModelType.PolynomialRegression, llmName);
+        var result = _registry.GetPropertyName(typeof(PolynomialRegression<>), llmName);
 
         Assert.Equal(expectedProperty, result);
     }
@@ -83,7 +83,7 @@ public class HyperparameterRegistryTests
     [InlineData("lambda", "Alpha")]
     public void GetPropertyName_RidgeRegression_ReturnsCorrectMapping(string llmName, string expectedProperty)
     {
-        var result = _registry.GetPropertyName(ModelType.RidgeRegression, llmName);
+        var result = _registry.GetPropertyName(typeof(RidgeRegression<>), llmName);
 
         Assert.Equal(expectedProperty, result);
     }
@@ -98,7 +98,7 @@ public class HyperparameterRegistryTests
     [InlineData("num_neighbors", "K")]
     public void GetPropertyName_KNN_ReturnsCorrectMapping(string llmName, string expectedProperty)
     {
-        var result = _registry.GetPropertyName(ModelType.KNearestNeighbors, llmName);
+        var result = _registry.GetPropertyName(typeof(KNearestNeighborsRegression<>), llmName);
 
         Assert.Equal(expectedProperty, result);
     }
@@ -106,10 +106,10 @@ public class HyperparameterRegistryTests
     [Fact]
     public void GetPropertyName_SVR_ReturnsCAndEpsilon()
     {
-        Assert.Equal("C", _registry.GetPropertyName(ModelType.SupportVectorRegression, "C"));
-        Assert.Equal("C", _registry.GetPropertyName(ModelType.SupportVectorRegression, "cost"));
-        Assert.Equal("Epsilon", _registry.GetPropertyName(ModelType.SupportVectorRegression, "epsilon"));
-        Assert.Equal("Epsilon", _registry.GetPropertyName(ModelType.SupportVectorRegression, "eps"));
+        Assert.Equal("C", _registry.GetPropertyName(typeof(SupportVectorRegression<>), "C"));
+        Assert.Equal("C", _registry.GetPropertyName(typeof(SupportVectorRegression<>), "cost"));
+        Assert.Equal("Epsilon", _registry.GetPropertyName(typeof(SupportVectorRegression<>), "epsilon"));
+        Assert.Equal("Epsilon", _registry.GetPropertyName(typeof(SupportVectorRegression<>), "eps"));
     }
 
     #endregion
@@ -119,10 +119,10 @@ public class HyperparameterRegistryTests
     [Fact]
     public void GetPropertyName_TimeSeries_ReturnsLagAndSeasonal()
     {
-        Assert.Equal("LagOrder", _registry.GetPropertyName(ModelType.TimeSeriesRegression, "lag_order"));
-        Assert.Equal("LagOrder", _registry.GetPropertyName(ModelType.TimeSeriesRegression, "lags"));
-        Assert.Equal("SeasonalPeriod", _registry.GetPropertyName(ModelType.TimeSeriesRegression, "seasonal_period"));
-        Assert.Equal("SeasonalPeriod", _registry.GetPropertyName(ModelType.TimeSeriesRegression, "seasonality"));
+        Assert.Equal("LagOrder", _registry.GetPropertyName(typeof(TimeSeriesRegression<>), "lag_order"));
+        Assert.Equal("LagOrder", _registry.GetPropertyName(typeof(TimeSeriesRegression<>), "lags"));
+        Assert.Equal("SeasonalPeriod", _registry.GetPropertyName(typeof(TimeSeriesRegression<>), "seasonal_period"));
+        Assert.Equal("SeasonalPeriod", _registry.GetPropertyName(typeof(TimeSeriesRegression<>), "seasonality"));
     }
 
     #endregion
@@ -130,22 +130,28 @@ public class HyperparameterRegistryTests
     #region Shared Parameters
 
     [Theory]
-    [InlineData(ModelType.RandomForest)]
-    [InlineData(ModelType.NeuralNetworkRegression)]
-    [InlineData(ModelType.KNearestNeighbors)]
-    [InlineData(ModelType.PolynomialRegression)]
-    public void GetPropertyName_SharedSeed_WorksAcrossModelTypes(ModelType modelType)
+    [MemberData(nameof(SharedSeedModelTypes))]
+    public void GetPropertyName_SharedSeed_WorksAcrossModelTypes(Type modelType)
     {
         Assert.Equal("Seed", _registry.GetPropertyName(modelType, "seed"));
         Assert.Equal("Seed", _registry.GetPropertyName(modelType, "random_seed"));
         Assert.Equal("Seed", _registry.GetPropertyName(modelType, "random_state"));
     }
 
+    public static IEnumerable<object[]> SharedSeedModelTypes =>
+        new List<object[]>
+        {
+            new object[] { typeof(RandomForestRegression<>) },
+            new object[] { typeof(NeuralNetworkRegression<>) },
+            new object[] { typeof(KNearestNeighborsRegression<>) },
+            new object[] { typeof(PolynomialRegression<>) },
+        };
+
     [Fact]
     public void GetPropertyName_SharedUseIntercept_Works()
     {
-        Assert.Equal("UseIntercept", _registry.GetPropertyName(ModelType.RidgeRegression, "use_intercept"));
-        Assert.Equal("UseIntercept", _registry.GetPropertyName(ModelType.RidgeRegression, "fit_intercept"));
+        Assert.Equal("UseIntercept", _registry.GetPropertyName(typeof(RidgeRegression<>), "use_intercept"));
+        Assert.Equal("UseIntercept", _registry.GetPropertyName(typeof(RidgeRegression<>), "fit_intercept"));
     }
 
     #endregion
@@ -155,7 +161,7 @@ public class HyperparameterRegistryTests
     [Fact]
     public void GetPropertyName_UnknownParameter_ReturnsNull()
     {
-        var result = _registry.GetPropertyName(ModelType.RandomForest, "nonexistent_param");
+        var result = _registry.GetPropertyName(typeof(RandomForestRegression<>), "nonexistent_param");
 
         Assert.Null(result);
     }
@@ -163,7 +169,7 @@ public class HyperparameterRegistryTests
     [Fact]
     public void GetDefinition_UnknownParameter_ReturnsNull()
     {
-        var result = _registry.GetDefinition(ModelType.RandomForest, "nonexistent_param");
+        var result = _registry.GetDefinition(typeof(RandomForestRegression<>), "nonexistent_param");
 
         Assert.Null(result);
     }
@@ -179,7 +185,7 @@ public class HyperparameterRegistryTests
     [InlineData("nestimators")]
     public void GetPropertyName_CaseInsensitiveNormalized_ReturnsCorrect(string alias)
     {
-        var result = _registry.GetPropertyName(ModelType.RandomForest, alias);
+        var result = _registry.GetPropertyName(typeof(RandomForestRegression<>), alias);
 
         Assert.Equal("NumberOfTrees", result);
     }
@@ -191,7 +197,7 @@ public class HyperparameterRegistryTests
     [Fact]
     public void Validate_InRange_ReturnsValid()
     {
-        var result = _registry.Validate(ModelType.RandomForest, "n_estimators", 100);
+        var result = _registry.Validate(typeof(RandomForestRegression<>), "n_estimators", 100);
 
         Assert.True(result.IsValid);
         Assert.False(result.HasWarning);
@@ -200,27 +206,27 @@ public class HyperparameterRegistryTests
     [Fact]
     public void Validate_BelowMinimum_ReturnsWarning()
     {
-        var result = _registry.Validate(ModelType.RandomForest, "n_estimators", 0);
+        var result = _registry.Validate(typeof(RandomForestRegression<>), "n_estimators", 0);
 
         Assert.True(result.IsValid);
         Assert.True(result.HasWarning);
-        Assert.Contains("below", result.Warning!);
+        Assert.Contains("below", result.Warning);
     }
 
     [Fact]
     public void Validate_AboveMaximum_ReturnsWarning()
     {
-        var result = _registry.Validate(ModelType.RandomForest, "n_estimators", 50000);
+        var result = _registry.Validate(typeof(RandomForestRegression<>), "n_estimators", 50000);
 
         Assert.True(result.IsValid);
         Assert.True(result.HasWarning);
-        Assert.Contains("above", result.Warning!);
+        Assert.Contains("above", result.Warning);
     }
 
     [Fact]
     public void Validate_UnknownParameter_ReturnsValid()
     {
-        var result = _registry.Validate(ModelType.RandomForest, "unknown_param", 42);
+        var result = _registry.Validate(typeof(RandomForestRegression<>), "unknown_param", 42);
 
         Assert.True(result.IsValid);
         Assert.False(result.HasWarning);
@@ -229,7 +235,7 @@ public class HyperparameterRegistryTests
     [Fact]
     public void Validate_NonNumericValue_ReturnsValid()
     {
-        var result = _registry.Validate(ModelType.RandomForest, "n_estimators", "not_a_number");
+        var result = _registry.Validate(typeof(RandomForestRegression<>), "n_estimators", "not_a_number");
 
         Assert.True(result.IsValid);
         Assert.False(result.HasWarning);
@@ -242,7 +248,7 @@ public class HyperparameterRegistryTests
     [Fact]
     public void Register_CustomDefinition_IsAccessible()
     {
-        _registry.Register(ModelType.RandomForest, new HyperparameterDefinition
+        _registry.Register(typeof(RandomForestRegression<>), new HyperparameterDefinition
         {
             PropertyName = "CustomParam",
             Aliases = new List<string> { "custom_param", "my_param" },
@@ -251,14 +257,14 @@ public class HyperparameterRegistryTests
             MaxValue = 100
         });
 
-        Assert.Equal("CustomParam", _registry.GetPropertyName(ModelType.RandomForest, "custom_param"));
-        Assert.Equal("CustomParam", _registry.GetPropertyName(ModelType.RandomForest, "my_param"));
+        Assert.Equal("CustomParam", _registry.GetPropertyName(typeof(RandomForestRegression<>), "custom_param"));
+        Assert.Equal("CustomParam", _registry.GetPropertyName(typeof(RandomForestRegression<>), "my_param"));
     }
 
     [Fact]
     public void Register_CustomDefinition_ValidationWorks()
     {
-        _registry.Register(ModelType.RandomForest, new HyperparameterDefinition
+        _registry.Register(typeof(RandomForestRegression<>), new HyperparameterDefinition
         {
             PropertyName = "TestParam",
             Aliases = new List<string> { "test_param" },
@@ -267,9 +273,9 @@ public class HyperparameterRegistryTests
             MaxValue = 10
         });
 
-        var valid = _registry.Validate(ModelType.RandomForest, "test_param", 5);
-        var tooLow = _registry.Validate(ModelType.RandomForest, "test_param", 0);
-        var tooHigh = _registry.Validate(ModelType.RandomForest, "test_param", 20);
+        var valid = _registry.Validate(typeof(RandomForestRegression<>), "test_param", 5);
+        var tooLow = _registry.Validate(typeof(RandomForestRegression<>), "test_param", 0);
+        var tooHigh = _registry.Validate(typeof(RandomForestRegression<>), "test_param", 20);
 
         Assert.False(valid.HasWarning);
         Assert.True(tooLow.HasWarning);
@@ -283,7 +289,7 @@ public class HyperparameterRegistryTests
     [Fact]
     public void GetDefinition_KnownParameter_ReturnsFullDefinition()
     {
-        var def = _registry.GetDefinition(ModelType.RandomForest, "n_estimators");
+        var def = _registry.GetDefinition(typeof(RandomForestRegression<>), "n_estimators");
 
         Assert.NotNull(def);
         Assert.Equal("NumberOfTrees", def.PropertyName);
@@ -295,7 +301,7 @@ public class HyperparameterRegistryTests
     [Fact]
     public void GetDefinition_SharedParameter_ReturnsDefinition()
     {
-        var def = _registry.GetDefinition(ModelType.RandomForest, "seed");
+        var def = _registry.GetDefinition(typeof(RandomForestRegression<>), "seed");
 
         Assert.NotNull(def);
         Assert.Equal("Seed", def.PropertyName);

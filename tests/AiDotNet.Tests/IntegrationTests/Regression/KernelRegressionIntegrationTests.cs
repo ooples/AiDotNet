@@ -177,7 +177,7 @@ public class KernelRegressionIntegrationTests
 
         // Assert
         Assert.NotNull(metadata);
-        Assert.Equal(ModelType.KernelRidgeRegression, metadata.ModelType);
+
         Assert.True(metadata.AdditionalInfo.ContainsKey("LambdaKRR"));
         Assert.Equal(0.5, (double)metadata.AdditionalInfo["LambdaKRR"]);
     }
@@ -288,7 +288,7 @@ public class KernelRegressionIntegrationTests
 
         // Assert
         Assert.NotNull(metadata);
-        Assert.Equal(ModelType.SupportVectorRegression, metadata.ModelType);
+
         Assert.True(metadata.AdditionalInfo.ContainsKey("Epsilon"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("C"));
     }
@@ -391,7 +391,7 @@ public class KernelRegressionIntegrationTests
 
         // Assert
         Assert.NotNull(metadata);
-        Assert.Equal(ModelType.GaussianProcessRegression, metadata.ModelType);
+
         Assert.True(metadata.AdditionalInfo.ContainsKey("NoiseLevel"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("LengthScale"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("SignalVariance"));
@@ -736,7 +736,7 @@ public class KernelRegressionIntegrationTests
 
         // Assert
         Assert.NotNull(metadata);
-        Assert.Equal(ModelType.RadialBasisFunctionRegression, metadata.ModelType);
+
     }
 
     [Fact]

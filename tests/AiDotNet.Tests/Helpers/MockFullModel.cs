@@ -45,7 +45,6 @@ public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>
         return new ModelMetadata<double>
         {
             Name = "MockFullModel",
-            ModelType = Enums.ModelType.None,
             FeatureCount = _parameters.Length,
             Complexity = 1
         };

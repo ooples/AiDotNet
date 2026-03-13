@@ -207,7 +207,7 @@ public class SegFormerIntegrationTests
 
         var metadata = model.GetModelMetadata();
 
-        Assert.Equal(ModelType.SemanticSegmentation, metadata.ModelType);
+
         Assert.Equal("SegFormer", metadata.AdditionalInfo["ModelName"]);
         Assert.Equal(21, metadata.AdditionalInfo["NumClasses"]);
         Assert.Equal("B2", metadata.AdditionalInfo["ModelSize"]);
@@ -246,7 +246,7 @@ public class SegFormerIntegrationTests
         // Get metadata which calls Serialize internally
         var metadata = model.GetModelMetadata();
         Assert.NotNull(metadata);
-        Assert.Equal(ModelType.SemanticSegmentation, metadata.ModelType);
+
 
         // Verify original model still works after metadata extraction
         var input = CreateRandomTensor([1, 3, 32, 32]);

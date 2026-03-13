@@ -826,7 +826,7 @@ public class PhysicsInformedIntegrationTests
         var metadata = pinn.GetModelMetadata();
 
         Assert.NotNull(metadata);
-        Assert.Equal(ModelType.NeuralNetwork, metadata.ModelType);
+
         Assert.True(metadata.AdditionalInfo.ContainsKey("PDE"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("InputDimension"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("OutputDimension"));

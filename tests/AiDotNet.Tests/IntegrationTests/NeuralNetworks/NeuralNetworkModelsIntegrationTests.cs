@@ -183,7 +183,7 @@ public class NeuralNetworkModelsIntegrationTests
 
         // Assert
         Assert.NotNull(metadata);
-        Assert.Equal(ModelType.FeedForwardNetwork, metadata.ModelType);
+
         Assert.NotNull(metadata.AdditionalInfo);
         Assert.True(metadata.AdditionalInfo.ContainsKey("LayerCount"));
     }
@@ -338,7 +338,7 @@ public class NeuralNetworkModelsIntegrationTests
 
         // Assert
         Assert.NotNull(metadata);
-        Assert.Equal(ModelType.ConvolutionalNeuralNetwork, metadata.ModelType);
+
     }
 
     #endregion

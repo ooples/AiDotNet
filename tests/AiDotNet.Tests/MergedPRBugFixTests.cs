@@ -706,7 +706,6 @@ public class MergedPRBugFixTests
             var metadata = new ModelMetadata<double>
             {
                 FeatureCount = 10,
-                ModelType = ModelType.NeuralNetwork,
                 Complexity = 100
             };
             var model = new MockModel();
@@ -743,7 +742,6 @@ public class MergedPRBugFixTests
             var metadata = new ModelMetadata<double>
             {
                 FeatureCount = 10,
-                ModelType = ModelType.NeuralNetwork
             };
             var model = new MockModel();
             registry.RegisterModel("TestModel", model, metadata);
@@ -822,7 +820,6 @@ public class MergedPRBugFixTests
             var metadata = new ModelMetadata<double>
             {
                 FeatureCount = 10,
-                ModelType = ModelType.NeuralNetwork
             };
             var model = new MockModel();
 
@@ -855,7 +852,6 @@ public class MergedPRBugFixTests
             var metadata = new ModelMetadata<double>
             {
                 FeatureCount = 10,
-                ModelType = ModelType.NeuralNetwork
             };
             var model = new MockModel();
 
@@ -889,7 +885,6 @@ public class MergedPRBugFixTests
             var metadata = new ModelMetadata<double>
             {
                 FeatureCount = 10,
-                ModelType = ModelType.NeuralNetwork
             };
             var model = new MockModel();
             registry.RegisterModel("TestModel", model, metadata);

@@ -341,7 +341,7 @@ public class RealESRGANIntegrationTests
         var metadata = model.GetModelMetadata();
 
         // Assert
-        Assert.Equal(ModelType.GenerativeAdversarialNetwork, metadata.ModelType);
+
         Assert.Equal("RealESRGAN", metadata.AdditionalInfo["ModelName"]);
         Assert.Equal(4, metadata.AdditionalInfo["ScaleFactor"]);
         Assert.Equal(23, metadata.AdditionalInfo["NumRRDBBlocks"]);
