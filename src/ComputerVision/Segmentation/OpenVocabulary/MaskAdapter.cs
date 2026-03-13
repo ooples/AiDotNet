@@ -42,7 +42,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Mask-Adapter: The Devil is in the Masks for Open-Vocabulary Segmentation", "", Year = 2025, Authors = "Xie et al.")]
+[ModelPaper("Mask-Adapter: The Devil is in the Masks for Open-Vocabulary Segmentation", "https://arxiv.org/abs/2501.03120", Year = 2025, Authors = "Yongkang Li, Tianheng Cheng, Wenyu Liu, Xinggang Wang")]
 public class MaskAdapter<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly MaskAdapterOptions _options;

@@ -44,7 +44,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
-[ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Mask DINO: Towards A Unified Transformer-based Framework for Object Detection and Segmentation", "https://arxiv.org/abs/2206.02777", Year = 2023, Authors = "Feng Li, Hao Zhang, Huaizhe Xu, Shilong Liu, Lei Zhang, Lionel M. Ni, Heung-Yeung Shum")]

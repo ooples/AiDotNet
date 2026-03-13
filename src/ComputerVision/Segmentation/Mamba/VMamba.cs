@@ -39,7 +39,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Segmentation)]
-[ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("VMamba: Visual State Space Model", "https://arxiv.org/abs/2401.10166", Year = 2024, Authors = "Liu et al.")]

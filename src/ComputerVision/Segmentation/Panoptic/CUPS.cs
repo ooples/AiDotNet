@@ -41,7 +41,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("CUPS: Comprehensive Use of Pixels and Semantics for Panoptic Segmentation", "", Year = 2023, Authors = "de Geus et al.")]
+[ModelPaper("CUPS: Comprehensive Use of Pixels and Semantics for Panoptic Segmentation", "https://arxiv.org/abs/2212.05920", Year = 2023, Authors = "Daan de Geus, Gijs Dubbelman")]
 public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly CUPSOptions _options;

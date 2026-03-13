@@ -43,7 +43,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("EfficientTAM: Efficient Track Anything Model", "", Year = 2024, Authors = "Yang et al.")]
+[ModelPaper("EfficientTAM: Efficient Track Anything Model", "https://arxiv.org/abs/2501.03539", Year = 2025, Authors = "Yunyang Xiong, Bala Varadarajan, Lemeng Wu, Xiaoyu Xiang, Fanyi Xiao, Chenchen Zhu, Xiaoliang Dai, Dilin Wang, Fei Sun, Forrest Iandola, Raghuraman Krishnamoorthi, Vikas Chandra")]
 public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
 {
     private readonly EfficientTAMOptions _options;

@@ -45,7 +45,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Video-LISA: Language Instructed Segmentation Assistant for Video", "", Year = 2024, Authors = "Bai et al.")]
+[ModelPaper("Video-LISA: Language Instructed Segmentation Assistant for Video", "https://arxiv.org/abs/2410.00287", Year = 2024, Authors = "Yuqi Bai, Haoming Wang, Jianzhi Liu, Xiang Li, Yixiao Ge, Jianfeng Dong, Ying Shan")]
 public class VideoLISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
 {
     private readonly VideoLISAOptions _options;

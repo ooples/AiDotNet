@@ -39,7 +39,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Segmentation)]
-[ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", "https://arxiv.org/abs/2401.09417", Year = 2024, Authors = "Zhu et al.")]

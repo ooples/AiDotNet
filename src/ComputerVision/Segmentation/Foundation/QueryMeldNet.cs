@@ -44,7 +44,6 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("QueryMeldNet: Dynamic Query Melding for Multi-Dataset Segmentation", "", Year = 2025, Authors = "Unknown et al.")]
 public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly QueryMeldNetOptions _options;
