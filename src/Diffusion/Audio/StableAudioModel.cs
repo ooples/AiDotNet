@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -70,6 +72,12 @@ namespace AiDotNet.Diffusion.Audio;
 ///     strength: 0.6);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Stable Audio Open", "https://arxiv.org/abs/2407.14358", Year = 2024, Authors = "Evans et al.")]
 public class StableAudioModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

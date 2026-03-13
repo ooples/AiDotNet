@@ -1,8 +1,10 @@
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -72,6 +74,12 @@ namespace AiDotNet.Diffusion.Audio;
 /// SaveWav(dogBark, "dog_bark.wav", sampleRate: 16000);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://arxiv.org/abs/2301.12503", Year = 2023, Authors = "Liu et al.")]
 public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

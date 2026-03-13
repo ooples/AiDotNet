@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
@@ -69,6 +71,12 @@ namespace AiDotNet.Diffusion.Audio;
 ///     preservationStrength: 0.7);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Simple and Controllable Music Generation", "https://arxiv.org/abs/2306.05284", Year = 2023, Authors = "Copet et al.")]
 public class MusicGenModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants
