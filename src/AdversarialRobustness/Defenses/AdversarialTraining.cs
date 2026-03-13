@@ -324,6 +324,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         return maxIndex;
     }
 
+    [AiDotNet.Attributes.ModelMetadataExempt]
     private sealed class PreprocessingFullModel : IFullModel<T, TInput, TOutput>
     {
         private readonly IFullModel<T, TInput, TOutput> _inner;
