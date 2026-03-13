@@ -36,6 +36,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]

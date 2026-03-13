@@ -36,6 +36,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// </remarks>
 [ModelDomain(ModelDomain.Multimodal)]
 [ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
 [ModelTask(ModelTask.Translation)]
 [ModelComplexity(ModelComplexity.High)]

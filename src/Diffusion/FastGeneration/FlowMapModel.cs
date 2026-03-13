@@ -39,6 +39,7 @@ namespace AiDotNet.Diffusion.FastGeneration;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FlowMap: Learning to Generate High-Quality Samples with a Single Step", "https://arxiv.org/abs/2406.07507", Year = 2024, Authors = "Chen et al.")]
 public class FlowMapModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

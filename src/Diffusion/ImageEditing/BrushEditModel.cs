@@ -1,10 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -37,6 +39,13 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Li et al., "BrushEdit: All-In-One Image Inpainting and Editing", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.ImageEditing)]
+[ModelTask(ModelTask.Inpainting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BrushEdit: All-In-One Image Inpainting and Editing", "https://arxiv.org/abs/2412.10316", Year = 2024, Authors = "Li et al.")]
 public class BrushEditModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

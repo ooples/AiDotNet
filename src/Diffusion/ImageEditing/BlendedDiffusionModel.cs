@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -49,6 +51,13 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Avrahami et al., "Blended Diffusion for Text-driven Editing of Natural Images", CVPR 2022
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.ImageEditing)]
+[ModelTask(ModelTask.Inpainting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Blended Diffusion for Text-driven Editing of Natural Images", "https://arxiv.org/abs/2111.14818", Year = 2022, Authors = "Avrahami et al.")]
 public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

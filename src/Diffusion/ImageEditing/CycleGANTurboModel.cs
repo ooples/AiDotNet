@@ -1,10 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -38,6 +40,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Parmar et al., "One-Step Image Translation with Text-to-Image Models", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.ImageEditing)]
+[ModelTask(ModelTask.StyleTransfer)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("One-Step Image Translation with Text-to-Image Models", "https://arxiv.org/abs/2403.12036", Year = 2024, Authors = "Parmar et al.")]
 public class CycleGANTurboModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;
