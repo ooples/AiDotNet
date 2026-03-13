@@ -34,6 +34,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models", "https://arxiv.org/abs/2407.15886", Year = 2024, Authors = "Chong et al.")]

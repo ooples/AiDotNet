@@ -32,9 +32,11 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.MotionGeneration)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("MotionDiffuse: Text-Driven Human Motion Generation with Diffusion Model", "https://arxiv.org/abs/2208.15001", Year = 2024, Authors = "Zhang et al.")]

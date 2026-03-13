@@ -32,9 +32,11 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.MotionGeneration)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("MoMask: Generative Masked Modeling of 3D Human Motions", "https://arxiv.org/abs/2312.00063", Year = 2024, Authors = "Guo et al.")]

@@ -37,6 +37,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("DiffPano: Scalable and Consistent Text to Panorama Generation with Spherical Epipolar-Aware Diffusion", "https://arxiv.org/abs/2407.10642", Year = 2024, Authors = "Wang et al.")]

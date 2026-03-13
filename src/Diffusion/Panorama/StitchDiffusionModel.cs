@@ -31,6 +31,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class StitchDiffusionModel<T> : LatentDiffusionModelBase<T>

@@ -34,6 +34,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("MultiDiffusion: Fusing Diffusion Paths for Controlled Image Generation", "https://arxiv.org/abs/2302.08113", Year = 2023, Authors = "Bar-Tal et al.")]

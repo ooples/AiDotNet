@@ -29,8 +29,10 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("FashionVDM: Video Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2411.00225", Year = 2024, Authors = "Gu et al.")]

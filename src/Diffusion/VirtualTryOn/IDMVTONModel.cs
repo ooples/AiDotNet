@@ -35,6 +35,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Improving Diffusion Models for Authentic Virtual Try-on in the Wild", "https://arxiv.org/abs/2403.05139", Year = 2024, Authors = "Choi et al.")]

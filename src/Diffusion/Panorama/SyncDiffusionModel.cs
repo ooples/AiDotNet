@@ -35,6 +35,7 @@ namespace AiDotNet.Diffusion.Panorama;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("SyncDiffusion: Coherent Montage via Synchronized Joint Diffusions", "https://arxiv.org/abs/2306.05178", Year = 2023, Authors = "Lee et al.")]

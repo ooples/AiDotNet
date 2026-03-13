@@ -31,6 +31,7 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ImageEditing)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("CATDM: Controllable Appearance Transfer Diffusion Model for Virtual Try-On", "https://arxiv.org/abs/2311.18405", Year = 2024, Authors = "Zeng et al.")]
