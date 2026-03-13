@@ -1,7 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -29,6 +32,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// Generative Image Modeling", 2025
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("EQ-VAE: Equivariance Regularized Latent Space for Improved Generative Image Modeling", "https://arxiv.org/abs/2502.09509", Year = 2025, Authors = "Xu et al.")]
 public class EQVAEModel<T> : VAEModelBase<T>
 {
     private const double EQVAE_LATENT_SCALE = 0.18215;

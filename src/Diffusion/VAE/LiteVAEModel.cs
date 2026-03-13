@@ -1,7 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -28,6 +31,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// for Latent Diffusion Models", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LiteVAE: Lightweight and Efficient Variational Autoencoders for Latent Diffusion Models", "https://arxiv.org/abs/2405.14477", Year = 2024, Authors = "Sauer et al.")]
 public class LiteVAEModel<T> : VAEModelBase<T>
 {
     private const double LITE_LATENT_SCALE = 0.18215;
