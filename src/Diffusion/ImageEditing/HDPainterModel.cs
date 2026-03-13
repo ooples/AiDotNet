@@ -1,10 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -39,6 +41,13 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Manukyan et al., "HD-Painter: High-Resolution and Prompt-Faithful Text-Guided Image Inpainting with Diffusion Models", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Inpainting)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("HD-Painter: High-Resolution and Prompt-Faithful Text-Guided Image Inpainting with Diffusion Models", "https://arxiv.org/abs/2312.14091", Year = 2024, Authors = "Manukyan et al.")]
 public class HDPainterModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

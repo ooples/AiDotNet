@@ -1,10 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -39,6 +41,12 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Podell et al., "SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis", ICLR 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Inpainting)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis", "https://arxiv.org/abs/2307.01952", Year = 2024, Authors = "Podell et al.")]
 public class SDXLInpaintingModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

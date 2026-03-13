@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -51,6 +53,12 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Yang et al., "Paint by Example: Exemplar-based Image Editing with Diffusion Models", CVPR 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Inpainting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Paint by Example: Exemplar-based Image Editing with Diffusion Models", "https://arxiv.org/abs/2211.13227", Year = 2023, Authors = "Yang et al.")]
 public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants
