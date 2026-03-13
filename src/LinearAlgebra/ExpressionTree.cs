@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Models;
 
 namespace AiDotNet.LinearAlgebra;
@@ -12,6 +14,12 @@ namespace AiDotNet.LinearAlgebra;
 /// Each node in the tree is either a number, a variable, or an operation (like addition or multiplication).
 /// This allows the AI to create and evolve mathematical formulas that can model your data.
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Interpretable)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
 {
     /// <summary>

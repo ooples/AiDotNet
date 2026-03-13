@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -32,6 +33,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Black Forest Labs, "FLUX.1 Technical Report", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.TextToImage)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

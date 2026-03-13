@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Genetics;
 
@@ -29,6 +31,12 @@ namespace AiDotNet.Genetics;
 /// Use this when you want to directly evolve machine learning models using genetic algorithms.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class ModelIndividual<T, TInput, TOutput, TGene> :
     IEvolvable<TGene, T>,
     IFullModel<T, TInput, TOutput>

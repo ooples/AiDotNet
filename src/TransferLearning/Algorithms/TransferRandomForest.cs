@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
@@ -242,6 +244,13 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// <summary>
 /// Wrapper model that applies feature mapping before prediction.
 /// </summary>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<T>>
 {
     private const int WrapperMagic = 0x4D52464D; // 'MRFM'

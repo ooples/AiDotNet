@@ -173,7 +173,8 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
-[ModelDomain(ModelDomain.MachineLearning)]
+[ModelDomain(ModelDomain.ThreeD)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Generation)]
 [ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.VeryHigh)]

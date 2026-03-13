@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Diffusion;
@@ -192,6 +193,13 @@ namespace AiDotNet.AutoML
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+    [ModelDomain(ModelDomain.Generative)]
+    [ModelCategory(ModelCategory.Diffusion)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Generation)]
+    [ModelTask(ModelTask.TextToImage)]
+    [ModelComplexity(ModelComplexity.VeryHigh)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class DiffusionAutoML<T> : AutoMLModelBase<T, Tensor<T>, Tensor<T>>
     {
         private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -734,6 +742,12 @@ namespace AiDotNet.AutoML
     /// Wrapper model that combines diffusion components into an IFullModel.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    [ModelDomain(ModelDomain.Generative)]
+    [ModelCategory(ModelCategory.Diffusion)]
+    [ModelTask(ModelTask.Generation)]
+    [ModelTask(ModelTask.Denoising)]
+    [ModelComplexity(ModelComplexity.VeryHigh)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class DiffusionAutoMLModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         private static IEngine Engine => AiDotNetEngine.Current;
