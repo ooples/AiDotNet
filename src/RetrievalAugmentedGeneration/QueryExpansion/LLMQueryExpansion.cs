@@ -1,11 +1,16 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
 {
     /// <summary>
     /// LLM-based query expansion for generating additional query variations.
     /// </summary>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
     public class LLMQueryExpansion : QueryExpansionBase
     {
         private readonly string _llmEndpoint;
