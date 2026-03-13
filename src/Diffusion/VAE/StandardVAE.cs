@@ -1,7 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -49,6 +52,12 @@ namespace AiDotNet.Diffusion.VAE;
 /// - Output: [batch, 3, H, W] reconstructed image
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class StandardVAE<T> : VAEModelBase<T>
 {
     /// <summary>

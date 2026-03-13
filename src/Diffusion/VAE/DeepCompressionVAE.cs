@@ -1,7 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -28,6 +31,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// Diffusion Models", NeurIPS 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Compression Autoencoder for Efficient High-Resolution Diffusion Models", "https://arxiv.org/abs/2410.10733", Year = 2024, Authors = "Chen et al.")]
 public class DeepCompressionVAE<T> : VAEModelBase<T>
 {
     private const double DCAE_LATENT_SCALE = 0.3611;

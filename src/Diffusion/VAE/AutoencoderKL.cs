@@ -1,4 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 
 namespace AiDotNet.Diffusion.VAE;
@@ -53,6 +56,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Auto-Encoding Variational Bayes", "https://arxiv.org/abs/1312.6114", Year = 2013, Authors = "Kingma & Welling")]
 public class AutoencoderKL<T> : VAEModelBase<T>
 {
     /// <summary>
