@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -30,6 +31,10 @@ namespace AiDotNet.FederatedLearning.Unlearning;
 /// specifically rather than general model quality.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Denoising)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class DiffusiveNoiseUnlearner<T> : FederatedLearningComponentBase<T>, IFederatedUnlearner<T>
 {
     private readonly FederatedUnlearningOptions _options;

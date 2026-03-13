@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -23,6 +24,11 @@ namespace AiDotNet.FederatedLearning.Vertical;
 /// element-wise sum, attention weighting, or learned gating.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
 public class SplitNeuralNetwork<T> : FederatedLearningComponentBase<T>, ISplitModel<T>
 {
     private readonly SplitModelOptions _options;

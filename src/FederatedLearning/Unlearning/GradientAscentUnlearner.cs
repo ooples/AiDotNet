@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -27,6 +28,10 @@ namespace AiDotNet.FederatedLearning.Unlearning;
 /// guarantees — the target client's influence is reduced but not provably zero.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class GradientAscentUnlearner<T> : FederatedLearningComponentBase<T>, IFederatedUnlearner<T>
 {
     private readonly FederatedUnlearningOptions _options;

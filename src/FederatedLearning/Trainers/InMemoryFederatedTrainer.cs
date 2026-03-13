@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.FederatedLearning.Heterogeneity;
 using AiDotNet.FederatedLearning.Infrastructure;
@@ -23,6 +24,10 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// running local optimization on each client's data, and aggregating client models into a global model.
 /// <para><b>For Beginners:</b> InMemoryFederatedTrainer provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     FederatedTrainerBase<IFullModel<T, TInput, TOutput>, FederatedClientDataset<TInput, TOutput>, FederatedLearningMetadata, T>
 {
