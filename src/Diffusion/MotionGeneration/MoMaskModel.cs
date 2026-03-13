@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -29,6 +31,13 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 /// Reference: Guo et al., "MoMask: Generative Masked Modeling of 3D Human Motions", CVPR 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MoMask: Generative Masked Modeling of 3D Human Motions", "https://arxiv.org/abs/2312.00063", Year = 2024, Authors = "Guo et al.")]
 public class MoMaskModel<T> : LatentDiffusionModelBase<T>
 {
     /// <summary>
