@@ -91,8 +91,10 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Wonder3D: Single Image to 3D using Cross-Domain Diffusion", "https://arxiv.org/abs/2310.15008", Year = 2024, Authors = "Long et al.")]

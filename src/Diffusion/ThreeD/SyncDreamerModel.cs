@@ -87,8 +87,10 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("SyncDreamer: Generating Multiview-consistent Images from a Single-view Image", "https://arxiv.org/abs/2309.03453", Year = 2024, Authors = "Liu et al.")]

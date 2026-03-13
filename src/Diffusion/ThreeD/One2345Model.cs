@@ -86,8 +86,10 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("One-2-3-45: Any Single Image to 3D Mesh in 45 Seconds without Per-Shape Optimization", "https://arxiv.org/abs/2306.16928", Year = 2023, Authors = "Liu et al.")]

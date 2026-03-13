@@ -74,8 +74,10 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ThreeDGeneration)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Magic3D: High-Resolution Text-to-3D Content Creation", "https://arxiv.org/abs/2211.10440", Year = 2023, Authors = "Lin et al.")]
