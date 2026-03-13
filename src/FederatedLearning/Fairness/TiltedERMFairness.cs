@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Fairness;
 
 /// <summary>
@@ -21,6 +23,12 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// <para>Reference: Li, T., et al. (2021). "Tilted Empirical Risk Minimization." ICLR 2021.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Tilted Empirical Risk Minimization", "https://arxiv.org/abs/2007.01162", Year = 2021, Authors = "Li et al.")]
 public class TiltedERMFairness<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _tilt;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Fairness;
 
 /// <summary>
@@ -20,6 +22,12 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// ICLR 2020.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Fair Resource Allocation in Federated Learning", "https://arxiv.org/abs/1905.10497", Year = 2020, Authors = "Li et al.")]
 public class QFairFederatedLearning<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _q;
