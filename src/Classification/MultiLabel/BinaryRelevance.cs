@@ -47,7 +47,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
 {
     #region Fields
