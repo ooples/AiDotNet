@@ -26,7 +26,6 @@ namespace AiDotNet.VisionLanguage.Unified;
 [ModelDomain(ModelDomain.Multimodal)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Classification)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]

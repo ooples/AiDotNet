@@ -18,7 +18,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "SkyEyeGPT: Unifying Remote Sensing Vision-Language Tasks (Various, 2025)"</item></list></para>
+/// <list type="bullet"><item>Paper: "SkyEyeGPT: Unifying Remote Sensing Vision-Language Tasks via Instruction Tuning with Large Language Model (Zhan et al., 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> SkyEyeGPT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]

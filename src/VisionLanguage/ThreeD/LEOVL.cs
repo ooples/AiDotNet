@@ -26,7 +26,6 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Classification)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]

@@ -27,6 +27,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Med-Flamingo: A Multimodal Medical Few-shot Learner", "https://arxiv.org/abs/2307.15189", Year = 2023, Authors = "Moor et al.")]

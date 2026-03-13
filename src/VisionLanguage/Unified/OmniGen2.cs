@@ -23,6 +23,7 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

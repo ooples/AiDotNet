@@ -18,7 +18,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "pi-zero: A Zero-Shot Robot Policy with Flow Matching (Physical Intelligence, 2024)"</item></list></para>
+/// <list type="bullet"><item>Paper: "pi0: A Vision-Language-Action Flow Model for General Robot Control (Black et al., 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> PiZero is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
