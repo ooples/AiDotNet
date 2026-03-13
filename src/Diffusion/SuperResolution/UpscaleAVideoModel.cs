@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -99,6 +101,12 @@ namespace AiDotNet.Diffusion.SuperResolution;
 ///     numInferenceSteps: 25);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Upscale-A-Video: Temporal-Consistent Diffusion Model for Real-World Video Super-Resolution", "https://arxiv.org/abs/2312.06640", Year = 2024, Authors = "Zhou et al.")]
 public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

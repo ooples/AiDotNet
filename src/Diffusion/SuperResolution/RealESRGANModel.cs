@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -94,6 +96,13 @@ namespace AiDotNet.Diffusion.SuperResolution;
 ///     guidanceScale: 3.0);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.GAN)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data", "https://arxiv.org/abs/2107.10833", Year = 2021, Authors = "Wang et al.")]
 public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

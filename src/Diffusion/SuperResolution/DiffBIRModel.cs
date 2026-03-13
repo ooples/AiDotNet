@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -94,6 +96,13 @@ namespace AiDotNet.Diffusion.SuperResolution;
 ///     numInferenceSteps: 50);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.Inpainting)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DiffBIR: Towards Blind Image Restoration with Generative Diffusion Prior", "https://arxiv.org/abs/2308.15070", Year = 2024, Authors = "Lin et al.")]
 public class DiffBIRModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

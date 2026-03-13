@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -97,6 +99,12 @@ namespace AiDotNet.Diffusion.SuperResolution;
 ///     numInferenceSteps: 50);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Exploiting Diffusion Prior for Real-World Image Super-Resolution", "https://arxiv.org/abs/2305.07015", Year = 2024, Authors = "Wang et al.")]
 public class StableSRModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants
