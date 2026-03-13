@@ -139,15 +139,6 @@ public class PolynomialRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type identifier for polynomial regression.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.PolynomialRegression;
-    }
-
-    /// <summary>
     /// Creates a new instance of the Polynomial Regression model with the same configuration.
     /// </summary>
     /// <returns>A new instance of the Polynomial Regression model.</returns>

@@ -508,7 +508,6 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoActionRecognition,
             AdditionalInfo = additionalInfo,
             ModelData = _useNativeMode ? this.Serialize() : []
         };

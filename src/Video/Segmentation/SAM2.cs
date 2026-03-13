@@ -1128,7 +1128,6 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoObjectSegmentation,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

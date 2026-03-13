@@ -403,7 +403,6 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Latent Consistency Model",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = $"Latent Consistency Model distilled from {_baseModel} for fast 2-8 step generation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

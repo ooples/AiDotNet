@@ -479,7 +479,6 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "FinBERT" },

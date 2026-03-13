@@ -95,7 +95,6 @@ public class ClassifierChain<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.ClassifierChain;
 
     /// <summary>
     /// Trains the Classifier Chain on multi-label data.

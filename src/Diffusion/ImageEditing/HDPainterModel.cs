@@ -134,7 +134,7 @@ public class HDPainterModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "HD-Painter", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "HD-Painter", Version = "1.0",
             Description = "High-resolution inpainting with Prompt-Aware Introverted Attention (PAIntA)",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

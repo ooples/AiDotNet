@@ -179,7 +179,6 @@ public class Genie2Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Genie2",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Genie 2 real-time interactive 3D environment generation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

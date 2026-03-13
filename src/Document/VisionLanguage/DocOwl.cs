@@ -513,7 +513,6 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         return new ModelMetadata<T>
         {
             Name = "DocOwl",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DocOwl multimodal LLM for document understanding (arXiv 2023)",
             FeatureCount = _languageDim,
             Complexity = _visionLayers + _languageLayers,

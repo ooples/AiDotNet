@@ -141,7 +141,7 @@ public class TransfusionModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Transfusion", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Transfusion", Version = "1.0",
             Description = "Unified autoregressive + diffusion transformer for native multimodal generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

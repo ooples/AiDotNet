@@ -2081,7 +2081,6 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.LSTMNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "LSTMLayerCount", lstmLayerCount },

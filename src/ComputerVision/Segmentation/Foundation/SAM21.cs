@@ -369,7 +369,6 @@ public class SAM21<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </summary>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "SAM21" },

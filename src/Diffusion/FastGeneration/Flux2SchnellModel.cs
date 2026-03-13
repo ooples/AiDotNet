@@ -138,7 +138,7 @@ public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "FLUX.2 Schnell", Version = "2.0", ModelType = ModelType.NeuralNetwork,
+            Name = "FLUX.2 Schnell", Version = "2.0",
             Description = "Next-gen ultra-fast FLUX generation in 1-4 steps with improved quality",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

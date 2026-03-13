@@ -393,7 +393,6 @@ public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NumFactors"] = _numFactors,

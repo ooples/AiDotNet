@@ -151,7 +151,6 @@ public class ShiftNet<T> : VideoDenoisingBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoDenoising,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "ShiftNet" },

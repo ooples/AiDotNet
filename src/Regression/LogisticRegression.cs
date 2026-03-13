@@ -281,30 +281,6 @@ public class LogisticRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type, in this case, LogisticRegression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an enumeration value indicating that this is a logistic regression model. This is used
-    /// for type identification when working with different regression models in a unified manner.
-    /// </para>
-    /// <para><b>For Beginners:</b> This simply tells other parts of the program what kind of model this is.
-    /// 
-    /// When you have different types of models in your program:
-    /// - Each model needs to identify itself
-    /// - This method returns a label (LogisticRegression) that identifies this specific type
-    /// - Other code can use this label to handle the model appropriately
-    /// 
-    /// It's like having different types of vehicles (cars, trucks, motorcycles) that each need to be serviced differently.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LogisticRegression;
-    }
-
-    /// <summary>
     /// Serializes the logistic regression model to a byte array for storage or transmission.
     /// </summary>
     /// <returns>A byte array containing the serialized model data.</returns>

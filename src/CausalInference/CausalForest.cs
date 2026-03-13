@@ -116,7 +116,6 @@ public class CausalForest<T> : CausalModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public override ModelType GetModelType() => ModelType.CausalForest;
 
     /// <summary>
     /// Initializes a new instance of the CausalForest class.

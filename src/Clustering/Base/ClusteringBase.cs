@@ -229,14 +229,12 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <summary>
     /// Returns the model type identifier.
     /// </summary>
-    protected abstract ModelType GetModelType();
 
     /// <inheritdoc/>
     public virtual ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             FeatureCount = NumFeatures,
             AdditionalInfo = new Dictionary<string, object>
             {

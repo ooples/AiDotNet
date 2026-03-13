@@ -255,7 +255,6 @@ public class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         {
             Name = _useNativeMode ? "HuBERT-Native" : "HuBERT-ONNX",
             Description = $"HuBERT {_options.Variant} self-supervised speech model (Hsu et al., 2021)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = 1,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

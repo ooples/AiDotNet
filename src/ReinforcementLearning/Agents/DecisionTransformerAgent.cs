@@ -337,7 +337,6 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DecisionTransformer,
         };
     }
 

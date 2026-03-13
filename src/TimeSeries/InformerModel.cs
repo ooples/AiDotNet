@@ -617,7 +617,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = AiDotNet.Enums.ModelType.Transformer,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["EmbeddingDim"] = _options.EmbeddingDim,

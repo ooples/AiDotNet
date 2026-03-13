@@ -1181,7 +1181,6 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.VARModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

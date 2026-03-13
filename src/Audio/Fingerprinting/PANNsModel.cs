@@ -1000,7 +1000,6 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Name = $"PANNs-{_architectureType}",
             Description = $"Pretrained Audio Neural Network ({_numClasses} classes, {_architectureType})",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate,
             Complexity = _convBlocks.Count
         };

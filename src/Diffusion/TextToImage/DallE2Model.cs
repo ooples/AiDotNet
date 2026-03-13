@@ -441,7 +441,6 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "DALL-E 2",
             Version = "2.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DALL-E 2 (unCLIP) two-stage text-to-image model with diffusion prior and GLIDE decoder",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

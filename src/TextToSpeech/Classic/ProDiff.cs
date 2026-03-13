@@ -242,7 +242,6 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "ProDiff-Native" : "ProDiff-ONNX",
             Description = "ProDiff: Progressive Fast Diffusion Model for High-Quality TTS (Huang et al., 2022)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumDiffusionSteps
         };

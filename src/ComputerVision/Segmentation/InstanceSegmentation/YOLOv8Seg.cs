@@ -328,7 +328,6 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </summary>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.InstanceSegmentation,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "YOLOv8Seg" },

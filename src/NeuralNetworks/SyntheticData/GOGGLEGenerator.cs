@@ -656,7 +656,6 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["GeneratorType"] = "GOGGLE",

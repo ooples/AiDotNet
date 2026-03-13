@@ -187,7 +187,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PaLM-E-Native" : "PaLM-E-ONNX", Description = "PaLM-E: 562B embodied multimodal language model for robotic planning.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PaLM-E-Native" : "PaLM-E-ONNX", Description = "PaLM-E: 562B embodied multimodal language model for robotic planning.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "PaLM-E";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

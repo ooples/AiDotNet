@@ -172,7 +172,6 @@ public class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "RealESRGANVideo-Native" : "RealESRGANVideo-ONNX",
             Description = $"Real-ESRGAN Video {_options.Variant} practical blind VSR (Wang et al., 2022)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumRRDBBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

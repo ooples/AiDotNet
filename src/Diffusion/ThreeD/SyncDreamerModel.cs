@@ -262,7 +262,7 @@ public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "SyncDreamer", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SyncDreamer", Version = "1.0",
             Description = "SyncDreamer synchronized multi-view 3D generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

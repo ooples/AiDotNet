@@ -135,7 +135,7 @@ public class CycleGANTurboModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "CycleGAN-Turbo", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "CycleGAN-Turbo", Version = "1.0",
             Description = "Single-step unpaired image translation with SDXL backbone and cycle consistency",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -99,7 +99,6 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.GradientBoostingClassifier;
 
     /// <summary>
     /// Trains the Gradient Boosting classifier on the provided data.

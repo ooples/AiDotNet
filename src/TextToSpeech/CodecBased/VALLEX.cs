@@ -282,7 +282,6 @@ public class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "VALLEX-Native" : "VALLEX-ONNX",
             Description = "VALL-E X: Cross-Lingual Zero-Shot TTS (Zhang et al., 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.LLMDim
         };
     }

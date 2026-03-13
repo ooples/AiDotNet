@@ -169,7 +169,6 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet++",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Improved ControlNet with reward-guided training for better control adherence",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

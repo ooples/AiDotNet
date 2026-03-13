@@ -134,7 +134,7 @@ public class DiffPanoModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "DiffPano", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "DiffPano", Version = "1.0",
             Description = "Spherical epipolar-aware diffusion for consistent 360-degree panorama generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "spherical-epipolar-unet");

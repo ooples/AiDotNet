@@ -186,7 +186,6 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet-Union-Pro",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Unified ControlNet supporting multiple control types in a single model",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

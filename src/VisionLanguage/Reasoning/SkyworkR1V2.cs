@@ -224,7 +224,7 @@ public class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Skywork-R1V2-Native" : "Skywork-R1V2-ONNX", Description = "Skywork R1V2: hybrid RL (MPO + GRPO) for multimodal reasoning SOTA.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Skywork-R1V2-Native" : "Skywork-R1V2-ONNX", Description = "Skywork R1V2: hybrid RL (MPO + GRPO) for multimodal reasoning SOTA.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Skywork-R1V2";
         m.AdditionalInfo["ReasoningApproach"] = _options.ReasoningApproach;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

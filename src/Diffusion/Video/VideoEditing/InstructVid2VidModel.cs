@@ -179,7 +179,6 @@ public class InstructVid2VidModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "InstructVid2Vid",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "InstructVid2Vid natural language instruction-based video editing.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

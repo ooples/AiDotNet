@@ -78,7 +78,6 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
     public LinkageMethod Linkage => _options.Linkage;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

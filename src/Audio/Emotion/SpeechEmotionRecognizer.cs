@@ -883,7 +883,6 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         {
             Name = "SpeechEmotionRecognizer",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "SampleRate", SampleRate },

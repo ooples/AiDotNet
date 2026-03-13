@@ -497,7 +497,6 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
             Name = _useNativeMode ? "SigLIP2-Native" : "SigLIP2-ONNX",
             Description = "SigLIP 2: Multilingual Vision-Language Encoders with " +
                           "Improved Semantic Understanding (Tschannen et al., 2025)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.ProjectionDim,
             Complexity = _options.NumVisionLayers + _options.NumTextLayers +
                          _options.NumCaptioningDecoderLayers + _options.NumMimDecoderLayers

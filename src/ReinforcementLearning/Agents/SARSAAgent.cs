@@ -210,7 +210,6 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

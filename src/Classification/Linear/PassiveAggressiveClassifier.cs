@@ -57,7 +57,6 @@ public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.PassiveAggressiveClassifier;
 
     /// <summary>
     /// Trains the Passive-Aggressive classifier on the provided data.

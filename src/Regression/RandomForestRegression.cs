@@ -232,7 +232,6 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.RandomForest,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _options.NumberOfTrees },

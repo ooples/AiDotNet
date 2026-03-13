@@ -307,7 +307,6 @@ public class EDVR<T> : VideoSuperResolutionBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.VideoSuperResolution,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "EDVR" }, { "NumFeatures", _numFeatures }, { "NumFrames", _numFrames },

@@ -246,7 +246,7 @@ public class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Groma-Native" : "Groma-ONNX", Description = "Groma: localized visual tokenization for grounded understanding.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Groma-Native" : "Groma-ONNX", Description = "Groma: localized visual tokenization for grounded understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Groma";
         m.AdditionalInfo["LocalizedTokenization"] = _options.EnableLocalizedTokenization.ToString();
         return m;

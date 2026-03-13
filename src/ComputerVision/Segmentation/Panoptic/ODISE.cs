@@ -275,7 +275,6 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "ODISE" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

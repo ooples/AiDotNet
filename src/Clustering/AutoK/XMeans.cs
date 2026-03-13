@@ -71,7 +71,6 @@ public class XMeans<T> : ClusteringBase<T>
     public double BIC => _bic;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

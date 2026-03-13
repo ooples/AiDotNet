@@ -467,7 +467,6 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         {
             Name = _useNativeMode ? "CNN-BiLSTM-CRF-Native" : "CNN-BiLSTM-CRF-ONNX",
             Description = $"CNN-BiLSTM-CRF {_options.Variant} sequence labeling NER (Ma and Hovy, ACL 2016)",
-            ModelType = ModelType.NamedEntityRecognition,
             Complexity = _options.NumLSTMLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

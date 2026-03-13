@@ -358,7 +358,6 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Paint-by-Example",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Paint-by-Example fills masked regions using exemplar images as visual references",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

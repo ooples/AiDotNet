@@ -282,7 +282,6 @@ public class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpe
         {
             Name = _useNativeMode ? "SpeakerLM-Native" : "SpeakerLM-ONNX",
             Description = "SpeakerLM language-model-based speaker recognition (2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLMLayers
         };
         m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();

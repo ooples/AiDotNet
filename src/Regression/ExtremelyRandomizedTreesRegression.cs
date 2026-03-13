@@ -335,7 +335,6 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ExtremelyRandomizedTrees,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _trees.Count },

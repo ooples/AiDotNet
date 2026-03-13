@@ -142,7 +142,7 @@ public class SiDDiTModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SiD-DiT", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SiD-DiT", Version = "1.0",
             Description = "Score Identity Distillation for Diffusion Transformer architectures enabling single-step generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

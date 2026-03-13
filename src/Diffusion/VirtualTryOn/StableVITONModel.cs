@@ -109,7 +109,7 @@ public class StableVITONModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "StableVITON", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "StableVITON", Version = "1.0",
             Description = "SD-based virtual try-on with learned semantic garment-person correspondence",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "sd-controlnet-tryon");

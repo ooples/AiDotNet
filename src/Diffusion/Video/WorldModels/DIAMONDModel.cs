@@ -181,7 +181,6 @@ public class DIAMONDModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "DIAMOND",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DIAMOND diffusion-based game engine from video with action conditioning.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -286,7 +286,6 @@ public class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "Voicebox-Native" : "Voicebox-ONNX",
             Description = "Voicebox: Text-Guided Multilingual Speech Generation (Le et al., 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.LLMDim
         };
     }

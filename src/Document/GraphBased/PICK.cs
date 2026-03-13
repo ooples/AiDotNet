@@ -414,7 +414,6 @@ public class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>
         return new ModelMetadata<T>
         {
             Name = "PICK",
-            ModelType = ModelType.NeuralNetwork,
             Description = "PICK for key information extraction (ICPR 2020)",
             FeatureCount = _hiddenDim,
             Complexity = _numGcnLayers,

@@ -57,7 +57,6 @@ public class PerceptronClassifier<T> : LinearClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.PerceptronClassifier;
 
     /// <summary>
     /// Trains the Perceptron classifier on the provided data.

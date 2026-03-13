@@ -630,7 +630,6 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// It's like a name tag that lets other parts of the program know what kind of model they're working with.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.MultilayerPerceptronRegression;
 
     /// <summary>
     /// Optimizes the model by training it on the provided data.

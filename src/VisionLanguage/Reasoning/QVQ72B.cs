@@ -165,7 +165,7 @@ public class QVQ72B<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "QVQ-72B-Native" : "QVQ-72B-ONNX", Description = "QVQ-72B: first open-source multimodal reasoning model from Qwen.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "QVQ-72B-Native" : "QVQ-72B-ONNX", Description = "QVQ-72B: first open-source multimodal reasoning model from Qwen.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "QVQ-72B";
         m.AdditionalInfo["ReasoningApproach"] = _options.ReasoningApproach;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

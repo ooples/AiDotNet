@@ -182,7 +182,6 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "ToonCrafter" },

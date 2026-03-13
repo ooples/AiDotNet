@@ -110,7 +110,7 @@ public class SyncDiffusionModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "SyncDiffusion", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "SyncDiffusion", Version = "1.0",
             Description = "Synchronized joint panorama generation with global style consistency",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "sync-panorama-gradient-descent");

@@ -838,7 +838,6 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = $"Whisper-{_modelSize}",
             Description = $"Whisper speech recognition model - {_modelSize} variant",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate * _maxAudioLengthSeconds,
             Complexity = (int)_modelSize
         };

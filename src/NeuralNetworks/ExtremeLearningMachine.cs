@@ -388,7 +388,6 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ExtremeLearningMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "HiddenLayerSize", _hiddenLayerSize },

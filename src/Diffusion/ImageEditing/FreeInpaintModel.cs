@@ -128,7 +128,7 @@ public class FreeInpaintModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "FreeInpaint", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "FreeInpaint", Version = "1.0",
             Description = "Free-form inpainting with arbitrary mask shapes and mask-aware attention",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -255,7 +255,6 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// Gets the model type of the K-Nearest Neighbors Regression model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType() => ModelType.KNearestNeighbors;
 
     /// <summary>
     /// Serializes the K-Nearest Neighbors Regression model to a byte array for storage or transmission.

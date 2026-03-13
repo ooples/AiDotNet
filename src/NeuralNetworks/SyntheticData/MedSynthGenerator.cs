@@ -423,7 +423,6 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["GeneratorType"] = "MedSynth",

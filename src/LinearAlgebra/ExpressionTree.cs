@@ -692,7 +692,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ExpressionTree,
             FeatureCount = FeatureCount,
             Complexity = Complexity,
             Description = ToString(),

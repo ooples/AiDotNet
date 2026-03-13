@@ -208,7 +208,6 @@ public class Zipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "Zipformer-Native" : "Zipformer-ONNX",
             Description = $"Zipformer {_options.Variant} U-Net ASR (Yao et al., 2023, Next-gen Kaldi)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = totalLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

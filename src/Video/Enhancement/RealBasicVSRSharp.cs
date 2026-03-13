@@ -171,7 +171,6 @@ public class RealBasicVSRSharp<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "RealBasicVSRSharp-Native" : "RealBasicVSRSharp-ONNX",
             Description = "RealBasicVSR-Sharp perceptual VSR (Chan et al., CVPR 2022)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks + _options.CleaningModuleBlocks
         };
         m.AdditionalInfo["NumFeatures"] = _options.NumFeatures.ToString();

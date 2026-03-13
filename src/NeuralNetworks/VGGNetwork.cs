@@ -494,7 +494,6 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ConvolutionalNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "VGG" },

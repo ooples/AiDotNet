@@ -325,7 +325,6 @@ public class FinancialPPOAgent<T> : TradingAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "AgentType", "FinancialPPO" },

@@ -94,7 +94,6 @@ public class OneVsRestClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.OneVsRestClassifier;
 
     /// <summary>
     /// Trains the One-vs-Rest classifier on multi-label data.

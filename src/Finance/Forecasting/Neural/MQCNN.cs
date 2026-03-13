@@ -529,7 +529,6 @@ public class MQCNN<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "MQCNN" },

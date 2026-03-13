@@ -227,7 +227,7 @@ public class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMod
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GPT4Point-Native" : "GPT4Point-ONNX", Description = "GPT4Point: unified point-language understanding and generation.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GPT4Point-Native" : "GPT4Point-ONNX", Description = "GPT4Point: unified point-language understanding and generation.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GPT4Point";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

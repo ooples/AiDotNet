@@ -275,7 +275,6 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = _useNativeMode ? "CMGAN-Native" : "CMGAN-ONNX",
             Description = "CMGAN Conformer-based Metric GAN (Cao et al., INTERSPEECH 2022)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.NumFreqBins,
             Complexity = _options.NumConformerLayers
         };

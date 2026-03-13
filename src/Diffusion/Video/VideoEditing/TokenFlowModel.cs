@@ -182,7 +182,6 @@ public class TokenFlowModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "TokenFlow",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "TokenFlow consistent video editing via token flow propagation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -533,7 +533,6 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
         {
             Name = _useNativeMode ? "SpeakerEmbeddingExtractor-Native" : "SpeakerEmbeddingExtractor-ONNX",
             Description = "Speaker embedding extraction model for voice recognition",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.NumMfcc * 3, // MFCC + delta + delta-delta
             Complexity = 1
         };

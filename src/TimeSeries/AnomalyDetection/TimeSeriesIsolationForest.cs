@@ -488,7 +488,6 @@ public class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.TimeSeriesRegression,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["Architecture"] = "TimeSeriesIsolationForest",

@@ -464,7 +464,6 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// You generally won't need to call this method directly in your code.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.SymbolicRegression;
 
     /// <summary>
     /// Creates a new instance of the Symbolic Regression model with the same configuration.

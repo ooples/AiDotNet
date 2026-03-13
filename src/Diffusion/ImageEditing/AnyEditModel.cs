@@ -132,7 +132,7 @@ public class AnyEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "AnyEdit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "AnyEdit", Version = "1.0",
             Description = "Unified instruction-based editing for diverse edit types on SD1.5",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

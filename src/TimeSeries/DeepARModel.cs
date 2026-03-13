@@ -550,7 +550,6 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "DeepAR",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Probabilistic forecasting with autoregressive recurrent networks (Production-Ready)",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,

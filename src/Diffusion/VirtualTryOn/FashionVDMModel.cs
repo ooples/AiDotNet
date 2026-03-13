@@ -107,7 +107,7 @@ public class FashionVDMModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "FashionVDM", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "FashionVDM", Version = "1.0",
             Description = "Video-based virtual try-on with temporal garment consistency",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "video-diffusion-tryon");

@@ -215,7 +215,6 @@ public class SEARAFT<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "SEARAFT" },

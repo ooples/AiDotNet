@@ -82,7 +82,6 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     public double CurrentLearningRate { get; private set; }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

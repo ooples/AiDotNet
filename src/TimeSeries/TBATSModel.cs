@@ -1197,7 +1197,6 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.TBATSModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include configuration options

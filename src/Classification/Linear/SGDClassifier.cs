@@ -55,7 +55,6 @@ public class SGDClassifier<T> : LinearClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.SGDClassifier;
 
     /// <summary>
     /// Trains the SGD classifier on the provided data.

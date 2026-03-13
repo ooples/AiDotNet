@@ -181,7 +181,6 @@ public class PyramidFlowModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "PyramidFlow",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Pyramid Flow multi-resolution video generation via pyramid flow matching.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

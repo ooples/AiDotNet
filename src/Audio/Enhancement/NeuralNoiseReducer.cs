@@ -933,7 +933,6 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         {
             Name = "NeuralNoiseReducer",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Neural network-based audio noise reducer with U-Net architecture"
         };
 

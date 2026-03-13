@@ -136,7 +136,7 @@ public class PowerPaintModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "PowerPaint", Version = "2.0", ModelType = ModelType.NeuralNetwork,
+            Name = "PowerPaint", Version = "2.0",
             Description = "Versatile task-aware inpainting with learnable task prompts on SD2.1",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

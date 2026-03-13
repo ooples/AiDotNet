@@ -246,7 +246,6 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// Gets the model type of the Genetic Algorithm Regression model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType() => ModelType.GeneticAlgorithmRegression;
 
     /// <summary>
     /// Updates the model coefficients and intercept based on the best solution found by the genetic algorithm.

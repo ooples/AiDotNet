@@ -148,7 +148,7 @@ public class SeeSRModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SeeSR", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SeeSR", Version = "1.0",
             Description = "Semantics-aware diffusion super-resolution with tag-guided detail generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

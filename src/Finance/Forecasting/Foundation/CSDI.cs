@@ -258,7 +258,6 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.NeuralNetwork,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "NetworkType", "CSDI" }, { "SequenceLength", _sequenceLength },

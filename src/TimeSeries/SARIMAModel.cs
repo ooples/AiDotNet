@@ -949,7 +949,6 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.SARIMAModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // SARIMA parameters

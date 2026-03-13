@@ -179,7 +179,6 @@ public class Veo3Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Veo3",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Veo 3 with native audio generation and dialogue synchronization.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

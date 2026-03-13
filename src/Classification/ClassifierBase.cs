@@ -349,10 +349,9 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             FeatureCount = NumFeatures,
             Complexity = NumFeatures * NumClasses,
-            Description = $"{GetModelType()} classifier with {NumFeatures} features and {NumClasses} classes",
+            Description = $"{GetType().Name} classifier with {NumFeatures} features and {NumClasses} classes",
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumClasses", NumClasses },
@@ -377,7 +376,6 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// of different types of models.
     /// </para>
     /// </remarks>
-    protected abstract ModelType GetModelType();
 
     /// <summary>
     /// Serializes the model to a byte array.

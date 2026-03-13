@@ -190,7 +190,6 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// <summary>
     /// Gets the model type identifier.
     /// </summary>
-    public ModelType ModelType => ModelType.HistGradientBoosting;
 
     /// <summary>
     /// Gets or sets the feature names.
@@ -330,7 +329,6 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.HistGradientBoosting,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _trees?.Count ?? 0 },

@@ -179,7 +179,6 @@ public class Show1Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Show1",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Show-1 marrying pixel and latent diffusion for text-to-video.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -649,7 +649,6 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         {
             Name = _useNativeMode ? "SceneClassifier-Native" : "SceneClassifier-ONNX",
             Description = "Acoustic scene classification model (DCASE-style)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.NumMfccs,  // Input feature count, not output class count
             Complexity = 1
         };

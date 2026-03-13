@@ -280,7 +280,6 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
         {
             Name = name,
             Version = _isImagen3 ? "3.0" : "2.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = $"{name} cascaded text-to-image generation with T5-XXL text encoding",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

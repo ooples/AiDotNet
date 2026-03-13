@@ -276,7 +276,6 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
     }
 
     /// <inheritdoc />
-    public override ModelType GetModelType() => ModelType.NelsonAalenEstimator;
 
     /// <inheritdoc />
     public override byte[] Serialize()

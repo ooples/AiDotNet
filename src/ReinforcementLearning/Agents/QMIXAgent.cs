@@ -641,7 +641,6 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

@@ -246,7 +246,7 @@ public class VoiceCraftModel<T> : AudioDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "VoiceCraft", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "VoiceCraft", Version = "1.0",
             Description = "VoiceCraft zero-shot speech editing and TTS with neural codec language modeling",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -72,7 +72,6 @@ public class SpectralClustering<T> : ClusteringBase<T>
     public T[,]? AffinityMatrix => _affinityMatrix;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

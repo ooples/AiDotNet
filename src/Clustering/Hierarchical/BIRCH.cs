@@ -73,7 +73,6 @@ public class BIRCH<T> : ClusteringBase<T>
     public IReadOnlyList<CFEntry>? LeafEntries => _leafEntries?.AsReadOnly();
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

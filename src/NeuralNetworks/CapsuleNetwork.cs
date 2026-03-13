@@ -456,7 +456,6 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.CapsuleNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputDimension", Layers[0].GetInputShape()[0] },

@@ -275,7 +275,6 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Kairos" },

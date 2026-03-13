@@ -156,7 +156,7 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "IP-Adapter-FaceID-Plus", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "IP-Adapter-FaceID-Plus", Version = "1.0",
             Description = "Face-identity-preserving image prompt adapter combining FaceID + CLIP embeddings",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

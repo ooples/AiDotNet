@@ -142,7 +142,7 @@ public class SANASprintModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SANA Sprint", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SANA Sprint", Version = "1.0",
             Description = "Ultra-fast single-step 1024x1024 generation via SANA architecture with hybrid distillation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

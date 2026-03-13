@@ -276,7 +276,7 @@ namespace AiDotNet.AutoML
                     try
                     {
                         // Create and evaluate model
-                        var model = await CreateModelAsync(ModelType.NeuralNetwork, parameters);
+                        var model = await CreateModelAsync(typeof(NeuralNetworks.NeuralNetworkBase<T>), parameters);
 
                         // Train model if training data provided
                         if (inputs.Shape[0] > 0)
@@ -314,7 +314,7 @@ namespace AiDotNet.AutoML
                 {
                     // Create a default model if no successful trials
                     var defaultParams = GetDefaultParameters();
-                    BestModel = await CreateModelAsync(ModelType.NeuralNetwork, defaultParams);
+                    BestModel = await CreateModelAsync(typeof(NeuralNetworks.NeuralNetworkBase<T>), defaultParams);
                     BestConfig = DiffusionTrialConfig<T>.FromDictionary(defaultParams);
                 }
 
@@ -380,7 +380,7 @@ namespace AiDotNet.AutoML
         /// Creates a diffusion model based on the specified parameters.
         /// </summary>
         protected override async Task<IFullModel<T, Tensor<T>, Tensor<T>>> CreateModelAsync(
-            ModelType modelType,
+            Type modelType,
             Dictionary<string, object> parameters)
         {
             return await Task.Run(() =>
@@ -415,7 +415,7 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Gets the default search space for diffusion models.
         /// </summary>
-        protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(ModelType modelType)
+        protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(Type modelType)
         {
             return GetDefaultDiffusionSearchSpace();
         }
@@ -746,7 +746,6 @@ namespace AiDotNet.AutoML
         private readonly int? _seed;
         private Random _random;
 
-        public ModelType Type => ModelType.NeuralNetwork;
 
         public int ParameterCount => _noisePredictor.ParameterCount + _vae.ParameterCount;
 
@@ -938,7 +937,6 @@ namespace AiDotNet.AutoML
                 Name = "DiffusionAutoMLModel",
                 Description = "Diffusion model created by AutoML search",
                 Version = "1.0",
-                ModelType = ModelType.NeuralNetwork,
                 Complexity = ParameterCount
             };
 

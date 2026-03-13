@@ -179,7 +179,6 @@ public class SnapVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "SnapVideo",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Snap Video scaled spatiotemporal transformer for text-to-video.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

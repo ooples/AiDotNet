@@ -718,7 +718,6 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
 
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ARIMAXModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

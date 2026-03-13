@@ -482,7 +482,6 @@ namespace AiDotNet.NeuralNetworks
             return new ModelMetadata<T>
             {
                 Name = "Word2Vec",
-                ModelType = ModelType.NeuralNetwork,
                 Description = $"Word2Vec ({_type}) embedding model",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>

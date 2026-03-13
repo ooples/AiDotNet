@@ -120,7 +120,6 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.NuSupportVectorClassifier;
 
     /// <summary>
     /// Trains the Nu-SVC on the provided data.

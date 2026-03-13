@@ -93,7 +93,7 @@ public class MPLUGDocOwl15<T> : VisionLanguageModelBase<T>, IDocumentUnderstandi
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "mPLUG-DocOwl-1.5-Native" : "mPLUG-DocOwl-1.5-ONNX", Description = "mPLUG-DocOwl 1.5: unified structure learning achieving SOTA on 10 document benchmarks.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "mPLUG-DocOwl-1.5-Native" : "mPLUG-DocOwl-1.5-ONNX", Description = "mPLUG-DocOwl 1.5: unified structure learning achieving SOTA on 10 document benchmarks.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "mPLUG-DocOwl-1.5";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["UnifiedStructureLearning"] = _options.EnableUnifiedStructureLearning.ToString();

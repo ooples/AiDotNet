@@ -142,7 +142,7 @@ public class DMD2Model<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "DMD2", Version = "2.0", ModelType = ModelType.NeuralNetwork,
+            Name = "DMD2", Version = "2.0",
             Description = "Distribution Matching Distillation v2 for single-step generation without GAN discriminator",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

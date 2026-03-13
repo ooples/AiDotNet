@@ -93,7 +93,7 @@ public class Pix2Struct<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingM
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Pix2Struct-Native" : "Pix2Struct-ONNX", Description = "Pix2Struct: screenshot parsing pre-training for visual language understanding.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Pix2Struct-Native" : "Pix2Struct-ONNX", Description = "Pix2Struct: screenshot parsing pre-training for visual language understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Pix2Struct";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["MaxPatches"] = _options.MaxPatchesPerImage.ToString();

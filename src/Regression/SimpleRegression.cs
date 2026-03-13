@@ -160,31 +160,4 @@ public class SimpleRegression<T> : RegressionBase<T>
         // Create a new instance with the same options and regularization
         return new SimpleRegression<T>(Options, Regularization);
     }
-
-    /// <summary>
-    /// Returns the type identifier for this regression model.
-    /// </summary>
-    /// <returns>
-    /// The model type identifier for simple regression.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used internally for model identification and serialization purposes.
-    /// It returns an enum value that identifies this model as a simple regression model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply tells the system what kind of model this is.
-    /// 
-    /// It's like a name tag for the model that says "I am a simple regression model."
-    /// This is useful when:
-    /// - Saving the model to a file
-    /// - Loading a model from a file
-    /// - Logging information about the model
-    /// 
-    /// You generally won't need to call this method directly in your code.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.SimpleRegression;
-    }
 }

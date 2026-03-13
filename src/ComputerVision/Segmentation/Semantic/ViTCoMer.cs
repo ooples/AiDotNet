@@ -387,7 +387,6 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "ViTCoMer" }, { "Description", "ViT-CoMer Hybrid CNN-Transformer Segmentation" },

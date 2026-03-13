@@ -705,7 +705,6 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         {
             Name = "SileroVad",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Silero Voice Activity Detection neural network"
         };
 

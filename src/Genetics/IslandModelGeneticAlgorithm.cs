@@ -233,7 +233,6 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
     public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
-        metadata.ModelType = ModelType.GeneticAlgorithmRegression;
         metadata.Description = "Model evolved using an island model genetic algorithm";
         metadata.AdditionalInfo["IslandCount"] = _islandCount.ToString();
         metadata.AdditionalInfo["MigrationInterval"] = _migrationInterval.ToString();

@@ -130,7 +130,7 @@ public class ReplaceAnythingModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "ReplaceAnything", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ReplaceAnything", Version = "1.0",
             Description = "SAM-based interactive segmentation with text-guided object replacement",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

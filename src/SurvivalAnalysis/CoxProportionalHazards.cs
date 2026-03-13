@@ -88,7 +88,6 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public override ModelType GetModelType() => ModelType.CoxProportionalHazards;
 
     /// <summary>
     /// Gets whether JIT compilation is supported.

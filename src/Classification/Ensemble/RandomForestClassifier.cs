@@ -96,7 +96,6 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.RandomForestClassifier;
 
     /// <summary>
     /// Trains the Random Forest on the provided data.

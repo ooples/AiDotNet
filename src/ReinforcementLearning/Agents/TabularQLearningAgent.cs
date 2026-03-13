@@ -199,7 +199,6 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

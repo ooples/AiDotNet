@@ -101,7 +101,6 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.StackingClassifier;
 
     /// <summary>
     /// Trains the stacking classifier.

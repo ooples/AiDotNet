@@ -507,7 +507,6 @@ public class DIFRINT<T> : VideoStabilizationBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.VideoStabilization,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "DIFRINT" }, { "NumFeatures", _numFeatures }, { "NumIterations", _numIterations }

@@ -306,7 +306,6 @@ public class MobileNetV2Network<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ConvolutionalNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "MobileNetV2Network" },

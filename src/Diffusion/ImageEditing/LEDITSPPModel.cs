@@ -346,7 +346,6 @@ public class LEDITSPPModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "LEDITS++",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LEDITS++ enables precise multi-concept editing of real images with automatic masking",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

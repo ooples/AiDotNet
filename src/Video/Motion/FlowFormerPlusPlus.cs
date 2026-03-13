@@ -230,7 +230,6 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.OpticalFlow,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FlowFormerPlusPlus" },

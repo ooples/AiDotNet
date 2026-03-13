@@ -406,7 +406,6 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Latte",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Latte latent diffusion transformer for video generation with factorized attention",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -346,7 +346,6 @@ public class DiffEditModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "DiffEdit",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DiffEdit automatically generates editing masks by comparing noise predictions between source and target prompts",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

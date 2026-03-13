@@ -147,7 +147,6 @@ public class FloRNN<T> : VideoDenoisingBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoDenoising,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FloRNN" },

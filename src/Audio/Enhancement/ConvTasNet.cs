@@ -1064,7 +1064,6 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = "Conv-TasNet",
             Description = $"Time-domain audio separation network ({_numSources} sources)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate,
             Complexity = _numBlocks * _numRepeats
         };

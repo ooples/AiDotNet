@@ -106,7 +106,7 @@ public class ConsisLoRAModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "ConsisLoRA", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "ConsisLoRA", Version = "1.0",
             Description = "Consistent LoRA-based style transfer with content-style disentanglement",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "consistency-lora-style");

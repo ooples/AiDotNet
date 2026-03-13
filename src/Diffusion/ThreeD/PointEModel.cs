@@ -683,7 +683,6 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "Point-E",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Point-E text-to-3D point cloud generation using transformer-based diffusion",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

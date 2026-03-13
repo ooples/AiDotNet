@@ -142,7 +142,7 @@ public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SDXL Turbo", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SDXL Turbo", Version = "1.0",
             Description = "SDXL-quality single-step generation via Adversarial Diffusion Distillation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

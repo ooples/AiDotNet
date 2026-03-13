@@ -93,7 +93,7 @@ public class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingMode
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GOT-OCR2-Native" : "GOT-OCR2-ONNX", Description = "GOT-OCR2: 580M unified OCR model for text, tables, charts, equations, and music scores.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GOT-OCR2-Native" : "GOT-OCR2-ONNX", Description = "GOT-OCR2: 580M unified OCR model for text, tables, charts, equations, and music scores.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GOT-OCR2";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["MathOCR"] = _options.EnableMathOCR.ToString();

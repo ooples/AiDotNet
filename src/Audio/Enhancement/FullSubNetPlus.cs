@@ -283,7 +283,6 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = _useNativeMode ? "FullSubNet+-Native" : "FullSubNet+-ONNX",
             Description = "FullSubNet+ Channel Attention Speech Enhancement (Chen et al., ICASSP 2022)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.NumFreqBins,
             Complexity = _options.FullBandLayers + _options.SubBandLayers
         };

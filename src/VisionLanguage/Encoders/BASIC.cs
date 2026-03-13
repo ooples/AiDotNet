@@ -183,7 +183,7 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "BASIC-Native" : "BASIC-ONNX", Description = "BASIC: Combined Scaling for Zero-shot Transfer Learning (Pham et al., 2022)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
+        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "BASIC-Native" : "BASIC-ONNX", Description = "BASIC: Combined Scaling for Zero-shot Transfer Learning (Pham et al., 2022)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
         meta.AdditionalInfo["Architecture"] = "BASIC";
         meta.AdditionalInfo["VisionEncoder"] = "CoAtNet";
         meta.AdditionalInfo["ProjectionDim"] = _options.ProjectionDim.ToString();

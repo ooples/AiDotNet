@@ -201,7 +201,7 @@ public class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SEED-X-Native" : "SEED-X-ONNX", Description = "SEED-X: multi-granularity comprehension and generation model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SEED-X-Native" : "SEED-X-ONNX", Description = "SEED-X: multi-granularity comprehension and generation model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "SEED-X";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         m.AdditionalInfo["MultiGranularity"] = _options.EnableMultiGranularity.ToString();

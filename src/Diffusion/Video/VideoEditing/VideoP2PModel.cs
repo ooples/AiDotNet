@@ -178,7 +178,6 @@ public class VideoP2PModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "VideoP2P",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "VideoP2P prompt-to-prompt cross-attention control for video editing.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -171,7 +171,7 @@ public class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "VideoChat2-Native" : "VideoChat2-ONNX", Description = "VideoChat2: progressive video training with diverse data.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "VideoChat2-Native" : "VideoChat2-ONNX", Description = "VideoChat2: progressive video training with diverse data.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "VideoChat2";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

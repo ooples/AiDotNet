@@ -1477,7 +1477,6 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         var options = (DynamicRegressionWithARIMAErrorsOptions<T>)Options;
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.DynamicRegressionWithARIMAErrors,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

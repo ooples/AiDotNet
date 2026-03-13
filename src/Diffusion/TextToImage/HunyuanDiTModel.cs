@@ -272,7 +272,6 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Hunyuan-DiT",
             Version = "1.2",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Hunyuan-DiT bilingual Chinese-English DiT text-to-image model",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

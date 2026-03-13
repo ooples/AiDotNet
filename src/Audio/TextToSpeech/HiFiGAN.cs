@@ -228,7 +228,6 @@ public class HiFiGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             Name = _useNativeMode ? "HiFi-GAN-Native" : "HiFi-GAN-ONNX",
             Description = $"HiFi-GAN {_options.Variant} neural vocoder (Kong et al., 2020)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.UpsampleRates.Length
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();

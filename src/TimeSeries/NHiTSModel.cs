@@ -433,7 +433,6 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "N-HiTS",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Neural Hierarchical Interpolation for Time Series with multi-rate sampling (Production-Ready)",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,

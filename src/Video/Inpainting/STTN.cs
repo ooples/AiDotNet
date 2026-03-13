@@ -163,7 +163,6 @@ public class STTN<T> : VideoInpaintingBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoInpainting,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "STTN" },

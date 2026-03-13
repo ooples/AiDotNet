@@ -1757,7 +1757,6 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "HashTableSize", _hashTableSize },

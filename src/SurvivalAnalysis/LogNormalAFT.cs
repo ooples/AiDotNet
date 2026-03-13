@@ -389,7 +389,6 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
     }
 
     /// <inheritdoc />
-    public override ModelType GetModelType() => ModelType.LogNormalAFT;
 
     /// <inheritdoc />
     public override byte[] Serialize()

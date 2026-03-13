@@ -88,7 +88,6 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.LinearDiscriminantAnalysis;
 
     /// <summary>
     /// Trains the LDA classifier on the provided data.

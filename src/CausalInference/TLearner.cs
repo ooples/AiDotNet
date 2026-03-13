@@ -360,5 +360,4 @@ public class TLearner<T> : CausalModelBase<T>
     }
 
     /// <inheritdoc />
-    public override ModelType GetModelType() => ModelType.TLearner;
 }

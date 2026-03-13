@@ -50,20 +50,20 @@ public sealed class FinancialSearchSpace
     /// best configuration for your specific data.
     /// </para>
     /// </remarks>
-    public Dictionary<string, ParameterRange> GetSearchSpace(ModelType modelType)
+    public Dictionary<string, ParameterRange> GetSearchSpace(Type modelType)
     {
-        return modelType switch
-        {
-            ModelType.PatchTST => GetPatchTSTSearchSpace(),
-            ModelType.ITransformer => GetITransformerSearchSpace(),
-            ModelType.DeepAR => GetDeepARSearchSpace(),
-            ModelType.NBEATS => GetNBEATSSearchSpace(),
-            ModelType.TFT => GetTFTSearchSpace(),
-            ModelType.NeuralVaR => GetNeuralVaRSearchSpace(),
-            ModelType.TabNet => GetTabNetSearchSpace(),
-            ModelType.TabTransformer => GetTabTransformerSearchSpace(),
-            _ => GetDomainAwareDefaultSearchSpace()
-        };
+        var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
+
+        if (lookupType == typeof(Forecasting.Transformers.PatchTST<>)) return GetPatchTSTSearchSpace();
+        if (lookupType == typeof(Forecasting.Transformers.ITransformer<>)) return GetITransformerSearchSpace();
+        if (lookupType == typeof(Forecasting.Neural.DeepAR<>)) return GetDeepARSearchSpace();
+        if (lookupType == typeof(Forecasting.Neural.NBEATSFinance<>)) return GetNBEATSSearchSpace();
+        if (lookupType == typeof(Forecasting.Transformers.TFT<>)) return GetTFTSearchSpace();
+        if (lookupType == typeof(Risk.NeuralVaR<>)) return GetNeuralVaRSearchSpace();
+        if (lookupType == typeof(Risk.TabNet<>)) return GetTabNetSearchSpace();
+        if (lookupType == typeof(Risk.TabTransformer<>)) return GetTabTransformerSearchSpace();
+
+        return GetDomainAwareDefaultSearchSpace();
     }
 
     /// <summary>

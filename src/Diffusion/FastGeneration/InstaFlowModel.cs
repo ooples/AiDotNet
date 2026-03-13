@@ -141,7 +141,7 @@ public class InstaFlowModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "InstaFlow", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "InstaFlow", Version = "1.0",
             Description = "Single-step generation via rectified flow straightening and one-step distillation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

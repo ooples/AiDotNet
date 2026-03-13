@@ -137,7 +137,7 @@ public class SD3TurboModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SD3 Turbo", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SD3 Turbo", Version = "1.0",
             Description = "Distilled Stable Diffusion 3 MMDiT for 4-8 step generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

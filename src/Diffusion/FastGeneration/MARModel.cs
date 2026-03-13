@@ -140,7 +140,7 @@ public class MARModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Masked Autoregressive (MAR)", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Masked Autoregressive (MAR)", Version = "1.0",
             Description = "Image generation via continuous-valued masked token prediction without VQ",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

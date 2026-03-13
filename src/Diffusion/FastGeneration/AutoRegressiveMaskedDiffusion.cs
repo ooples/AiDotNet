@@ -136,7 +136,7 @@ public class AutoRegressiveMaskedDiffusion<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Autoregressive Masked Diffusion", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Autoregressive Masked Diffusion", Version = "1.0",
             Description = "Hybrid discrete-continuous generation via interleaved masking and diffusion",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

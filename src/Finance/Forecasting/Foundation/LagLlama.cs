@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
@@ -594,7 +594,6 @@ public class LagLlama<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "LagLlama" },

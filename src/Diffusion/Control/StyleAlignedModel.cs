@@ -138,7 +138,7 @@ public class StyleAlignedModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Style-Aligned", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Style-Aligned", Version = "1.0",
             Description = "Shared attention for consistent style across multiple generated images",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

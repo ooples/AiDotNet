@@ -355,7 +355,6 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputSize", Architecture.InputSize },

@@ -128,7 +128,7 @@ public class BrushNetXModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "BrushNet-X", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "BrushNet-X", Version = "1.0",
             Description = "SDXL dual-branch inpainting for high-resolution 1024x1024 generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

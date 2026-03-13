@@ -246,7 +246,6 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelType", "DeepPortfolioManager" },

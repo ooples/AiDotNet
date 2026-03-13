@@ -292,7 +292,6 @@ public class ODISESegmentation<T> : NeuralNetworkBase<T>, IPanopticSegmentation<
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation, // Closest available; ODISE supports panoptic segmentation
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "ODISESegmentation" }, { "SegmentationType", "Panoptic" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

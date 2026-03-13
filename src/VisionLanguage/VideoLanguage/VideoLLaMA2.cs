@@ -169,7 +169,7 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "VideoLLaMA2-Native" : "VideoLLaMA2-ONNX", Description = "VideoLLaMA 2: spatial-temporal convolution for video tokens.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "VideoLLaMA2-Native" : "VideoLLaMA2-ONNX", Description = "VideoLLaMA 2: spatial-temporal convolution for video tokens.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "VideoLLaMA2";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         m.AdditionalInfo["SpatialTemporalConv"] = _options.EnableSpatialTemporalConv.ToString();

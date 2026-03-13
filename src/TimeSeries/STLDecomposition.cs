@@ -1020,7 +1020,6 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.STLDecomposition,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include configuration options

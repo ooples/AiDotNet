@@ -64,7 +64,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
 
                 var parameters = await SuggestNextTrialAsync();
 
-                if (!parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
+                if (!parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not Type modelType)
                 {
                     throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
                 }
@@ -98,7 +98,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickModelTypeByUcb();
-        if (modelType == ModelType.None)
+        if (modelType is null)
         {
             throw new InvalidOperationException("No candidate models are configured for AutoML.");
         }
@@ -117,7 +117,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
             }
 
             successfulForType = _trialHistory
-                .Where(t => t.Success && t.Parameters.TryGetValue("ModelType", out var mt) && mt is ModelType m && m == modelType)
+                .Where(t => t.Success && t.Parameters.TryGetValue("ModelType", out var mt) && mt is Type m && m == modelType)
                 .Select(t => t.Clone())
                 .ToList();
         }
@@ -135,16 +135,16 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
         return new BayesianOptimizationAutoML<T, TInput, TOutput>(Random);
     }
 
-    private ModelType PickModelTypeByUcb()
+    private Type? PickModelTypeByUcb()
     {
         lock (_lock)
         {
             if (_candidateModels.Count == 0)
             {
-                return ModelType.None;
+                return null;
             }
 
-            var stats = new Dictionary<ModelType, (int Count, double MeanReward)>();
+            var stats = new Dictionary<Type, (int Count, double MeanReward)>();
             int total = 0;
 
             foreach (var modelType in _candidateModels)
@@ -159,7 +159,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
                     continue;
                 }
 
-                if (!trial.Parameters.TryGetValue("ModelType", out var mt) || mt is not ModelType modelType)
+                if (!trial.Parameters.TryGetValue("ModelType", out var mt) || mt is not Type modelType)
                 {
                     continue;
                 }
@@ -186,7 +186,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
             }
 
             double logTotal = Math.Log(Math.Max(1, total));
-            ModelType best = _candidateModels[0];
+            Type best = _candidateModels[0];
             double bestUcb = double.NegativeInfinity;
 
             foreach (var modelType in _candidateModels)

@@ -93,7 +93,6 @@ public class SupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.SupportVectorClassifier;
 
     /// <summary>
     /// Trains the SVC on the provided data.

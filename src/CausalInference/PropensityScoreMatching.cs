@@ -101,7 +101,6 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public override ModelType GetModelType() => ModelType.PropensityScoreMatching;
 
     /// <summary>
     /// Initializes a new instance of the PropensityScoreMatching class.

@@ -557,24 +557,6 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for Inverse Gaussian regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Returns an identifier indicating this is an Inverse Gaussian regression model.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.InverseGaussianRegression;
-    }
-
-    /// <summary>
     /// Creates a new instance of the Inverse Gaussian Regression model with the same configuration.
     /// </summary>
     /// <returns>A new instance of the Inverse Gaussian Regression model.</returns>

@@ -184,7 +184,6 @@ public class BalancedBaggingClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This identifier helps the system track what type of model this is.</para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.BalancedBaggingClassifier;
 
     /// <summary>
     /// Trains the balanced bagging classifier.

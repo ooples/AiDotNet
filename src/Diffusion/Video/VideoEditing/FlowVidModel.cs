@@ -190,7 +190,6 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "FlowVid",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "FlowVid optical flow guided video-to-video synthesis.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

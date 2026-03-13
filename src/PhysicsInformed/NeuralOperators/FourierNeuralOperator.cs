@@ -831,7 +831,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "Modes", _modes },

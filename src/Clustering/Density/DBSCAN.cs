@@ -101,7 +101,6 @@ public class DBSCAN<T> : ClusteringBase<T>
     public bool[]? CorePointMask => _corePointMask;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

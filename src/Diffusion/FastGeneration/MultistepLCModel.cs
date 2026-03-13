@@ -177,7 +177,6 @@ public class MultistepLCModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Multistep Latent Consistency Model (MLCM)",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Multistep consistency distillation for flexible few-step generation with quality scaling",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

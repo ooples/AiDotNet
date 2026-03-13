@@ -314,7 +314,6 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Coefficients", _coefficients },
@@ -329,7 +328,6 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// Gets the model type of the Generalized Additive Model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType() => ModelType.GeneralizedAdditiveModelRegression;
 
     /// <summary>
     /// Calculates the importance of each feature in the model based on the magnitude of its coefficients.

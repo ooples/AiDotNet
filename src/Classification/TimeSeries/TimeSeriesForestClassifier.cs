@@ -114,7 +114,6 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.TimeSeriesClassifier;
 
     /// <summary>
     /// Trains the Time Series Forest on time series sequences.

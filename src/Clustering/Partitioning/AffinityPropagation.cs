@@ -75,7 +75,6 @@ public class AffinityPropagation<T> : ClusteringBase<T>
     public T[,]? SimilarityMatrix => _similarityMatrix;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

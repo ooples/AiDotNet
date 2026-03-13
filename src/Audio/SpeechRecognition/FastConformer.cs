@@ -211,7 +211,6 @@ public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "FastConformer-Native" : "FastConformer-ONNX",
             Description = $"Fast Conformer {_options.Variant} ASR (Rekesh et al., 2023, NVIDIA NeMo)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

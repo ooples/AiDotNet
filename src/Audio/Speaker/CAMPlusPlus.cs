@@ -265,7 +265,6 @@ public class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, IS
         {
             Name = _useNativeMode ? "CAM++-Native" : "CAM++-ONNX",
             Description = "CAM++ Context-Aware Masking Speaker Model (Wang et al., 2023)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumBlocks
         };
         m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();

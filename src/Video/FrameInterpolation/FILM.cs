@@ -1282,7 +1282,6 @@ public class FILM<T> : FrameInterpolationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FILM" },

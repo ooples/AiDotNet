@@ -187,7 +187,6 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Sora2",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Sora 2 cinematic video generation with physics simulation and synced audio.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

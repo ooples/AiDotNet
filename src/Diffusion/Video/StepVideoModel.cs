@@ -180,7 +180,6 @@ public class StepVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "StepVideo",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "StepVideo text-to-video model with benchmark-leading quality.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

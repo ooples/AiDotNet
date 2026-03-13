@@ -526,7 +526,6 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.IQLAgent,
             FeatureCount = _options.StateSize,
             Complexity = ParameterCount,
         };

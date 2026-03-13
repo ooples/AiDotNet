@@ -236,7 +236,6 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

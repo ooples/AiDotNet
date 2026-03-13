@@ -105,7 +105,7 @@ public class StitchDiffusionModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "StitchDiffusion", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "StitchDiffusion", Version = "1.0",
             Description = "360-degree panorama with circular padding and wrap-around consistency",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "circular-padding-panorama");

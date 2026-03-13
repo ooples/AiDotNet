@@ -181,7 +181,6 @@ public class VideoPoetModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "VideoPoet",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "VideoPoet LLM-based zero-shot video generation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -716,7 +716,6 @@ public class TabFlowGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "TabFlow" },

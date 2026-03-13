@@ -137,7 +137,7 @@ public class SD3FlashModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SD3 Flash", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SD3 Flash", Version = "1.0",
             Description = "Consistency-distilled SD3 for ultra-fast 1-4 step generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

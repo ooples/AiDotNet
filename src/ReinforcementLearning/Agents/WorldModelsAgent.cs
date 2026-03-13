@@ -539,7 +539,6 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

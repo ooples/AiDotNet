@@ -134,7 +134,7 @@ public class TurboEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "TurboEdit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "TurboEdit", Version = "1.0",
             Description = "Fast 3-5 step image editing with distilled SDXL Turbo inversion",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

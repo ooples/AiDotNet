@@ -194,7 +194,7 @@ public class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PLLaVA-Native" : "PLLaVA-ONNX", Description = "PLLaVA: parameter-free pooling extension from images to video.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PLLaVA-Native" : "PLLaVA-ONNX", Description = "PLLaVA: parameter-free pooling extension from images to video.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "PLLaVA";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         m.AdditionalInfo["ParameterFreePooling"] = _options.EnableParameterFreePooling.ToString();

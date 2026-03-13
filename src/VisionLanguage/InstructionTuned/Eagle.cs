@@ -89,7 +89,7 @@ public class Eagle<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Eagle-Native" : "Eagle-ONNX", Description = "Eagle: NVIDIA data-centric VLM with high-quality training data.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Eagle-Native" : "Eagle-ONNX", Description = "Eagle: NVIDIA data-centric VLM with high-quality training data.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Eagle";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

@@ -426,7 +426,6 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.MultiLabelClassifier;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()

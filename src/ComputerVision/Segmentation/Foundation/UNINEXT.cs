@@ -387,7 +387,6 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "UNINEXT" }, { "InputHeight", _height }, { "InputWidth", _width },

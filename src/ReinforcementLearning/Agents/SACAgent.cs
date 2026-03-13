@@ -561,7 +561,6 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SACAgent,
             FeatureCount = _sacOptions.StateSize,
         };
     }

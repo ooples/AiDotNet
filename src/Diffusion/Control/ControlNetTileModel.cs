@@ -122,7 +122,7 @@ public class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "ControlNet-Tile", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNet-Tile", Version = "1.0",
             Description = "ControlNet Tile for upscaling and detail enhancement",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

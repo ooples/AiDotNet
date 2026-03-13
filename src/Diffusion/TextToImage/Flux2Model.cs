@@ -364,7 +364,6 @@ public class Flux2Model<T> : LatentDiffusionModelBase<T>
         {
             Name = $"FLUX.2 [{_variant}]",
             Version = _variant.ToString(),
-            ModelType = ModelType.NeuralNetwork,
             Description = $"FLUX.2 [{_variant}] next-generation hybrid MMDiT with {FLUX2_JOINT_LAYERS} joint + {FLUX2_SINGLE_LAYERS} single blocks and improved rectified flow",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

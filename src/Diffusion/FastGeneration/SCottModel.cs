@@ -141,7 +141,7 @@ public class SCottModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SCott", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SCott", Version = "1.0",
             Description = "Score consistency via optimal transport for efficient single/few-step generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

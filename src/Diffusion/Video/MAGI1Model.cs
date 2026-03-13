@@ -181,7 +181,6 @@ public class MAGI1Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "MAGI1",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "MAGI-1 video model with strong temporal coherence and multi-task support.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

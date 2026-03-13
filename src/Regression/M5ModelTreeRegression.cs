@@ -664,7 +664,6 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.M5ModelTree,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MaxDepth", _options.MaxDepth },

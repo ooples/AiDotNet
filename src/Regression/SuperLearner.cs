@@ -890,12 +890,6 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     }
 
     /// <inheritdoc/>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.SuperLearner;
-    }
-
-    /// <inheritdoc/>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         Train(x, y);
@@ -906,7 +900,6 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SuperLearner,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumBaseModels", _baseModels.Count },

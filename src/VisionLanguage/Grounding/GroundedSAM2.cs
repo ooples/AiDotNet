@@ -261,7 +261,7 @@ public class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GroundedSAM2-Native" : "GroundedSAM2-ONNX", Description = "Grounded-SAM 2: combines Grounding DINO with SAM 2 for grounded segmentation and tracking.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GroundedSAM2-Native" : "GroundedSAM2-ONNX", Description = "Grounded-SAM 2: combines Grounding DINO with SAM 2 for grounded segmentation and tracking.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GroundedSAM2";
         m.AdditionalInfo["Segmentation"] = _options.EnableSegmentation.ToString();
         m.AdditionalInfo["Tracking"] = _options.EnableTracking.ToString();

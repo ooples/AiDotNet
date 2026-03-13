@@ -109,7 +109,6 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.TimeSeriesClassifier;
 
     /// <summary>
     /// Trains the ROCKET classifier on time series data.

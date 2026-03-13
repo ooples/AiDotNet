@@ -409,7 +409,6 @@ public class SAMHQ<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "SAMHQ" }, { "InputHeight", _height }, { "InputWidth", _width },

@@ -129,7 +129,7 @@ public class RADModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "RAD", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "RAD", Version = "1.0",
             Description = "Region-aware diffusion for multi-region spatially controlled editing",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

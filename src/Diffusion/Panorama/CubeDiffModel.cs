@@ -106,7 +106,7 @@ public class CubeDiffModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "CubeDiff", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "CubeDiff", Version = "1.0",
             Description = "Cubemap 360x180 panorama with cross-face attention consistency",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "cubemap-cross-face-panorama");

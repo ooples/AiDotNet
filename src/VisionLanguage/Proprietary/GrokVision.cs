@@ -93,7 +93,7 @@ public class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Grok-Vision-Native" : "Grok-Vision-ONNX", Description = "Grok Vision: reference implementation of xAI's real-time multimodal model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Grok-Vision-Native" : "Grok-Vision-ONNX", Description = "Grok Vision: reference implementation of xAI's real-time multimodal model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Grok-Vision";
         m.AdditionalInfo["Provider"] = _options.Provider;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

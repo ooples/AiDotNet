@@ -449,7 +449,6 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Upscale-A-Video",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Upscale-A-Video temporally consistent video super-resolution with diffusion",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

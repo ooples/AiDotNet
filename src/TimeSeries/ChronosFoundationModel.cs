@@ -858,7 +858,6 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "Chronos Foundation Model",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Foundation model for zero-shot time series forecasting with mean-scaling tokenization and causal transformer",
             Complexity = ParameterCount,
             FeatureCount = _options.ContextLength,

@@ -148,7 +148,7 @@ public class CCSRModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "CCSR", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "CCSR", Version = "1.0",
             Description = "Content-consistent diffusion SR with hallucination prevention and VAE refinement",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

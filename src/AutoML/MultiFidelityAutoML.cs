@@ -237,7 +237,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
         int[] shuffledTrainingRowIndices,
         CancellationToken cancellationToken)
     {
-        if (!config.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
+        if (!config.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not Type modelType)
         {
             throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
         }
@@ -361,7 +361,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickCandidateModelType();
-        if (modelType == ModelType.None)
+        if (modelType is null)
         {
             throw new InvalidOperationException("No candidate models are configured for AutoML.");
         }
@@ -537,7 +537,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
     private static (TInput Inputs, TOutput Targets) CreateRungTrainingSubset(
         TInput inputs,
         TOutput targets,
-        ModelType modelType,
+        Type modelType,
         int subsetSize,
         int[] shuffledRowIndices)
     {
@@ -577,8 +577,10 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
         return ((TInput)(object)xs, (TOutput)(object)ys);
     }
 
-    private static bool IsTimeSeriesModel(ModelType modelType)
+    private static bool IsTimeSeriesModel(Type modelType)
     {
-        return modelType == ModelType.TimeSeriesRegression || modelType == ModelType.BayesianStructuralTimeSeriesModel;
+        var typeName = modelType.IsGenericType ? modelType.GetGenericTypeDefinition().Name : modelType.Name;
+        return typeName.StartsWith("TimeSeriesRegression", StringComparison.Ordinal)
+            || typeName.StartsWith("BayesianStructuralTimeSeriesModel", StringComparison.Ordinal);
     }
 }

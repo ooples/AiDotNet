@@ -462,7 +462,6 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             Version = "1.0.0",
             AdditionalInfo = new Dictionary<string, object>
             {

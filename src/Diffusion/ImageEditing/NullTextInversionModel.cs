@@ -357,7 +357,6 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Null-text Inversion",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Null-text Inversion enables editing real images by optimizing the unconditional embedding",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

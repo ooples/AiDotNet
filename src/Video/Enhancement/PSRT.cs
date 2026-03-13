@@ -172,7 +172,6 @@ public class PSRT<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "PSRT-Native" : "PSRT-ONNX",
             Description = $"PSRT {_options.Variant} progressive spatio-temporal alignment VSR (Shi et al., 2022)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumSTABs
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

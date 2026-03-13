@@ -180,7 +180,6 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "FateZero",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "FateZero zero-shot video editing via attention blending.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

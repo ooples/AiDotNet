@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Neural;
 
@@ -452,7 +452,6 @@ public class WaveNet<T> : ForecastingModelBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "WaveNet" },

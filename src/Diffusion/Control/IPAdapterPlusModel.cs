@@ -164,7 +164,6 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "IP-Adapter-Plus",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Image prompt adapter with fine-grained image feature injection",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

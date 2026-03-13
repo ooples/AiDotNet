@@ -15,7 +15,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.StateSpace;
 
@@ -466,7 +466,6 @@ public class Hippo<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "HiPPO" },

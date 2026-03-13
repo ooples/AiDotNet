@@ -130,7 +130,6 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.ExplainableBoostingClassifier;
 
     /// <summary>
     /// Trains the EBM classifier using cyclic gradient boosting.
@@ -791,7 +790,6 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ExplainableBoostingClassifier,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumFeatures", _numFeatures },

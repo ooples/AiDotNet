@@ -106,7 +106,7 @@ public class KLoRAStyleModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "K-LoRA Style", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "K-LoRA Style", Version = "1.0",
             Description = "Composable multi-LoRA style transfer with adjustable blending",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "multi-lora-style-composition");

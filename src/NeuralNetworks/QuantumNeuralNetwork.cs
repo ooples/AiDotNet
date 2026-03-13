@@ -304,7 +304,6 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.QuantumNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputShape", Architecture.GetInputShape() },

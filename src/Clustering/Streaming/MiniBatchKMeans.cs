@@ -80,7 +80,6 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
     public int IterationsPerformed { get; private set; }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

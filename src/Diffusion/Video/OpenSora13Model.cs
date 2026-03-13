@@ -179,7 +179,6 @@ public class OpenSora13Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "OpenSora13",
             Version = "1.3",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Open-Sora 1.3 with upgraded 3D-VAE and rectified flow.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

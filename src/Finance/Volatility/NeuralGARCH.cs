@@ -283,7 +283,6 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelType", "NeuralGARCH" },

@@ -180,7 +180,6 @@ public class CosmosModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Cosmos",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "NVIDIA Cosmos physics-aware world generation model.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

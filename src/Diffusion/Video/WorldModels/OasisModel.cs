@@ -179,7 +179,6 @@ public class OasisModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Oasis",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Oasis playable AI game via next-frame prediction.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

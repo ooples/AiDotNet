@@ -539,7 +539,6 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.MuZeroAgent
         };
     }
 

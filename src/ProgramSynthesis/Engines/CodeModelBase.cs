@@ -147,7 +147,6 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Transformer,
             AdditionalInfo = info,
             ModelData = Serialize()
         };

@@ -400,7 +400,6 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "EoMT" }, { "InputHeight", _height }, { "InputWidth", _width },

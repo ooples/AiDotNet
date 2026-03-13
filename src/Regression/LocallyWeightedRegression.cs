@@ -272,7 +272,6 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// Gets the model type of the Locally Weighted Regression model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType() => ModelType.LocallyWeightedRegression;
 
     /// <summary>
     /// Serializes the Locally Weighted Regression model to a byte array for storage or transmission.

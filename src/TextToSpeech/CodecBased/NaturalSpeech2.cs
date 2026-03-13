@@ -205,7 +205,6 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             Name = _useNativeMode ? "NaturalSpeech2-Native" : "NaturalSpeech2-ONNX",
             Description = "NaturalSpeech 2: Latent Diffusion TTS (Shen et al., 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim
         };
     }

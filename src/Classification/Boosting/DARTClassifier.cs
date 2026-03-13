@@ -95,7 +95,6 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.DARTClassifier;
 
     /// <summary>
     /// Trains the DART classifier with dropout regularization.
@@ -455,7 +454,6 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DARTClassifier,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _trees.Count },

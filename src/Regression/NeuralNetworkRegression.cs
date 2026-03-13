@@ -669,7 +669,6 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// It's used internally by the library to keep track of different types of models.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.NeuralNetworkRegression;
 
     /// <summary>
     /// Optimizes the model parameters using the provided training data.

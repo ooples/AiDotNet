@@ -184,7 +184,6 @@ public class GIMMVFI<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "GIMMVFI-Native" : "GIMMVFI-ONNX",
             Description = $"GIMM-VFI {_options.Variant} implicit motion modeling interpolation (NeurIPS 2024)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumEncoderBlocks * _options.NumImplicitLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

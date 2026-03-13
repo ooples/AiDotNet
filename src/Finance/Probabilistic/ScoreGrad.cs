@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Probabilistic;
 
@@ -507,7 +507,6 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "ScoreGrad" },

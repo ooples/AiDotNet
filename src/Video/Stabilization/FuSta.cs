@@ -149,7 +149,6 @@ public class FuSta<T> : VideoStabilizationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoStabilization,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FuSta" },

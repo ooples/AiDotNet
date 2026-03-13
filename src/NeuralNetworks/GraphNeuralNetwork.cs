@@ -920,7 +920,6 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "LayerCount", Layers.Count },

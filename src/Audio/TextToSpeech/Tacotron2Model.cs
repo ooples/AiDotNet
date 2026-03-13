@@ -832,7 +832,6 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             Name = "Tacotron2",
             Description = "Attention-based sequence-to-sequence TTS model",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _vocabSize,
             Complexity = 2
         };

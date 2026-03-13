@@ -1195,7 +1195,6 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.TextToVideo,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "OpenSora" },

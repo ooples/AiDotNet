@@ -375,7 +375,6 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.AttentionNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "SequenceLength", _sequenceLength },

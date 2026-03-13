@@ -131,7 +131,7 @@ public class TurboFillModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "TurboFill", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "TurboFill", Version = "1.0",
             Description = "Fast 4-8 step inpainting via adversarial distillation on SDXL",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

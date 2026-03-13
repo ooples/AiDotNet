@@ -110,7 +110,7 @@ public class IDMVTONModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "IDM-VTON", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "IDM-VTON", Version = "1.0",
             Description = "Dual U-Net virtual try-on with IP-Adapter garment encoding",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "dual-unet-virtual-tryon");

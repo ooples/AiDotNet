@@ -195,7 +195,6 @@ public class ABME<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "ABME-Native" : "ABME-ONNX",
             Description = $"ABME {_options.Variant} asymmetric bilateral motion estimation (Park et al., ICCV 2021)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumResBlocks * _options.NumRefinementIters
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

@@ -94,7 +94,6 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.NGBoostClassifier;
 
     /// <summary>
     /// Trains the NGBoost classifier using natural gradient boosting.
@@ -538,7 +537,6 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NGBoostClassifier,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfIterations", _trees.Count },

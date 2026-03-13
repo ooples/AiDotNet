@@ -142,7 +142,7 @@ public class FlashDiffusionModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Flash Diffusion", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Flash Diffusion", Version = "1.0",
             Description = "Progressive attention distillation for few-step generation with preserved compositional abilities",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

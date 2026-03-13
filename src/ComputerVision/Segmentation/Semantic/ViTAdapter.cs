@@ -393,7 +393,6 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "ViTAdapter" }, { "Description", "ViT-Adapter Semantic Segmentation" },

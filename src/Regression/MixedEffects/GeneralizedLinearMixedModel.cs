@@ -919,7 +919,6 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.GeneralizedLinearMixedModel;
 
     /// <summary>
     /// Creates a new instance of the model with the same configuration.

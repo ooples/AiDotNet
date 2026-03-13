@@ -211,7 +211,7 @@ public class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMod
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3D-LLM-Native" : "3D-LLM-ONNX", Description = "3D-LLM: injects 3D spatial features into large language models.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3D-LLM-Native" : "3D-LLM-ONNX", Description = "3D-LLM: injects 3D spatial features into large language models.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "3D-LLM";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

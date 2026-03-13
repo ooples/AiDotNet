@@ -277,7 +277,6 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "Tacotron2-Native" : "Tacotron2-ONNX",
             Description = "Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions (Shen et al., 2018)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };

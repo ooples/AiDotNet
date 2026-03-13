@@ -790,7 +790,6 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DeepBeliefNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfLayers", layerSizes.Count },

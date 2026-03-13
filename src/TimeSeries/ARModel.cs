@@ -543,7 +543,6 @@ public class ARModel<T> : TimeSeriesModelBase<T>
         var arOptions = (ARModelOptions<T>)Options;
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ARModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

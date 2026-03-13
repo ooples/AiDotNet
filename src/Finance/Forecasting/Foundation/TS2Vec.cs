@@ -261,7 +261,6 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TS2Vec" },

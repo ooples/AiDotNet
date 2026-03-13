@@ -347,7 +347,6 @@ public class SDEditModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "SDEdit",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "SDEdit transforms sketches and images through partial noising and guided denoising",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

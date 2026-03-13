@@ -446,7 +446,6 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetworkRegression,
             FeatureCount = _inputSize,
             Description = $"RBFN with {_inputSize} inputs, {_hiddenSize} RBF neurons, and {_outputSize} outputs",
             AdditionalInfo = new Dictionary<string, object>

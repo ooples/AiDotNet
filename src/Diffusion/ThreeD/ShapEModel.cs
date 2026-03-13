@@ -925,7 +925,6 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "Shap-E",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Shap-E text-to-3D generation with implicit neural representations (NeRF/SDF)",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

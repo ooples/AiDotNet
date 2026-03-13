@@ -134,7 +134,7 @@ public class BrushNetModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "BrushNet", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "BrushNet", Version = "1.0",
             Description = "Dual-branch plug-and-play inpainting with dense per-layer conditioning",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

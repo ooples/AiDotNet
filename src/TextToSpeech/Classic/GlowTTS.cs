@@ -230,7 +230,6 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "GlowTTS-Native" : "GlowTTS-ONNX",
             Description = "Glow-TTS: Generative Flow for TTS via Monotonic Alignment Search (Kim et al., 2020)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumFlowLayers
         };

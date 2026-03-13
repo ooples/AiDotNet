@@ -91,7 +91,6 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.BaggingClassifier;
 
     /// <summary>
     /// Trains the Bagging classifier on the provided data.

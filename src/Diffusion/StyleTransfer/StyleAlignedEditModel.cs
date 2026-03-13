@@ -109,7 +109,7 @@ public class StyleAlignedEditModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "StyleAligned-Edit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "StyleAligned-Edit", Version = "1.0",
             Description = "Consistent multi-image editing via shared self-attention alignment",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "shared-attention-style-editing");

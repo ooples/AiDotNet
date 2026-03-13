@@ -208,7 +208,7 @@ public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "AuraFlow", Version = "0.3", ModelType = ModelType.NeuralNetwork,
+            Name = "AuraFlow", Version = "0.3",
             Description = "AuraFlow open-source flow-matching text-to-image model",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

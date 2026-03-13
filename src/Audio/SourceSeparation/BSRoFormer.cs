@@ -209,7 +209,7 @@ public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "BS-RoFormer-Native" : "BS-RoFormer-ONNX", Description = "BS-RoFormer Band-Split Rotary Transformer (Lu et al., 2023)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "BS-RoFormer-Native" : "BS-RoFormer-ONNX", Description = "BS-RoFormer Band-Split Rotary Transformer (Lu et al., 2023)", FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
         m.AdditionalInfo["NumBands"] = _options.NumBands.ToString(); m.AdditionalInfo["NumStems"] = _options.NumStems.ToString();
         return m;
     }

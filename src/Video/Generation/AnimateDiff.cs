@@ -504,7 +504,6 @@ public class AnimateDiff<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.TextToVideo,
             AdditionalInfo = additionalInfo,
             ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };

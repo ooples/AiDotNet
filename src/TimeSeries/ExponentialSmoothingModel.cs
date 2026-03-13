@@ -843,7 +843,6 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ExponentialSmoothingModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

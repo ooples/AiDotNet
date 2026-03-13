@@ -268,7 +268,6 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "UniverSeg" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

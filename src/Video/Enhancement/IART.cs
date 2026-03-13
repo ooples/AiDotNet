@@ -174,7 +174,6 @@ public class IART<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "IART-Native" : "IART-ONNX",
             Description = $"IART {_options.Variant} implicit resampling alignment transformer VSR (Kai et al., CVPR 2024)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumTransformerBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

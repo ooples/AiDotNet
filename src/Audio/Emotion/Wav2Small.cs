@@ -260,7 +260,6 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         {
             Name = _useNativeMode ? "Wav2Small-Native" : "Wav2Small-ONNX",
             Description = "Wav2Small Lightweight SER (Gomez-Alanis et al., 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumLayers
         };
         m.AdditionalInfo["NumClasses"] = _options.NumClasses.ToString();
         m.AdditionalInfo["HiddenDim"] = _options.HiddenDim.ToString();

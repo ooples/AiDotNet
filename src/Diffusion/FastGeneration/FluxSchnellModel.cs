@@ -140,7 +140,7 @@ public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "FLUX.1 Schnell", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "FLUX.1 Schnell", Version = "1.0",
             Description = "Ultra-fast 1-4 step FLUX generation, Apache 2.0 licensed",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

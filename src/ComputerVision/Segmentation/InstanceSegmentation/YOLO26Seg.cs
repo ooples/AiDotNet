@@ -300,7 +300,6 @@ public class YOLO26Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.InstanceSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "YOLO26Seg" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

@@ -840,7 +840,6 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ConditionalGAN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },

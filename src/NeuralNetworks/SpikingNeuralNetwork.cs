@@ -887,7 +887,6 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SpikingNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "TimeStep", _timeStep },

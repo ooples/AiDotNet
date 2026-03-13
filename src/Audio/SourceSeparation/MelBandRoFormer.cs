@@ -166,7 +166,7 @@ public class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparat
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "MelBand-RoFormer-Native" : "MelBand-RoFormer-ONNX", Description = "MelBand-RoFormer Mel-Band Source Separation (2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "MelBand-RoFormer-Native" : "MelBand-RoFormer-ONNX", Description = "MelBand-RoFormer Mel-Band Source Separation (2024)", FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
         m.AdditionalInfo["NumMelBands"] = _options.NumMelBands.ToString(); m.AdditionalInfo["NumStems"] = _options.NumStems.ToString();
         return m;
     }

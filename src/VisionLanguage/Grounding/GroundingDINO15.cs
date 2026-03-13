@@ -182,7 +182,7 @@ public class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGroundingMo
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GroundingDINO-1.5-Native" : "GroundingDINO-1.5-ONNX", Description = "Grounding DINO 1.5: enhanced open-set detection with improved architecture.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GroundingDINO-1.5-Native" : "GroundingDINO-1.5-ONNX", Description = "Grounding DINO 1.5: enhanced open-set detection with improved architecture.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GroundingDINO-1.5";
         m.AdditionalInfo["BackboneType"] = _options.BackboneType;
         return m;

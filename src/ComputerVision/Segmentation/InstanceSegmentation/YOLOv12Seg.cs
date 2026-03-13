@@ -304,7 +304,6 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.InstanceSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "YOLOv12Seg" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

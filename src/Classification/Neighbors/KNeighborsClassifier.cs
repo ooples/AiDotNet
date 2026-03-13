@@ -70,7 +70,6 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.KNeighborsClassifier;
 
     /// <summary>
     /// Trains the KNN classifier by storing the training data.

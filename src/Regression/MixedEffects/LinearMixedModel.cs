@@ -732,7 +732,6 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.MixedEffectsModel;
 
     /// <summary>
     /// Creates a new instance of the model with the same configuration.

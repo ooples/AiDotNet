@@ -285,7 +285,6 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DeepQNetwork,
             FeatureCount = _dqnOptions.StateSize,
         };
     }

@@ -94,7 +94,7 @@ public class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GeoChat-Native" : "GeoChat-ONNX", Description = "GeoChat: grounded VLM for satellite imagery understanding.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GeoChat-Native" : "GeoChat-ONNX", Description = "GeoChat: grounded VLM for satellite imagery understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GeoChat";
         m.AdditionalInfo["SupportedBands"] = _options.SupportedBands;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

@@ -266,7 +266,6 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "eDiff-I",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "eDiff-I ensemble-of-experts text-to-image diffusion model",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -131,7 +131,7 @@ public class SmartEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SmartEdit-Native" : "SmartEdit-ONNX", Description = "SmartEdit: enhanced instruction understanding for complex image editing.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SmartEdit-Native" : "SmartEdit-ONNX", Description = "SmartEdit: enhanced instruction understanding for complex image editing.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "SmartEdit";
         m.AdditionalInfo["ComplexReasoning"] = _options.EnableComplexReasoning.ToString();
         return m;

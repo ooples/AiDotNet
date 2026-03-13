@@ -84,7 +84,6 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.VotingClassifier;
 
     /// <summary>
     /// Trains all classifiers in the voting ensemble.

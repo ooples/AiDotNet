@@ -212,7 +212,6 @@ public class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "RNN-T-Native" : "RNN-T-ONNX",
             Description = $"RNN-Transducer {_options.Variant} streaming ASR (Graves, 2012; He et al., 2019)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumEncoderLayers + _options.NumPredictionLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

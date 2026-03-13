@@ -785,7 +785,6 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoActionRecognition,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

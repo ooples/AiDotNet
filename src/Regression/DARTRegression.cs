@@ -649,7 +649,6 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DART,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _trees.Count },

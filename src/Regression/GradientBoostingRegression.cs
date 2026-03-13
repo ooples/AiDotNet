@@ -365,7 +365,6 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GradientBoosting,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _options.NumberOfTrees },

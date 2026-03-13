@@ -322,7 +322,6 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public virtual ModelType GetModelType() => ModelType.None;
 
     /// <summary>
     /// Gets metadata about the model.
@@ -331,10 +330,9 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             FeatureCount = NumFeatures,
             Complexity = NumFeatures,
-            Description = $"{GetModelType()} causal inference model with {NumFeatures} features",
+            Description = $"{GetType().Name} causal inference model with {NumFeatures} features",
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "IsFitted", IsFitted }

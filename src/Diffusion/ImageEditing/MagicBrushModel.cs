@@ -345,7 +345,6 @@ public class MagicBrushModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "MagicBrush",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "MagicBrush enables instruction-based image editing with visual brush stroke guidance",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

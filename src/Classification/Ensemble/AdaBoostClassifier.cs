@@ -72,7 +72,6 @@ public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.AdaBoostClassifier;
 
     /// <summary>
     /// Trains the AdaBoost classifier on the provided data.

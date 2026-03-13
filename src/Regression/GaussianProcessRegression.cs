@@ -437,15 +437,6 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the model type of the Gaussian Process Regression model.
-    /// </summary>
-    /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.GaussianProcessRegression;
-    }
-
-    /// <summary>
     /// Creates a new instance of the Gaussian Process Regression model with the same configuration.
     /// </summary>
     /// <returns>

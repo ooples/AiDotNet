@@ -311,7 +311,6 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.QuantileRegressionForests,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _trees.Count },

@@ -231,7 +231,6 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "ForwardTacotron-Native" : "ForwardTacotron-ONNX",
             Description = "Forward Tacotron: Non-Autoregressive Alternative to Tacotron (Elias et al., 2021)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };

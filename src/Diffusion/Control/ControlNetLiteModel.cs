@@ -138,7 +138,7 @@ public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "ControlNet-Lite", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNet-Lite", Version = "1.0",
             Description = "Lightweight ControlNet with ~25% parameters for faster inference",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -461,7 +461,6 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return new ModelMetadata<T>
         {
             Name = "Dessurt",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Dessurt for self-supervised document understanding (arXiv 2022)",
             FeatureCount = _encoderDim,
             Complexity = _encoderLayers + _decoderLayers,

@@ -95,7 +95,7 @@ public class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Gemini-Vision-Native" : "Gemini-Vision-ONNX", Description = "Gemini Vision: reference implementation of Google's native multimodal Mixture of Experts model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Gemini-Vision-Native" : "Gemini-Vision-ONNX", Description = "Gemini Vision: reference implementation of Google's native multimodal Mixture of Experts model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Gemini-Vision";
         m.AdditionalInfo["Provider"] = _options.Provider;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

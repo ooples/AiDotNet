@@ -179,7 +179,6 @@ public class EmuVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "EmuVideo",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Emu Video high-quality video generation with temporal consistency.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

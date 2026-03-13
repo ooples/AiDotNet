@@ -132,7 +132,7 @@ public class ICEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "ICEdit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ICEdit", Version = "1.0",
             Description = "In-context learning based image editing without per-task fine-tuning",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

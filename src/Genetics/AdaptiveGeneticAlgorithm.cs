@@ -98,7 +98,6 @@ public class AdaptiveGeneticAlgorithm<T, TInput, TOutput> :
     public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
-        metadata.ModelType = ModelType.GeneticAlgorithmRegression;
         metadata.Description = "Model evolved using an adaptive genetic algorithm";
         metadata.AdditionalInfo["MinMutationRate"] = _minMutationRate.ToString();
         metadata.AdditionalInfo["MaxMutationRate"] = _maxMutationRate.ToString();

@@ -436,7 +436,6 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "DeepANT",
-            ModelType = AiDotNet.Enums.ModelType.TimeSeriesRegression,
             Description = "Deep learning for anomaly detection in time series using CNN",
             Complexity = ParameterCount,
             FeatureCount = _options.WindowSize,

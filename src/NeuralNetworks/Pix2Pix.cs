@@ -718,7 +718,6 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Pix2Pix,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },

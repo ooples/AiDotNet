@@ -681,7 +681,6 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

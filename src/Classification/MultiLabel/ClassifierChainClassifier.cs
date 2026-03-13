@@ -516,21 +516,6 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     #region Abstract Method Implementations
 
     /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enum value for Classifier Chain.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This identifies what kind of model this is within the
-    /// AiDotNet library's type system.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.ClassifierChain;
-    }
-
-    /// <summary>
     /// Gets all learnable parameters of the model as a single vector.
     /// </summary>
     /// <returns>A concatenated vector of all chain classifiers' parameters.</returns>

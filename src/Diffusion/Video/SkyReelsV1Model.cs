@@ -179,7 +179,6 @@ public class SkyReelsV1Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "SkyReelsV1",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "SkyReels V1 human-centric video generation model.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

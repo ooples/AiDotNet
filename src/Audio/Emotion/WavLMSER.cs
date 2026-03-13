@@ -291,7 +291,6 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         {
             Name = _useNativeMode ? "WavLM-SER-Native" : "WavLM-SER-ONNX",
             Description = $"WavLM-SER {_options.Variant} Speech Emotion Recognition (Chen et al., 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["NumClasses"] = _options.NumClasses.ToString();

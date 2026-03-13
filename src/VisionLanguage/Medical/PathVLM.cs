@@ -95,7 +95,7 @@ public class PathVLM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PathVLM-Native" : "PathVLM-ONNX", Description = "PathVLM: histopathology-specific vision-language model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PathVLM-Native" : "PathVLM-ONNX", Description = "PathVLM: histopathology-specific vision-language model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "PathVLM";
         m.AdditionalInfo["MedicalDomain"] = _options.MedicalDomain;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

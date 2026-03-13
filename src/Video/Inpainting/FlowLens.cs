@@ -162,7 +162,6 @@ public class FlowLens<T> : VideoInpaintingBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoInpainting,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FlowLens" },

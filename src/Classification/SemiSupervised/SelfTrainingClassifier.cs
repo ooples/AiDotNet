@@ -503,14 +503,6 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     }
 
     /// <summary>
-    /// Gets the model type.
-    /// </summary>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.SelfTrainingClassifier;
-    }
-
-    /// <summary>
     /// Serializes the self-training classifier including its wrapped base classifier.
     /// </summary>
     public override byte[] Serialize()

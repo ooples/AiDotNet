@@ -239,7 +239,7 @@ public class PromptToPromptModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Prompt-to-Prompt", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Prompt-to-Prompt", Version = "1.0",
             Description = "Prompt-to-Prompt attention-based image editing with cross-attention control",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

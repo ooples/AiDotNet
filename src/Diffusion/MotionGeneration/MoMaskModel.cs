@@ -113,7 +113,7 @@ public class MoMaskModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "MoMask", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "MoMask", Version = "1.0",
             Description = "Masked generative modeling for fast parallel 3D motion generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "masked-token-motion-generation");

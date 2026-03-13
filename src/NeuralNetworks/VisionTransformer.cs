@@ -508,7 +508,6 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "VisionTransformer",
-            ModelType = ModelType.Transformer,
             FeatureCount = _imageHeight * _imageWidth * _channels,
             Complexity = ParameterCount,
             Description = $"Vision Transformer with {_numLayers} layers, {_numHeads} attention heads, and {_numPatches} patches",

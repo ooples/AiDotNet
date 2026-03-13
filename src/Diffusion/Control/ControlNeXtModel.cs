@@ -128,7 +128,7 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "ControlNeXt", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNeXt", Version = "1.0",
             Description = "Parameter-efficient control with cross-normalization for improved generalization",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

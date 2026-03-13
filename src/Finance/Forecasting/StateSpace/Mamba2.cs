@@ -277,7 +277,6 @@ public class Mamba2<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Mamba2" },

@@ -207,7 +207,7 @@ public class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "OmniGen2-Native" : "OmniGen2-ONNX", Description = "OmniGen2: dual-path architecture with parameter decoupling.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "OmniGen2-Native" : "OmniGen2-ONNX", Description = "OmniGen2: dual-path architecture with parameter decoupling.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "OmniGen2";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         m.AdditionalInfo["DualPath"] = _options.EnableDualPath.ToString();

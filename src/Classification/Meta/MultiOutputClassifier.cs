@@ -82,7 +82,6 @@ public class MultiOutputClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.MultiOutputClassifier;
 
     /// <summary>
     /// Trains the Multi-output classifier on multi-label data.

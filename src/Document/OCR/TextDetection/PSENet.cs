@@ -516,7 +516,6 @@ public class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         return new ModelMetadata<T>
         {
             Name = "PSENet",
-            ModelType = ModelType.NeuralNetwork,
             Description = "PSENet for progressive scale expansion text detection (CVPR 2019)",
             FeatureCount = _featureChannels,
             Complexity = _numKernels,

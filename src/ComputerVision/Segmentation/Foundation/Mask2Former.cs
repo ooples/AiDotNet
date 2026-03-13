@@ -403,7 +403,6 @@ public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "Mask2Former" }, { "Description", "Mask2Former Universal Segmentation" },

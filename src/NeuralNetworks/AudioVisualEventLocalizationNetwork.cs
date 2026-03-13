@@ -1342,7 +1342,6 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         return new ModelMetadata<T>
         {
             Name = "AudioVisualEventLocalizationNetwork",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _embeddingDimension,
             Complexity = _numEncoderLayers * 2 + 4,
             Description = "Audio-visual event localization network for temporal and spatial event detection"

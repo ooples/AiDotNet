@@ -132,7 +132,7 @@ public class OSDSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "OSDS", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "OSDS", Version = "1.0",
             Description = "One-step diffusion via shortcut models for instant generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "shortcut-unet");

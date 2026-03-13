@@ -213,7 +213,7 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "InstantID", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "InstantID", Version = "1.0",
             Description = "InstantID zero-shot identity-preserving image generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

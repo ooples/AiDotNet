@@ -131,7 +131,7 @@ public class UltraEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "UltraEdit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "UltraEdit", Version = "1.0",
             Description = "Fine-grained region-aware instruction-based image editing at scale",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

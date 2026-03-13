@@ -109,7 +109,7 @@ public class InstantStyleModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "InstantStyle", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "InstantStyle", Version = "1.0",
             Description = "Zero-shot IP-Adapter style transfer with content-style separation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "ip-adapter-style-injection");

@@ -76,7 +76,6 @@ public class ConsensusClustering<T> : ClusteringBase<T>
     public double[,]? CoAssociationMatrix => _coAssociationMatrix;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

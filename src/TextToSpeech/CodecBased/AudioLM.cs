@@ -217,7 +217,6 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "AudioLM-Native" : "AudioLM-ONNX",
             Description = "AudioLM: A Language Modeling Approach to Audio Generation (Borsos et al., 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.LLMDim
         };
     }

@@ -150,7 +150,7 @@ public class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Video-LLaVA-Native" : "Video-LLaVA-ONNX", Description = "Video-LLaVA: united visual representation for video understanding.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Video-LLaVA-Native" : "Video-LLaVA-ONNX", Description = "Video-LLaVA: united visual representation for video understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Video-LLaVA";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

@@ -96,7 +96,6 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.TimeSeriesClassifier;
 
     /// <summary>
     /// Trains the MiniRocket classifier on time series sequences.

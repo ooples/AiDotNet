@@ -154,7 +154,6 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet-FLUX",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "ControlNet adapted for FLUX.1 flow-matching architecture",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

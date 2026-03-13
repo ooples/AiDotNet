@@ -80,7 +80,6 @@ public class CLARANS<T> : ClusteringBase<T>
     public T BestCost => _bestCost;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

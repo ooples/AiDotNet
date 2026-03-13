@@ -180,7 +180,6 @@ public class CogVideoX15Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "CogVideoX15",
             Version = "1.5",
-            ModelType = ModelType.NeuralNetwork,
             Description = "CogVideoX 1.5 model with 10-second any-resolution video generation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

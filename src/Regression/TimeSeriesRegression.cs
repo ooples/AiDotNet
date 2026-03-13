@@ -594,7 +594,6 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// loading models, or when deciding how to process them.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.TimeSeriesRegression;
 
     /// <summary>
     /// Converts the model into a byte array that can be stored or transmitted.

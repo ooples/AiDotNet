@@ -177,7 +177,6 @@ public class EasyConsistencyModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Easy Consistency Tuning (ECT)",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Progressive curriculum consistency training for stable single/few-step generation from pretrained diffusion models",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

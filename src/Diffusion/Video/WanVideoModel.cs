@@ -472,7 +472,6 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = $"Wan-{_variant}",
             Version = "2.1",
-            ModelType = ModelType.NeuralNetwork,
             Description = $"Wan {_variant} video generation with full 3D attention and WanVAE",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -297,7 +297,6 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "LSTM-VAE",
-            ModelType = AiDotNet.Enums.ModelType.TimeSeriesRegression,
             Description = "LSTM Variational Autoencoder for time series anomaly detection",
             Complexity = ParameterCount,
             FeatureCount = _options.WindowSize,

@@ -278,7 +278,6 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelType", "RealizedVolatilityTransformer" },

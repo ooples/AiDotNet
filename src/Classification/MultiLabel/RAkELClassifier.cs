@@ -480,7 +480,6 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.RAkEL;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()

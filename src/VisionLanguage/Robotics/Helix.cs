@@ -217,7 +217,7 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Helix-Native" : "Helix-ONNX", Description = "Helix: first VLA model for full humanoid upper body control.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Helix-Native" : "Helix-ONNX", Description = "Helix: first VLA model for full humanoid upper body control.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Helix";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

@@ -231,7 +231,7 @@ public class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3D-VLA-Native" : "3D-VLA-ONNX", Description = "3D-VLA: connects vision-language-action to 3D world via generative world model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3D-VLA-Native" : "3D-VLA-ONNX", Description = "3D-VLA: connects vision-language-action to 3D world via generative world model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "3D-VLA";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

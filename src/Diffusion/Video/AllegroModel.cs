@@ -181,7 +181,6 @@ public class AllegroModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Allegro",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Allegro efficient DiT-based video generation model.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

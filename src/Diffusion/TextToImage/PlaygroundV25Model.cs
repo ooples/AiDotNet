@@ -388,7 +388,6 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "Playground v2.5",
             Version = "2.5",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Playground v2.5 aesthetic-optimized text-to-image model with SDXL architecture and EDM training",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

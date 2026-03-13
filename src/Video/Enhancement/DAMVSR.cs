@@ -173,7 +173,6 @@ public class DAMVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "DAMVSR-Native" : "DAMVSR-ONNX",
             Description = $"DAM-VSR {_options.Variant} appearance-motion disentangled VSR (SIGGRAPH 2025)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

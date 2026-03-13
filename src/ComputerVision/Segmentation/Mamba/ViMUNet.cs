@@ -295,7 +295,6 @@ public class ViMUNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "ViMUNet" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

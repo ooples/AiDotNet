@@ -227,7 +227,6 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = _useNativeMode ? "MP-SENet-Native" : "MP-SENet-ONNX",
             Description = $"MP-SENet {_options.Variant} speech enhancement (Lu et al., 2023)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins, Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["HiddenDim"] = _options.HiddenDim.ToString();

@@ -403,7 +403,6 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.RecurrentNeuralNetwork,
             FeatureCount = Architecture.GetInputShape()[0],
             Description = $"RNN with {Layers.Count} layers",
             AdditionalInfo = new Dictionary<string, object>

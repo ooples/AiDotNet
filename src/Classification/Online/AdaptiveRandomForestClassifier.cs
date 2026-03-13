@@ -143,7 +143,6 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.AdaptiveRandomForestClassifier;
 
     /// <summary>
     /// Updates the model with a single training sample.

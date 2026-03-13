@@ -135,7 +135,7 @@ public class FlowEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "FlowEdit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "FlowEdit", Version = "1.0",
             Description = "Inversion-free text-based editing via rectified flow models",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

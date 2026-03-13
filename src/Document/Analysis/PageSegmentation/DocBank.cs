@@ -584,7 +584,6 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         return new ModelMetadata<T>
         {
             Name = "DocBank",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Document layout analysis and page segmentation (COLING 2020)",
             FeatureCount = _backboneChannels,
             Complexity = Layers.Count,

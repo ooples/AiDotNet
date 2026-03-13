@@ -213,7 +213,6 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             Name = _useNativeMode ? "VITS-Native" : "VITS-ONNX",
             Description = "VITS: Conditional VAE with Adversarial Learning for End-to-End TTS (Kim et al., 2021)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim
         };
     }

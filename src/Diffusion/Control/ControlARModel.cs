@@ -128,7 +128,7 @@ public class ControlARModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "ControlAR", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlAR", Version = "1.0",
             Description = "Spatial control for autoregressive image generation via token-level conditioning",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -263,7 +263,6 @@ public class KolorsModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Kolors",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Kolors ChatGLM3-powered bilingual text-to-image model",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

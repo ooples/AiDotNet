@@ -260,7 +260,6 @@ public class PixArtDeltaModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "PixArt-Delta",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LCM-distilled PixArt for fast 2-8 step text-to-image generation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

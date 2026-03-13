@@ -134,7 +134,6 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.OnlineLearning;
 
     /// <summary>
     /// Updates the model with a single training sample.

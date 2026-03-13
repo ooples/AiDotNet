@@ -180,7 +180,6 @@ public class LoongModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Loong",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Loong autoregressive LLM-based minute-long video generator.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

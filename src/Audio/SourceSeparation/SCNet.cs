@@ -221,7 +221,6 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         {
             Name = _useNativeMode ? "SCNet-Native" : "SCNet-ONNX",
             Description = "SCNet Sparse Compression Network (Chen et al., 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins,
             Complexity = _options.NumEncoderBlocks + _options.NumDecoderBlocks
         };
         m.AdditionalInfo["NumClusters"] = _options.NumClusters.ToString();

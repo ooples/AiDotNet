@@ -223,7 +223,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Lumina-T2X", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Lumina-T2X", Version = "1.0",
             Description = "Unified text-to-any framework with Flag-DiT for multi-modality generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

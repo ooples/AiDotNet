@@ -106,7 +106,7 @@ public class TLoRAModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "T-LoRA", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "T-LoRA", Version = "1.0",
             Description = "Temporal LoRA-based style transfer with video consistency",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "temporal-lora-style");

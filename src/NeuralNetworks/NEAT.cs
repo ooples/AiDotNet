@@ -1182,7 +1182,6 @@ public class NEAT<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NEAT,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "PopulationSize", _populationSize },

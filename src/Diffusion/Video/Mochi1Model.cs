@@ -422,7 +422,6 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Mochi-1",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Mochi 1 asymmetric DiT video generation with joint text-video attention",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

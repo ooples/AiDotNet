@@ -461,7 +461,6 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Imagen",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Imagen cascaded pixel-space diffusion model with T5-XXL text encoder and dynamic thresholding",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

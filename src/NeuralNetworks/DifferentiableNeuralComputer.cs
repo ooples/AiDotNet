@@ -1813,7 +1813,6 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DifferentiableNeuralComputer,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MemorySize", _memorySize },

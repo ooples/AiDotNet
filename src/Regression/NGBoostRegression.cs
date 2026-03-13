@@ -717,7 +717,6 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NGBoost,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfIterations", _trees.Count },

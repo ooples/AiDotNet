@@ -211,7 +211,6 @@ public class CTCDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "CTCDecoder-Native" : "CTCDecoder-ONNX",
             Description = $"CTC decoder {_options.Variant} ASR model (Graves et al., 2006)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["EncoderDim"] = _options.EncoderDim.ToString();

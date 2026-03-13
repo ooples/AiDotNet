@@ -1157,7 +1157,6 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.Flamingo,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ImageSize", _imageSize },

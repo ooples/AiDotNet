@@ -296,7 +296,6 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "Tacotron-Native" : "Tacotron-ONNX",
             Description = "Tacotron: Towards End-to-End Speech Synthesis (Wang et al., 2017)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };

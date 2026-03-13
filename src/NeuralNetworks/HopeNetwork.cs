@@ -527,7 +527,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "HopeNetwork",
-            ModelType = Enums.ModelType.RecurrentNeuralNetwork, // Hope is a recurrent architecture variant
+// Hope is a recurrent architecture variant
             Version = "1.0",
             Description = "Self-modifying recurrent network with Continuum Memory System for continual learning based on Google's Nested Learning paradigm",
             FeatureCount = _hiddenDim,

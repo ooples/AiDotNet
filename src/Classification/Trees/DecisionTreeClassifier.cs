@@ -78,7 +78,6 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.DecisionTreeClassifier;
 
     /// <summary>
     /// Trains the decision tree on the provided data.

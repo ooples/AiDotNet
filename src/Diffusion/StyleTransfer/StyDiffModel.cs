@@ -105,7 +105,7 @@ public class StyDiffModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "StyDiff", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "StyDiff", Version = "1.0",
             Description = "Diffusion-based style transfer with cross-attention style injection",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "ddim-inversion-style-transfer");

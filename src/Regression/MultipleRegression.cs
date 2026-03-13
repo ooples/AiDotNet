@@ -147,28 +147,4 @@ public class MultipleRegression<T> : RegressionBase<T>
 
         return newModel;
     }
-
-    /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type, in this case, MultipleRegression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an enumeration value indicating that this is a multiple regression model. This is used
-    /// for type identification when working with different regression models in a unified manner.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply identifies what kind of model this is.
-    /// 
-    /// It returns a label (MultipleRegression) that:
-    /// - Identifies this specific type of model
-    /// - Helps other code handle the model appropriately
-    /// - Is used for model identification and categorization
-    /// 
-    /// It's like a name tag that lets other parts of the program know what kind of model they're working with.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.MultipleRegression;
-    }
 }

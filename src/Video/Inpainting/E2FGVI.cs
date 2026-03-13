@@ -818,7 +818,6 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.VideoInpainting,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "E2FGVI" },

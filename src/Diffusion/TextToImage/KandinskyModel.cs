@@ -456,7 +456,6 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
         {
             Name = $"Kandinsky {versionName}",
             Version = versionName,
-            ModelType = ModelType.NeuralNetwork,
             Description = $"Kandinsky {versionName} two-stage text-to-image model with CLIP prior and latent diffusion decoder",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -383,7 +383,6 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
         {
             Name = $"Stable Diffusion {variantName}",
             Version = variantName,
-            ModelType = ModelType.NeuralNetwork,
             Description = $"Stable Diffusion {variantName} with MMDiT architecture, rectified flow, and triple text encoders",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -133,7 +133,7 @@ public class Pix2PixZeroModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Pix2Pix-Zero", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Pix2Pix-Zero", Version = "1.0",
             Description = "Zero-shot image-to-image translation via text embedding direction discovery",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

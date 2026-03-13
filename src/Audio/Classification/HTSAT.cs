@@ -377,7 +377,6 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         {
             Name = _useNativeMode ? "HTS-AT-Native" : "HTS-AT-ONNX",
             Description = "HTS-AT: Hierarchical Token-Semantic Audio Transformer (Chen et al., ICASSP 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = ClassLabels.Count,
             Complexity = _options.NumLayersPerStage.Sum()
         };
         metadata.AdditionalInfo["Architecture"] = "HTS-AT";

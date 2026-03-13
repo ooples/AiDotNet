@@ -1723,7 +1723,6 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.ImageBind,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ImageSize", _imageSize },

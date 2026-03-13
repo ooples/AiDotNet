@@ -1818,7 +1818,6 @@ public class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesModelBase
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.UnobservedComponentsModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include information about model components

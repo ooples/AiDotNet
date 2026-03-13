@@ -179,7 +179,6 @@ public class LumaRay3Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Luma-Ray-3",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Luma Ray 3 with Hi-Fi Diffusion for 4K HDR video.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

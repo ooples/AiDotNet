@@ -135,7 +135,7 @@ public class SD3InpaintingModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SD3 Inpainting", Version = "3.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SD3 Inpainting", Version = "3.0",
             Description = "SD3 MMDiT-based inpainting with triple text encoders and rectified flow",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

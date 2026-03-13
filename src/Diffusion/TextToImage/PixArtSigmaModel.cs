@@ -266,7 +266,6 @@ public class PixArtSigmaModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "PixArt-Sigma",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "PixArt-Sigma DiT-based text-to-image model with 4K resolution support",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

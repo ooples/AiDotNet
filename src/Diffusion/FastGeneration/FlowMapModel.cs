@@ -141,7 +141,7 @@ public class FlowMapModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "FlowMap", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "FlowMap", Version = "1.0",
             Description = "Direct transport map learning for true one-step generation from flow-matching models",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -87,7 +87,6 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.QuadraticDiscriminantAnalysis;
 
     /// <summary>
     /// Trains the QDA classifier on the provided data.

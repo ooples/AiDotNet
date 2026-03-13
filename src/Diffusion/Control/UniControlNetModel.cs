@@ -240,7 +240,7 @@ public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Uni-ControlNet", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Uni-ControlNet", Version = "1.0",
             Description = "Uni-ControlNet multi-condition simultaneous control with learned mixing",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

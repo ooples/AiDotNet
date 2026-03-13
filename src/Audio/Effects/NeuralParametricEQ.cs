@@ -191,7 +191,6 @@ public class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         {
             Name = _useNativeMode ? "NeuralParametricEQ-Native" : "NeuralParametricEQ-ONNX",
             Description = $"Neural Parametric EQ {_options.Variant} (Steinmetz et al., 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.FFTSize / 2 + 1, Complexity = _options.NumEncoderLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["NumBands"] = _options.NumBands.ToString();

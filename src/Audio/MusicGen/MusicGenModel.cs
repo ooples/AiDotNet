@@ -1034,7 +1034,6 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = $"MusicGen-{_options.ModelSize}",
             Description = $"Meta MusicGen text-to-music model ({_options.ModelSize})",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.MaxTextLength,
             Complexity = (int)_options.ModelSize,
             AdditionalInfo = new Dictionary<string, object>

@@ -158,7 +158,6 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <summary>
     /// Gets the model type for this classifier.
     /// </summary>
-    protected abstract ModelType GetModelType();
 
     /// <summary>
     /// Creates a new instance of this model type.
@@ -196,10 +195,9 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             FeatureCount = NumFeatures,
             Complexity = NumFeatures * NumLabels,
-            Description = $"{GetModelType()} multi-label classifier with {NumFeatures} features and {NumLabels} labels",
+            Description = $"{GetType().Name} multi-label classifier with {NumFeatures} features and {NumLabels} labels",
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumLabels", NumLabels },

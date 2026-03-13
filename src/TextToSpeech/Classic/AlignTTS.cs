@@ -221,7 +221,6 @@ public class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "AlignTTS-Native" : "AlignTTS-ONNX",
             Description = "AlignTTS: Efficient Feed-Forward TTS without Explicit Alignment (Zeng et al., 2020)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };

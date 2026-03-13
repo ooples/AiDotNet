@@ -193,7 +193,6 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Wan22",
             Version = "2.2",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Wan 2.2 video model with timestep-specialized MoE experts.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

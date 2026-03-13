@@ -80,7 +80,6 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.ExtraTreesClassifier;
 
     /// <summary>
     /// Trains the Extra Trees classifier on the provided data.

@@ -147,7 +147,7 @@ public class PASDModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "PASD", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "PASD", Version = "1.0",
             Description = "Pixel-aware stable diffusion for structure-preserving real-world super-resolution",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

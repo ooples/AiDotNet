@@ -12,7 +12,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
@@ -631,7 +631,6 @@ public class ITransformer<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "iTransformer" },

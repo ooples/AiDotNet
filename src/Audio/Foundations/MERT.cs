@@ -263,7 +263,6 @@ public class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         {
             Name = _useNativeMode ? "MERT-Native" : "MERT-ONNX",
             Description = $"MERT {_options.Variant} music understanding foundation model (Li et al., 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.HiddenDim,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

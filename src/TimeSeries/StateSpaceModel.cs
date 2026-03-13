@@ -742,7 +742,6 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.StateSpaceModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Model dimensions

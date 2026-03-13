@@ -180,7 +180,6 @@ public class GameGenXModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "GameGenX",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "GameGen-X open-world game video generation with interactive control.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

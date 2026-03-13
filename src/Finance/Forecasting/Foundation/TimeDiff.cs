@@ -292,7 +292,6 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.NeuralNetwork,
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "TimeDiff" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "UseFutureMixup", _useFutureMixup }, { "UseAutoregressiveInit", _useAutoregressiveInit }, { "UseNativeMode", _useNativeMode } },
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };

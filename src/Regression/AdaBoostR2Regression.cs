@@ -493,7 +493,6 @@ public class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.AdaBoostR2,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfEstimators", _options.NumberOfEstimators },

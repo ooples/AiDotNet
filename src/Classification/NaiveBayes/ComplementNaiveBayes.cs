@@ -73,7 +73,6 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.ComplementNaiveBayes;
 
     /// <summary>
     /// Computes class-specific parameters for Complement Naive Bayes.

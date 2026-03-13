@@ -129,7 +129,7 @@ public class SeedEdit3Model<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SeedEdit 3", Version = "3.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SeedEdit 3", Version = "3.0",
             Description = "Structure-preserving instruction-based editing with layout-aware conditioning",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

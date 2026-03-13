@@ -424,25 +424,6 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for radial basis function regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// This method simply returns an identifier that indicates this is a radial basis function regression model.
-    /// It's used internally by the library to keep track of different types of models.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.RadialBasisFunctionRegression;
-    }
-
-    /// <summary>
     /// Serializes the model to a byte array.
     /// </summary>
     /// <returns>A byte array containing the serialized model data.</returns>

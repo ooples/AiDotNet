@@ -364,7 +364,6 @@ public class U2Seg<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "U2Seg" }, { "InputHeight", _height }, { "InputWidth", _width },

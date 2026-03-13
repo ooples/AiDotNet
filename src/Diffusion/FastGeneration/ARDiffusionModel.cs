@@ -136,7 +136,7 @@ public class ARDiffusionModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "AR-Diffusion", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "AR-Diffusion", Version = "1.0",
             Description = "Autoregressive diffusion combining sequential token generation with continuous diffusion",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

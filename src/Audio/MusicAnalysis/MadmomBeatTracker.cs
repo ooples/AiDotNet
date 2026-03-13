@@ -235,7 +235,6 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         {
             Name = _useNativeMode ? "MadmomBeatTracker-Native" : "MadmomBeatTracker-ONNX",
             Description = "Madmom neural beat tracker (Bock et al., 2016)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumBands,
             Complexity = _options.NumRnnLayers
         };
         m.AdditionalInfo["RnnHiddenSize"] = _options.RnnHiddenSize.ToString();

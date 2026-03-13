@@ -556,30 +556,6 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type, in this case, MultinomialLogisticRegression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an enumeration value indicating that this is a multinomial logistic regression model. This is used
-    /// for type identification when working with different regression models in a unified manner.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply tells what kind of model this is.
-    /// 
-    /// It returns a label (MultinomialLogisticRegression) that:
-    /// - Identifies this specific type of model
-    /// - Helps other code handle the model appropriately
-    /// - Is used for model identification and categorization
-    /// 
-    /// It's like a name tag that lets other parts of the program know what kind of model they're working with.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.MultinomialLogisticRegression;
-    }
-
-    /// <summary>
     /// Creates a new instance of the Multinomial Logistic Regression model with the same configuration.
     /// </summary>
     /// <returns>A new instance of the Multinomial Logistic Regression model.</returns>

@@ -647,7 +647,6 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = "Wav2Vec2",
             Description = "Wav2Vec2 self-supervised speech recognition model",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate * _maxAudioLengthSeconds,
             Complexity = 3
         };

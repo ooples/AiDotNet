@@ -179,7 +179,6 @@ public class LumaRay2Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Luma-Ray-2",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Luma Ray 2 video model with fast natural motion and better physics.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

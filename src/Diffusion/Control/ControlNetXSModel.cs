@@ -231,7 +231,7 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "ControlNet-XS", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNet-XS", Version = "1.0",
             Description = "ControlNet-XS lightweight spatial control with ~1% parameters",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

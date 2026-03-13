@@ -645,7 +645,6 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoDepthEstimation,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

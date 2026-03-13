@@ -62,7 +62,7 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         private readonly ILossFunction<T> _defaultLossFunction;
 
-        public ModelType Type => ModelType.NeuralNetwork;
+
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
         public int ParameterCount => _weights.Values.Sum(w => w.Length) +
                                       _architectureParams.Sum(a => a.Rows * a.Columns);
@@ -791,7 +791,6 @@ namespace AiDotNet.NeuralNetworks
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 Description = "Differentiable Architecture Search SuperNet",
                 FeatureCount = _inputSize,
                 Complexity = _numNodes,

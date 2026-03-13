@@ -442,7 +442,6 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         {
             Name = _useNativeMode ? "LSTM-CRF-Native" : "LSTM-CRF-ONNX",
             Description = $"LSTM-CRF {_options.Variant} unidirectional sequence labeling NER (Huang et al., 2015)",
-            ModelType = ModelType.NamedEntityRecognition,
             Complexity = _options.NumLSTMLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

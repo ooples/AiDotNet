@@ -218,7 +218,7 @@ public class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-CoT-Native" : "LLaVA-CoT-ONNX", Description = "LLaVA-CoT: chain-of-thought visual reasoning with structured output.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-CoT-Native" : "LLaVA-CoT-ONNX", Description = "LLaVA-CoT: chain-of-thought visual reasoning with structured output.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "LLaVA-CoT";
         m.AdditionalInfo["ReasoningApproach"] = _options.ReasoningApproach;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

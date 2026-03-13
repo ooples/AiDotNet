@@ -180,7 +180,6 @@ public class UniSimModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "UniSim",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "UniSim universal simulator from video and action pairs.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

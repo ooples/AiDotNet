@@ -179,7 +179,6 @@ public class RunwayGen4Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Runway-Gen-4",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Runway Gen-4 multi-modal understanding and generation model.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

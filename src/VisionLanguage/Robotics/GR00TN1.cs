@@ -205,7 +205,7 @@ public class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GR00T-N1-Native" : "GR00T-N1-ONNX", Description = "GR00T N1: NVIDIA VLA for humanoid robots with dual-system architecture.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GR00T-N1-Native" : "GR00T-N1-ONNX", Description = "GR00T N1: NVIDIA VLA for humanoid robots with dual-system architecture.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GR00T-N1";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

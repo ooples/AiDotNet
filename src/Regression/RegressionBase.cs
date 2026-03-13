@@ -219,10 +219,9 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             FeatureCount = Coefficients.Length,
             Complexity = Coefficients.Length,
-            Description = $"{GetModelType()} model with {Coefficients.Length} features",
+            Description = $"{GetType().Name} model with {Coefficients.Length} features",
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "HasIntercept", HasIntercept },
@@ -247,7 +246,6 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// of different types of models.
     /// </para>
     /// </remarks>
-    protected abstract ModelType GetModelType();
 
     /// <summary>
     /// Calculates the importance of each feature in the model.

@@ -388,7 +388,6 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "QueryMeldNet" }, { "InputHeight", _height }, { "InputWidth", _width },

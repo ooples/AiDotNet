@@ -627,7 +627,6 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return new ModelMetadata<T>
         {
             Name = "Nougat",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Nougat for academic document understanding (arXiv 2023)",
             FeatureCount = _hiddenDim,
             Complexity = _numEncoderLayers + _numDecoderLayers,

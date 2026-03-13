@@ -508,7 +508,6 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         return new ModelMetadata<T>
         {
             Name = "DocFormer",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DocFormer with shared spatial encodings (ICCV 2021)",
             FeatureCount = _hiddenDim,
             Complexity = _numLayers,

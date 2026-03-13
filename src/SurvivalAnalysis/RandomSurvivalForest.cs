@@ -515,7 +515,6 @@ public class RandomSurvivalForest<T> : SurvivalModelBase<T>
     }
 
     /// <inheritdoc />
-    public override ModelType GetModelType() => ModelType.RandomSurvivalForest;
 
     /// <summary>
     /// Internal survival tree node.

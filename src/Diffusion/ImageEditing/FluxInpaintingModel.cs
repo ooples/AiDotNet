@@ -138,7 +138,7 @@ public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "FLUX Fill", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "FLUX Fill", Version = "1.0",
             Description = "FLUX rectified flow transformer for high-quality mask-guided inpainting",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

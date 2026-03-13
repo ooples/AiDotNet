@@ -1352,7 +1352,6 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = $"AudioLDM-{_options.ModelSize}",
             Description = $"AudioLDM text-to-audio model ({_options.ModelSize})",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.MaxTextLength,
             Complexity = (int)_options.ModelSize,
             AdditionalInfo = new Dictionary<string, object>

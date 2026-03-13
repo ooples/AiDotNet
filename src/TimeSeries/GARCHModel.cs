@@ -1025,7 +1025,6 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.GARCHModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

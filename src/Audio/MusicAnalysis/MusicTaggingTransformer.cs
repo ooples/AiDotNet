@@ -247,7 +247,6 @@ public class MusicTaggingTransformer<T> : AudioNeuralNetworkBase<T>
         {
             Name = _useNativeMode ? "MusicTaggingTransformer-Native" : "MusicTaggingTransformer-ONNX",
             Description = "Music Tagging Transformer (Won et al., 2021)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["NumTags"] = _options.NumTags.ToString();

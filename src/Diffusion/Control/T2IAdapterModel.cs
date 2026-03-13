@@ -457,7 +457,6 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "T2I-Adapter",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "T2I-Adapter lightweight spatial conditioning adapter for text-to-image diffusion models",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

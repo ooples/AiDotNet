@@ -289,7 +289,6 @@ public class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         {
             Name = _useNativeMode ? "MelodyExtractor-Native" : "MelodyExtractor-ONNX",
             Description = "Neural melody extraction from polyphonic audio",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["NumPitchBins"] = _options.NumPitchBins.ToString();

@@ -127,7 +127,6 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> This identifier helps the system know what type of model
     /// this is, which is useful for serialization and model management.</para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.OrdinalRidgeRegression;
 
     /// <summary>
     /// Trains the ordinal ridge regression model.

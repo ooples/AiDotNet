@@ -198,7 +198,7 @@ public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "OWLv2-Native" : "OWLv2-ONNX", Description = "OWLv2: self-training for scaling open-vocabulary detection.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "OWLv2-Native" : "OWLv2-ONNX", Description = "OWLv2: self-training for scaling open-vocabulary detection.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "OWLv2";
         m.AdditionalInfo["NumClassEmbeddings"] = _options.NumClassEmbeddings.ToString();
         m.AdditionalInfo["SelfTraining"] = _options.EnableSelfTraining.ToString();

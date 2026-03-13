@@ -141,7 +141,7 @@ public class SwiftBrushModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SwiftBrush", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SwiftBrush", Version = "1.0",
             Description = "Image-free one-step text-to-image distillation via variational score distillation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

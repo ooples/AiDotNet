@@ -986,7 +986,6 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         return new ModelMetadata<T>
         {
             Name = "LayoutLMv3",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LayoutLMv3 document understanding model with unified text and image pre-training",
             FeatureCount = _hiddenDim,
             Complexity = _numLayers,

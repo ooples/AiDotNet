@@ -179,7 +179,6 @@ public class StreamingT2VModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "StreamingT2V",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "StreamingT2V autoregressive long video generation up to 1200 frames.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

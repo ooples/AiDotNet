@@ -97,7 +97,6 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public override ModelType GetModelType() => ModelType.DoublyRobustEstimator;
 
     /// <summary>
     /// Initializes a new instance of the DoublyRobustEstimator class.

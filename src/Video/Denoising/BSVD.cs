@@ -149,7 +149,6 @@ public class BSVD<T> : VideoDenoisingBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoDenoising,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "BSVD" },

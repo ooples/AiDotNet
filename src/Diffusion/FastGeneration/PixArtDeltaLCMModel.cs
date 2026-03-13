@@ -140,7 +140,7 @@ public class PixArtDeltaLCMModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "PixArt-Delta LCM", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "PixArt-Delta LCM", Version = "1.0",
             Description = "Latent Consistency Model distillation of PixArt-Delta for 2-8 step generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

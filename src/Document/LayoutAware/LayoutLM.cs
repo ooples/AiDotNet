@@ -432,7 +432,6 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         return new ModelMetadata<T>
         {
             Name = "LayoutLM",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LayoutLM v1 with text and 2D position embeddings (KDD 2020)",
             FeatureCount = _hiddenDim,
             Complexity = _numLayers,

@@ -181,7 +181,6 @@ public class OrthogonalRegression<T> : RegressionBase<T>
     /// It's used internally by the library to keep track of different types of models.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.OrthogonalRegression;
 
     /// <summary>
     /// Serializes the model to a byte array.

@@ -128,7 +128,7 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "ControlNet++-FLUX", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNet++-FLUX", Version = "1.0",
             Description = "ControlNet++ with reward-guided training for FLUX flow-matching architecture",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

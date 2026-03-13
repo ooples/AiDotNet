@@ -136,7 +136,7 @@ public class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Reference-Only", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Reference-Only", Version = "1.0",
             Description = "Reference-only control using self-attention feature injection from a reference image",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

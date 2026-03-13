@@ -1084,7 +1084,6 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         return new ModelMetadata<T>
         {
             Name = "AudioVisualCorrespondenceNetwork",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _embeddingDimension,
             Complexity = _numEncoderLayers * 2,
             Description = "Audio-visual correspondence learning network for cross-modal understanding",

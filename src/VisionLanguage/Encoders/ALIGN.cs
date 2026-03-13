@@ -237,7 +237,6 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         {
             Name = _useNativeMode ? "ALIGN-Native" : "ALIGN-ONNX",
             Description = "ALIGN: A Large-scale ImaGe and Noisy-text embedding (Jia et al., ICML 2021)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.ProjectionDim,
             Complexity = _options.NumVisionLayers + _options.NumTextLayers
         };

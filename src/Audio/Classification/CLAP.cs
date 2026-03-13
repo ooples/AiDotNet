@@ -421,7 +421,6 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         {
             Name = _useNativeMode ? "CLAP-Native" : "CLAP-ONNX",
             Description = "CLAP Contrastive Language-Audio Pre-training (Wu et al., ICASSP 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = ClassLabels.Count,
             Complexity = _options.NumAudioEncoderLayers
         };

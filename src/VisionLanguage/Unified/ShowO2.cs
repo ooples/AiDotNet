@@ -236,7 +236,7 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Show-o2-Native" : "Show-o2-ONNX", Description = "Show-o2: improved native unified multimodal model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Show-o2-Native" : "Show-o2-ONNX", Description = "Show-o2: improved native unified multimodal model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Show-o2";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         return m;

@@ -90,7 +90,7 @@ public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SmolVLM-Native" : "SmolVLM-ONNX", Description = "SmolVLM: compact and efficient VLM designed for edge deployment.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SmolVLM-Native" : "SmolVLM-ONNX", Description = "SmolVLM: compact and efficient VLM designed for edge deployment.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "SmolVLM";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

@@ -176,7 +176,6 @@ public class ImprovedConsistencyModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Improved Consistency Training (iCT)",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Single-step image generation via improved consistency training with lognormal schedule and pseudo-Huber loss",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -292,7 +292,6 @@ public class MedSegDiffV2Segmentation<T> : NeuralNetworkBase<T>, IMedicalSegment
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "MedSegDiffV2Segmentation" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

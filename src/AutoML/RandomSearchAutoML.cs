@@ -61,7 +61,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
 
                 var parameters = await SuggestNextTrialAsync();
 
-                if (!parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
+                if (!parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not Type modelType)
                 {
                     throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
                 }
@@ -111,7 +111,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickCandidateModelType();
-        if (modelType == ModelType.None)
+        if (modelType is null)
         {
             throw new InvalidOperationException("No candidate models are configured for AutoML.");
         }

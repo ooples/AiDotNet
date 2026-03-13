@@ -224,7 +224,7 @@ public class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LEO-VL-Native" : "LEO-VL-ONNX", Description = "LEO-VL: efficient 3D scene representation from multi-view RGB-D.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LEO-VL-Native" : "LEO-VL-ONNX", Description = "LEO-VL: efficient 3D scene representation from multi-view RGB-D.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "LEO-VL";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

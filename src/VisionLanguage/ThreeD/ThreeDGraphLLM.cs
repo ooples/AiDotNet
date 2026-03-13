@@ -246,7 +246,7 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3DGraphLLM-Native" : "3DGraphLLM-ONNX", Description = "3DGraphLLM: 3D scene graph as LLM input for spatial reasoning.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3DGraphLLM-Native" : "3DGraphLLM-ONNX", Description = "3DGraphLLM: 3D scene graph as LLM input for spatial reasoning.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "3DGraphLLM";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

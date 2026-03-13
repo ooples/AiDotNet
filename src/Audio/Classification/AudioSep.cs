@@ -316,7 +316,6 @@ public class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         {
             Name = _useNativeMode ? "AudioSep-Native" : "AudioSep-ONNX",
             Description = $"AudioSep: Open-Vocabulary Audio Separation {_options.Variant} (Liu et al., ICML 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = ClassLabels.Count,
             Complexity = _options.NumSeparationLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

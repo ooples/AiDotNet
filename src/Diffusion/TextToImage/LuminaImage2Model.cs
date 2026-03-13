@@ -217,7 +217,7 @@ public class LuminaImage2Model<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Lumina Image 2.0", Version = "2.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Lumina Image 2.0", Version = "2.0",
             Description = "Flag-DiT with flow matching, Gemma text encoder, and multi-resolution support",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

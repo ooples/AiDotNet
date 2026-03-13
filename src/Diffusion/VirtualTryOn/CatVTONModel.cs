@@ -109,7 +109,7 @@ public class CatVTONModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "CatVTON", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "CatVTON", Version = "1.0",
             Description = "Concatenation-based virtual try-on without explicit warping",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "concat-diffusion-tryon");

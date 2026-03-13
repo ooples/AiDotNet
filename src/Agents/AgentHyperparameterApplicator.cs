@@ -43,12 +43,12 @@ internal class AgentHyperparameterApplicator<T>
     /// Applies the recommended hyperparameters to the model's options.
     /// </summary>
     /// <param name="model">The model implementing IConfigurableModel.</param>
-    /// <param name="modelType">The ModelType for registry lookups.</param>
+    /// <param name="modelType">The model name for registry lookups.</param>
     /// <param name="hyperparameters">The parsed hyperparameters dictionary.</param>
     /// <returns>A result object describing what was applied, skipped, and failed.</returns>
     public HyperparameterApplicationResult Apply(
         IConfigurableModel<T> model,
-        ModelType modelType,
+        Type modelType,
         Dictionary<string, object> hyperparameters)
     {
         if (model is null) throw new ArgumentNullException(nameof(model));
@@ -82,7 +82,7 @@ internal class AgentHyperparameterApplicator<T>
 
     private void ApplyParameter(
         ModelOptions options,
-        ModelType modelType,
+        Type modelType,
         string paramName,
         object paramValue,
         HyperparameterApplicationResult result)

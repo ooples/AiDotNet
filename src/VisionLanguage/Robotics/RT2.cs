@@ -186,7 +186,7 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "RT-2-Native" : "RT-2-ONNX", Description = "RT-2: vision-language-action model that transfers web knowledge to robotic control.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "RT-2-Native" : "RT-2-ONNX", Description = "RT-2: vision-language-action model that transfers web knowledge to robotic control.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "RT-2";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

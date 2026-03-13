@@ -371,7 +371,6 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,  // Generic RL type
             FeatureCount = _reinforceOptions.StateSize,
         };
     }

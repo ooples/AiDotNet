@@ -941,7 +941,6 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.MixedEffectsModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumFeatures", _numFeatures },
@@ -1039,12 +1038,6 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new MixedEffectsModel<T>(_options, Regularization);
-    }
-
-    /// <inheritdoc/>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.MixedEffectsModel;
     }
 
     /// <inheritdoc/>

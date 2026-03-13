@@ -226,7 +226,6 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "AdaSpeech-Native" : "AdaSpeech-ONNX",
             Description = "AdaSpeech: Adaptive TTS for Custom Voice (Chen et al., 2021)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };

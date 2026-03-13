@@ -254,26 +254,6 @@ public class WeightedRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type identifier for weighted regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method identifies the type of this regression model as weighted regression, which
-    /// helps with model type checking and serialization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply identifies what kind of model this is.
-    /// 
-    /// It returns a label that identifies this as a weighted regression model, which helps the system
-    /// recognize and handle it correctly when saving, loading, or processing models.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.WeightedRegression;
-    }
-
-    /// <summary>
     /// Creates a new instance of the weighted regression model with the same configuration.
     /// </summary>
     /// <returns>

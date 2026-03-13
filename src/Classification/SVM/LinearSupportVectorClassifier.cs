@@ -81,7 +81,6 @@ public class LinearSupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.LinearSupportVectorClassifier;
 
     /// <summary>
     /// Trains the Linear SVC on the provided data using SGD.

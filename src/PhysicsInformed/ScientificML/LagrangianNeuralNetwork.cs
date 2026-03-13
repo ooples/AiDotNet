@@ -351,7 +351,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "ConfigurationDimension", _configurationDim },

@@ -568,7 +568,6 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         // Create a new metadata object
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.SpectralAnalysisModel,
             AdditionalInfo = new Dictionary<string, object>()
         };
 

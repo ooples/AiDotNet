@@ -179,7 +179,6 @@ public class Seedance1Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Seedance1",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Seedance 1 ranked #1 on T2V and I2V leaderboards.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -1028,7 +1028,6 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = $"StableAudio-{_options.ModelSize}",
             Description = $"Stable Audio text-to-audio model ({_options.ModelSize})",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.MaxTextLength,
             Complexity = (int)_options.ModelSize,
             AdditionalInfo = new Dictionary<string, object>

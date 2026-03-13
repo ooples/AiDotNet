@@ -318,7 +318,6 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
             Description = _options.UseSigLIP2
                 ? "SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding (2025)"
                 : "SigLIP: Sigmoid Loss for Language Image Pre-Training (Zhai et al., ICCV 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.ProjectionDim,
             Complexity = _options.NumVisionLayers + _options.NumTextLayers
         };

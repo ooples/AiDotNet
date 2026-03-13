@@ -250,7 +250,7 @@ public class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "InstructPix2Pix", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "InstructPix2Pix", Version = "1.0",
             Description = "InstructPix2Pix instruction-based image editing with dual guidance",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

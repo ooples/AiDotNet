@@ -105,7 +105,7 @@ public class CACTIModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "CACTI", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "CACTI", Version = "1.0",
             Description = "Content-aware controllable style transfer with semantic region preservation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "content-aware-style-unet");

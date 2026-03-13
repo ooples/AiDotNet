@@ -366,7 +366,6 @@ public class StableDiffusion35Model<T> : LatentDiffusionModelBase<T>
         {
             Name = $"Stable Diffusion 3.5 [{_variant}]",
             Version = "3.5",
-            ModelType = ModelType.NeuralNetwork,
             Description = $"SD 3.5 {_variant} with MMDiT-X ({(isLarge ? "8B" : "2.5B")} params), QK-normalization, and triple text encoders",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -193,7 +193,7 @@ public class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GroundingDINO-Native" : "GroundingDINO-ONNX", Description = "Grounding DINO: open-set detection combining DINO with grounded pre-training.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GroundingDINO-Native" : "GroundingDINO-ONNX", Description = "Grounding DINO: open-set detection combining DINO with grounded pre-training.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GroundingDINO";
         m.AdditionalInfo["NumQueryPositions"] = _options.NumQueryPositions.ToString();
         return m;

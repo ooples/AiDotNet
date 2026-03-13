@@ -273,7 +273,6 @@ public class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "SPEARTTS-Native" : "SPEARTTS-ONNX",
             Description = "SPEAR-TTS: High-Fidelity TTS with Minimal Supervision (Kharitonov et al., 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.LLMDim
         };
     }

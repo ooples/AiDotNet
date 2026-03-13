@@ -1211,7 +1211,6 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DeepHit,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumSharedLayers", _options.NumSharedLayers },

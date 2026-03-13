@@ -352,7 +352,6 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
     }
 
     /// <inheritdoc />
-    public override ModelType GetModelType() => ModelType.WeibullAFT;
 
     /// <inheritdoc />
     public override byte[] Serialize()

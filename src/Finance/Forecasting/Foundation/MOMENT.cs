@@ -434,7 +434,6 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "MOMENT" },

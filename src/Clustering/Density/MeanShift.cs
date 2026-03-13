@@ -75,7 +75,6 @@ public class MeanShift<T> : ClusteringBase<T>
     public T Bandwidth => _bandwidth;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

@@ -82,7 +82,6 @@ public class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
     /// Returns the model type identifier for this classifier.
     /// </summary>
     /// <returns>ModelType.BernoulliNaiveBayes</returns>
-    protected override ModelType GetModelType() => ModelType.BernoulliNaiveBayes;
 
     /// <summary>
     /// Computes the log feature probabilities for presence and absence for each class.

@@ -640,7 +640,6 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.TransferFunctionModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Model structure information

@@ -74,7 +74,6 @@ public class GaussianNaiveBayes<T> : NaiveBayesBase<T>
     /// Returns the model type identifier for this classifier.
     /// </summary>
     /// <returns>ModelType.GaussianNaiveBayes</returns>
-    protected override ModelType GetModelType() => ModelType.GaussianNaiveBayes;
 
     /// <summary>
     /// Computes the mean and variance of each feature for each class.

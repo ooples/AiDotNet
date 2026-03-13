@@ -1323,7 +1323,6 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         var bstsOptions = (BayesianStructuralTimeSeriesOptions<T>)Options;
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.BayesianStructuralTimeSeriesModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

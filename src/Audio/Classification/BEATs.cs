@@ -1239,7 +1239,6 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         {
             Name = _useNativeMode ? "BEATs-Native" : "BEATs-ONNX",
             Description = "BEATs: Audio Pre-Training with Acoustic Tokenizers (Chen et al., ICML 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = ClassLabels.Count,
             Complexity = _options.NumEncoderLayers
         };

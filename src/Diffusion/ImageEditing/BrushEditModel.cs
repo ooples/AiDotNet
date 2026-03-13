@@ -132,7 +132,7 @@ public class BrushEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "BrushEdit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "BrushEdit", Version = "1.0",
             Description = "LLM-guided automatic mask generation with BrushNet dual-branch inpainting",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

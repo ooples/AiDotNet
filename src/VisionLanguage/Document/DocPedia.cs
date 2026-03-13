@@ -94,7 +94,7 @@ public class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingMod
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "DocPedia-Native" : "DocPedia-ONNX", Description = "DocPedia: frequency-domain document understanding model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "DocPedia-Native" : "DocPedia-ONNX", Description = "DocPedia: frequency-domain document understanding model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "DocPedia";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["FrequencyDomain"] = _options.EnableFrequencyDomain.ToString();

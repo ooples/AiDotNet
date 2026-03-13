@@ -414,7 +414,6 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.RainbowDQN,
             FeatureCount = _options.StateSize,
         };
     }

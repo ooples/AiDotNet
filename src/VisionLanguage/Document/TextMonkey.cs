@@ -94,7 +94,7 @@ public class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingM
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "TextMonkey-Native" : "TextMonkey-ONNX", Description = "TextMonkey: OCR-free text understanding with shifted window attention.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "TextMonkey-Native" : "TextMonkey-ONNX", Description = "TextMonkey: OCR-free text understanding with shifted window attention.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "TextMonkey";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["ShiftedWindowAttention"] = _options.EnableShiftedWindowAttention.ToString();

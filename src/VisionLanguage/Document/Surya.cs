@@ -95,7 +95,7 @@ public class Surya<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Surya-Native" : "Surya-ONNX", Description = "Surya: multi-language OCR with layout analysis support.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Surya-Native" : "Surya-ONNX", Description = "Surya: multi-language OCR with layout analysis support.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Surya";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["NumLanguages"] = _options.NumLanguages.ToString();

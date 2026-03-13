@@ -451,21 +451,6 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     #region Abstract Method Implementations
 
     /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enum value for Label Powerset.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This identifies what kind of model this is within the
-    /// AiDotNet library's type system.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LabelPowersetClassifier;
-    }
-
-    /// <summary>
     /// Gets all learnable parameters of the model as a single vector.
     /// </summary>
     /// <returns>The parameters from the underlying multi-class classifier.</returns>

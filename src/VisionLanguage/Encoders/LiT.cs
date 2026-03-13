@@ -144,7 +144,7 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "LiT-Native" : "LiT-ONNX", Description = "LiT: Zero-Shot Transfer with Locked-image text Tuning (Zhai et al., CVPR 2022)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
+        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "LiT-Native" : "LiT-ONNX", Description = "LiT: Zero-Shot Transfer with Locked-image text Tuning (Zhai et al., CVPR 2022)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
         meta.AdditionalInfo["Architecture"] = "LiT";
         meta.AdditionalInfo["FreezeVisionEncoder"] = _options.FreezeVisionEncoder.ToString();
         meta.AdditionalInfo["ProjectionDim"] = _options.ProjectionDim.ToString();

@@ -181,7 +181,6 @@ public class HunyuanVideo15Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "HunyuanVideo15",
             Version = "1.5",
-            ModelType = ModelType.NeuralNetwork,
             Description = "HunyuanVideo 1.5 efficient video generation model for consumer GPUs.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

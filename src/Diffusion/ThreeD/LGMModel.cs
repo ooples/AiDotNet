@@ -353,7 +353,6 @@ public class LGMModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "LGM",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LGM feed-forward 3D Gaussian generation from multi-view images",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -1176,7 +1176,6 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoCLIP,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

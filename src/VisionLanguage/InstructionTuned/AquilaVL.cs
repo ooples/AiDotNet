@@ -93,7 +93,7 @@ public class AquilaVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "AquilaVL-Native" : "AquilaVL-ONNX", Description = "AquilaVL: bilingual VLM aligned with Chinese and English visual-language understanding.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "AquilaVL-Native" : "AquilaVL-ONNX", Description = "AquilaVL: bilingual VLM aligned with Chinese and English visual-language understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "AquilaVL";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

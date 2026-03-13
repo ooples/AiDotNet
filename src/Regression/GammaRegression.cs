@@ -596,25 +596,6 @@ public class GammaRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for Gamma regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method simply returns an identifier that indicates this is a Gamma regression model.
-    /// It's used internally by the library to keep track of different types of models.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.GammaRegression;
-    }
-
-    /// <summary>
     /// Creates a new instance of the Gamma Regression model with the same configuration.
     /// </summary>
     /// <returns>A new instance of the Gamma Regression model.</returns>

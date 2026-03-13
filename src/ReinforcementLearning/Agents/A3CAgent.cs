@@ -567,7 +567,6 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.A3CAgent,
             FeatureCount = _options.StateSize,
             Complexity = ParameterCount,
         };

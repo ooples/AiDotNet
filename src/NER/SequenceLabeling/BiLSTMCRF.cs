@@ -1012,7 +1012,6 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         {
             Name = _useNativeMode ? "BiLSTM-CRF-Native" : "BiLSTM-CRF-ONNX",
             Description = $"BiLSTM-CRF {_options.Variant} sequence labeling NER (Lample et al., NAACL 2016)",
-            ModelType = ModelType.NamedEntityRecognition,
             Complexity = _options.NumLSTMLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

@@ -178,7 +178,6 @@ public class SeedVR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "SeedVR-Native" : "SeedVR-ONNX",
             Description = $"SeedVR {_options.Variant} DiT video restoration (Wang et al., 2025)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumDiTBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

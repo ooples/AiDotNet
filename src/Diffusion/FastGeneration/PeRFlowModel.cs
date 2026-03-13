@@ -152,7 +152,7 @@ public class PeRFlowModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "PeRFlow", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "PeRFlow", Version = "1.0",
             Description = "Piecewise rectified flow with segment-wise straightening for efficient few-step generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

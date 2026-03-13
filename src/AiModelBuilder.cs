@@ -2577,28 +2577,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             registeredModelName = $"{model.GetType().Name}-{trainingStartTime:yyyyMMdd-HHmmss}";
 
-            // Determine model type from the actual model class
-            var modelTypeName = optimizationResult.BestSolution.GetType().Name;
-            ModelType derivedModelType = ModelType.None;
-            if (Enum.TryParse<ModelType>(modelTypeName, ignoreCase: true, out var parsedType))
-            {
-                derivedModelType = parsedType;
-            }
-            else if (modelTypeName.Contains("Regression", StringComparison.OrdinalIgnoreCase))
-            {
-                derivedModelType = ModelType.SimpleRegression;
-            }
-            else if (modelTypeName.Contains("Neural", StringComparison.OrdinalIgnoreCase))
-            {
-                derivedModelType = ModelType.NeuralNetwork;
-            }
-
             var modelMetadata = new ModelMetadata<T>
             {
                 Name = registeredModelName,
                 Version = "1.0",
                 TrainingDate = trainingStartTime,
-                ModelType = derivedModelType,
                 FeatureCount = convertedX.Columns,
                 Complexity = optimizationResult.BestSolution.GetType().GetProperties().Length,
                 Description = $"Model trained via AiModelBuilder on {trainingStartTime:yyyy-MM-dd HH:mm:ss} UTC",
@@ -5646,13 +5629,25 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             reasoningTrace.AppendLine("STEP 2: Selecting optimal model type...\n");
 
+            // Use the deterministic ModelSelectionTool directly for type-safe model recommendation
+            const string problemType = "regression";
+            recommendation.SuggestedModelType = ModelSelectionTool.RecommendModelType(
+                problemType: problemType,
+                nSamples: nSamples,
+                nFeatures: nFeatures,
+                isLinear: false,
+                hasOutliers: false,
+                computationalConstraints: "moderate",
+                requiresInterpretability: false);
+
+            // Also run the tool via the agent for detailed reasoning text
             var modelSelectionInput = new Newtonsoft.Json.Linq.JObject
             {
-                ["problem_type"] = "regression",  // Assuming regression for now
+                ["problem_type"] = problemType,
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
-                ["is_linear"] = false,  // Conservative default
-                ["has_outliers"] = false,  // Would need analysis
+                ["is_linear"] = false,
+                ["has_outliers"] = false,
                 ["has_missing_values"] = false,
                 ["requires_interpretability"] = false,
                 ["computational_constraints"] = "moderate"
@@ -5664,28 +5659,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 Input for ModelSelectionTool:
                 {modelSelectionInput}
 
-                Based on the tool's recommendation, suggest ONE specific ModelType.");
+                Provide detailed reasoning for your recommendation.");
 
             recommendation.ModelSelectionReasoning = modelSelectionResult;
-
-            // Try to extract model type from agent response
-            var agentResponse = modelSelectionResult.ToLower();
-            recommendation.SuggestedModelType = agentResponse switch
-            {
-                var r when r.Contains("random forest") || r.Contains("randomforest") => ModelType.RandomForest,
-                var r when r.Contains("neural network") || r.Contains("neuralnetwork") => ModelType.NeuralNetworkRegression,
-                var r when r.Contains("polynomial") => ModelType.PolynomialRegression,
-                var r when r.Contains("ridge") => ModelType.SimpleRegression,
-                var r when r.Contains("multiple") => ModelType.MultipleRegression,
-                var r when r.Contains("simple") || r.Contains("linear") => ModelType.SimpleRegression,
-                _ => null
-            };
-
             reasoningTrace.AppendLine($"Model Selection:\n{modelSelectionResult}\n");
-            if (recommendation.SuggestedModelType.HasValue)
-            {
-                reasoningTrace.AppendLine($"Selected Model: {recommendation.SuggestedModelType.Value}\n");
-            }
+            reasoningTrace.AppendLine($"Selected Model: {recommendation.SuggestedModelType.Name}\n");
         }
 
         // 3. HYPERPARAMETER TUNING
@@ -5693,7 +5671,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             reasoningTrace.AppendLine("STEP 3: Recommending hyperparameter values...\n");
 
-            var modelTypeStr = recommendation.SuggestedModelType?.ToString() ?? _model?.GetType().Name ?? "RandomForest";
+            var modelTypeStr = recommendation.SuggestedModelType?.Name ?? _model?.GetType().Name ?? "RandomForest";
 
             var hyperparameterInput = new Newtonsoft.Json.Linq.JObject
             {
@@ -5840,7 +5818,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Regularization recommendations
             var regularizationInput = new Newtonsoft.Json.Linq.JObject
             {
-                ["model_type"] = recommendation.SuggestedModelType?.ToString() ?? "RandomForest",
+                ["model_type"] = recommendation.SuggestedModelType?.Name ?? "RandomForest",
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
                 ["training_score"] = 0.0,
@@ -6131,7 +6109,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private void ApplyAgentRecommendationsCore(AgentRecommendation<T, TInput, TOutput> recommendation)
     {
         // Apply agent recommendations where possible
-        if (_model == null && recommendation.SuggestedModelType.HasValue)
+        if (_model == null && recommendation.SuggestedModelType is not null)
         {
             // Agent recommended a model type
             // Note: Auto-creation of model instances is not implemented to avoid the complexity
@@ -6140,7 +6118,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // to review and manually configure using the builder's UseModel() method.
 
             Console.WriteLine($"\n=== AGENT RECOMMENDATION ===");
-            Console.WriteLine($"The AI agent recommends using: {recommendation.SuggestedModelType.Value}");
+            Console.WriteLine($"The AI agent recommends using: {recommendation.SuggestedModelType.Name}");
 
             var reasoning = recommendation.ModelSelectionReasoning ?? string.Empty;
             if (reasoning.Length > 0)
@@ -6150,7 +6128,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
 
             Console.WriteLine($"\nTo use this recommendation, configure your builder:");
-            Console.WriteLine($"  builder.UseModel(/* create {recommendation.SuggestedModelType.Value} instance */);");
+            Console.WriteLine($"  builder.UseModel(/* create {recommendation.SuggestedModelType.Name} instance */);");
             Console.WriteLine($"\nFull recommendation details available in result.AgentRecommendation");
             Console.WriteLine("===========================\n");
         }
@@ -6162,7 +6140,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             var registry = new HyperparameterRegistry();
             var applicator = new AgentHyperparameterApplicator<T>(registry);
-            var modelType = recommendation.SuggestedModelType ?? DeriveModelTypeFromModel(_model);
+            var modelType = recommendation.SuggestedModelType ?? DeriveModelType(_model);
 
             var applicationResult = applicator.Apply(configurableModel, modelType, recommendation.SuggestedHyperparameters);
             recommendation.HyperparameterApplicationResult = applicationResult;
@@ -6177,35 +6155,17 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
-    /// Derives the ModelType from the actual model instance by examining its class name.
+    /// Derives the open generic type definition from the actual model instance.
     /// </summary>
-    private static ModelType DeriveModelTypeFromModel(IFullModel<T, TInput, TOutput>? model)
+    private static Type DeriveModelType(IFullModel<T, TInput, TOutput>? model)
     {
-        if (model == null) return ModelType.None;
-
-        var modelTypeName = model.GetType().Name;
-
-        // Try direct enum parse first (handles cases like "RandomForest", "GradientBoosting")
-        if (Enum.TryParse<ModelType>(modelTypeName, true, out var parsedType))
+        if (model is null)
         {
-            return parsedType;
+            return typeof(IFullModel<,,>);
         }
 
-        // Try common suffixes removal
-        var suffixes = new[] { "Regression", "Model", "Classifier", "Network" };
-        foreach (var suffix in suffixes)
-        {
-            if (modelTypeName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-            {
-                var baseName = modelTypeName.Substring(0, modelTypeName.Length - suffix.Length);
-                if (Enum.TryParse<ModelType>(baseName, true, out var strippedType))
-                {
-                    return strippedType;
-                }
-            }
-        }
-
-        return ModelType.None;
+        var runtimeType = model.GetType();
+        return runtimeType.IsGenericType ? runtimeType.GetGenericTypeDefinition() : runtimeType;
     }
 
     /// <summary>

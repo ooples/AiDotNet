@@ -345,7 +345,6 @@ public class ImagicModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Imagic",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Imagic edits real images to match target text via text embedding optimization and model fine-tuning",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

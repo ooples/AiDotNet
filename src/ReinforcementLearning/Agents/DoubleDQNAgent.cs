@@ -262,7 +262,6 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DoubleDQN,
             FeatureCount = _options.StateSize,
         };
     }

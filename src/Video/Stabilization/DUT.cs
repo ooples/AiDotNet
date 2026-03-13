@@ -145,7 +145,6 @@ public class DUT<T> : VideoStabilizationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoStabilization,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "DUT" },

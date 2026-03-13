@@ -880,7 +880,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "PDE", _pdeSpecification.Name },

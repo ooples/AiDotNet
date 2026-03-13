@@ -531,7 +531,6 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         {
             Name = _useNativeMode ? "MusicSourceSeparator-Native" : "MusicSourceSeparator-ONNX",
             Description = "Music source separation model (Spleeter/Demucs-style)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.FftSize / 2 + 1,
             Complexity = 1
         };

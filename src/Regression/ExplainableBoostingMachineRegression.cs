@@ -673,7 +673,6 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ExplainableBoostingMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfFeatures", _numFeatures },

@@ -447,7 +447,6 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.VideoDenoising,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "FastDVDNet" }, { "NumFeatures", _numFeatures },

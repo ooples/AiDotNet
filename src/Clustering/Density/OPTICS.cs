@@ -87,7 +87,6 @@ public class OPTICS<T> : ClusteringBase<T>
     public int[]? Ordering => _ordering;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

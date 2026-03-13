@@ -1254,7 +1254,6 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.TextToVideo,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

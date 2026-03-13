@@ -210,7 +210,6 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             Name = _useNativeMode ? "MeloTTS-Native" : "MeloTTS-ONNX",
             Description = "MeloTTS: High-quality Multilingual TTS (MyShell, 2024)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim
         };
     }

@@ -272,7 +272,6 @@ public class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "VALL-E-Native" : "VALL-E-ONNX",
             Description = "VALL-E: Neural Codec Language Model TTS (Wang et al., 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.LLMDim
         };
     }

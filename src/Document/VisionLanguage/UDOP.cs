@@ -565,7 +565,6 @@ public class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         return new ModelMetadata<T>
         {
             Name = "UDOP",
-            ModelType = ModelType.NeuralNetwork,
             Description = "UDOP for unified document processing (CVPR 2023)",
             FeatureCount = _hiddenDim,
             Complexity = _numEncoderLayers + _numDecoderLayers,

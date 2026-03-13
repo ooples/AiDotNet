@@ -260,7 +260,6 @@ public class RAPHAELModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "RAPHAEL",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "RAPHAEL Mixture-of-Experts text-to-image diffusion model",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -178,7 +178,6 @@ public class MinimaxVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "MinimaxVideo",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "MiniMax Hailuo video model with strong image-to-video generation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

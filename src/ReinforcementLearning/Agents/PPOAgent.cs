@@ -639,7 +639,6 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.PPOAgent,
             FeatureCount = _ppoOptions.StateSize,
         };
     }

@@ -912,7 +912,6 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Name = "AST",
             Description = $"Audio Spectrogram Transformer ({_numClasses} classes, {_numLayers} layers)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate,
             Complexity = _numLayers * _numHeads
         };

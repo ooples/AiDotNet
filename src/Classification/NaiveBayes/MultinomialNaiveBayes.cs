@@ -66,7 +66,6 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     /// Returns the model type identifier for this classifier.
     /// </summary>
     /// <returns>ModelType.MultinomialNaiveBayes</returns>
-    protected override ModelType GetModelType() => ModelType.MultinomialNaiveBayes;
 
     /// <summary>
     /// Computes the log feature probabilities for each class using Laplace smoothing.

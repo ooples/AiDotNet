@@ -667,7 +667,6 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.BetaRegression,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "LinkFunction", _options.LinkFunction.ToString() },

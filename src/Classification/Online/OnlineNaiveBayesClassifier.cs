@@ -110,7 +110,6 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.OnlineLearning;
 
     /// <summary>
     /// Updates the model with a single training sample.

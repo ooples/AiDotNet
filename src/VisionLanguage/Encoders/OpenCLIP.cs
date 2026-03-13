@@ -311,7 +311,6 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
         {
             Name = _useNativeMode ? "OpenCLIP-Native" : "OpenCLIP-ONNX",
             Description = "OpenCLIP: Open-source Contrastive Language-Image Pre-training (Cherti et al., CVPR 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.ProjectionDim,
             Complexity = _options.NumVisionLayers + _options.NumTextLayers
         };

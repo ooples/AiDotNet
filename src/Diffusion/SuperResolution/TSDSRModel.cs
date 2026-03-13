@@ -148,7 +148,7 @@ public class TSDSRModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "TSD-SR", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "TSD-SR", Version = "1.0",
             Description = "Timestep-shifted diffusion for fast 4-10 step super-resolution",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

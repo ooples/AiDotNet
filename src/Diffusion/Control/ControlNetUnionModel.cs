@@ -268,7 +268,7 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "ControlNet Union", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNet Union", Version = "1.0",
             Description = "ControlNet Union all-in-one multi-condition control model for SDXL",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

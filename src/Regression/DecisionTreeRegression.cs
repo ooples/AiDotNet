@@ -246,7 +246,6 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DecisionTree,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MaxDepth", _options.MaxDepth },

@@ -108,7 +108,7 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "FLIP-Native" : "FLIP-ONNX", Description = "FLIP: Fast Language-Image Pre-training via Masking (Li et al., 2022)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
+        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "FLIP-Native" : "FLIP-ONNX", Description = "FLIP: Fast Language-Image Pre-training via Masking (Li et al., 2022)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
         meta.AdditionalInfo["Architecture"] = "FLIP"; meta.AdditionalInfo["MaskingRatio"] = _options.MaskingRatio.ToString(); meta.AdditionalInfo["ProjectionDim"] = _options.ProjectionDim.ToString();
         return meta;
     }

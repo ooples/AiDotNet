@@ -72,7 +72,6 @@ public class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.CategoricalNaiveBayes;
 
     /// <summary>
     /// Computes category probabilities for all classes.

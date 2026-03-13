@@ -344,7 +344,6 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FeedForwardNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputShape", Architecture.GetInputShape() },

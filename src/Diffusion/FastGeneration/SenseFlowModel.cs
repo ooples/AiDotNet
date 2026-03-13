@@ -141,7 +141,7 @@ public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SenseFlow", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SenseFlow", Version = "1.0",
             Description = "Accelerated flow-matching generation via progressive distillation and feature alignment",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

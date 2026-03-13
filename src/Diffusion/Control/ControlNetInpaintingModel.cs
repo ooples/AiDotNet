@@ -124,7 +124,7 @@ public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "ControlNet-Inpainting", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNet-Inpainting", Version = "1.0",
             Description = "Mask-aware ControlNet inpainting with control signal guidance",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

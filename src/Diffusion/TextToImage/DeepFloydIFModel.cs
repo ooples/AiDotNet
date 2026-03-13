@@ -454,7 +454,6 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "DeepFloyd IF",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DeepFloyd IF cascaded pixel-space diffusion model with T5-XXL text encoder",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

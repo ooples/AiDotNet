@@ -773,7 +773,6 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DeepSurv,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumHiddenLayers", _options.NumHiddenLayers },

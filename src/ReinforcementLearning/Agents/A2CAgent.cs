@@ -464,7 +464,6 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.A2CAgent,
             FeatureCount = _a2cOptions.StateSize,
         };
     }

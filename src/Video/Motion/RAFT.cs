@@ -659,7 +659,6 @@ public class RAFT<T> : OpticalFlowBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.OpticalFlow,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

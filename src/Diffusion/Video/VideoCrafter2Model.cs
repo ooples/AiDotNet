@@ -180,7 +180,6 @@ public class VideoCrafter2Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "VideoCrafter2",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "VideoCrafter 2 with improved quality and style fusion.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

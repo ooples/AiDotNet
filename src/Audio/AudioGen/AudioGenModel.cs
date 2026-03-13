@@ -921,7 +921,6 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = $"AudioGen-{_modelSize}",
             Description = $"AudioGen text-to-audio model - {_modelSize} variant",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _maxTextLength,
             Complexity = (int)_modelSize
         };

@@ -219,7 +219,6 @@ public class RobustRegression<T> : RegressionBase<T>
     /// - Logging information about the model
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.RobustRegression;
 
     /// <summary>
     /// Serializes the robust regression model to a byte array for storage or transmission.

@@ -554,7 +554,6 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ConditionalInferenceTree,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MaxDepth", _options.MaxDepth },

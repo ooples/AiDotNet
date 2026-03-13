@@ -178,7 +178,6 @@ public class EmuVideo2Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "EmuVideo2",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Emu Video 2 with improved generation quality and motion.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

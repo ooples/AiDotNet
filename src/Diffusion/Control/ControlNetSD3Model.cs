@@ -154,7 +154,6 @@ public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet-SD3",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "ControlNet adapted for Stable Diffusion 3 MMDiT architecture",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

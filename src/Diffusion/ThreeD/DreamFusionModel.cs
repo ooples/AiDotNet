@@ -671,7 +671,6 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "DreamFusion",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Text-to-3D generation via Score Distillation Sampling",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

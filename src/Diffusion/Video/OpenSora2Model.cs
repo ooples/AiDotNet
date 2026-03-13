@@ -192,7 +192,6 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "OpenSora2",
             Version = "2.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Open-Sora 2.0 commercial-level video generation model.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -137,7 +137,7 @@ public class OmniGen2Model<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "OmniGen-2", Version = "2.0", ModelType = ModelType.NeuralNetwork,
+            Name = "OmniGen-2", Version = "2.0",
             Description = "Unified multi-task generation and editing with Phi-3 backbone and interleaved text-image input",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

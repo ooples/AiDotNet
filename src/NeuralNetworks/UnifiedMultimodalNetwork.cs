@@ -926,7 +926,6 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         return new ModelMetadata<T>
         {
             Name = "UnifiedMultimodalNetwork",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _embeddingDimension,
             Complexity = _numTransformerLayers * 4,
             Description = "Unified multimodal network for any-to-any modality generation"

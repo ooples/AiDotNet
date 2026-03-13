@@ -187,14 +187,6 @@ public class RidgeRegression<T> : RegressionBase<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enumeration value for Ridge Regression.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.RidgeRegression;
-    }
 
     /// <summary>
     /// Creates a new instance of Ridge Regression with the same configuration.

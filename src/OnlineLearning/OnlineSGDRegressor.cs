@@ -92,7 +92,6 @@ public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public override ModelType GetModelType() => ModelType.OnlineSGDRegressor;
 
     /// <summary>
     /// Gets whether JIT compilation is supported.

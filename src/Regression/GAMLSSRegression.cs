@@ -665,7 +665,6 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GAMLSS,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "DistributionFamily", _options.DistributionFamily.ToString() },

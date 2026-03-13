@@ -180,7 +180,6 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         return new ModelMetadata<T>
         {
             Name = "ClipNeuralNetwork",
-            ModelType = ModelType.Transformer,
             FeatureCount = 3 * _imageSize * _imageSize,
             Complexity = _embeddingDimension * _maxSequenceLength,
             Description = $"CLIP multimodal embedding model with {_embeddingDimension}-dimensional embeddings",

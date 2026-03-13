@@ -512,7 +512,6 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         return new ModelMetadata<T>
         {
             Name = "CRNN",
-            ModelType = ModelType.NeuralNetwork,
             Description = "CRNN for sequence text recognition (TPAMI 2017)",
             FeatureCount = _cnnChannels,
             Complexity = _rnnLayers,

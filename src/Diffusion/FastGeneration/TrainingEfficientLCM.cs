@@ -188,7 +188,6 @@ public class TrainingEfficientLCM<T> : LatentDiffusionModelBase<T>
         {
             Name = "Training-Efficient LCM",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Resource-efficient LCM distillation using LoRA adapters and gradient checkpointing",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

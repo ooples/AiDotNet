@@ -395,7 +395,6 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "OneFormer" }, { "Description", "OneFormer Universal Segmentation (Text-Conditioned)" },

@@ -768,7 +768,6 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.InterventionAnalysisModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

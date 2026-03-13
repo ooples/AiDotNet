@@ -181,7 +181,6 @@ public class MovieGenModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "MovieGen",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "MovieGen 30B foundation model for video, audio, and editing.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

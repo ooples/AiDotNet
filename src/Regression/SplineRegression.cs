@@ -385,7 +385,6 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     /// You generally won't need to call this method directly in your code.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.SplineRegression;
 
     /// <summary>
     /// Serializes the spline regression model to a byte array for storage or transmission.

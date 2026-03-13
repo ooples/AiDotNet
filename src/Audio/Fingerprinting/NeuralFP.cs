@@ -262,7 +262,6 @@ internal class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Name = _useNativeMode ? "NeuralFP-Native" : "NeuralFP-ONNX",
             Description = "Neural Audio Fingerprint for learned audio identification (Chang et al., 2021)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumConvBlocks
         };
         m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();

@@ -180,7 +180,6 @@ public class Kling26Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Kling26",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Kling 2.6 with simultaneous audio-visual generation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

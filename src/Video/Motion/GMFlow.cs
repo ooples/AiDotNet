@@ -666,7 +666,6 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.OpticalFlow,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "GMFlow" },

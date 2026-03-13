@@ -583,7 +583,6 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         return new ModelMetadata<T>
         {
             Name = "LayoutXLM",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LayoutXLM for multilingual document understanding (ACL 2022)",
             FeatureCount = _hiddenDim,
             Complexity = _numLayers,

@@ -315,14 +315,6 @@ public class ElasticNetRegression<T> : RegressionBase<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enumeration value for Elastic Net Regression.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.ElasticNetRegression;
-    }
 
     /// <summary>
     /// Creates a new instance of Elastic Net Regression with the same configuration.

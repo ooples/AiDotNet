@@ -275,7 +275,6 @@ public class MarbleNet<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         {
             Name = _useNativeMode ? "MarbleNet-Native" : "MarbleNet-ONNX",
             Description = "MarbleNet separable convolutional VAD (Jia et al., 2021, NVIDIA NeMo)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumBlocks * _options.SubBlocksPerBlock
         };
         m.AdditionalInfo["NumBlocks"] = _options.NumBlocks.ToString();

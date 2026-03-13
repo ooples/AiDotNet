@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Regression;
+using AiDotNet.NeuralNetworks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 namespace AiDotNet.Tools;
@@ -72,211 +74,281 @@ public class ModelSelectionTool : ToolBase
         "\"has_outliers\": boolean, \"has_missing_values\": boolean, " +
         "\"requires_interpretability\": boolean, \"computational_constraints\": \"low|moderate|high\" }. " +
         "Returns recommended model type with detailed reasoning and alternative suggestions.";
+    /// <summary>
+    /// Returns the recommended model <see cref="Type"/> based on dataset characteristics.
+    /// This provides a type-safe way to get the recommendation without parsing text output.
+    /// </summary>
+    /// <param name="problemType">The problem type ("regression" or "classification").</param>
+    /// <param name="nSamples">Number of samples in the dataset.</param>
+    /// <param name="nFeatures">Number of features in the dataset.</param>
+    /// <param name="isLinear">Whether the relationship appears linear.</param>
+    /// <param name="hasOutliers">Whether the dataset contains outliers.</param>
+    /// <param name="computationalConstraints">Computational constraints ("low", "moderate", "high").</param>
+    /// <param name="requiresInterpretability">Whether interpretability is required.</param>
+    /// <returns>The open generic type definition for the recommended model.</returns>
+    public static Type RecommendModelType(
+        string problemType,
+        int nSamples,
+        int nFeatures,
+        bool isLinear,
+        bool hasOutliers,
+        string computationalConstraints,
+        bool requiresInterpretability)
+    {
+        bool isClassification = string.Equals(problemType, "classification", StringComparison.OrdinalIgnoreCase);
+
+        if (nSamples < 100)
+        {
+            if (isLinear || requiresInterpretability)
+            {
+                return isClassification
+                    ? typeof(LogisticRegression<>)
+                    : typeof(SimpleRegression<>);
+            }
+            return typeof(KNearestNeighborsRegression<>);
+        }
+
+        if (nSamples < 1000)
+        {
+            if (requiresInterpretability)
+            {
+                return typeof(DecisionTreeRegression<>);
+            }
+            if (isLinear)
+            {
+                return isClassification
+                    ? typeof(LogisticRegression<>)
+                    : typeof(RidgeRegression<>);
+            }
+            return hasOutliers
+                ? typeof(RandomForestRegression<>)
+                : typeof(GradientBoostingRegression<>);
+        }
+
+        if (nSamples < 10000)
+        {
+            if (requiresInterpretability || hasOutliers)
+            {
+                return typeof(RandomForestRegression<>);
+            }
+            return typeof(GradientBoostingRegression<>);
+        }
+
+        // Large dataset
+        if (requiresInterpretability)
+        {
+            return typeof(GradientBoostingRegression<>);
+        }
+        if (nFeatures > 100)
+        {
+            return typeof(NeuralNetworkRegression<>);
+        }
+        return typeof(GradientBoostingRegression<>);
+    }
+
     /// <inheritdoc/>
     protected override string ExecuteCore(string input)
     {
-        try
+        var root = JObject.Parse(input);
+        // Extract problem characteristics
+        string problemType = TryGetString(root, "problem_type", "regression");
+        int nSamples = TryGetInt(root, "n_samples", 1000);
+        int nFeatures = TryGetInt(root, "n_features", 10);
+        bool isLinear = TryGetBool(root, "is_linear", false);
+        bool hasOutliers = TryGetBool(root, "has_outliers", false);
+        bool hasMissingValues = TryGetBool(root, "has_missing_values", false);
+        bool requiresInterpretability = TryGetBool(root, "requires_interpretability", false);
+        string computationalConstraints = TryGetString(root, "computational_constraints", "moderate");
+
+        // Get the type-safe recommendation
+        var recommendedType = RecommendModelType(
+            problemType, nSamples, nFeatures, isLinear, hasOutliers,
+            computationalConstraints, requiresInterpretability);
+        var recommendedModel = recommendedType.Name.Replace("`1", string.Empty);
+
+        // Build reasoning based on characteristics
+        var reasoning = BuildReasoning(nSamples, nFeatures, isLinear, hasOutliers,
+            requiresInterpretability, computationalConstraints);
+        var alternatives = BuildAlternatives(nSamples, nFeatures, isLinear, hasOutliers,
+            requiresInterpretability);
+
+        // Output recommendation
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("=== MODEL SELECTION RECOMMENDATION ===\n");
+        sb.AppendLine($"**Primary Recommendation: {recommendedModel}**\n");
+        sb.AppendLine("**Reasoning:**");
+        foreach (var reason in reasoning)
         {
-            var root = JObject.Parse(input);
-            // Extract problem characteristics
-            string problemType = TryGetString(root, "problem_type", "regression");
-            int nSamples = TryGetInt(root, "n_samples", 1000);
-            int nFeatures = TryGetInt(root, "n_features", 10);
-            bool isLinear = TryGetBool(root, "is_linear", false);
-            bool hasOutliers = TryGetBool(root, "has_outliers", false);
-            bool hasMissingValues = TryGetBool(root, "has_missing_values", false);
-            bool requiresInterpretability = TryGetBool(root, "requires_interpretability", false);
-            string computationalConstraints = TryGetString(root, "computational_constraints", "moderate");
-            // Build recommendation
-            var recommendation = new System.Text.StringBuilder();
-            recommendation.AppendLine("=== MODEL SELECTION RECOMMENDATION ===\n");
-            // Determine recommended model based on characteristics
-            string recommendedModel;
-            var reasoning = new List<string>();
-            var alternatives = new List<(string Model, string Reason)>();
-            // Decision logic
-            if (nSamples < 100)
+            sb.AppendLine($"  - {reason}");
+        }
+        sb.AppendLine();
+        sb.AppendLine("**Problem Characteristics:**");
+        sb.AppendLine($"  - Problem type: {problemType}");
+        sb.AppendLine($"  - Dataset size: {nSamples:N0} samples x {nFeatures} features");
+        sb.AppendLine($"  - Relationship: {(isLinear ? "Linear" : "Non-linear")}");
+        sb.AppendLine($"  - Outliers: {(hasOutliers ? "Present" : "Minimal/None")}");
+        sb.AppendLine($"  - Missing values: {(hasMissingValues ? "Present" : "None")}");
+        sb.AppendLine($"  - Interpretability required: {(requiresInterpretability ? "Yes" : "No")}");
+        sb.AppendLine($"  - Computational constraints: {computationalConstraints}");
+        if (alternatives.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("**Alternative Models to Consider:**");
+            foreach (var (model, reason) in alternatives)
             {
-                // Very small dataset - use simple models
-                if (isLinear || requiresInterpretability)
-                {
-                    recommendedModel = problemType.ToLowerInvariant() == "classification"
-                        ? "Logistic Regression"
-                        : "Linear Regression";
-                    reasoning.Add($"Very small dataset ({nSamples} samples) - simple linear model prevents overfitting");
-                    reasoning.Add("Linear model provides interpretability and requires few samples to train");
-                    if (hasOutliers)
-                    {
-                        reasoning.Add("⚠️ Note: Linear models sensitive to outliers - consider robust regression or outlier removal");
-                    }
-                    alternatives.Add(("Ridge/Lasso Regression", "Regularization helps prevent overfitting on small datasets"));
-                }
-                else
-                {
-                    recommendedModel = "k-Nearest Neighbors (k-NN)";
-                    reasoning.Add($"Small dataset ({nSamples} samples) with non-linear patterns");
-                    reasoning.Add("k-NN is non-parametric and can capture non-linear relationships");
-                    reasoning.Add("No training required - entire dataset used for predictions");
-                    if (hasOutliers)
-                    {
-                        reasoning.Add("⚠️ Note: k-NN sensitive to outliers - consider data cleaning");
-                    }
-                    alternatives.Add(("Decision Tree", "Simple non-linear model, easy to interpret"));
-                    alternatives.Add(("Support Vector Machine", "Effective in high-dimensional spaces"));
-                }
+                sb.AppendLine($"  - {model}: {reason}");
             }
-            else if (nSamples < 1000)
+        }
+        sb.AppendLine();
+        sb.AppendLine("**Next Steps:**");
+        sb.AppendLine("  1. Start with the primary recommendation");
+        sb.AppendLine("  2. Use cross-validation to evaluate performance");
+        sb.AppendLine("  3. Try alternatives if results are unsatisfactory");
+        sb.AppendLine("  4. Consider ensemble methods combining multiple models");
+        return sb.ToString();
+    }
+
+    private static List<string> BuildReasoning(
+        int nSamples, int nFeatures, bool isLinear, bool hasOutliers,
+        bool requiresInterpretability, string computationalConstraints)
+    {
+        var reasoning = new List<string>();
+
+        if (nSamples < 100)
+        {
+            if (isLinear || requiresInterpretability)
             {
-                // Small dataset - moderate complexity
-                if (requiresInterpretability)
+                reasoning.Add($"Very small dataset ({nSamples} samples) - simple linear model prevents overfitting");
+                reasoning.Add("Linear model provides interpretability and requires few samples to train");
+                if (hasOutliers)
                 {
-                    recommendedModel = problemType.ToLowerInvariant() == "classification"
-                        ? "Decision Tree"
-                        : "Decision Tree Regression";
-                    reasoning.Add($"Small dataset ({nSamples} samples) with interpretability requirement");
-                    reasoning.Add("Decision trees provide clear decision rules that are easy to explain");
-                    reasoning.Add("Can handle both linear and non-linear relationships");
-                    if (!hasOutliers)
-                    {
-                        alternatives.Add(("Linear/Logistic Regression with Regularization", "Simpler model, better for linear patterns"));
-                    }
-                }
-                else if (isLinear)
-                {
-                    recommendedModel = problemType.ToLowerInvariant() == "classification"
-                        ? "Logistic Regression with Regularization"
-                        : "Ridge Regression";
-                    reasoning.Add($"Dataset size ({nSamples} samples) suitable for regularized linear models");
-                    reasoning.Add("Linear patterns detected - linear model is appropriate");
-                    reasoning.Add("Regularization prevents overfitting");
-                    alternatives.Add(("Elastic Net", "Combines L1 and L2 regularization for feature selection"));
-                }
-                else
-                {
-                    recommendedModel = hasOutliers
-                        ? "Random Forest"
-                        : "Gradient Boosting";
-                    reasoning.Add($"Dataset size ({nSamples} samples) supports ensemble methods");
-                    reasoning.Add("Non-linear patterns require flexible model");
-                    if (hasOutliers)
-                    {
-                        reasoning.Add("Random Forest is robust to outliers and missing values");
-                    }
-                    else
-                    {
-                        reasoning.Add("Gradient Boosting typically achieves highest accuracy");
-                    }
-                    alternatives.Add(("Support Vector Machine", "Effective for non-linear patterns, good generalization"));
-                    alternatives.Add(("Neural Network (shallow)", "Can learn complex patterns but may overfit"));
-                }
-            }
-            else if (nSamples < 10000)
-            {
-                // Moderate dataset - can use more complex models
-                if (requiresInterpretability)
-                {
-                    recommendedModel = "Random Forest with Feature Importance";
-                    reasoning.Add($"Moderate dataset ({nSamples} samples) with interpretability needs");
-                    reasoning.Add("Random Forest balances performance with explainability");
-                    reasoning.Add("Feature importance scores help explain predictions");
-                    alternatives.Add(("Gradient Boosting with SHAP", "Better performance, SHAP values for interpretability"));
-                    alternatives.Add(("Regularized Linear Model", "Most interpretable but may underfit"));
-                }
-                else if (hasOutliers)
-                {
-                    recommendedModel = "Random Forest";
-                    reasoning.Add($"Dataset size ({nSamples} samples) ideal for Random Forest");
-                    reasoning.Add("Random Forest highly robust to outliers and noise");
-                    reasoning.Add("No extensive hyperparameter tuning required");
-                    alternatives.Add(("Gradient Boosting with robust loss", "Higher accuracy potential, more tuning needed"));
-                    alternatives.Add(("Isolation Forest preprocessing + Gradient Boosting", "Remove outliers then use powerful model"));
-                }
-                else
-                {
-                    recommendedModel = "Gradient Boosting (XGBoost/LightGBM)";
-                    reasoning.Add($"Dataset size ({nSamples} samples) optimal for gradient boosting");
-                    reasoning.Add("Clean data without outliers - can use sensitive but powerful algorithm");
-                    reasoning.Add("Gradient boosting typically achieves state-of-the-art results");
-                    alternatives.Add(("Random Forest", "Faster training, less hyperparameter tuning"));
-                    alternatives.Add(("Neural Network", "Can learn very complex patterns with proper regularization"));
+                    reasoning.Add("Note: Linear models sensitive to outliers - consider robust regression or outlier removal");
                 }
             }
             else
             {
-                // Large dataset - can use complex models including deep learning
-                if (requiresInterpretability)
+                reasoning.Add($"Small dataset ({nSamples} samples) with non-linear patterns");
+                reasoning.Add("k-NN is non-parametric and can capture non-linear relationships");
+                reasoning.Add("No training required - entire dataset used for predictions");
+                if (hasOutliers)
                 {
-                    recommendedModel = "Gradient Boosting with Explainability Tools";
-                    reasoning.Add($"Large dataset ({nSamples} samples) supports complex models");
-                    reasoning.Add("Gradient boosting achieves excellent performance");
-                    reasoning.Add("Use SHAP or LIME for post-hoc interpretability");
-                    alternatives.Add(("Random Forest", "Inherently more interpretable, slightly lower performance"));
-                    alternatives.Add(("GAM (Generalized Additive Models)", "High interpretability with non-linear capabilities"));
+                    reasoning.Add("Note: k-NN sensitive to outliers - consider data cleaning");
                 }
-                else if (nFeatures > 100)
-                {
-                    recommendedModel = "Deep Neural Network";
-                    reasoning.Add($"Large dataset ({nSamples} samples) and high dimensionality ({nFeatures} features)");
-                    reasoning.Add("Deep learning excels with large datasets and many features");
-                    reasoning.Add("Can automatically learn feature interactions and representations");
-                    if (computationalConstraints == "low")
-                    {
-                        reasoning.Add("⚠️ Note: Neural networks require significant computational resources");
-                    }
-                    alternatives.Add(("Gradient Boosting", "Faster training, often competitive performance"));
-                    alternatives.Add(("AutoML ensemble", "Combines multiple models for best results"));
-                }
+            }
+        }
+        else if (nSamples < 1000)
+        {
+            if (requiresInterpretability)
+            {
+                reasoning.Add($"Small dataset ({nSamples} samples) with interpretability requirement");
+                reasoning.Add("Decision trees provide clear decision rules that are easy to explain");
+            }
+            else if (isLinear)
+            {
+                reasoning.Add($"Dataset size ({nSamples} samples) suitable for regularized linear models");
+                reasoning.Add("Linear patterns detected - linear model is appropriate");
+                reasoning.Add("Regularization prevents overfitting");
+            }
+            else
+            {
+                reasoning.Add($"Dataset size ({nSamples} samples) supports ensemble methods");
+                reasoning.Add("Non-linear patterns require flexible model");
+                if (hasOutliers)
+                    reasoning.Add("Random Forest is robust to outliers and missing values");
                 else
+                    reasoning.Add("Gradient Boosting typically achieves highest accuracy");
+            }
+        }
+        else if (nSamples < 10000)
+        {
+            if (requiresInterpretability)
+            {
+                reasoning.Add($"Moderate dataset ({nSamples} samples) with interpretability needs");
+                reasoning.Add("Random Forest balances performance with explainability");
+            }
+            else if (hasOutliers)
+            {
+                reasoning.Add($"Dataset size ({nSamples} samples) ideal for Random Forest");
+                reasoning.Add("Random Forest highly robust to outliers and noise");
+            }
+            else
+            {
+                reasoning.Add($"Dataset size ({nSamples} samples) optimal for gradient boosting");
+                reasoning.Add("Gradient boosting typically achieves state-of-the-art results");
+            }
+        }
+        else
+        {
+            if (requiresInterpretability)
+            {
+                reasoning.Add($"Large dataset ({nSamples} samples) supports complex models");
+                reasoning.Add("Gradient boosting achieves excellent performance");
+                reasoning.Add("Use SHAP or LIME for post-hoc interpretability");
+            }
+            else if (nFeatures > 100)
+            {
+                reasoning.Add($"Large dataset ({nSamples} samples) and high dimensionality ({nFeatures} features)");
+                reasoning.Add("Deep learning excels with large datasets and many features");
+                if (string.Equals(computationalConstraints, "low", StringComparison.OrdinalIgnoreCase))
                 {
-                    recommendedModel = "Gradient Boosting (XGBoost/LightGBM/CatBoost)";
-                    reasoning.Add($"Large dataset ({nSamples} samples) with moderate features ({nFeatures})");
-                    reasoning.Add("Gradient boosting: state-of-the-art performance for tabular data");
-                    reasoning.Add("Handles missing values, categorical features, and complex interactions");
-                    alternatives.Add(("Deep Neural Network", "May achieve better results with proper architecture"));
-                    alternatives.Add(("Ensemble of models", "Stack multiple models for maximum performance"));
+                    reasoning.Add("Note: Neural networks require significant computational resources");
                 }
             }
-            // Output recommendation
-            recommendation.AppendLine($"**Primary Recommendation: {recommendedModel}**\n");
-            recommendation.AppendLine("**Reasoning:**");
-            foreach (var reason in reasoning)
+            else
             {
-                recommendation.AppendLine($"  • {reason}");
+                reasoning.Add($"Large dataset ({nSamples} samples) with moderate features ({nFeatures})");
+                reasoning.Add("Gradient boosting: state-of-the-art performance for tabular data");
             }
-            recommendation.AppendLine();
-            recommendation.AppendLine("**Problem Characteristics:**");
-            recommendation.AppendLine($"  • Problem type: {problemType}");
-            recommendation.AppendLine($"  • Dataset size: {nSamples:N0} samples × {nFeatures} features");
-            recommendation.AppendLine($"  • Relationship: {(isLinear ? "Linear" : "Non-linear")}");
-            recommendation.AppendLine($"  • Outliers: {(hasOutliers ? "Present" : "Minimal/None")}");
-            recommendation.AppendLine($"  • Missing values: {(hasMissingValues ? "Present" : "None")}");
-            recommendation.AppendLine($"  • Interpretability required: {(requiresInterpretability ? "Yes" : "No")}");
-            recommendation.AppendLine($"  • Computational constraints: {computationalConstraints}");
-            if (alternatives.Count > 0)
+        }
+
+        return reasoning;
+    }
+
+    private static List<(string Model, string Reason)> BuildAlternatives(
+        int nSamples, int nFeatures, bool isLinear, bool hasOutliers,
+        bool requiresInterpretability)
+    {
+        var alternatives = new List<(string Model, string Reason)>();
+
+        if (nSamples < 100)
+        {
+            if (isLinear || requiresInterpretability)
+                alternatives.Add(("RidgeRegression", "Regularization helps prevent overfitting on small datasets"));
+            else
             {
-                recommendation.AppendLine();
-                recommendation.AppendLine("**Alternative Models to Consider:**");
-                foreach (var (model, reason) in alternatives)
-                {
-                    recommendation.AppendLine($"  • {model}: {reason}");
-                }
+                alternatives.Add(("DecisionTreeRegression", "Simple non-linear model, easy to interpret"));
+                alternatives.Add(("SupportVectorRegression", "Effective in high-dimensional spaces"));
             }
-            recommendation.AppendLine();
-            recommendation.AppendLine("**Next Steps:**");
-            recommendation.AppendLine("  1. Start with the primary recommendation");
-            recommendation.AppendLine("  2. Use cross-validation to evaluate performance");
-            recommendation.AppendLine("  3. Try alternatives if results are unsatisfactory");
-            recommendation.AppendLine("  4. Consider ensemble methods combining multiple models");
-            return recommendation.ToString();
         }
-        catch (JsonReaderException)
+        else if (nSamples < 1000)
         {
-            throw; // Let base class handle JSON errors
+            if (!requiresInterpretability && !isLinear)
+            {
+                alternatives.Add(("SupportVectorRegression", "Effective for non-linear patterns, good generalization"));
+                alternatives.Add(("NeuralNetworkRegression", "Can learn complex patterns but may overfit"));
+            }
+            else if (isLinear)
+            {
+                alternatives.Add(("ElasticNetRegression", "Combines L1 and L2 regularization for feature selection"));
+            }
         }
-        catch (Exception)
+        else if (nSamples < 10000)
         {
-            throw; // Let base class handle generic errors
+            if (!requiresInterpretability && !hasOutliers)
+            {
+                alternatives.Add(("RandomForestRegression", "Faster training, less hyperparameter tuning"));
+                alternatives.Add(("NeuralNetworkRegression", "Can learn very complex patterns with proper regularization"));
+            }
         }
+        else
+        {
+            if (nFeatures > 100)
+                alternatives.Add(("GradientBoostingRegression", "Faster training, often competitive performance"));
+            else
+                alternatives.Add(("NeuralNetworkRegression", "May achieve better results with proper architecture"));
+        }
+
+        return alternatives;
     }
     /// <inheritdoc/>
     protected override string GetJsonErrorMessage(JsonReaderException ex)

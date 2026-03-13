@@ -816,7 +816,6 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         return new ModelMetadata<T>
         {
             Name = "DallE3Model",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DALL-E 3 style text-to-image generation model",
             AdditionalInfo = new Dictionary<string, object>
             {

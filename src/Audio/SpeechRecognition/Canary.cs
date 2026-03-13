@@ -237,7 +237,6 @@ public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "Canary-Native" : "Canary-ONNX",
             Description = $"Canary {_options.Variant} multilingual ASR/ST model (NVIDIA, 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.EncoderDim,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

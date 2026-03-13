@@ -608,7 +608,6 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.ReinforcementLearning,
         };
     }
 

@@ -299,7 +299,6 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         {
             Name = _useNativeMode ? "FDY-SED-Native" : "FDY-SED-ONNX",
             Description = $"FDY-SED: Frequency Dynamic Sound Event Detection {_options.Variant} (Nam et al., ICASSP 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = ClassLabels.Count,
             Complexity = _options.CNNChannels.Length + _options.NumRNNLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

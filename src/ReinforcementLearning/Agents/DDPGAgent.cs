@@ -439,7 +439,6 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DDPGAgent,
             FeatureCount = _options.StateSize,
         };
     }

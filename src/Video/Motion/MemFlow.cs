@@ -236,7 +236,6 @@ public class MemFlow<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "MemFlow" },

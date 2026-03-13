@@ -179,7 +179,6 @@ public class LumiereModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Lumiere",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Lumiere Space-Time UNet for single-pass 80-frame video generation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

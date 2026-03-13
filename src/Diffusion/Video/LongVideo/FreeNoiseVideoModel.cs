@@ -180,7 +180,6 @@ public class FreeNoiseVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "FreeNoiseVideo",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "FreeNoise extended video generation through noise rescheduling.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

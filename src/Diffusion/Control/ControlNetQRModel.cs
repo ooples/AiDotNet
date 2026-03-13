@@ -140,7 +140,7 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "ControlNet-QR", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNet-QR", Version = "1.0",
             Description = "ControlNet specialized for embedding QR codes in generated artwork",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -699,7 +699,6 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ARIMAModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // ARIMA-specific parameters

@@ -157,7 +157,7 @@ public class HyperSDModel<T> : LatentDiffusionModelBase<T>
         var variant = _isXLVariant ? "SDXL" : "SD 1.5";
         var m = new ModelMetadata<T>
         {
-            Name = $"Hyper-SD ({variant})", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = $"Hyper-SD ({variant})", Version = "1.0",
             Description = $"Trajectory-segmented consistency model for unified 1-8 step {variant} generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

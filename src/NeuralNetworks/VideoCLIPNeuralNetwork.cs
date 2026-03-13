@@ -1774,7 +1774,6 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.VideoCLIP,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ImageSize", _imageSize },

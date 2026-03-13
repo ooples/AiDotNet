@@ -208,7 +208,6 @@ public class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "Conformer-Native" : "Conformer-ONNX",
             Description = $"Conformer {_options.Variant} ASR model (Gulati et al., 2020)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["EncoderDim"] = _options.EncoderDim.ToString();

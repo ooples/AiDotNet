@@ -159,7 +159,6 @@ public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "Branchformer-Native" : "Branchformer-ONNX",
             Description = "Branchformer: Parallel MLP-Attention Architectures (Peng et al., 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers
         };
     }
 

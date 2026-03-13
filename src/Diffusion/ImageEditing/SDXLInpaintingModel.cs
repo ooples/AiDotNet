@@ -133,7 +133,7 @@ public class SDXLInpaintingModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SDXL Inpainting", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SDXL Inpainting", Version = "1.0",
             Description = "SDXL native 1024x1024 mask-based inpainting with 9-channel input",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

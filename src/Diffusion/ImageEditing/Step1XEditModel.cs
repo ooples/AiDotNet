@@ -130,7 +130,7 @@ public class Step1XEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Step1X-Edit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Step1X-Edit", Version = "1.0",
             Description = "Single-step image editing via consistency distillation from rectified flow teacher",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

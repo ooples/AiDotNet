@@ -410,30 +410,6 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type, in this case, NegativeBinomialRegression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an enumeration value indicating that this is a negative binomial regression model. This is used
-    /// for type identification when working with different regression models in a unified manner.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply identifies what kind of model this is.
-    /// 
-    /// It returns a label (NegativeBinomialRegression) that:
-    /// - Identifies this specific type of model
-    /// - Helps other code handle the model appropriately
-    /// - Is used when saving or loading models
-    /// 
-    /// It's like a name tag that lets other parts of the program know what kind of model they're working with.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.NegativeBinomialRegression;
-    }
-
-    /// <summary>
     /// Creates a new instance of the Negative Binomial Regression model with the same configuration.
     /// </summary>
     /// <returns>A new instance of the Negative Binomial Regression model.</returns>

@@ -256,7 +256,6 @@ public class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         {
             Name = _useNativeMode ? "Tempogram-Native" : "Tempogram-ONNX",
             Description = "Neural tempogram for tempo estimation over time",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.FftSize,
             Complexity = _options.NumOnsetLayers
         };
         m.AdditionalInfo["MinBPM"] = _options.MinBPM.ToString("F0");

@@ -89,7 +89,6 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public override ModelType GetModelType() => ModelType.OnlineSGDClassifier;
 
     /// <summary>
     /// Gets whether JIT compilation is supported.

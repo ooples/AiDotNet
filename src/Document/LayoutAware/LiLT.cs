@@ -951,7 +951,6 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         return new ModelMetadata<T>
         {
             Name = "LiLT",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LiLT for language-independent layout understanding (ACL 2022)",
             FeatureCount = _hiddenDim,
             Complexity = _numLayers,

@@ -170,7 +170,6 @@ public class IconVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "IconVSR-Native" : "IconVSR-ONNX",
             Description = $"IconVSR {_options.Variant} information-aggregation VSR (Chan et al., CVPR 2021)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

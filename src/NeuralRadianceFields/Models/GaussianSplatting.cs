@@ -1829,7 +1829,6 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GaussianCount", _gaussians.Count },

@@ -661,7 +661,6 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NetworkType"] = "LinkPredictionModel",

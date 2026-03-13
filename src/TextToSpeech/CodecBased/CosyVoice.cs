@@ -218,7 +218,6 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "CosyVoice-Native" : "CosyVoice-ONNX",
             Description = "CosyVoice: Multilingual TTS with Supervised Semantic Tokens (Du et al., 2024)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.LLMDim
         };
     }

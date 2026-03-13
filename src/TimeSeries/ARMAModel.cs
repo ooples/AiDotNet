@@ -636,7 +636,6 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         var armaOptions = (ARMAOptions<T>)Options;
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ARMAModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

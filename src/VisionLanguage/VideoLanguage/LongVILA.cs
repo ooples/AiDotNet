@@ -211,7 +211,7 @@ public class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LongVILA-Native" : "LongVILA-ONNX", Description = "LongVILA: long-context visual language model for 1hr+ videos.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LongVILA-Native" : "LongVILA-ONNX", Description = "LongVILA: long-context visual language model for 1hr+ videos.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "LongVILA";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         m.AdditionalInfo["MaxVideoMinutes"] = _options.MaxVideoMinutes.ToString();

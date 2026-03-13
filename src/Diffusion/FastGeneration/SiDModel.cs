@@ -141,7 +141,7 @@ public class SiDModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Score Identity Distillation (SiD)", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Score Identity Distillation (SiD)", Version = "1.0",
             Description = "Discriminator-free single-step distillation using score identity",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

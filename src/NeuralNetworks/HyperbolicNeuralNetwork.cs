@@ -292,7 +292,6 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FeedForwardNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "HyperbolicNeuralNetwork" },

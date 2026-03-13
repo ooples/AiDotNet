@@ -759,7 +759,6 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DeepQNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ActionSpace", _actionSpace },

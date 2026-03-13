@@ -113,7 +113,7 @@ public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "MotionDiffuse", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "MotionDiffuse", Version = "1.0",
             Description = "Fine-grained body part text-driven motion generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "part-aware-motion-diffusion");

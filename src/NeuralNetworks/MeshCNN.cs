@@ -431,7 +431,6 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.MeshCNN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumClasses", _options.NumClasses },

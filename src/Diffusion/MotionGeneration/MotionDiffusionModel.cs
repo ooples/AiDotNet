@@ -108,7 +108,7 @@ public class MotionDiffusionModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "MDM", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "MDM", Version = "1.0",
             Description = "Text-to-motion generation for human body animation sequences",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "transformer-motion-diffusion");

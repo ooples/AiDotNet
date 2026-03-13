@@ -235,7 +235,6 @@ public class Vocos<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             Name = _useNativeMode ? "Vocos-Native" : "Vocos-ONNX",
             Description = $"Vocos {_options.Variant} ISTFT vocoder (Siuzdak, 2023, Charactr)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumBackboneBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

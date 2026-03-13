@@ -187,7 +187,6 @@ public class BiMVFI<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "BiMVFI-Native" : "BiMVFI-ONNX",
             Description = $"BiMVFI {_options.Variant} bidirectional motion field interpolation (Seo et al., CVPR 2025)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumResBlocks * _options.NumScales
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

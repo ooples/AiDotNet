@@ -98,12 +98,12 @@ namespace AiDotNet.AutoML.NAS
             return Task.FromResult(new Dictionary<string, object>());
         }
 
-        protected override Task<IFullModel<T, Tensor<T>, Tensor<T>>> CreateModelAsync(ModelType modelType, Dictionary<string, object> parameters)
+        protected override Task<IFullModel<T, Tensor<T>, Tensor<T>>> CreateModelAsync(Type modelType, Dictionary<string, object> parameters)
         {
             return Task.FromResult((IFullModel<T, Tensor<T>, Tensor<T>>)new SuperNet<T>(NasSearchSpace, numNodes: NasNumNodes));
         }
 
-        protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(ModelType modelType)
+        protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(Type modelType)
         {
             return new Dictionary<string, ParameterRange>();
         }

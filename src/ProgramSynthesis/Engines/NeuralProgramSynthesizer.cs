@@ -682,7 +682,6 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Transformer,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "NeuralProgramSynthesizer" },

@@ -894,7 +894,6 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     {
         var metaData = new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetworkARIMA,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "AR Order", _nnarimaOptions.AROrder },

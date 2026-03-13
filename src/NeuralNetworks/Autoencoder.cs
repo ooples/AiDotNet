@@ -962,7 +962,6 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Autoencoder,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputDimension", Layers[0].GetInputShape()[0] },

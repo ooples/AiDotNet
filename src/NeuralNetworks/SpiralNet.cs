@@ -538,7 +538,6 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SpiralNet,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumClasses", _options.NumClasses },

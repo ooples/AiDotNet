@@ -577,26 +577,6 @@ public class BayesianRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the model type for serialization purposes.
-    /// </summary>
-    /// <returns>The model type identifier.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the type identifier for the Bayesian regression model, which is used
-    /// during serialization and deserialization to correctly reconstruct the model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply identifies the type of model for saving and loading purposes.
-    /// 
-    /// When you save a model to a file or database, the system needs to know what kind of model it is
-    /// in order to load it correctly later. This method provides that identification.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.BayesianRegression;
-    }
-
-    /// <summary>
     /// Creates a new instance of the Bayesian regression model with the same configuration.
     /// </summary>
     /// <returns>

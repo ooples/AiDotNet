@@ -1009,21 +1009,6 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     #region Abstract Method Implementations
 
     /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enum value for Label Propagation.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This identifies what kind of model this is within the
-    /// AiDotNet library's type system.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LabelPropagation;
-    }
-
-    /// <summary>
     /// Gets all learnable parameters of the model as a single vector.
     /// </summary>
     /// <returns>An empty vector as Label Propagation is non-parametric.</returns>

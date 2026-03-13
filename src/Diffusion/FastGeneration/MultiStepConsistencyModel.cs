@@ -177,7 +177,6 @@ public class MultiStepConsistencyModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Multi-Step Consistency Model",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Configurable multi-step consistency model bridging single-step speed and multi-step quality",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

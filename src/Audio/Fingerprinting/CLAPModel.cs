@@ -908,7 +908,6 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Name = "CLAP",
             Description = $"Contrastive Language-Audio Pretraining ({_embeddingDim}D embedding, {_projectionDim}D projection)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate,
             Complexity = _audioEncoderLayers
         };

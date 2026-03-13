@@ -297,14 +297,6 @@ public class LassoRegression<T> : RegressionBase<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enumeration value for Lasso Regression.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LassoRegression;
-    }
 
     /// <summary>
     /// Creates a new instance of Lasso Regression with the same configuration.

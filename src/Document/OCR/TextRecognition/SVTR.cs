@@ -438,7 +438,6 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         return new ModelMetadata<T>
         {
             Name = "SVTR",
-            ModelType = ModelType.NeuralNetwork,
             Description = "SVTR for scene text recognition (IJCAI 2022)",
             FeatureCount = _embedDim,
             Complexity = _numLayers,

@@ -185,7 +185,6 @@ public class Wan21Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Wan-2.1",
             Version = "2.1",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Wan 2.1: MoE DiT video generation (Alibaba, 2025)",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

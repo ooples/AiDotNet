@@ -206,7 +206,6 @@ public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         Name = _useNativeMode ? "FireRedASR-Native" : "FireRedASR-ONNX",
         Description = "FireRedASR: dual-pass industrial ASR (2025)",
-        ModelType = ModelType.NeuralNetwork,
         FeatureCount = _options.NumMels,
         Complexity = _options.NumEncoderLayers
     };

@@ -487,7 +487,6 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
     /// model type (e.g., KaplanMeierEstimator, CoxProportionalHazards).
     /// </para>
     /// </remarks>
-    public virtual ModelType GetModelType() => ModelType.None;
 
     /// <summary>
     /// Gets metadata about the model.
@@ -496,10 +495,9 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             FeatureCount = NumFeatures,
             Complexity = NumFeatures,
-            Description = $"{GetModelType()} survival model with {NumFeatures} features",
+            Description = $"{GetType().Name} survival model with {NumFeatures} features",
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "IsFitted", IsFitted },

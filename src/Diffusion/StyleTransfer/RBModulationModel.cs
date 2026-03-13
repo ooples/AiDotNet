@@ -110,7 +110,7 @@ public class RBModulationModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "RB-Modulation", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "RB-Modulation", Version = "1.0",
             Description = "Training-free style transfer via reference-based attention modulation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "attention-modulation-style");

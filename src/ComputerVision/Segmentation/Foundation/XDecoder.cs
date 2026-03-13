@@ -417,7 +417,6 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "XDecoder" }, { "InputHeight", _height }, { "InputWidth", _width },

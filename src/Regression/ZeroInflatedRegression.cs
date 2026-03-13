@@ -746,7 +746,6 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ZeroInflatedRegression,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "DistributionFamily", _options.DistributionFamily.ToString() },

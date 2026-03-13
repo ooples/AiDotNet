@@ -290,7 +290,6 @@ public class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         {
             Name = _useNativeMode ? "CREPE-Native" : "CREPE-ONNX",
             Description = $"CREPE {_options.Variant} pitch detection (Kim et al., 2018)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.FrameSize,
             Complexity = 6
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

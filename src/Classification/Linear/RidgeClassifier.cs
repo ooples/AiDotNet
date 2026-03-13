@@ -56,7 +56,6 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.RidgeClassifier;
 
     /// <summary>
     /// Trains the Ridge Classifier using closed-form solution.

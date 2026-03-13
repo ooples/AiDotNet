@@ -1084,7 +1084,6 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "Temporal Fusion Transformer",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Multi-horizon interpretable forecasting with multi-head attention (Production-Ready)",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,

@@ -1687,7 +1687,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         return new ModelMetadata<T>
         {
             Name = "Gpt4VisionNeuralNetwork",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _embeddingDimension,
             Complexity = _visionEncoderLayers.Count + _languageModelLayers.Count + _crossAttentionLayers.Count,
             Description = "GPT-4V style vision-language model combining vision encoding with language generation",

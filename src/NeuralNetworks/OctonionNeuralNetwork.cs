@@ -282,7 +282,6 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FeedForwardNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "OctonionNeuralNetwork" },

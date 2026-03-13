@@ -1091,7 +1091,6 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.MAModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // MA-specific parameters

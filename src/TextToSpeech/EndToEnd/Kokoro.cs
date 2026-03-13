@@ -291,7 +291,6 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             Name = _useNativeMode ? "Kokoro-Native" : "Kokoro-ONNX",
             Description = "Kokoro: Lightweight StyleTTS2-inspired TTS with ISTFTNet (Hexgrad, 2024)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim
         };
     }

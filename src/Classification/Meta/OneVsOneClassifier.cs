@@ -82,7 +82,6 @@ public class OneVsOneClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.OneVsOneClassifier;
 
     /// <summary>
     /// Trains the One-vs-One classifier on the provided data.

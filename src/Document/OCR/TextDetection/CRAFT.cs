@@ -436,7 +436,6 @@ public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         return new ModelMetadata<T>
         {
             Name = "CRAFT",
-            ModelType = ModelType.NeuralNetwork,
             Description = "CRAFT for character-level text detection (CVPR 2019)",
             FeatureCount = _backboneChannels,
             Complexity = Layers.Count,

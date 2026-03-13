@@ -401,7 +401,6 @@ public class OMGSeg<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "OMGSeg" }, { "InputHeight", _height }, { "InputWidth", _width },

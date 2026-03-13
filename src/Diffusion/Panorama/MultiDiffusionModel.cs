@@ -109,7 +109,7 @@ public class MultiDiffusionModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "MultiDiffusion", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "MultiDiffusion", Version = "1.0",
             Description = "Seamless panoramic generation via overlapping diffusion path averaging",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "overlapping-patch-panorama");

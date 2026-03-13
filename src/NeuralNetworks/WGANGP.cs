@@ -640,7 +640,6 @@ public class WGANGP<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.WassersteinGANGP,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },

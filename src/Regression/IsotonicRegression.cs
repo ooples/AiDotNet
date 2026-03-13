@@ -303,15 +303,6 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the model type of the Isotonic Regression model.
-    /// </summary>
-    /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.IsotonicRegression;
-    }
-
-    /// <summary>
     /// Serializes the Isotonic Regression model to a byte array for storage or transmission.
     /// </summary>
     /// <returns>A byte array containing the serialized model.</returns>

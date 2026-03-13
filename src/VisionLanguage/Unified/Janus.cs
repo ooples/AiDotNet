@@ -204,7 +204,7 @@ public class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Janus-Native" : "Janus-ONNX", Description = "Janus: decoupled visual encoding for understanding vs generation.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Janus-Native" : "Janus-ONNX", Description = "Janus: decoupled visual encoding for understanding vs generation.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Janus";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         m.AdditionalInfo["DecoupledEncoding"] = _options.EnableDecoupledEncoding.ToString();

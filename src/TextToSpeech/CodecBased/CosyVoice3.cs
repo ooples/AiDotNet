@@ -218,7 +218,6 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "CosyVoice3-Native" : "CosyVoice3-ONNX",
             Description = "CosyVoice 3: Zero-Shot Multilingual TTS (Alibaba DAMO, 2025)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.LLMDim
         };
     }

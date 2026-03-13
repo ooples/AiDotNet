@@ -277,7 +277,6 @@ public class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T
         {
             Name = _useNativeMode ? "ECAPA-TDNN-Native" : "ECAPA-TDNN-ONNX",
             Description = "ECAPA-TDNN Speaker Embedding (Desplanques et al., Interspeech 2020)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.Channels.Length
         };
         m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();

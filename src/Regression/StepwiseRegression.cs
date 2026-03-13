@@ -482,33 +482,6 @@ public class StepwiseRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Returns the type identifier for this regression model.
-    /// </summary>
-    /// <returns>
-    /// The model type identifier for stepwise regression.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the enum value that identifies this model as a stepwise regression model. This is used 
-    /// for model identification in serialization/deserialization and for logging purposes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply tells the system what kind of model this is.
-    /// 
-    /// It's like a name tag for the model that says "I am a stepwise regression model."
-    /// This is useful when:
-    /// - Saving the model to a file
-    /// - Loading a model from a file
-    /// - Logging information about the model
-    /// 
-    /// You generally won't need to call this method directly in your code.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.StepwiseRegression;
-    }
-
-    /// <summary>
     /// Serializes the stepwise regression model to a byte array for storage or transmission.
     /// </summary>
     /// <returns>A byte array containing the serialized model data.</returns>
