@@ -92,8 +92,10 @@ namespace AiDotNet.Diffusion.Audio;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToSpeech)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class BarkModel<T> : AudioDiffusionModelBase<T>

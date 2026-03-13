@@ -72,6 +72,7 @@ namespace AiDotNet.Diffusion.Audio;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
