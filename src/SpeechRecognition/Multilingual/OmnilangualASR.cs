@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,14 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// Omnilingual ASR builds on MMS with improved pre-training using 500k+ hours of multilingual data and a more efficient adapter mechanism. The model uses a language-agnostic encoder with lightweight language-specific projection heads. It supports seamless code-switching between languages within a single utterance, enabled by a shared multilingual vocabulary and joint language-identification CTC auxiliary loss.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Scaling Speech Technology to 1,000+ Languages", "https://arxiv.org/abs/2305.13516", Year = 2023, Authors = "Pratap et al.")]
 public class OmnilangualASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly OmnilangualASROptions _options; public override ModelOptions GetOptions() => _options;

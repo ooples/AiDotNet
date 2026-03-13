@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// FireRedASR is an industrial-grade ASR system using a dual-pass architecture. The first pass (Fire) uses a fast Conformer-CTC encoder for streaming results. The second pass (Reduce) refines the output using attention-based rescoring with language model integration. The dual-pass design balances latency and accuracy for production deployments. Achieves state-of-the-art on Mandarin ASR benchmarks with robust performance on accented and noisy speech.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition", "https://arxiv.org/abs/2501.07755", Year = 2025, Authors = "FireRed Team")]
 public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly FireRedASROptions _options;

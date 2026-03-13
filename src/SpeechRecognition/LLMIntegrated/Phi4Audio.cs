@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,13 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// Phi-4 Audio extends the Phi-4 language model with speech understanding through a Mixture-of-LoRA adapter approach. A lightweight speech encoder processes audio and produces features that are injected into the Phi-4 model via specialized LoRA adapters. The mixture approach routes different speech feature types (prosody, phonetic, semantic) to specialized adapter experts. This enables efficient speech understanding without full model fine-tuning while maintaining Phi-4's strong language capabilities.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Phi-4-mini Technical Report: Compact yet Powerful Multimodal Language Models via Mixture-of-LoRAs", "https://arxiv.org/abs/2503.01743", Year = 2025, Authors = "Abdin et al.")]
 public class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Phi4AudioOptions _options; public override ModelOptions GetOptions() => _options;

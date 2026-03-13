@@ -158,6 +158,12 @@ public enum ModelTask
     ImageEditing,
 
     /// <summary>
+    /// Modifies or manipulates existing data based on instructions, conditions, or references.
+    /// Example: editing speech in an audio recording or modifying a 3D scene.
+    /// </summary>
+    Editing,
+
+    /// <summary>
     /// Generates images from text descriptions.
     /// Example: creating a photorealistic image from "a cat sitting on a rainbow."
     /// </summary>
@@ -251,5 +257,23 @@ public enum ModelTask
     /// Assigns inputs to one of three or more categories.
     /// Example: classifying images as cats, dogs, or birds.
     /// </summary>
-    MultiClassClassification
+    MultiClassClassification,
+
+    /// <summary>
+    /// Generates video content from various inputs (text, image, or video).
+    /// Example: creating a short video from a text prompt or animating a still image.
+    /// </summary>
+    VideoGeneration,
+
+    /// <summary>
+    /// Generates video by animating a single input image.
+    /// Example: turning a photo of a landscape into a video with moving clouds and water.
+    /// </summary>
+    ImageToVideo,
+
+    /// <summary>
+    /// Transforms an existing video into a modified version.
+    /// Example: changing the style of a video or editing specific elements while preserving motion.
+    /// </summary>
+    VideoToVideo
 }

@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -20,6 +22,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> /// Deep Voice 3: fully convolutional attention-based TTS with monotonic attention.
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Voice 3: Scaling Text-to-Speech with Convolutional Sequence Learning", "https://arxiv.org/abs/1710.07654", Year = 2018, Authors = "Ping et al.")]
 public class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly DeepVoice3Options _options; public override ModelOptions GetOptions() => _options;

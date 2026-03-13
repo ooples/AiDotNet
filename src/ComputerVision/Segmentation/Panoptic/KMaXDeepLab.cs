@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 /// <b>Reference:</b> Yu et al., "k-means Mask Transformer", ECCV 2022.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("k-means Mask Transformer", "https://arxiv.org/abs/2207.04044", Year = 2022, Authors = "Yu et al.")]
 public class KMaXDeepLab<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly KMaXDeepLabOptions _options;

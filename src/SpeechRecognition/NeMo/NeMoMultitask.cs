@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,12 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// task-specific decoder prompts.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition", "https://arxiv.org/abs/2305.05084", Year = 2023, Authors = "Rekesh et al.")]
 public class NeMoMultitask<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly NeMoMultitaskOptions _options; public override ModelOptions GetOptions() => _options;

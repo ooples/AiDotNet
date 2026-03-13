@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <list type="bullet"><item>Paper: "GLaMM: Pixel Grounding Large Multimodal Model" (MBZUAI, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> GLaMM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GLaMM: Pixel Grounding Large Multimodal Model", "https://arxiv.org/abs/2311.03356", Year = 2024, Authors = "Rasheed et al.")]
 public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GLaMMOptions _options; public override ModelOptions GetOptions() => _options;

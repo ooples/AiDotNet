@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -30,6 +32,12 @@ namespace AiDotNet.NeuralNetworks;
 /// gradually improving its predictions through a process called training.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class NeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly NeuralNetworkDefaultOptions _options;

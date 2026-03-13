@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -23,6 +24,16 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "Perception Encoder: The best satisfies all" (Meta, 2025)</item></list></para>
 /// <para><b>For Beginners:</b> PerceptionEncoder is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Perception Encoder: The best satisfies all", "https://arxiv.org/abs/2504.13181", Year = 2025, Authors = "Meta")]
 public class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly PerceptionEncoderOptions _options; public override ModelOptions GetOptions() => _options;

@@ -48,7 +48,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int h = Math.Min(HiddenUnits, 10);
+        int h = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -171,8 +171,8 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         }
 
         var result = ExtractAdjacency(W1, d, h);
-        // Threshold
-        T wThreshold = NumOps.FromDouble(0.3);
+        // Threshold using configurable EdgeThreshold from DeepCausalBase
+        T wThreshold = NumOps.FromDouble(EdgeThreshold);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
                 if (!NumOps.GreaterThan(NumOps.Abs(result[i, j]), wThreshold))
@@ -198,29 +198,26 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
 
     private T ComputeTraceExpConstraint(Matrix<T> A, int d)
     {
-        // h(A) = tr(e^(A*A)) - d using power series approximation
+        // h(A) = tr(e^(A∘A)) - d using power series: exp(M) = I + M + M^2/2! + ...
         var AA = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
                 AA[i, j] = NumOps.Multiply(A[i, j], A[i, j]);
 
-        // e^M ≈ I + M + M^2/2 + M^3/6 using Engine-accelerated MatMul
         var power = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++) power[i, i] = NumOps.One;
         var expM = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++) expM[i, i] = NumOps.One;
 
-        for (int p = 1; p <= 5; p++)
+        for (int p = 1; p <= 10; p++)
         {
-            var next = MatMul(power, AA);
+            // power = power * AA (unscaled M^p)
+            power = MatMul(power, AA);
             T fact = NumOps.FromDouble(1.0 / Factorial(p));
+            // expM += power / p!
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
-                {
-                    next[i, j] = NumOps.Multiply(next[i, j], fact);
-                    expM[i, j] = NumOps.Add(expM[i, j], next[i, j]);
-                }
-            power = next;
+                    expM[i, j] = NumOps.Add(expM[i, j], NumOps.Multiply(power[i, j], fact));
         }
 
         T trace = NumOps.Zero;
@@ -231,29 +228,26 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
 
     private (T h, Matrix<T> grad) ComputeExpGradient(Matrix<T> A, int d)
     {
-        // Gradient: dh/dA[i,j] = 2 * A[i,j] * (e^(A*A))^T[i,j]
+        // Gradient: dh/dA[i,j] = 2 * A[i,j] * (e^(A∘A))^T[i,j]
         var AA = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
                 AA[i, j] = NumOps.Multiply(A[i, j], A[i, j]);
 
-        // Compute e^(AA) via power series with Engine-accelerated MatMul
         var expM = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++) expM[i, i] = NumOps.One;
         var power = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++) power[i, i] = NumOps.One;
 
-        for (int p = 1; p <= 5; p++)
+        for (int p = 1; p <= 10; p++)
         {
-            var next = MatMul(power, AA);
+            // power = power * AA (unscaled M^p)
+            power = MatMul(power, AA);
             T fact = NumOps.FromDouble(1.0 / Factorial(p));
+            // expM += power / p!
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
-                {
-                    next[i, j] = NumOps.Multiply(next[i, j], fact);
-                    expM[i, j] = NumOps.Add(expM[i, j], next[i, j]);
-                }
-            power = next;
+                    expM[i, j] = NumOps.Add(expM[i, j], NumOps.Multiply(power[i, j], fact));
         }
 
         T trace = NumOps.Zero;

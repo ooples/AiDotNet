@@ -1,8 +1,24 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>SpeechT5: SpeechT5: Unified-Modal Encoder-Decoder Pre-Training.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "SpeechT5: Unified-Modal Encoder-Decoder Pre-Training" (Ao et al., 2022)</item></list></para><para><b>For Beginners:</b> SpeechT5: SpeechT5: Unified-Modal Encoder-Decoder Pre-Training.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SpeechT5: Unified-Modal Encoder-Decoder Pre-Training for Spoken Language Processing", "https://arxiv.org/abs/2110.07205", Year = 2022, Authors = "Ao et al.")]
 public class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly SpeechT5Options _options; public override ModelOptions GetOptions() => _options;

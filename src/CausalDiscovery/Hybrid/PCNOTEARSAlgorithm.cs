@@ -198,9 +198,11 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
                         gradient += W[k, j] * S[i, k];
                     }
 
-                    // Soft thresholding (L1 proximal)
+                    // Proximal gradient update: w_new = soft_threshold(w_old - gradient/S[i,i], lambda/S[i,i])
+                    double sii = S[i, i] + 1e-10;
                     double oldW = W[i, j];
-                    double newW = SoftThreshold(-gradient / (S[i, i] + 1e-10), _lambda / (S[i, i] + 1e-10));
+                    double updated = oldW - gradient / sii;
+                    double newW = SoftThreshold(updated, _lambda / sii);
 
                     if (Math.Abs(newW - oldW) > 1e-8)
                     {
@@ -213,10 +215,72 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
             if (!changed) break;
         }
 
-        // Convert to Matrix<T>
+        // Enforce DAG: remove weakest edges that create cycles
+        // Use topological ordering via edge removal
+        EnforceDag(W, d);
+
         var result = new double[d, d];
         Array.Copy(W, result, W.Length);
         return result;
+    }
+
+    private static void EnforceDag(double[,] W, int d)
+    {
+        // Iteratively remove weakest edge participating in a cycle until acyclic
+        while (true)
+        {
+            // Check for cycles via DFS
+            var visited = new int[d]; // 0=unvisited, 1=in-stack, 2=done
+            int weakI = -1, weakJ = -1;
+            double weakVal = double.MaxValue;
+            bool hasCycle = false;
+
+            for (int start = 0; start < d && !hasCycle; start++)
+            {
+                if (visited[start] != 0) continue;
+                var stack = new Stack<(int node, int nextChild)>();
+                stack.Push((start, 0));
+                visited[start] = 1;
+
+                while (stack.Count > 0 && !hasCycle)
+                {
+                    var (node, nextChild) = stack.Pop();
+                    bool pushed = false;
+                    for (int child = nextChild; child < d; child++)
+                    {
+                        if (Math.Abs(W[node, child]) < 1e-12) continue;
+                        if (visited[child] == 1)
+                        {
+                            hasCycle = true;
+                            // Find weakest edge in the cycle path
+                            foreach (var (n, _) in stack)
+                            {
+                                for (int c = 0; c < d; c++)
+                                    if (Math.Abs(W[n, c]) > 1e-12 && visited[c] == 1)
+                                        if (Math.Abs(W[n, c]) < weakVal)
+                                        { weakVal = Math.Abs(W[n, c]); weakI = n; weakJ = c; }
+                            }
+                            if (Math.Abs(W[node, child]) < weakVal)
+                            { weakVal = Math.Abs(W[node, child]); weakI = node; weakJ = child; }
+                            break;
+                        }
+                        if (visited[child] == 0)
+                        {
+                            stack.Push((node, child + 1));
+                            stack.Push((child, 0));
+                            visited[child] = 1;
+                            pushed = true;
+                            break;
+                        }
+                    }
+                    if (!pushed && !hasCycle)
+                        visited[node] = 2;
+                }
+            }
+
+            if (!hasCycle || weakI < 0) break;
+            W[weakI, weakJ] = 0;
+        }
     }
 
     private static double SoftThreshold(double z, double threshold)
@@ -239,7 +303,7 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
             partialCorr = ComputePartialCorrelation(data, i, j, condSet, n);
         }
 
-        int dof = n - condSet.Count - 3;
+        int dof = n - condSet.Count - 2;
         if (dof <= 0) return true;
 
         double clamped = Math.Max(-0.999999, Math.Min(partialCorr, 0.999999));

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,12 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// optional diarization. This achieves 12x faster than real-time with accurate word timestamps.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("WhisperX: Time-Accurate Speech Transcription of Long-Form Audio", "https://arxiv.org/abs/2303.00747", Year = 2023, Authors = "Bain et al.")]
 public class WhisperX<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly WhisperXOptions _options; public override ModelOptions GetOptions() => _options;

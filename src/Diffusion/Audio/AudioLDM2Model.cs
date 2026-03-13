@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
@@ -69,6 +71,13 @@ namespace AiDotNet.Diffusion.Audio;
 ///     guidanceScale: 4.0);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AudioLDM 2: Learning Holistic Audio Generation with Self-supervised Pretraining", "https://arxiv.org/abs/2308.05734", Year = 2023, Authors = "Liu et al.")]
 public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

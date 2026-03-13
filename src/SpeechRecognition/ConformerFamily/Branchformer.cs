@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -15,7 +16,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Branchformer: Parallel MLP-Attention Architectures" (Peng et al., 2022)</item></list></para>
+/// <list type="bullet"><item>Paper: "Branchformer: Parallel MLP-Attention Architectures to Achieve High Accuracy and Linear-Time Complexity for Speech Processing" (Peng et al., 2022)</item></list></para>
 /// <para><b>For Beginners:</b> The Branchformer processes audio through two parallel branches per layer: (1) Multi-head self-attention for global context, (2) Convolutional gating MLP (cgMLP) for local patterns. The branches are concatenated and merged with a learned linear pro...</para>
 /// <para>
 /// The Branchformer processes audio through two parallel branches per layer:
@@ -25,6 +26,12 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// allowing each layer to capture both local and global dependencies simultaneously.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Branchformer: Parallel MLP-Attention Architectures to Achieve High Accuracy and Linear-Time Complexity for Speech Processing", "https://arxiv.org/abs/2207.02971", Year = 2022, Authors = "Peng et al.")]
 public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly BranchformerOptions _options;

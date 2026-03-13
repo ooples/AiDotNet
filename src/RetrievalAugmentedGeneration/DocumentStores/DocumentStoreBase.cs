@@ -17,7 +17,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// on implementing storage-specific logic and search algorithms.
 /// </para>
 /// <para><b>For Beginners:</b> This is the foundation that all document storage systems build upon.
-/// 
+///
 /// Think of it like a template for building a library:
 /// - It handles common tasks (checking inputs, managing documents, calculating similarity)
 /// - Specific storage systems (in-memory, database) just fill in where/how documents are stored

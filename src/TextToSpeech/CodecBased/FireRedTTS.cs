@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>FireRedTTS: foundation TTS model with large-scale training and multi-codebook generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "FireRedTTS: A Foundation TTS Framework" (Guo et al., 2024)</item></list></para><para><b>For Beginners:</b> FireRedTTS: foundation TTS model with large-scale training and multi-codebook generation.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FireRedTTS: A Foundation Text-To-Speech Framework for Industry-Level Generative Speech Applications", "https://arxiv.org/abs/2409.03283", Year = 2024, Authors = "Guo et al.")]
 public class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly FireRedTTSOptions _options; public override ModelOptions GetOptions() => _options;

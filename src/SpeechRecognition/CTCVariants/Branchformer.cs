@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// Branchformer processes each encoder block through two parallel branches: a self-attention branch for global context and a convolutional branch (cgMLP) for local patterns. The branches operate independently and their outputs are merged via a learned gating mechanism. This parallel design allows the model to capture both local acoustic details and long-range dependencies more effectively than Conformer's sequential attention-convolution design. Branchformer consistently outperforms Conformer on ASR benchmarks.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Branchformer: Parallel MLP-Attention Architectures for Speech Processing", "https://arxiv.org/abs/2207.02971", Year = 2022, Authors = "Peng et al.")]
 public class Branchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CTCBranchformerOptions _options; public override ModelOptions GetOptions() => _options;

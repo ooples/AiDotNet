@@ -12,7 +12,8 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// NTS-NOTEARS extends DYNOTEARS to handle nonstationary time series where the causal
 /// structure may change over time. It partitions the data into segments using a variance-based
 /// change-point detector, learns a separate NOTEARS-style DAG for each segment, and produces
-/// a summary graph that captures the union of causal structures weighted by segment length.
+/// a summary graph by taking the maximum absolute edge weight across segments, preserving
+/// regime-specific causal effects.
 /// </para>
 /// <para>
 /// <b>Algorithm:</b>
@@ -55,13 +56,19 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
     private readonly double _lambda1;
     private readonly double _wThreshold;
     private readonly int _maxSegments;
+    private readonly int _maxOuterIterations;
+    private readonly int _maxInnerSteps;
 
     public NTSNOTEARSAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyTimeSeriesOptions(options);
         _lambda1 = options?.SparsityPenalty ?? 0.1;
         _wThreshold = options?.EdgeThreshold ?? 0.3;
-        _maxSegments = Math.Max(2, Math.Min(options?.MaxIterations ?? 3, 5));
+        // MaxSegments is a separate concept from optimizer iterations
+        _maxSegments = Math.Max(2, Math.Min(options?.MaxParents ?? 3, 5));
+        // MaxIterations controls the actual optimization convergence
+        _maxOuterIterations = Math.Max(1, options?.MaxIterations ?? 20);
+        _maxInnerSteps = 100;
     }
 
     /// <inheritdoc/>
@@ -71,7 +78,10 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         int d = data.Columns;
         int effectiveN = n - MaxLag;
 
-        if (effectiveN < 2 * d + 3 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"NTS-NOTEARS requires at least 2 variables, got {d}.");
+        if (effectiveN < 2 * d + 3)
+            throw new ArgumentException($"NTS-NOTEARS requires at least {2 * d + 3 + MaxLag} samples for {d} variables with lag {MaxLag}, got {n}.");
 
         // Phase 1: Change-point detection using rolling variance ratio
         var changePoints = DetectChangePoints(data, n, d);
@@ -240,48 +250,42 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
                     Z[t, colOffset + j] = stdData[t + MaxLag - lag, j];
             }
 
-        // NOTEARS with augmented Lagrangian on W only
+        // DYNOTEARS-style: optimize contemporaneous W and lagged A matrices
+        // Loss = 1/(2n) * ||Xt - Xt*W - Z*A||_F^2 + lambda*||W||_1
+        // subject to h(W) = tr(exp(W∘W)) - d = 0
         var W = new Matrix<T>(d, d);
+        var A = new Matrix<T>(lagDim, d); // Lagged coefficients
         double rho = 1.0, alpha = 0.0;
         T lr = NumOps.FromDouble(1e-3);
         T lambda = NumOps.FromDouble(_lambda1);
         T invN = NumOps.FromDouble(1.0 / effectiveN);
 
-        for (int outer = 0; outer < 20; outer++)
+        for (int outer = 0; outer < _maxOuterIterations; outer++)
         {
             // Inner gradient descent
-            for (int step = 0; step < 100; step++)
+            for (int step = 0; step < _maxInnerSteps; step++)
             {
-                // Residual: R = Xt - Xt*W (simplified; ignoring lagged for W gradient)
                 var gradW = new Matrix<T>(d, d);
+                var gradA = new Matrix<T>(lagDim, d);
 
-                // Compute loss gradient using columns with Engine.DotProduct
+                // Compute residual and gradients for each target column j
                 for (int j = 0; j < d; j++)
                 {
-                    var targetCol = new Vector<T>(effectiveN);
-                    for (int t = 0; t < effectiveN; t++)
-                        targetCol[t] = Xt[t, j];
-
-                    // Prediction: sum_k Xt[:,k] * W[k,j]
-                    var predCol = new Vector<T>(effectiveN);
-                    for (int k = 0; k < d; k++)
-                    {
-                        if (NumOps.GreaterThan(NumOps.Abs(W[k, j]), NumOps.FromDouble(1e-15)))
-                        {
-                            var xCol = new Vector<T>(effectiveN);
-                            for (int t = 0; t < effectiveN; t++)
-                                xCol[t] = Xt[t, k];
-                            for (int t = 0; t < effectiveN; t++)
-                                predCol[t] = NumOps.Add(predCol[t], NumOps.Multiply(W[k, j], xCol[t]));
-                        }
-                    }
-
-                    // Residual for this column
+                    // Residual: r_j = Xt[:,j] - Xt*W[:,j] - Z*A[:,j]
                     var residCol = new Vector<T>(effectiveN);
                     for (int t = 0; t < effectiveN; t++)
-                        residCol[t] = NumOps.Subtract(targetCol[t], predCol[t]);
+                    {
+                        T pred = NumOps.Zero;
+                        // Contemporaneous: Xt * W[:,j]
+                        for (int k = 0; k < d; k++)
+                            pred = NumOps.Add(pred, NumOps.Multiply(Xt[t, k], W[k, j]));
+                        // Lagged: Z * A[:,j]
+                        for (int l = 0; l < lagDim; l++)
+                            pred = NumOps.Add(pred, NumOps.Multiply(Z[t, l], A[l, j]));
+                        residCol[t] = NumOps.Subtract(Xt[t, j], pred);
+                    }
 
-                    // Gradient: -1/n * Xt' * residual
+                    // Gradient for W: -1/n * Xt' * residual
                     for (int i = 0; i < d; i++)
                     {
                         var xiCol = new Vector<T>(effectiveN);
@@ -290,9 +294,19 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
                         T dot = Engine.DotProduct(xiCol, residCol);
                         gradW[i, j] = NumOps.Negate(NumOps.Multiply(invN, dot));
                     }
+
+                    // Gradient for A: -1/n * Z' * residual
+                    for (int l = 0; l < lagDim; l++)
+                    {
+                        var zCol = new Vector<T>(effectiveN);
+                        for (int t = 0; t < effectiveN; t++)
+                            zCol[t] = Z[t, l];
+                        T dot = Engine.DotProduct(zCol, residCol);
+                        gradA[l, j] = NumOps.Negate(NumOps.Multiply(invN, dot));
+                    }
                 }
 
-                // Add acyclicity gradient: (alpha + rho*h) * 2 * exp(W∘W) ∘ W
+                // Add acyclicity gradient for W: (alpha + rho*h) * [exp(W∘W)^T ∘ 2W]
                 double h = ComputeTraceExpWoW(W, d);
                 T constraintMult = NumOps.FromDouble(alpha + rho * h);
                 T two = NumOps.FromDouble(2.0);
@@ -300,18 +314,22 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
                 for (int i = 0; i < d; i++)
                     for (int j = 0; j < d; j++)
                     {
+                        // Use transposed expWoW: expWoW[j,i] not expWoW[i,j]
                         T acGrad = NumOps.Multiply(constraintMult,
-                            NumOps.Multiply(two, NumOps.Multiply(expWoW[i, j], W[i, j])));
+                            NumOps.Multiply(two, NumOps.Multiply(expWoW[j, i], W[i, j])));
                         T l1Grad = NumOps.Multiply(lambda, NumOps.FromDouble(Math.Sign(NumOps.ToDouble(W[i, j]))));
                         gradW[i, j] = NumOps.Add(gradW[i, j], NumOps.Add(acGrad, l1Grad));
                     }
 
-                // Update W
+                // Update W and A
                 for (int i = 0; i < d; i++)
                     for (int j = 0; j < d; j++)
                         W[i, j] = NumOps.Subtract(W[i, j], NumOps.Multiply(lr, gradW[i, j]));
+                for (int l = 0; l < lagDim; l++)
+                    for (int j = 0; j < d; j++)
+                        A[l, j] = NumOps.Subtract(A[l, j], NumOps.Multiply(lr, gradA[l, j]));
 
-                // Zero diagonal
+                // Zero diagonal of W
                 for (int i = 0; i < d; i++)
                     W[i, i] = NumOps.Zero;
             }

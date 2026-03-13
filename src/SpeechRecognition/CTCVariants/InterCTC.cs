@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// InterCTC applies auxiliary CTC losses at intermediate encoder layers, not just the final layer. Each intermediate CTC head provides gradient signals to lower layers, improving training of deep encoders. The intermediate predictions can also be used for self-conditioning: each layer receives the CTC posteriors from the layer below, enabling iterative refinement of predictions through the encoder stack. This consistently improves accuracy for deep Conformer encoders (12+ layers).
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Intermediate Loss Regularization for CTC-based Speech Recognition", "https://arxiv.org/abs/2102.03216", Year = 2021, Authors = "Lee and Watanabe")]
 public class InterCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly InterCTCOptions _options; public override ModelOptions GetOptions() => _options;

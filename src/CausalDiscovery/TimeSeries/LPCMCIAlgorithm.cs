@@ -31,7 +31,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// some edges may be uncertain in direction (shown with circle marks).
 /// </para>
 /// <para>
-/// Reference: Gerhardus and Runge (2022), "High-recall causal discovery for autocorrelated
+/// Reference: Gerhardus and Runge (2020), "High-recall causal discovery for autocorrelated
 /// time series with latent confounders", NeurIPS.
 /// </para>
 /// </remarks>
@@ -44,7 +44,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("High-recall causal discovery for autocorrelated time series with latent confounders", "https://proceedings.neurips.cc/paper_files/paper/2020/hash/94e70705efae45a1de1bcc6ca669aca3-Abstract.html", Year = 2022, Authors = "Andreas Gerhardus, Jakob Runge")]
+[ModelPaper("High-recall causal discovery for autocorrelated time series with latent confounders", "https://proceedings.neurips.cc/paper_files/paper/2020/hash/94e70705efae45a1de1bcc6ca669aca3-Abstract.html", Year = 2020, Authors = "Andreas Gerhardus, Jakob Runge")]
 public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <inheritdoc/>
@@ -58,12 +58,14 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
 
     private readonly double _alpha;
     private readonly int _maxCondSetSize;
+    private readonly double _correlationThreshold;
 
     public LPCMCIAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyTimeSeriesOptions(options);
         _alpha = options?.SignificanceLevel ?? 0.05;
         _maxCondSetSize = options?.MaxConditioningSetSize ?? 3;
+        _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
     }
 
     /// <inheritdoc/>
@@ -76,7 +78,7 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
 
         var cov = ComputeCovarianceMatrix(data);
         T eps = NumOps.FromDouble(1e-10);
-        T threshold = NumOps.FromDouble(0.1);
+        T threshold = NumOps.FromDouble(_correlationThreshold);
 
         // Phase 1: PCMCI-style condition selection — compute MCI statistic for each pair
         // MCI(i→j | Parents(j)\{i}) tests if i→j survives conditioning on j's other parents

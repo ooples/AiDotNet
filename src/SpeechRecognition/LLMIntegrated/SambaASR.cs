@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// Samba-ASR applies the Mamba selective state-space model architecture to speech recognition. Unlike Transformer-based ASR with quadratic attention complexity, Mamba's linear-time SSM layers process sequences efficiently. The model uses selective scan mechanisms that dynamically filter speech features based on content, achieving competitive WER with significantly lower computational cost for long-form audio processing.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("An Exploration of State Space Models and Mamba for Speech Recognition", "https://arxiv.org/abs/2406.02832", Year = 2024, Authors = "Miyazaki et al.")]
 public class SambaASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SambaASROptions _options; public override ModelOptions GetOptions() => _options;

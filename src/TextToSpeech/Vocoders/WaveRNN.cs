@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>WaveRNN: efficient autoregressive vocoder with dual softmax and subscale sample generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Efficient Neural Audio Synthesis" (Kalchbrenner et al., 2018)</item></list></para><para><b>For Beginners:</b> WaveRNN: efficient autoregressive vocoder with dual softmax and subscale sample generation.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Efficient Neural Audio Synthesis", "https://arxiv.org/abs/1802.08435", Year = 2018, Authors = "Kalchbrenner et al.")]
 public class WaveRNN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveRNNOptions _options; public override ModelOptions GetOptions() => _options;

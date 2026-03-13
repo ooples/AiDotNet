@@ -1,3 +1,4 @@
+
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
 /// <summary>

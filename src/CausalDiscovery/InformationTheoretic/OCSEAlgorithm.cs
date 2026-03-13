@@ -20,7 +20,7 @@ namespace AiDotNet.CausalDiscovery.InformationTheoretic;
 /// <item>For each candidate cause X, compute causation entropy:
 ///   CE(X→Y|S) = MI(delta_Y ; X | S) where S is the current conditioning set</item>
 /// <item>Greedily add variables to S that maximize CE until no variable exceeds threshold</item>
-/// <item>Variables remaining outside S with significant CE are causal parents of Y</item>
+/// <item>Variables in S are the discovered causal parents of Y</item>
 /// <item>Edge weight = causation entropy value (Gaussian MI approximation)</item>
 /// </list>
 /// </para>
@@ -70,7 +70,10 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
         int d = data.Columns;
         int effectiveN = n - 1; // We need transitions
 
-        if (effectiveN < d + 3 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"oCSE requires at least 2 variables, got {d}.");
+        if (effectiveN < d + 3)
+            throw new ArgumentException($"oCSE requires at least {d + 3 + 1} time points for {d} variables, got {n}.");
 
         // Compute transitions: delta_Y[t] = Y[t+1] - Y[t]
         var transitions = new Matrix<T>(effectiveN, d);
@@ -202,22 +205,40 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
         int p = condSet.Count;
         if (p == 0) return y;
 
-        // Build normal equations using Engine.DotProduct for each column pair
+        T nT = NumOps.FromDouble(n);
+
+        // Center y
+        T yMean = NumOps.Zero;
+        for (int t = 0; t < n; t++)
+            yMean = NumOps.Add(yMean, y[t]);
+        yMean = NumOps.Divide(yMean, nT);
+
+        var centY = new Vector<T>(n);
+        for (int t = 0; t < n; t++)
+            centY[t] = NumOps.Subtract(y[t], yMean);
+
+        // Extract and center conditioning columns
+        var cols = new Vector<T>[p];
+        var colMeans = new T[p];
+        for (int c = 0; c < p; c++)
+        {
+            T mean = NumOps.Zero;
+            for (int t = 0; t < n; t++)
+                mean = NumOps.Add(mean, data[t, condSet[c]]);
+            colMeans[c] = NumOps.Divide(mean, nT);
+
+            cols[c] = new Vector<T>(n);
+            for (int t = 0; t < n; t++)
+                cols[c][t] = NumOps.Subtract(data[t, condSet[c]], colMeans[c]);
+        }
+
+        // Build normal equations on centered data
         var XtX = new Matrix<T>(p, p);
         var Xty = new Vector<T>(p);
 
-        // Extract conditioning columns
-        var cols = new Vector<T>[p];
-        for (int c = 0; c < p; c++)
-        {
-            cols[c] = new Vector<T>(n);
-            for (int t = 0; t < n; t++)
-                cols[c][t] = data[t, condSet[c]];
-        }
-
         for (int a = 0; a < p; a++)
         {
-            Xty[a] = Engine.DotProduct(cols[a], y);
+            Xty[a] = Engine.DotProduct(cols[a], centY);
             for (int b = a; b < p; b++)
             {
                 T dot = Engine.DotProduct(cols[a], cols[b]);
@@ -233,14 +254,14 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
 
         var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
 
-        // Compute residuals
+        // Compute residuals from centered regression
         var residuals = new Vector<T>(n);
         for (int t = 0; t < n; t++)
         {
             T pred = NumOps.Zero;
             for (int c = 0; c < p; c++)
                 pred = NumOps.Add(pred, NumOps.Multiply(cols[c][t], beta[c]));
-            residuals[t] = NumOps.Subtract(y[t], pred);
+            residuals[t] = NumOps.Subtract(centY[t], pred);
         }
 
         return residuals;

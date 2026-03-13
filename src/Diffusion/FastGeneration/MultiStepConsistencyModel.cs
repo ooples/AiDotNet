@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -32,6 +34,12 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Based on Consistency Models (Song et al., 2023) with multi-step extensions
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Consistency Models", "https://arxiv.org/abs/2303.01469", Year = 2023, Authors = "Song et al.")]
 public class MultiStepConsistencyModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

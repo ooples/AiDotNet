@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,15 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// AV-HuBERT extends HuBERT to jointly learn from audio and visual (lip) modalities. The model uses separate audio (CNN) and visual (ResNet) feature encoders followed by a shared Transformer that learns multimodal representations. During pre-training, both audio and visual streams are masked, and the model predicts cluster assignments from the combined input. For audio-only ASR, AV-HuBERT leverages pre-trained representations that capture cross-modal speech dynamics.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Learning Audio-Visual Speech Representation by Masked Multimodal Cluster Prediction", "https://arxiv.org/abs/2201.02184", Year = 2022, Authors = "Shi et al.")]
 public class AVHuBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AVHuBERTOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// Groq Whisper provides Whisper model inference accelerated by Groq's LPU (Language Processing Unit) hardware. The LPU's deterministic execution model and high memory bandwidth enable real-time Whisper Large V3 inference at unprecedented speeds. Groq achieves 189x real-time processing for Whisper Large V3, making it the fastest available Whisper API. The service supports all Whisper model sizes and languages through Groq's cloud API, with particular advantages for batch processing large audio datasets.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Robust Speech Recognition via Large-Scale Weak Supervision", "https://arxiv.org/abs/2212.04356", Year = 2023, Authors = "Radford et al.")]
 public class GroqWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly GroqWhisperOptions _options; public override ModelOptions GetOptions() => _options;

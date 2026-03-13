@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Aria: An Open Multimodal Native Mixture-of-Experts Model" (Rhymes AI, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> Aria is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Aria: An Open Multimodal Native Mixture-of-Experts Model", "https://arxiv.org/abs/2410.05993", Year = 2024, Authors = "Li et al.")]
 public class Aria<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly AriaOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// <list type="bullet"><item>Paper: "LLaVA-CoT: Let Vision Language Models Reason Step-by-Step" (2024)</item></list></para>
 /// <para><b>For Beginners:</b> LLaVACoT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LLaVA-CoT: Let Vision Language Models Reason Step-by-Step", "https://arxiv.org/abs/2411.10440", Year = 2024, Authors = "Xu et al.")]
 public class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly LLaVACoTOptions _options; public override ModelOptions GetOptions() => _options;

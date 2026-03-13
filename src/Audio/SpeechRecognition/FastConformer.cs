@@ -43,6 +43,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

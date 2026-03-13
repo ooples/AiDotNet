@@ -126,8 +126,13 @@ public class FastIAMBAlgorithm<T> : ConstraintBasedBase<T>
                 for (int j = i + 1; j < d; j++)
                 {
                     if (j == k || !adj[j, k] || adj[i, j]) continue;
-                    if (sepSets.TryGetValue((i, j), out var sepSet) && sepSet.Contains(k))
-                        continue;
+                    // Only orient a collider if we have a recorded separator for (i,j)
+                    // and k is NOT in that separator. Without a separator, we can't
+                    // determine collider status.
+                    if (!sepSets.TryGetValue((i, j), out var sepSet))
+                        continue; // No separator found — skip, don't orient
+                    if (sepSet.Contains(k))
+                        continue; // k is in separator — not a collider
                     oriented[i, k] = true;
                     oriented[j, k] = true;
                 }

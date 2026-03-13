@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -24,6 +25,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "mPLUG-Owl2: Revolutionizing Multi-modal Large Language Model with Modality Collaboration" (2024)</item></list></para>
 /// <para><b>For Beginners:</b> MPLUGOwl2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("mPLUG-Owl2: Revolutionizing Multi-modal Large Language Model with Modality Collaboration", "https://arxiv.org/abs/2311.04257", Year = 2024, Authors = "Ye et al.")]
 public class MPLUGOwl2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MPLUGOwl2Options _options; public override ModelOptions GetOptions() => _options;

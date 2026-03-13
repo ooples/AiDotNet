@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Eagle 2.5: Boosting Long-Context Post-Training for Frontier Vision-Language Models" (2025)</item></list></para>
 /// <para><b>For Beginners:</b> Eagle25 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Eagle 2.5: Boosting Long-Context Post-Training for Frontier Vision-Language Models", "https://arxiv.org/abs/2501.14818", Year = 2025, Authors = "Shi et al.")]
 public class Eagle25<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Eagle25Options _options; public override ModelOptions GetOptions() => _options;

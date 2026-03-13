@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// <b>Reference:</b> Wang et al., "RepViT-SAM: Towards Real-Time Segmenting Anything", arXiv 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RepViT-SAM: Towards Real-Time Segmenting Anything", "https://arxiv.org/abs/2312.05760", Year = 2024, Authors = "Ao Wang, Hui Chen, Zijia Lin, Jungong Han, Guiguang Ding")]
 public class RepViTSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly RepViTSAMOptions _options;

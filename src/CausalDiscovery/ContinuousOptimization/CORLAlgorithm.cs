@@ -70,6 +70,12 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
         _learningRate = options?.LearningRate ?? 0.01;
         _numEpisodes = options?.MaxIterations ?? 100;
         _maxParents = options?.MaxParents ?? 5;
+        if (_learningRate <= 0 || double.IsNaN(_learningRate) || double.IsInfinity(_learningRate))
+            throw new ArgumentException("LearningRate must be positive and finite.");
+        if (_numEpisodes < 1)
+            throw new ArgumentException("MaxIterations must be at least 1.");
+        if (_maxParents < 0)
+            throw new ArgumentException("MaxParents must be non-negative.");
     }
 
     /// <inheritdoc/>
@@ -78,14 +84,18 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
         int n = data.Rows;
         int d = data.Columns;
 
-        if (n < 2 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"CORL requires at least 2 variables, got {d}.");
+        int minSamples = Math.Max(_maxParents + 3, d + 1);
+        if (n < minSamples)
+            throw new ArgumentException($"CORL requires at least {minSamples} samples (max parents={_maxParents}, variables={d}), got {n}.");
 
         // Compute sample covariance using base class utility
         var S = ComputeCovarianceMatrix(data);
 
         // Initialize position scores: scores[i,j] = preference for variable i at position j
         var scores = new Matrix<T>(d, d);
-        var rng = new Random(42);
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
 
         int[] bestOrdering = Enumerable.Range(0, d).ToArray();
         double bestReward = double.NegativeInfinity;
@@ -98,6 +108,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
             var ordering = SampleOrdering(scores, d, rng);
 
             // Compute the DAG from this ordering and get BIC reward
+            // Use the same maxParents and threshold as BuildDAGFromOrdering
             double reward = ComputeOrderingReward(data, ordering, d, n, S);
 
             // Update baseline (running average)
@@ -111,18 +122,45 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
                 bestOrdering = (int[])ordering.Clone();
             }
 
-            // REINFORCE update: increase probability of positions that led to good reward
+            // REINFORCE gradient matching the masked sampling in SampleOrdering:
+            // At each position, only available (not-yet-chosen) variables participate in softmax.
             T advantage = NumOps.FromDouble(reward - baselineReward);
             T lr = NumOps.FromDouble(_learningRate);
-            T update = NumOps.Multiply(lr, advantage);
+            var availableSet = new HashSet<int>(Enumerable.Range(0, d));
             for (int pos = 0; pos < d; pos++)
             {
-                int v = ordering[pos];
-                scores[v, pos] = NumOps.Add(scores[v, pos], update);
+                int chosenVar = ordering[pos];
+                var available = availableSet.ToList();
+
+                // Compute softmax only over available variables (matching SampleOrdering)
+                double maxLogit = double.NegativeInfinity;
+                foreach (int v in available)
+                    maxLogit = Math.Max(maxLogit, NumOps.ToDouble(scores[v, pos]));
+                double sumExp = 0;
+                var probs = new Dictionary<int, double>();
+                foreach (int v in available)
+                {
+                    double p = Math.Exp(NumOps.ToDouble(scores[v, pos]) - maxLogit);
+                    probs[v] = p;
+                    sumExp += p;
+                }
+                foreach (int v in available)
+                    probs[v] /= sumExp;
+
+                // REINFORCE: update = lr * advantage * grad_log_pi
+                // grad_log_pi[chosen] = 1 - p(chosen), grad_log_pi[other] = -p(other)
+                foreach (int v in available)
+                {
+                    double gradLogPi = (v == chosenVar) ? (1.0 - probs[v]) : (-probs[v]);
+                    T update = NumOps.Multiply(lr, NumOps.Multiply(advantage, NumOps.FromDouble(gradLogPi)));
+                    scores[v, pos] = NumOps.Add(scores[v, pos], update);
+                }
+
+                availableSet.Remove(chosenVar);
             }
         }
 
-        // Build the DAG from the best ordering
+        // Build the DAG from the best ordering using the SAME criteria used in scoring
         return BuildDAGFromOrdering(data, bestOrdering, d, n, S);
     }
 
@@ -174,195 +212,241 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     }
 
     /// <summary>
+    /// Selects parents for a target from predecessors in the ordering using BIC-based forward selection.
+    /// </summary>
+    private List<int> SelectParentsBIC(Matrix<T> data, int target, int[] ordering, int idx, int n)
+    {
+        var parents = new List<int>();
+        var candidates = new List<int>();
+        for (int predIdx = 0; predIdx < idx; predIdx++)
+            candidates.Add(ordering[predIdx]);
+
+        double bestBIC = ComputeBICForParents(data, target, parents, n);
+
+        // Greedy forward selection up to _maxParents
+        while (parents.Count < _maxParents && candidates.Count > 0)
+        {
+            int bestCandidate = -1;
+            double bestCandidateBIC = bestBIC;
+
+            foreach (int c in candidates)
+            {
+                var trial = new List<int>(parents) { c };
+                double trialBIC = ComputeBICForParents(data, target, trial, n);
+                if (trialBIC > bestCandidateBIC)
+                {
+                    bestCandidateBIC = trialBIC;
+                    bestCandidate = c;
+                }
+            }
+
+            if (bestCandidate < 0) break;
+            parents.Add(bestCandidate);
+            candidates.Remove(bestCandidate);
+            bestBIC = bestCandidateBIC;
+        }
+
+        return parents;
+    }
+
+    /// <summary>
+    /// Computes BIC score for a target with given parents using multivariate OLS.
+    /// </summary>
+    private double ComputeBICForParents(Matrix<T> data, int target, List<int> parents, int n)
+    {
+        double rss = ComputeRSS(data, target, parents, n);
+        int k = parents.Count + 1; // +1 for intercept
+        return -n * Math.Log(rss / n + 1e-10) - k * Math.Log(n);
+    }
+
+    /// <summary>
     /// Computes the total BIC reward for a given ordering.
+    /// Uses the same parent selection as BuildDAGFromOrdering.
     /// </summary>
     private double ComputeOrderingReward(Matrix<T> data, int[] ordering, int d, int n, Matrix<T> S)
     {
         double totalBIC = 0;
-
         for (int idx = 0; idx < d; idx++)
         {
             int target = ordering[idx];
-
-            // Find best parents from predecessors based on correlation
-            var parents = new List<int>();
-            for (int predIdx = 0; predIdx < idx && parents.Count < _maxParents; predIdx++)
-            {
-                int candidate = ordering[predIdx];
-                double stt = NumOps.ToDouble(S[target, target]);
-                double scc = NumOps.ToDouble(S[candidate, candidate]);
-                double stc = Math.Abs(NumOps.ToDouble(S[target, candidate]));
-                double corr = stc / Math.Sqrt((stt + 1e-10) * (scc + 1e-10));
-
-                if (corr > 0.1)
-                    parents.Add(candidate);
-            }
-
-            // Compute RSS with these parents via OLS
+            var parents = SelectParentsBIC(data, target, ordering, idx, n);
             double rss = ComputeRSS(data, target, parents, n);
             double bic = -n * Math.Log(rss / n + 1e-10) - (parents.Count + 1) * Math.Log(n);
             totalBIC += bic;
         }
-
         return totalBIC;
     }
 
     /// <summary>
-    /// Computes residual sum of squares for target given parents via OLS.
+    /// Computes residual sum of squares for target given parents via multivariate OLS.
     /// </summary>
     private double ComputeRSS(Matrix<T> data, int target, List<int> parents, int n)
     {
-        T nT = NumOps.FromDouble(n);
-
         // Compute target mean
-        T meanT = NumOps.Zero;
+        double meanT = 0;
         for (int i = 0; i < n; i++)
-            meanT = NumOps.Add(meanT, data[i, target]);
-        meanT = NumOps.Divide(meanT, nT);
+            meanT += NumOps.ToDouble(data[i, target]);
+        meanT /= n;
 
         if (parents.Count == 0)
         {
-            // No parents: RSS = sum of (x - mean)^2
-            T rss = NumOps.Zero;
+            double rss = 0;
             for (int i = 0; i < n; i++)
             {
-                T e = NumOps.Subtract(data[i, target], meanT);
-                rss = NumOps.Add(rss, NumOps.Multiply(e, e));
+                double e = NumOps.ToDouble(data[i, target]) - meanT;
+                rss += e * e;
             }
-            return NumOps.ToDouble(rss);
+            return rss;
         }
 
-        if (parents.Count == 1)
+        int p = parents.Count;
+
+        // Compute parent means
+        var parentMeans = new double[p];
+        for (int j = 0; j < p; j++)
         {
-            // Single parent: simple linear regression
-            T meanP = NumOps.Zero;
             for (int i = 0; i < n; i++)
-                meanP = NumOps.Add(meanP, data[i, parents[0]]);
-            meanP = NumOps.Divide(meanP, nT);
-
-            T covTP = NumOps.Zero;
-            T varP = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T dp = NumOps.Subtract(data[i, parents[0]], meanP);
-                T dt = NumOps.Subtract(data[i, target], meanT);
-                covTP = NumOps.Add(covTP, NumOps.Multiply(dp, dt));
-                varP = NumOps.Add(varP, NumOps.Multiply(dp, dp));
-            }
-
-            double varPd = NumOps.ToDouble(varP);
-            double beta = varPd > 1e-10 ? NumOps.ToDouble(covTP) / varPd : 0;
-            T betaT = NumOps.FromDouble(beta);
-
-            T rss = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T dp = NumOps.Subtract(data[i, parents[0]], meanP);
-                T pred = NumOps.Add(meanT, NumOps.Multiply(betaT, dp));
-                T e = NumOps.Subtract(data[i, target], pred);
-                rss = NumOps.Add(rss, NumOps.Multiply(e, e));
-            }
-            return NumOps.ToDouble(rss);
+                parentMeans[j] += NumOps.ToDouble(data[i, parents[j]]);
+            parentMeans[j] /= n;
         }
 
-        // Multi-parent: compute means and use sequential regression
-        var parentMeans = new T[parents.Count];
-        for (int j = 0; j < parents.Count; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-                sum = NumOps.Add(sum, data[i, parents[j]]);
-            parentMeans[j] = NumOps.Divide(sum, nT);
-        }
+        // Build normal equations X'X and X'y for multivariate OLS
+        var XtX = new double[p, p];
+        var Xty = new double[p];
 
-        // Multi-parent OLS via sequential residualization
-        var residuals = new T[n];
         for (int i = 0; i < n; i++)
-            residuals[i] = NumOps.Subtract(data[i, target], meanT);
-
-        for (int j = 0; j < parents.Count; j++)
         {
-            T covRP = NumOps.Zero;
-            T varPj = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T dp = NumOps.Subtract(data[i, parents[j]], parentMeans[j]);
-                covRP = NumOps.Add(covRP, NumOps.Multiply(residuals[i], dp));
-                varPj = NumOps.Add(varPj, NumOps.Multiply(dp, dp));
-            }
+            double dy = NumOps.ToDouble(data[i, target]) - meanT;
+            var dx = new double[p];
+            for (int j = 0; j < p; j++)
+                dx[j] = NumOps.ToDouble(data[i, parents[j]]) - parentMeans[j];
 
-            double varPjd = NumOps.ToDouble(varPj);
-            if (varPjd > 1e-10)
+            for (int a = 0; a < p; a++)
             {
-                T beta = NumOps.Divide(covRP, varPj);
-                for (int i = 0; i < n; i++)
-                {
-                    T dp = NumOps.Subtract(data[i, parents[j]], parentMeans[j]);
-                    residuals[i] = NumOps.Subtract(residuals[i], NumOps.Multiply(beta, dp));
-                }
+                Xty[a] += dx[a] * dy;
+                for (int b = a; b < p; b++)
+                    XtX[a, b] += dx[a] * dx[b];
             }
         }
 
-        T totalRss = NumOps.Zero;
+        // Symmetrize and add ridge
+        for (int a = 0; a < p; a++)
+        {
+            XtX[a, a] += 1e-10;
+            for (int b = a + 1; b < p; b++)
+                XtX[b, a] = XtX[a, b];
+        }
+
+        // Solve for beta via Gaussian elimination
+        var beta = SolveSmallSystem(XtX, Xty, p);
+
+        // Compute RSS
+        double totalRss = 0;
         for (int i = 0; i < n; i++)
-            totalRss = NumOps.Add(totalRss, NumOps.Multiply(residuals[i], residuals[i]));
-        return NumOps.ToDouble(totalRss);
+        {
+            double pred = meanT;
+            for (int j = 0; j < p; j++)
+                pred += beta[j] * (NumOps.ToDouble(data[i, parents[j]]) - parentMeans[j]);
+            double e = NumOps.ToDouble(data[i, target]) - pred;
+            totalRss += e * e;
+        }
+
+        return totalRss;
     }
 
     /// <summary>
-    /// Builds the final DAG from the best ordering using greedy parent selection.
+    /// Builds the final DAG from the best ordering using the same parent selection as scoring.
     /// </summary>
     private Matrix<T> BuildDAGFromOrdering(Matrix<T> data, int[] ordering, int d, int n, Matrix<T> S)
     {
         var W = new Matrix<T>(d, d);
-        T nT = NumOps.FromDouble(n);
 
         for (int idx = 1; idx < d; idx++)
         {
             int target = ordering[idx];
+            var parents = SelectParentsBIC(data, target, ordering, idx, n);
 
-            for (int predIdx = 0; predIdx < idx; predIdx++)
+            if (parents.Count == 0) continue;
+
+            int p = parents.Count;
+
+            // Compute multivariate OLS coefficients
+            var parentMeans = new double[p];
+            double meanT = 0;
+            for (int i = 0; i < n; i++)
             {
-                int parent = ordering[predIdx];
-                double stt = NumOps.ToDouble(S[target, target]);
-                double spp = NumOps.ToDouble(S[parent, parent]);
-                double stp = Math.Abs(NumOps.ToDouble(S[target, parent]));
-                double corr = stp / Math.Sqrt((stt + 1e-10) * (spp + 1e-10));
+                meanT += NumOps.ToDouble(data[i, target]);
+                for (int j = 0; j < p; j++)
+                    parentMeans[j] += NumOps.ToDouble(data[i, parents[j]]);
+            }
+            meanT /= n;
+            for (int j = 0; j < p; j++) parentMeans[j] /= n;
 
-                if (corr > WThreshold)
+            var XtX = new double[p, p];
+            var Xty = new double[p];
+            for (int i = 0; i < n; i++)
+            {
+                double dy = NumOps.ToDouble(data[i, target]) - meanT;
+                var dx = new double[p];
+                for (int j = 0; j < p; j++)
+                    dx[j] = NumOps.ToDouble(data[i, parents[j]]) - parentMeans[j];
+                for (int a = 0; a < p; a++)
                 {
-                    // Compute OLS weight using generic operations
-                    T meanP = NumOps.Zero;
-                    T meanT = NumOps.Zero;
-                    for (int i = 0; i < n; i++)
-                    {
-                        meanP = NumOps.Add(meanP, data[i, parent]);
-                        meanT = NumOps.Add(meanT, data[i, target]);
-                    }
-                    meanP = NumOps.Divide(meanP, nT);
-                    meanT = NumOps.Divide(meanT, nT);
-
-                    T covPT = NumOps.Zero;
-                    T varP = NumOps.Zero;
-                    for (int i = 0; i < n; i++)
-                    {
-                        T dp = NumOps.Subtract(data[i, parent], meanP);
-                        covPT = NumOps.Add(covPT, NumOps.Multiply(dp,
-                                NumOps.Subtract(data[i, target], meanT)));
-                        varP = NumOps.Add(varP, NumOps.Multiply(dp, dp));
-                    }
-
-                    double varPd = NumOps.ToDouble(varP);
-                    if (varPd > 1e-10)
-                    {
-                        T weight = NumOps.Divide(covPT, varP);
-                        if (Math.Abs(NumOps.ToDouble(weight)) >= WThreshold)
-                            W[parent, target] = weight;
-                    }
+                    Xty[a] += dx[a] * dy;
+                    for (int b = a; b < p; b++)
+                        XtX[a, b] += dx[a] * dx[b];
                 }
+            }
+            for (int a = 0; a < p; a++)
+            {
+                XtX[a, a] += 1e-10;
+                for (int b = a + 1; b < p; b++)
+                    XtX[b, a] = XtX[a, b];
+            }
+
+            var beta = SolveSmallSystem(XtX, Xty, p);
+            for (int j = 0; j < p; j++)
+            {
+                if (Math.Abs(beta[j]) >= WThreshold)
+                    W[parents[j], target] = NumOps.FromDouble(beta[j]);
             }
         }
 
         return W;
+    }
+
+    private static double[] SolveSmallSystem(double[,] A, double[] b, int p)
+    {
+        var aug = new double[p, p + 1];
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = 0; j < p; j++) aug[i, j] = A[i, j];
+            aug[i, p] = b[i];
+        }
+        for (int col = 0; col < p; col++)
+        {
+            int maxRow = col;
+            for (int row = col + 1; row < p; row++)
+                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
+            if (maxRow != col)
+                for (int j = col; j <= p; j++)
+                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
+            double pivot = aug[col, col];
+            if (Math.Abs(pivot) < 1e-15) continue;
+            for (int row = col + 1; row < p; row++)
+            {
+                double factor = aug[row, col] / pivot;
+                for (int j = col; j <= p; j++) aug[row, j] -= factor * aug[col, j];
+            }
+        }
+        var x = new double[p];
+        for (int row = p - 1; row >= 0; row--)
+        {
+            double sum = aug[row, p];
+            for (int j = row + 1; j < p; j++) sum -= aug[row, j] * x[j];
+            double diag = aug[row, row];
+            x[row] = Math.Abs(diag) > 1e-15 ? sum / diag : 0;
+        }
+        return x;
     }
 }

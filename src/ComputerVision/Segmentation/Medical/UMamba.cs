@@ -1,6 +1,8 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -35,6 +37,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Ma et al., "U-Mamba: Enhancing Long-range Dependency for Biomedical Image Segmentation", arXiv 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("U-Mamba: Enhancing Long-range Dependency for Biomedical Image Segmentation", "https://arxiv.org/abs/2401.04722", Year = 2024, Authors = "Ma et al.")]
 public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly UMambaOptions _options;

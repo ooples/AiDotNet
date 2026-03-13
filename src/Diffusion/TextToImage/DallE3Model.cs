@@ -1,10 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -24,6 +26,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// text rendering, style control, and high-quality image generation at multiple sizes.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Improving Image Generation with Better Captions", "https://cdn.openai.com/papers/dall-e-3.pdf", Year = 2023, Authors = "Betker et al.")]
 public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 {
     #region Constants

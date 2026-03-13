@@ -59,7 +59,7 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int h = Math.Min(HiddenUnits, 10);
+        int h = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -150,11 +150,12 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
                     T residual = NumOps.Subtract(pred, data[s, j]);
                     T scaledResidual = NumOps.Multiply(NumOps.Multiply(residual, invVar), invN);
 
-                    // Log-variance gradient: d/d_logvar [ -0.5 * logvar - 0.5 * (x-mu)^2 / var ]
+                    // Log-variance gradient of NLL: d/d_logvar [ 0.5*logvar + 0.5*(x-mu)^2*exp(-logvar) ]
+                    // = 0.5 - 0.5*(x-mu)^2/var
                     T resSq = NumOps.Multiply(residual, residual);
                     gLogVar[j] = NumOps.Add(gLogVar[j], NumOps.Multiply(invN,
-                        NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(0.5),
-                            NumOps.Multiply(resSq, invVar)), NumOps.FromDouble(0.5))));
+                        NumOps.Subtract(NumOps.FromDouble(0.5),
+                            NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Multiply(resSq, invVar)))));
 
                     // Backprop through MLP
                     for (int k = 0; k < h; k++)
@@ -179,7 +180,18 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
                 }
             }
 
-            // KL divergence gradient for edge distribution: encourages sparsity
+            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+            var PSq = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    PSq[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
+            var expPSq = MatrixExponentialTaylor(PSq, d);
+            T hVal = NumOps.Zero;
+            for (int i = 0; i < d; i++)
+                hVal = NumOps.Add(hVal, expPSq[i, i]);
+            hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
+
+            // KL divergence + acyclicity gradients on edge logits
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
                 {
@@ -188,9 +200,10 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
                     T oneMinusP = NumOps.Subtract(NumOps.One, pij);
                     // KL(Bernoulli(p) || Bernoulli(prior)) where prior is small
                     T klGrad = NumOps.Multiply(lambda1, pij);
-                    // Acyclicity penalty
-                    T acycGrad = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
-                        NumOps.FromDouble(2));
+                    // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+                    T acycGrad = NumOps.Multiply(
+                        NumOps.Add(alpha, NumOps.Multiply(rho, hVal)),
+                        NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
                     T totalGrad = NumOps.Add(klGrad, acycGrad);
                     T pSigD = NumOps.Divide(NumOps.Multiply(pij, oneMinusP),
                         NumOps.Add(tauT, eps));
@@ -217,13 +230,10 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
                     W1[j][j, k] = NumOps.Zero;
             }
 
-            // Update augmented Lagrangian
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    if (i != j) hVal = NumOps.Add(hVal, NumOps.Multiply(P[i, j], P[i, j]));
+            // Update augmented Lagrangian with NOTEARS h(P) = tr(exp(P∘P)) - d
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            T rhoMax = NumOps.FromDouble(1e+16);
+            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)) && !NumOps.GreaterThan(rho, rhoMax))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
@@ -253,4 +263,5 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
 
         return result;
     }
+
 }

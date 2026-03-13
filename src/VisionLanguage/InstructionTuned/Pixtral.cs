@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Pixtral 12B" (Mistral, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> Pixtral is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Pixtral 12B", "https://arxiv.org/abs/2410.07073", Year = 2024, Authors = "Agrawal et al.")]
 public class Pixtral<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly PixtralOptions _options; public override ModelOptions GetOptions() => _options;

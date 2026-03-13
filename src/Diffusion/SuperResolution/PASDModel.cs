@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -38,6 +40,13 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// Reference: Yang et al., "Pixel-Aware Stable Diffusion for Realistic Image Super-resolution and Personalized Stylization", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SuperResolution)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Pixel-Aware Stable Diffusion for Realistic Image Super-resolution and Personalized Stylization", "https://arxiv.org/abs/2308.14469", Year = 2024, Authors = "Yang et al.")]
 public class PASDModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,13 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// SALM augments an LLM with speech understanding via in-context learning. A frozen speech encoder (Conformer or wav2vec 2.0) extracts features, which are projected into the LLM's embedding space via a lightweight adapter. The LLM generates transcriptions using in-context examples and instructions. SALM demonstrates that LLMs can perform competitive ASR through prompting strategies without explicit ASR fine-tuning, leveraging their pre-trained language abilities.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SALM: Speech-augmented Language Model with In-context Learning for Speech Recognition", "https://arxiv.org/abs/2310.09424", Year = 2024, Authors = "Chen et al.")]
 public class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SALMOptions _options; public override ModelOptions GetOptions() => _options;

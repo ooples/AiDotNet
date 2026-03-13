@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>Parallel WaveGAN: non-autoregressive GAN vocoder with multi-resolution STFT loss for stable training.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Parallel WaveGAN: A fast waveform generation model based on generative adversarial networks with multi-resolution spectrogram" (Yamamoto et al., 2020)</item></list></para><para><b>For Beginners:</b> Parallel WaveGAN: non-autoregressive GAN vocoder with multi-resolution STFT loss for stable training.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Parallel WaveGAN: A fast waveform generation model based on generative adversarial networks with multi-resolution spectrogram", "https://arxiv.org/abs/1910.11480", Year = 2020, Authors = "Yamamoto et al.")]
 public class ParallelWaveGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly ParallelWaveGANOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// FunASR-Nano is an ultra-lightweight ASR model designed for on-device deployment. It uses a compact Conformer encoder (256-dim, 6 layers) with aggressive subsampling and a CTC decoder. Knowledge distillation from Paraformer-Large provides strong performance despite the small model size. Optimized for mobile and edge devices with <50MB model size and real-time inference on CPU.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("FunASR: A Fundamental End-to-End Speech Recognition Toolkit", "https://arxiv.org/abs/2305.11013", Year = 2024, Authors = "Gao et al.")]
 public class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly FunASRNanoOptions _options; public override ModelOptions GetOptions() => _options;

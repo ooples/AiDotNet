@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <list type="bullet"><item>Paper: "General OCR Theory: Towards OCR-2.0 via a Unified End-to-end Model" (StepFun, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> GOTOCR2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("General OCR Theory: Towards OCR-2.0 via a Unified End-to-end Model", "https://arxiv.org/abs/2409.01704", Year = 2024, Authors = "Wei et al.")]
 public class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly GOTOCR2Options _options; public override ModelOptions GetOptions() => _options;

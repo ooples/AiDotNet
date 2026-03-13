@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>MegaTTS: Mega-TTS: Zero-Shot TTS with Prosody Decomposition.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Mega-TTS: Zero-Shot TTS with Prosody Decomposition" (Jiang et al., 2023)</item></list></para><para><b>For Beginners:</b> MegaTTS: Mega-TTS: Zero-Shot TTS with Prosody Decomposition.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Mega-TTS: Zero-Shot Text-to-Speech at Scale with Intrinsic Inductive Bias", "https://arxiv.org/abs/2306.03509", Year = 2023, Authors = "Jiang et al.")]
 public class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MegaTTSOptions _options; public override ModelOptions GetOptions() => _options;

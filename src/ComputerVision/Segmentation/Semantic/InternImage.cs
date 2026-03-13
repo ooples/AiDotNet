@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -39,6 +40,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// with Deformable Convolutions", CVPR 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("InternImage: Exploring Large-Scale Vision Foundation Models with Deformable Convolutions", "https://arxiv.org/abs/2211.05778", Year = 2023, Authors = "Wang et al.")]
 public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly InternImageOptions _options;

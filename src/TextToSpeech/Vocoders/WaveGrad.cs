@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>WaveGrad: gradient-based conditional waveform generation using continuous noise level conditioning.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "WaveGrad: Estimating Gradients for Waveform Generation" (Chen et al., 2021)</item></list></para><para><b>For Beginners:</b> WaveGrad: gradient-based conditional waveform generation using continuous noise level conditioning.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("WaveGrad: Estimating Gradients for Waveform Generation", "https://arxiv.org/abs/2009.00713", Year = 2021, Authors = "Chen et al.")]
 public class WaveGrad<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveGradOptions _options; public override ModelOptions GetOptions() => _options;

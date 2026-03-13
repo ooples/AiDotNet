@@ -1,5 +1,6 @@
 global using AiDotNet.RetrievalAugmentedGeneration.Models;
 
+
 namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 
 /// <summary>

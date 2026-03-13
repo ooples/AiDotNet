@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,10 +36,16 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// - Completely training-free: uses frozen diffusion model weights only
 /// </para>
 /// <para>
-/// <b>Reference:</b> Tian et al., "DiffSeg: A Segmentation Model for Skin Lesions Based
-/// on Diffusion Difference", arXiv 2024.
+/// <b>Reference:</b> Tian et al., "Diffuse, Attend, and Segment: Unsupervised Zero-Shot
+/// Segmentation using Stable Diffusion", arXiv 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Diffuse, Attend, and Segment: Unsupervised Zero-Shot Segmentation using Stable Diffusion", "https://arxiv.org/abs/2305.02015", Year = 2023, Authors = "Junjiao Tian, Lavisha Aggarwal, Andrea Colber, Zunzhi You, Eldhose Iype, Haiyang Sheng")]
 public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly DiffSegOptions _options;

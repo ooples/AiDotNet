@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// <list type="bullet"><item>Paper: "QVQ: To See the World with Wisdom" (Qwen Team, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> QVQ72B is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("QVQ: To See the World with Wisdom", "https://qwenlm.github.io/blog/qvq-72b-preview/", Year = 2024, Authors = "Qwen Team")]
 public class QVQ72B<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 {
     private readonly QVQ72BOptions _options; public override ModelOptions GetOptions() => _options;

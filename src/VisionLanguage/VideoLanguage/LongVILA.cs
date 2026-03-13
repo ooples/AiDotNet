@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -19,6 +20,15 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <list type="bullet"><item>Paper: "LongVILA: Scaling Long-Context Visual Language Models for Long Videos" (NVIDIA, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> LongVILA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LongVILA: Scaling Long-Context Visual Language Models for Long Videos", "https://arxiv.org/abs/2408.10188", Year = 2024, Authors = "Xue et al.")]
 public class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly LongVILAOptions _options; public override ModelOptions GetOptions() => _options;

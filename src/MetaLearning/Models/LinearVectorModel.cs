@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using System.Globalization;
 using System.Text;
 using AiDotNet.Autodiff;
@@ -16,6 +17,11 @@ namespace AiDotNet.MetaLearning.Models;
 /// <para>Computes y = X * w + b where w is a weight vector and b is a bias scalar.
 /// Provides gradient computation via MSE loss for use with gradient-based meta-learners.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<double>>, ICloneable
 {
     private Vector<double> _parameters;

@@ -42,7 +42,7 @@ namespace AiDotNet.CausalDiscovery.Bayesian;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Being Bayesian About Network Structure", "https://doi.org/10.1023/B:MACH.0000033120.25", Year = 2003, Authors = "Nir Friedman, Daphne Koller")]
+[ModelPaper("Being Bayesian About Network Structure", "https://doi.org/10.1023/B:MACH.0000033120.25888.1e", Year = 2003, Authors = "Nir Friedman, Daphne Koller")]
 public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
 {
     private readonly int _maxParents;
@@ -175,27 +175,127 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
         {
             int target = ordering[idx];
             var parents = SelectBestParents(data, target, ordering, idx);
-            foreach (int parent in parents)
+            if (parents.Length == 0)
+                continue;
+
+            var weights = ComputeMultivariateOLSWeights(cov, parents, target);
+            for (int p = 0; p < parents.Length; p++)
             {
-                T weight = ComputeOLSWeight(cov, parent, target);
-                T absWeight = NumOps.Abs(weight);
+                T absWeight = NumOps.Abs(weights[p]);
                 if (NumOps.GreaterThan(absWeight, NumOps.FromDouble(1e-6)))
-                    W[parent, target] = weight;
+                    W[parents[p], target] = weights[p];
             }
         }
         return W;
     }
 
     /// <summary>
-    /// Computes OLS regression weight using covariance matrix: w = cov(from,to) / var(from).
-    /// Fully generic using Matrix&lt;T&gt; and NumOps.
+    /// Computes multivariate OLS regression weights: beta = Cov(parents,parents)^{-1} * Cov(parents,target).
+    /// This correctly accounts for correlations among parents, yielding unbiased partial regression coefficients.
     /// </summary>
-    private T ComputeOLSWeight(Matrix<T> cov, int from, int to)
+    private T[] ComputeMultivariateOLSWeights(Matrix<T> cov, int[] parents, int target)
     {
-        T varFrom = cov[from, from];
+        int k = parents.Length;
         T eps = NumOps.FromDouble(1e-10);
-        if (!NumOps.GreaterThan(varFrom, eps))
-            return NumOps.Zero;
-        return NumOps.Divide(cov[from, to], varFrom);
+
+        // Single parent: use simple univariate formula
+        if (k == 1)
+        {
+            T varFrom = cov[parents[0], parents[0]];
+            if (!NumOps.GreaterThan(varFrom, eps))
+                return [NumOps.Zero];
+            return [NumOps.Divide(cov[parents[0], target], varFrom)];
+        }
+
+        // Extract Cov(parents, parents) sub-matrix and Cov(parents, target) vector
+        var covPP = new Matrix<T>(k, k);
+        var covPT = new T[k];
+        for (int i = 0; i < k; i++)
+        {
+            covPT[i] = cov[parents[i], target];
+            for (int j = 0; j < k; j++)
+            {
+                covPP[i, j] = cov[parents[i], parents[j]];
+            }
+        }
+
+        // Add small regularization to diagonal for numerical stability
+        for (int i = 0; i < k; i++)
+        {
+            covPP[i, i] = NumOps.Add(covPP[i, i], eps);
+        }
+
+        // Solve covPP * beta = covPT using Cholesky-like forward/back substitution
+        // (Gaussian elimination with partial pivoting for small k)
+        var augmented = new double[k, k + 1];
+        for (int i = 0; i < k; i++)
+        {
+            for (int j = 0; j < k; j++)
+            {
+                augmented[i, j] = NumOps.ToDouble(covPP[i, j]);
+            }
+            augmented[i, k] = NumOps.ToDouble(covPT[i]);
+        }
+
+        // Gaussian elimination with partial pivoting
+        for (int col = 0; col < k; col++)
+        {
+            // Find pivot
+            int pivotRow = col;
+            double pivotVal = Math.Abs(augmented[col, col]);
+            for (int row = col + 1; row < k; row++)
+            {
+                double val = Math.Abs(augmented[row, col]);
+                if (val > pivotVal)
+                {
+                    pivotVal = val;
+                    pivotRow = row;
+                }
+            }
+
+            // Swap rows
+            if (pivotRow != col)
+            {
+                for (int j = 0; j <= k; j++)
+                {
+                    (augmented[col, j], augmented[pivotRow, j]) = (augmented[pivotRow, j], augmented[col, j]);
+                }
+            }
+
+            // Singular or near-singular: return zeros
+            if (Math.Abs(augmented[col, col]) < 1e-12)
+            {
+                return new T[k];
+            }
+
+            // Eliminate below
+            for (int row = col + 1; row < k; row++)
+            {
+                double factor = augmented[row, col] / augmented[col, col];
+                for (int j = col; j <= k; j++)
+                {
+                    augmented[row, j] -= factor * augmented[col, j];
+                }
+            }
+        }
+
+        // Back substitution
+        var beta = new double[k];
+        for (int i = k - 1; i >= 0; i--)
+        {
+            double sum = augmented[i, k];
+            for (int j = i + 1; j < k; j++)
+            {
+                sum -= augmented[i, j] * beta[j];
+            }
+            beta[i] = sum / augmented[i, i];
+        }
+
+        var result = new T[k];
+        for (int i = 0; i < k; i++)
+        {
+            result[i] = NumOps.FromDouble(beta[i]);
+        }
+        return result;
     }
 }

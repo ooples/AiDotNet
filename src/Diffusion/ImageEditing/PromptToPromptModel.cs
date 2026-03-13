@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -81,6 +83,12 @@ namespace AiDotNet.Diffusion.ImageEditing;
 ///     guidanceScale: 7.5);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Editing)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Prompt-to-Prompt Image Editing with Cross Attention Control", "https://arxiv.org/abs/2208.01626", Year = 2023, Authors = "Hertz et al.")]
 public class PromptToPromptModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

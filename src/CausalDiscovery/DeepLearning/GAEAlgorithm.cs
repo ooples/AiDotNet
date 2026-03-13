@@ -11,20 +11,10 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// <para>
 /// GAE uses an autoencoder architecture where the encoder produces a latent graph
 /// representation and the decoder reconstructs the data through the learned graph.
-/// The encoder maps each variable to a latent embedding via shared MLP, then computes
-/// edge probabilities as sigmoid(Z_i^T * Z_j). The decoder reconstructs X_hat = X * A
-/// where A is the soft adjacency. NOTEARS acyclicity constraint ensures a valid DAG.
-/// </para>
-/// <para>
-/// <b>Algorithm:</b>
-/// <list type="number">
-/// <item>Encoder: map data statistics to node embeddings Z (d x embDim) via MLP</item>
-/// <item>Compute edge probabilities: P[i,j] = sigmoid(Z_i^T * Z_j)</item>
-/// <item>Decoder: reconstruct X_hat = X * P (graph-filtered signal)</item>
-/// <item>Loss = reconstruction MSE + KL divergence + acyclicity penalty</item>
-/// <item>Update encoder/decoder via gradient descent</item>
-/// <item>Threshold final P to get adjacency</item>
-/// </list>
+/// The encoder maps each variable to separate source/target latent embeddings via shared MLP,
+/// then computes edge probabilities as sigmoid(Zs_i^T * Zt_j) using asymmetric dot products
+/// to encode directionality. The decoder reconstructs X_hat = X * A where A is the soft
+/// adjacency. NOTEARS acyclicity constraint h(A) = tr(exp(A∘A)) - d ensures a valid DAG.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> A Graph Autoencoder compresses data through a "graph bottleneck."
@@ -59,7 +49,7 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int embDim = Math.Min(HiddenUnits, 8);
+        int embDim = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -67,14 +57,19 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
         var cov = ComputeCovarianceMatrix(data);
         T eps = NumOps.FromDouble(1e-10);
 
-        // Encoder: per-variable embedding W_enc (d x embDim) maps column statistics to embedding
-        var Zmu = new Matrix<T>(d, embDim);
-        var ZlogVar = new Matrix<T>(d, embDim);
+        // Separate source/target embeddings to break symmetry:
+        // P[i,j] = sigmoid(Zs_i . Zt_j) != P[j,i] = sigmoid(Zs_j . Zt_i)
+        var ZsMu = new Matrix<T>(d, embDim);
+        var ZtMu = new Matrix<T>(d, embDim);
+        var ZsLogVar = new Matrix<T>(d, embDim);
+        var ZtLogVar = new Matrix<T>(d, embDim);
         for (int i = 0; i < d; i++)
             for (int k = 0; k < embDim; k++)
             {
-                Zmu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                ZlogVar[i, k] = NumOps.FromDouble(-4);
+                ZsMu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+                ZtMu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+                ZsLogVar[i, k] = NumOps.FromDouble(-4);
+                ZtLogVar[i, k] = NumOps.FromDouble(-4);
             }
 
         T lr = NumOps.FromDouble(LearningRate);
@@ -84,17 +79,21 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
-            // Sample embeddings via reparameterization: Z = mu + exp(logvar/2) * eps
-            var Z = new Matrix<T>(d, embDim);
+            // Sample embeddings via reparameterization
+            var Zs = new Matrix<T>(d, embDim);
+            var Zt = new Matrix<T>(d, embDim);
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
                 {
-                    T std = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZlogVar[i, k])));
-                    T noise = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-                    Z[i, k] = NumOps.Add(Zmu[i, k], NumOps.Multiply(std, noise));
+                    T stdS = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZsLogVar[i, k])));
+                    T noiseS = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
+                    Zs[i, k] = NumOps.Add(ZsMu[i, k], NumOps.Multiply(stdS, noiseS));
+                    T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[i, k])));
+                    T noiseT = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
+                    Zt[i, k] = NumOps.Add(ZtMu[i, k], NumOps.Multiply(stdT, noiseT));
                 }
 
-            // Compute edge probabilities: P[i,j] = sigmoid(Z_i . Z_j)
+            // Compute edge probabilities: P[i,j] = sigmoid(Zs_i . Zt_j)
             var P = new Matrix<T>(d, d);
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
@@ -102,13 +101,23 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                     if (i == j) continue;
                     T dot = NumOps.Zero;
                     for (int k = 0; k < embDim; k++)
-                        dot = NumOps.Add(dot, NumOps.Multiply(Z[i, k], Z[j, k]));
+                        dot = NumOps.Add(dot, NumOps.Multiply(Zs[i, k], Zt[j, k]));
                     double sv = NumOps.ToDouble(dot);
                     P[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
 
+            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+            var PSq = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    PSq[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
+            var expPSq = MatrixExponentialTaylor(PSq, d);
+            T hVal = NumOps.Zero;
+            for (int i = 0; i < d; i++)
+                hVal = NumOps.Add(hVal, expPSq[i, i]);
+            hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
+
             // Reconstruction: X_hat[s,j] = sum_i X[s,i] * P[i,j]
-            // Loss gradient w.r.t. P[i,j]: sum_s (X_hat[s,j] - X[s,j]) * X[s,i] / n
             var gradP = new Matrix<T>(d, d);
             T invN = NumOps.FromDouble(1.0 / n);
 
@@ -129,8 +138,8 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             }
 
             // Gradient: dP/dZ via chain rule through sigmoid and dot product
-            var gradZmu = new Matrix<T>(d, embDim);
-            var gradZlogVar = new Matrix<T>(d, embDim);
+            var gradZsMu = new Matrix<T>(d, embDim);
+            var gradZtMu = new Matrix<T>(d, embDim);
 
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
@@ -142,17 +151,20 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                     // Add sparsity and acyclicity gradients
                     T sparsityGrad = NumOps.Multiply(lambda1,
                         NumOps.FromDouble(Math.Sign(NumOps.ToDouble(pij))));
-                    T acycGrad = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
-                        NumOps.FromDouble(2));
+                    // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+                    T acycGrad = NumOps.Multiply(
+                        NumOps.Add(alpha, NumOps.Multiply(rho, hVal)),
+                        NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
                     T totalGradP = NumOps.Add(gradP[i, j], NumOps.Add(sparsityGrad, acycGrad));
                     T gradScale = NumOps.Multiply(totalGradP, sigD);
 
+                    // d(Zs_i . Zt_j)/dZs_i = Zt_j, d(Zs_i . Zt_j)/dZt_j = Zs_i
                     for (int k = 0; k < embDim; k++)
                     {
-                        gradZmu[i, k] = NumOps.Add(gradZmu[i, k],
-                            NumOps.Multiply(gradScale, Z[j, k]));
-                        gradZmu[j, k] = NumOps.Add(gradZmu[j, k],
-                            NumOps.Multiply(gradScale, Z[i, k]));
+                        gradZsMu[i, k] = NumOps.Add(gradZsMu[i, k],
+                            NumOps.Multiply(gradScale, Zt[j, k]));
+                        gradZtMu[j, k] = NumOps.Add(gradZtMu[j, k],
+                            NumOps.Multiply(gradScale, Zs[i, k]));
                     }
                 }
 
@@ -160,33 +172,28 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
                 {
-                    gradZmu[i, k] = NumOps.Add(gradZmu[i, k],
-                        NumOps.Multiply(NumOps.FromDouble(0.01), Zmu[i, k]));
-                    T var_ik = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(ZlogVar[i, k])));
-                    gradZlogVar[i, k] = NumOps.Multiply(NumOps.FromDouble(0.5),
-                        NumOps.Subtract(var_ik, NumOps.One));
+                    gradZsMu[i, k] = NumOps.Add(gradZsMu[i, k],
+                        NumOps.Multiply(NumOps.FromDouble(0.01), ZsMu[i, k]));
+                    gradZtMu[i, k] = NumOps.Add(gradZtMu[i, k],
+                        NumOps.Multiply(NumOps.FromDouble(0.01), ZtMu[i, k]));
                 }
 
             // Apply gradients
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
                 {
-                    Zmu[i, k] = NumOps.Subtract(Zmu[i, k], NumOps.Multiply(lr, gradZmu[i, k]));
-                    ZlogVar[i, k] = NumOps.Subtract(ZlogVar[i, k],
-                        NumOps.Multiply(NumOps.FromDouble(LearningRate * 0.1), gradZlogVar[i, k]));
+                    ZsMu[i, k] = NumOps.Subtract(ZsMu[i, k], NumOps.Multiply(lr, gradZsMu[i, k]));
+                    ZtMu[i, k] = NumOps.Subtract(ZtMu[i, k], NumOps.Multiply(lr, gradZtMu[i, k]));
                 }
 
             // Update augmented Lagrangian
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    if (i != j) hVal = NumOps.Add(hVal, NumOps.Multiply(P[i, j], P[i, j]));
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            T rhoMax = NumOps.FromDouble(1e+16);
+            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)) && !NumOps.GreaterThan(rho, rhoMax))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
-        // Final output
+        // Final output using trained embeddings
         var result = new Matrix<T>(d, d);
         T threshold = NumOps.FromDouble(0.3);
         for (int i = 0; i < d; i++)
@@ -195,9 +202,10 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                 if (i == j) continue;
                 T dot = NumOps.Zero;
                 for (int k = 0; k < embDim; k++)
-                    dot = NumOps.Add(dot, NumOps.Multiply(Zmu[i, k], Zmu[j, k]));
+                    dot = NumOps.Add(dot, NumOps.Multiply(ZsMu[i, k], ZtMu[j, k]));
                 double sv = NumOps.ToDouble(dot);
-                if (sv > 0)
+                double prob = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
+                if (prob > 0.5)
                 {
                     T varI = cov[i, i];
                     if (NumOps.GreaterThan(varI, eps))
@@ -211,4 +219,5 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
 
         return result;
     }
+
 }

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,14 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 /// <b>Reference:</b> Zou et al., "Segment Everything Everywhere All at Once", NeurIPS 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Segment Everything Everywhere All at Once", "https://arxiv.org/abs/2304.06718", Year = 2023, Authors = "Zou et al.")]
 public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly SEEMOptions _options;

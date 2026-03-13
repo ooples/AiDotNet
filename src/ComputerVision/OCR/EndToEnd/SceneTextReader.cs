@@ -1,6 +1,8 @@
+using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.TextDetection;
 using AiDotNet.ComputerVision.OCR.Recognition;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.OCR.EndToEnd;
@@ -22,6 +24,12 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 /// - Configurable detection and recognition models
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SceneTextReader<T>
 {
     private readonly INumericOperations<T> _numOps;

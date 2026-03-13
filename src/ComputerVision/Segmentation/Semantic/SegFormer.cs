@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -41,6 +42,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// Segmentation with Transformers", NeurIPS 2021.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers", "https://arxiv.org/abs/2105.15203", Year = 2021, Authors = "Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping Luo")]
 public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly SegFormerOptions _options;

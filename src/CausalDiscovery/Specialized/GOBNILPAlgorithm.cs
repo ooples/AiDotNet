@@ -66,7 +66,7 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
 
     public GOBNILPAlgorithm(CausalDiscoveryOptions? options = null)
     {
-        _maxParents = Math.Min(options?.MaxParents ?? 3, 4); // Cap at 4 to keep search tractable
+        _maxParents = options?.MaxParents ?? 3;
         _maxBranchIterations = options?.MaxIterations ?? 1000;
     }
 
@@ -76,7 +76,10 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         int n = data.Rows;
         int d = data.Columns;
 
-        if (n < d + 3 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"GOBNILP requires at least 2 variables, got {d}.");
+        if (n < d + 3)
+            throw new ArgumentException($"GOBNILP requires at least d+3={d + 3} samples for {d} variables, got {n}.");
 
         // Phase 1: Pre-compute BIC scores for all candidate parent sets
         // parentSets[j] = list of (parent set, BIC score) for variable j

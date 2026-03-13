@@ -157,4 +157,58 @@ public class CausalDiscoveryOptions
     /// Larger values can model more complex relationships but require more data.</para>
     /// </remarks>
     public int? HiddenUnits { get; set; }
+
+    /// <summary>
+    /// Number of inner gradient descent steps per outer augmented Lagrangian iteration. Default: null (algorithm-specific).
+    /// </summary>
+    /// <remarks>
+    /// <para>Used by MCSL (default: 30), NOTEARS Low-Rank (default: 20), and similar algorithms.
+    /// Higher values improve convergence per outer step but increase computation time.</para>
+    /// </remarks>
+    public int? InnerIterations { get; set; }
+
+    /// <summary>
+    /// Maximum rank for low-rank matrix factorizations. Default: null (10).
+    /// </summary>
+    /// <remarks>
+    /// <para>Used by NOTEARS Low-Rank (W = A*B^T factorization).
+    /// Higher rank allows more complex graphs but increases parameters quadratically.</para>
+    /// </remarks>
+    public int? MaxRank { get; set; }
+
+    /// <summary>
+    /// Correlation threshold for edge inclusion in constraint-based time-series methods. Default: null (0.1).
+    /// </summary>
+    /// <remarks>
+    /// <para>Used by LPCMCI, TSFCI, and other time-series methods to filter weak correlations
+    /// before running conditional independence tests.</para>
+    /// </remarks>
+    public double? CorrelationThreshold { get; set; }
+
+    /// <summary>
+    /// Concavity parameter (gamma) for MCP/SCAD penalty functions. Default: null (algorithm-specific).
+    /// </summary>
+    /// <remarks>
+    /// <para>Used by CCDr and other methods using non-convex penalties.
+    /// Controls the transition from L1 to constant penalty. Typical values: 1.5-3.7.</para>
+    /// </remarks>
+    public double? ConcavityParameter { get; set; }
+
+    /// <summary>
+    /// Sobolev regularization weight for NOTEARS Sobolev. Default: null (0.1).
+    /// </summary>
+    /// <remarks>
+    /// <para>Controls the strength of the Sobolev smoothness penalty, which encourages
+    /// smoothly varying causal functions. Distinct from <see cref="SparsityPenalty"/> (L1).</para>
+    /// </remarks>
+    public double? SobolevWeight { get; set; }
+
+    /// <summary>
+    /// Maximum number of training epochs for deep learning-based methods. Default: null (algorithm-specific).
+    /// </summary>
+    /// <remarks>
+    /// <para>Used by CGNN, GraN-DAG, TCDF, and other neural network methods. Higher values allow
+    /// more training but risk overfitting on small datasets.</para>
+    /// </remarks>
+    public int? MaxEpochs { get; set; }
 }

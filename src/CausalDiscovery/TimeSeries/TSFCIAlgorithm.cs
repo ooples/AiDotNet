@@ -57,9 +57,12 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsLatentConfounders => true;
 
+    private readonly double _correlationThreshold;
+
     public TSFCIAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyTimeSeriesOptions(options);
+        _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
     }
 
     /// <inheritdoc/>
@@ -72,7 +75,7 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
 
         var cov = ComputeCovarianceMatrix(data);
         T eps = NumOps.FromDouble(1e-10);
-        T threshold = NumOps.FromDouble(0.1);
+        T threshold = NumOps.FromDouble(_correlationThreshold);
 
         // Phase 1: Build lagged covariance structure
         // For each pair (i,j) and lag l, compute lagged correlation

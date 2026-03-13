@@ -65,9 +65,15 @@ public class CCDrAlgorithm<T> : FunctionalBase<T>
     public CCDrAlgorithm(CausalDiscoveryOptions? options = null)
     {
         _lambda = options?.SparsityPenalty ?? 0.1;
-        _gamma = 2.0; // MCP concavity parameter (>1 required)
+        _gamma = options?.ConcavityParameter ?? 2.0;
         _threshold = options?.EdgeThreshold ?? 0.1;
         _maxIterations = options?.MaxIterations ?? 100;
+        if (_gamma <= 1.0)
+            throw new ArgumentException("ConcavityParameter (MCP gamma) must be > 1.0.");
+        if (_lambda < 0)
+            throw new ArgumentException("SparsityPenalty must be non-negative.");
+        if (_maxIterations < 1)
+            throw new ArgumentException("MaxIterations must be at least 1.");
     }
 
     /// <inheritdoc/>
@@ -75,6 +81,8 @@ public class CCDrAlgorithm<T> : FunctionalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
+        if (n < 2 || d < 2) return new Matrix<T>(d, d);
+
         var standardized = StandardizeData(data);
 
         // Compute sample covariance matrix S = (1/n) X^T X

@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -83,6 +85,14 @@ namespace AiDotNet.Diffusion.ThreeD;
 ///     guidanceScale: 3.0);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.ThreeD)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.ThreeDGeneration)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("One-2-3-45: Any Single Image to 3D Mesh in 45 Seconds without Per-Shape Optimization", "https://arxiv.org/abs/2306.16928", Year = 2023, Authors = "Liu et al.")]
 public class One2345Model<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

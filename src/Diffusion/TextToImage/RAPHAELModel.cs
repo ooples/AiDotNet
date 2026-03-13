@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -53,6 +55,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// Reference: Xue et al., "RAPHAEL: Text-to-Image Generation via Large Mixture of Diffusion Paths", NeurIPS 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("RAPHAEL: Text-to-Image Generation via Large Mixture of Diffusion Paths", "https://arxiv.org/abs/2305.18295", Year = 2023, Authors = "Xue et al.")]
 public class RAPHAELModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

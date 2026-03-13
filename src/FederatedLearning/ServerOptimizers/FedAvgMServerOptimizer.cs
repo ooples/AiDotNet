@@ -3,11 +3,15 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.FederatedLearning.ServerOptimizers;
 
 /// <summary>
-/// FedAvgM server optimizer (server momentum).
+/// FedAvgM server optimizer — server-side momentum for stabilized federated averaging.
 /// </summary>
 /// <remarks>
-/// <b>For Beginners:</b> Momentum helps smooth updates across rounds. Instead of applying only the
+/// <para><b>For Beginners:</b> Momentum helps smooth updates across rounds. Instead of applying only the
 /// current round's update, the server maintains a running "velocity" that accumulates updates.
+/// This reduces oscillations caused by heterogeneous client data.</para>
+///
+/// <para>Reference: Hsu, T.-M. H., et al. (2019). "Measuring the Effects of Non-Identical Data
+/// Distribution for Federated Visual Classification." NeurIPS Workshop 2019.</para>
 /// </remarks>
 public sealed class FedAvgMServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {

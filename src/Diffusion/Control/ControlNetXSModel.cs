@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -45,6 +47,12 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Zavadski et al., "ControlNet-XS", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("ControlNet-XS: Designing an Efficient and Effective Architecture for Controlling Text-to-Image Diffusion Models", "https://arxiv.org/abs/2312.06573", Year = 2024, Authors = "Zavadski et al.")]
 public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

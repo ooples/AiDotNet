@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,13 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// Qwen3-ASR-Small is a compact variant using a smaller encoder (512-dim, 12 layers) paired with Qwen3-0.5B for efficient deployment. Maintains multilingual support and instruction-following capabilities while targeting edge and mobile platforms with reduced compute requirements.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Qwen3-ASR Technical Report", "https://qwenlm.github.io/blog/qwen3/", Year = 2025, Authors = "Qwen Team")]
 public class Qwen3ASRSmall<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Qwen3ASRSmallOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <summary>StyleTTS: style-based generative model for expressive TTS with style diffusion and adversarial training.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "StyleTTS: A Style-Based Generative Model for Natural and Diverse Text-to-Speech Synthesis" (Li et al., 2022)</item></list></para><para><b>For Beginners:</b> StyleTTS: style-based generative model for expressive TTS with style diffusion and adversarial training.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("StyleTTS: A Style-Based Generative Model for Natural and Diverse Text-to-Speech Synthesis", "https://arxiv.org/abs/2205.15439", Year = 2022, Authors = "Li et al.")]
 public class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTSOptions _options; public override ModelOptions GetOptions() => _options;

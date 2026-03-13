@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Ovis: Structural Embedding Alignment for Multimodal Large Language Model" (2024)</item></list></para>
 /// <para><b>For Beginners:</b> Ovis is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Ovis: Structural Embedding Alignment for Multimodal Large Language Model", "https://arxiv.org/abs/2405.20797", Year = 2024, Authors = "Lu et al.")]
 public class Ovis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly OvisOptions _options; public override ModelOptions GetOptions() => _options;

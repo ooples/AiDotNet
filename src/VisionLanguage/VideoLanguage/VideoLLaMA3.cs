@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -19,6 +20,16 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <list type="bullet"><item>Paper: "VideoLLaMA 3: Frontier Multimodal Foundation Models" (Alibaba, 2025)</item></list></para>
 /// <para><b>For Beginners:</b> VideoLLaMA3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VideoLLaMA 3: Frontier Multimodal Foundation Models for Image and Video Understanding", "https://arxiv.org/abs/2501.13106", Year = 2025, Authors = "Zhang et al.")]
 public class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly VideoLLaMA3Options _options; public override ModelOptions GetOptions() => _options;

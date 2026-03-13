@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Monkey: Image Resolution and Text Label Are Important Things for Large Multi-modal Models" (2024)</item></list></para>
 /// <para><b>For Beginners:</b> Monkey is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Monkey: Image Resolution and Text Label Are Important Things for Large Multi-modal Models", "https://arxiv.org/abs/2311.06607", Year = 2024, Authors = "Li et al.")]
 public class Monkey<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MonkeyOptions _options; public override ModelOptions GetOptions() => _options;

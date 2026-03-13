@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,15 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// AudioPaLM fuses the PaLM-2 text language model with AudioLM's speech processing capabilities into a single multimodal model. For ASR, speech is encoded using USM encoder features, which are projected into PaLM-2's embedding space. The model generates text tokens conditioned on the speech input, leveraging PaLM-2's massive language understanding. AudioPaLM achieves state-of-the-art on speech translation while maintaining competitive ASR performance.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AudioPaLM: A Large Language Model That Can Speak and Listen", "https://arxiv.org/abs/2306.12925", Year = 2023, Authors = "Rubenstein et al.")]
 public class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AudioPaLMOptions _options; public override ModelOptions GetOptions() => _options;

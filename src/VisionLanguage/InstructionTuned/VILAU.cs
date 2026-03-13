@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "VILA-U: a Unified Foundation Model Integrating Visual Understanding and Generation" (NVIDIA, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> VILAU is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VILA-U: a Unified Foundation Model Integrating Visual Understanding and Generation", "https://arxiv.org/abs/2402.11894", Year = 2024, Authors = "Wu et al.")]
 public class VILAU<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly VILAUOptions _options; public override ModelOptions GetOptions() => _options;

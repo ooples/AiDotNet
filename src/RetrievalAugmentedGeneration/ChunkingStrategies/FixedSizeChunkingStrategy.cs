@@ -1,5 +1,4 @@
 
-
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
 
 /// <summary>

@@ -37,7 +37,7 @@ namespace AiDotNet.TimeSeries;
 [ModelCategory(ModelCategory.Bayesian)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Time Series Analysis by State Space Methods", "https://doi.org/10.1093/acprof:oso/9780199641178.001.0001", Year = 2012, Authors = "James Durbin, Siem Jan Koopman")]
 public class StateSpaceModel<T> : TimeSeriesModelBase<T>
 {

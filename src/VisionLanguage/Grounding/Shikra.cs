@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <list type="bullet"><item>Paper: "Shikra: Unleashing Multimodal LLM Referential Dialogue" (SenseTime, 2023)</item></list></para>
 /// <para><b>For Beginners:</b> Shikra is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Shikra: Unleashing Multimodal LLM's Referential Dialogue Magic", "https://arxiv.org/abs/2306.15195", Year = 2023, Authors = "Chen et al.")]
 public class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly ShikraOptions _options; public override ModelOptions GetOptions() => _options;

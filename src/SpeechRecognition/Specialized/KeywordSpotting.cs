@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,11 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// Keyword Spotting provides lightweight, always-on detection of specific keywords and voice commands. The model uses a compact encoder (4-layer Conformer with reduced dimensions) optimized for low-power continuous inference. Instead of full CTC vocabulary decoding, the model outputs confidence scores for a small set of predefined keywords. The model runs in streaming mode with a sliding window, using a fixed-point quantized encoder for minimal power consumption on edge devices.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly KeywordSpottingOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -20,6 +22,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> /// SpeedySpeech: lightweight non-autoregressive TTS with convolutional residual blocks and teacher-student duration distillation.
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SpeedySpeech: Efficient Neural Speech Synthesis", "https://arxiv.org/abs/2008.03802", Year = 2020, Authors = "Vainer and Durnov")]
 public class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly SpeedySpeechOptions _options; public override ModelOptions GetOptions() => _options;

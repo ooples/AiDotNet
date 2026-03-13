@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -91,6 +93,15 @@ namespace AiDotNet.Diffusion.TextToImage;
 ///     count: 4);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PixArt-alpha: Fast Training of Diffusion Transformer for Photorealistic Text-to-Image Synthesis", "https://arxiv.org/abs/2310.00426", Year = 2024, Authors = "Chen et al.")]
 public class PixArtModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

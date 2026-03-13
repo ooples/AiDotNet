@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>BigVGAN: large-scale universal vocoder with anti-aliased multi-periodicity composition (AMP) and Snake activation for high-fidelity synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "BigVGAN: A Universal Neural Vocoder with Large-Scale Training" (Lee et al., 2023)</item></list></para><para><b>For Beginners:</b> BigVGAN: large-scale universal vocoder with anti-aliased multi-periodicity composition (AMP) and Snake activation for high-fidelity synthesis.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("BigVGAN: A Universal Neural Vocoder with Large-Scale Training", "https://arxiv.org/abs/2206.04658", Year = 2023, Authors = "Lee et al.")]
 public class BigVGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly BigVGANOptions _options; public override ModelOptions GetOptions() => _options;

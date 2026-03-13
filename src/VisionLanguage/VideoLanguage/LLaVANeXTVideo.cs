@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <list type="bullet"><item>Paper: "LLaVA-NeXT: A Strong Zero-shot Video Understanding Model" (ByteDance, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> LLaVANeXTVideo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("LLaVA-NeXT: A Strong Zero-shot Video Understanding Model", "https://arxiv.org/abs/2408.03303", Year = 2024, Authors = "Zhang et al.")]
 public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
 {
     private readonly LLaVANeXTVideoOptions _options; public override ModelOptions GetOptions() => _options;

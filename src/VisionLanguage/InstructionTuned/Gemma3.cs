@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,15 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Gemma 3 Technical Report" (Google, 2025)</item></list></para>
 /// <para><b>For Beginners:</b> Gemma3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Gemma 3 Technical Report", "https://arxiv.org/abs/2503.19786", Year = 2025, Authors = "Gemma Team")]
 public class Gemma3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Gemma3Options _options; public override ModelOptions GetOptions() => _options;

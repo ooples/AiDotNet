@@ -39,7 +39,7 @@ namespace AiDotNet.TimeSeries;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Generalized Autoregressive Conditional Heteroskedasticity", "https://doi.org/10.1016/0304-4076(86)90063-1", Year = 1986, Authors = "Tim Bollerslev")]
 public class GARCHModel<T> : TimeSeriesModelBase<T>
 {

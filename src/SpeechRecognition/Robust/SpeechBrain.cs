@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// SpeechBrain provides a comprehensive set of pre-trained ASR models built with the open-source toolkit. The models use various architectures including CRDNN (convolutional-recurrent-DNN), Transformer, and Conformer encoders with CTC or attention-based decoders. SpeechBrain models are trained with extensive data augmentation, dynamic batching, and mixed-precision training. The toolkit supports over 100 speech processing recipes covering ASR, speaker recognition, speech separation, and more.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SpeechBrain: A General-Purpose Speech Toolkit", "https://arxiv.org/abs/2106.04624", Year = 2021, Authors = "Ravanelli et al.")]
 public class SpeechBrain<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SpeechBrainOptions _options; public override ModelOptions GetOptions() => _options;

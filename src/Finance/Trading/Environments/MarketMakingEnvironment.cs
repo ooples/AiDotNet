@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors;
 
@@ -19,6 +21,12 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// keeping inventory small. This environment teaches an agent to balance profit and risk.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Finance)]
+[ModelDomain(ModelDomain.ReinforcementLearning)]
+[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public sealed class MarketMakingEnvironment<T> : TradingEnvironment<T>
 {
     private readonly int _maxInventory;

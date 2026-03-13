@@ -99,6 +99,17 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
                     P[i, j] = NumOps.FromDouble(sigVal);
                 }
 
+            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+            var PSqC = new Matrix<T>(d, d);
+            for (int i2 = 0; i2 < d; i2++)
+                for (int j2 = 0; j2 < d; j2++)
+                    PSqC[i2, j2] = NumOps.Multiply(P[i2, j2], P[i2, j2]);
+            var expPSqC = MatrixExponentialTaylor(PSqC, d);
+            T hValC = NumOps.Zero;
+            for (int i2 = 0; i2 < d; i2++)
+                hValC = NumOps.Add(hValC, expPSqC[i2, i2]);
+            hValC = NumOps.Subtract(hValC, NumOps.FromDouble(d));
+
             // Compute expected weighted adjacency: W[i,j] = P[i,j] * cov[i,j] / cov[i,i]
             var W = new Matrix<T>(d, d);
             for (int i = 0; i < d; i++)
@@ -151,9 +162,10 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
                             Math.Log(NumOps.ToDouble(pij) / NumOps.ToDouble(oneMinusP)));
                     }
 
-                    // Acyclicity gradient (via NOTEARS on P*P)
-                    // Simplified: penalize large P values
-                    T acycGrad = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, P[i, j])), P[i, j]);
+                    // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+                    T acycGrad = NumOps.Multiply(
+                        NumOps.Add(alpha, NumOps.Multiply(rho, hValC)),
+                        NumOps.Multiply(expPSqC[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
 
                     // Total gradient w.r.t. P[i,j]
                     T totalGradP = NumOps.Add(dataGrad, NumOps.Add(klGrad, acycGrad));
@@ -171,15 +183,9 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
                     Z[i, j] = NumOps.Subtract(Z[i, j], NumOps.Multiply(lr, gradZ[i, j]));
                 }
 
-            // Update augmented Lagrangian
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    if (i != j)
-                        hVal = NumOps.Add(hVal, NumOps.Multiply(P[i, j], P[i, j]));
-
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            // Update augmented Lagrangian with NOTEARS h(P) = tr(exp(P∘P)) - d
+            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValC));
+            if (NumOps.GreaterThan(hValC, NumOps.FromDouble(0.25)))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
             if (NumOps.GreaterThan(rho, rhoMax))
                 rho = rhoMax;
@@ -212,4 +218,5 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
 
         return result;
     }
+
 }

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// OWSM is an open-source reproduction of Whisper's training approach using publicly available data. It uses ESPnet's encoder-decoder architecture with a Conformer encoder and Transformer decoder, trained on a curated collection of open speech datasets. OWSM supports ASR, translation, and language identification. Being fully open-source (data, code, and model), it enables reproducible multilingual ASR research.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("OWSM v3.1: Better and Faster Open Whisper-Style Speech Models based on E-Branchformer", "https://arxiv.org/abs/2401.16658", Year = 2024, Authors = "Peng et al.")]
 public class OWSM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly OWSMOptions _options; public override ModelOptions GetOptions() => _options;

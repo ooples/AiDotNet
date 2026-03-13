@@ -61,7 +61,7 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int h = Math.Min(HiddenUnits, 10);
+        int h = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -208,20 +208,74 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
                     }
                 }
 
-                // Simplified gradient w.r.t. encoder weights through causal layer
+                // Gradient w.r.t. z through decoder
+                var dZ = new T[d];
                 for (int j = 0; j < d; j++)
                 {
                     T reconGrad = NumOps.Multiply(NumOps.Subtract(xhat[j], data[s, j]), invN);
                     for (int k = 0; k < h; k++)
                     {
+                        T sigD = NumOps.Multiply(hDec[k], NumOps.Subtract(NumOps.One, hDec[k]));
+                        T dH = NumOps.Multiply(reconGrad, NumOps.Multiply(Wout[k, j], sigD));
+                        for (int i = 0; i < d; i++)
+                            dZ[i] = NumOps.Add(dZ[i], NumOps.Multiply(dH, Wdec[i, k]));
+                    }
+                }
+
+                // Gradient w.r.t. A through causal layer: dL/dA[i,j] = dL/dz * d(IminusAinv*eps)/dA
+                // z_m = sum_l (I-A)^{-1}[m,l] * eps[l]
+                // d(I-A)^{-1}/dA[i,j] = (I-A)^{-1} * dA/dA[i,j] * (I-A)^{-1}
+                // where dA[i,j] is the matrix with 1 at [i,j] and 0 elsewhere
+                // So dz_m/dA[i,j] = IminusAinv[m,i] * IminusAinv[j,:] . eps
+                for (int i = 0; i < d; i++)
+                    for (int j = 0; j < d; j++)
+                    {
+                        if (i == j) continue;
+                        T IinvEpsJ = NumOps.Zero;
+                        for (int l = 0; l < d; l++)
+                            IinvEpsJ = NumOps.Add(IinvEpsJ, NumOps.Multiply(IminusAinv[j, l], epsNoise[l]));
+                        T dataFitGrad = NumOps.Zero;
+                        for (int m = 0; m < d; m++)
+                            dataFitGrad = NumOps.Add(dataFitGrad, NumOps.Multiply(dZ[m], IminusAinv[m, i]));
+                        dataFitGrad = NumOps.Multiply(dataFitGrad, IinvEpsJ);
+                        T aSigD = NumOps.Multiply(A[i, j], NumOps.Subtract(NumOps.One, A[i, j]));
+                        gALogits[i, j] = NumOps.Add(gALogits[i, j], NumOps.Multiply(dataFitGrad, aSigD));
+                    }
+
+                // Backprop dZ through causal layer: dEps = (I-A)^{-T} * dZ
+                var dEps = new T[d];
+                for (int j = 0; j < d; j++)
+                {
+                    dEps[j] = NumOps.Zero;
+                    for (int m = 0; m < d; m++)
+                        dEps[j] = NumOps.Add(dEps[j], NumOps.Multiply(IminusAinv[m, j], dZ[m]));
+                }
+
+                // Gradient w.r.t. encoder weights through z = (I-A)^{-1} * eps
+                // dL/dWmu[k,j] = dL/dEps[j] * d(eps[j])/dWmu[k,j] = dEps[j] * hEnc[k]
+                for (int j = 0; j < d; j++)
+                {
+                    for (int k = 0; k < h; k++)
+                    {
+                        gWmu[k, j] = NumOps.Add(gWmu[k, j], NumOps.Multiply(dEps[j], hEnc[k]));
                         T sigD = NumOps.Multiply(hEnc[k], NumOps.Subtract(NumOps.One, hEnc[k]));
-                        T dHEnc = NumOps.Multiply(reconGrad, NumOps.Multiply(Wmu[k, j], sigD));
+                        T dHEnc = NumOps.Multiply(dEps[j], NumOps.Multiply(Wmu[k, j], sigD));
                         for (int i = 0; i < d; i++)
                             gWenc[i, k] = NumOps.Add(gWenc[i, k], NumOps.Multiply(dHEnc, data[s, i]));
-                        gWmu[k, j] = NumOps.Add(gWmu[k, j], NumOps.Multiply(reconGrad, hEnc[k]));
                     }
                 }
             }
+
+            // NOTEARS acyclicity: h(A) = tr(exp(A∘A)) - d
+            var ASq = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    ASq[i, j] = NumOps.Multiply(A[i, j], A[i, j]);
+            var expASq = MatrixExponentialTaylor(ASq, d);
+            T hVal = NumOps.Zero;
+            for (int i = 0; i < d; i++)
+                hVal = NumOps.Add(hVal, expASq[i, i]);
+            hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
 
             // Acyclicity and sparsity gradients on A logits
             for (int i = 0; i < d; i++)
@@ -231,10 +285,13 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
                     T aij = A[i, j];
                     T l1Grad = NumOps.Multiply(lambda1,
                         NumOps.FromDouble(Math.Sign(NumOps.ToDouble(aij))));
-                    T acycGrad = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, aij)),
-                        NumOps.FromDouble(2));
+                    // Acyclicity gradient: (alpha + rho*h) * [exp(A∘A)^T ∘ 2A][i,j]
+                    T acycGrad = NumOps.Multiply(
+                        NumOps.Add(alpha, NumOps.Multiply(rho, hVal)),
+                        NumOps.Multiply(expASq[j, i], NumOps.Multiply(NumOps.FromDouble(2), aij)));
                     T aSigD = NumOps.Multiply(aij, NumOps.Subtract(NumOps.One, aij));
-                    gALogits[i, j] = NumOps.Multiply(NumOps.Add(l1Grad, acycGrad), aSigD);
+                    gALogits[i, j] = NumOps.Add(gALogits[i, j],
+                        NumOps.Multiply(NumOps.Add(l1Grad, acycGrad), aSigD));
                 }
 
             // Apply gradients
@@ -257,11 +314,7 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
                     Wout[k, j] = NumOps.Subtract(Wout[k, j], NumOps.Multiply(lr, gWout[k, j]));
                 }
 
-            // Update augmented Lagrangian
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    if (i != j) hVal = NumOps.Add(hVal, NumOps.Multiply(A[i, j], A[i, j]));
+            // Update augmented Lagrangian with NOTEARS h(A) = tr(exp(A∘A)) - d
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
             if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
@@ -292,4 +345,5 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
 
         return result;
     }
+
 }

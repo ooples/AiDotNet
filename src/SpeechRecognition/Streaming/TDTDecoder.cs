@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// The TDT (Token-and-Duration Transducer) decoder extends standard RNN-T by jointly predicting both the output token and the number of encoder frames to skip. When a non-blank token is emitted, the duration head predicts how many blank frames to skip, reducing the number of joint network forward passes. This achieves up to 2.5x inference speedup over standard RNN-T without accuracy degradation. The approach is orthogonal to encoder optimization and combines well with Fast Conformer.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Efficient Sequence Transduction by Jointly Predicting Tokens and Durations", "https://arxiv.org/abs/2304.06795", Year = 2023, Authors = "Xu et al.")]
 public class TDTDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly TDTDecoderOptions _options; public override ModelOptions GetOptions() => _options;

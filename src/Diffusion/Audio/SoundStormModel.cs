@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -87,6 +89,14 @@ namespace AiDotNet.Diffusion.Audio;
 ///     guidanceScale: 1.0);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToSpeech)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SoundStorm: Efficient Parallel Audio Generation", "https://arxiv.org/abs/2305.09636", Year = 2023, Authors = "Borsos et al.")]
 public class SoundStormModel<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

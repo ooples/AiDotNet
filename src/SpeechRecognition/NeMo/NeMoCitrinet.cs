@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,12 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// tokens achieves competitive WER with much faster inference than attention-based models.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Citrinet: Closing the Gap between Non-Autoregressive and Autoregressive End-to-End Models for Automatic Speech Recognition", "https://arxiv.org/abs/2104.01721", Year = 2021, Authors = "Majumdar et al.")]
 public class NeMoCitrinet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly NeMoCitrinetOptions _options; public override ModelOptions GetOptions() => _options;

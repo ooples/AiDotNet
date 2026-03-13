@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,14 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// Data2Vec uses a shared self-supervised framework across speech, vision, and language. The teacher network produces contextualized target representations from unmasked input, while the student network predicts these targets from masked input. Unlike HuBERT's discrete pseudo-labels, data2vec regresses continuous latent representations. For speech, it achieves competitive ASR performance while using a simpler training objective without quantization.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("data2vec: A General Framework for Self-Supervised Learning in Speech, Vision and Language", "https://arxiv.org/abs/2202.03555", Year = 2022, Authors = "Baevski et al.")]
 public class Data2VecASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Data2VecASROptions _options; public override ModelOptions GetOptions() => _options;

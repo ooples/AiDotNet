@@ -29,6 +29,7 @@ namespace AiDotNet.ComputerVision.Tracking;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("ByteTrack: Multi-Object Tracking by Associating Every Detection Box",

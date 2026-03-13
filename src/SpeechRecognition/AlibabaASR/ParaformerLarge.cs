@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// Paraformer-Large scales up the Paraformer architecture to 220M parameters with a wider encoder (1024-dim, 16 heads) and deeper stack (50 encoder layers). Trained on 60k hours of Mandarin/English data with data augmentation (SpecAugment, speed perturbation). The model uses a 4x convolutional subsampling front-end and SentencePiece tokenization. Achieves state-of-the-art CER on AISHELL-1 and competitive results on LibriSpeech.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Paraformer: Fast and Accurate Parallel Transformer for Non-autoregressive End-to-End Speech Recognition", "https://arxiv.org/abs/2206.08317", Year = 2023, Authors = "Gao et al.")]
 public class ParaformerLarge<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ParaformerLargeOptions _options; public override ModelOptions GetOptions() => _options;

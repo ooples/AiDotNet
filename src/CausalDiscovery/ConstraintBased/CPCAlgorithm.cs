@@ -159,13 +159,15 @@ public class CPCAlgorithm<T> : ConstraintBasedBase<T>
     }
 
     /// <summary>
-    /// Checks if k is a definite collider in the triple i — k — j.
-    /// k is a definite collider if no separating set of (i,j) contains k.
+    /// Checks if k is a definite collider in the triple i — k — j per CPC rules.
+    /// k is a definite collider ONLY if we found at least one separating set of (i,j)
+    /// AND k does not appear in ANY of those separating sets.
+    /// If k appears in even one separating set, this triple is ambiguous and we must not orient.
     /// </summary>
     private bool IsDefiniteCollider(Matrix<T> data, int i, int j, int k, bool[,] adj, int d)
     {
         bool foundSepSet = false;
-        bool kAlwaysInSepSet = true;
+        bool kEverInSepSet = false;
 
         // Check all subsets of adj(i)\{j} and adj(j)\{i}
         var adjI = new List<int>();
@@ -187,16 +189,17 @@ public class CPCAlgorithm<T> : ConstraintBasedBase<T>
                 if (TestCI(data, i, j, condSet, Alpha))
                 {
                     foundSepSet = true;
-                    if (!condSet.Contains(k))
+                    if (condSet.Contains(k))
                     {
-                        kAlwaysInSepSet = false;
+                        kEverInSepSet = true;
                     }
                 }
             }
         }
 
-        // k is definite collider if we found separating sets and k was never in any of them
-        return foundSepSet && !kAlwaysInSepSet;
+        // Definite collider: found sep sets and k was NEVER in any of them
+        // If k was in even one sep set, the triple is ambiguous → don't orient
+        return foundSepSet && !kEverInSepSet;
     }
 
     private static void ApplyMeekRules(bool[,] adj, bool[,] oriented, int d)

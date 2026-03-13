@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -49,6 +51,13 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Couairon et al., "DiffEdit: Diffusion-based Semantic Image Editing with Mask Guidance", ICLR 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.ImageEditing)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DiffEdit: Diffusion-based Semantic Image Editing with Mask Guidance", "https://arxiv.org/abs/2210.11427", Year = 2023, Authors = "Couairon et al.")]
 public class DiffEditModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

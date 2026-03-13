@@ -15,7 +15,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression;
 /// for the core compression logic.
 /// </para>
 /// <para><b>For Beginners:</b> This is the foundation that all context compressors build upon.
-/// 
+///
 /// Think of it like a template for reducing document size:
 /// - It handles common tasks (checking inputs aren't null or empty)
 /// - Specific compression methods (LLM-based, rule-based) fill in how they compress

@@ -48,7 +48,7 @@ namespace AiDotNet.TimeSeries;
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Temporal Fusion Transformers for Interpretable Multi-horizon Time Series Forecasting", "https://arxiv.org/abs/1912.09363", Year = 2021, Authors = "Bryan Lim, Sercan O. Arik, Nicolas Loeff, Tomas Pfister")]
 public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 {

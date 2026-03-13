@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Document;
 /// <list type="bullet"><item>Paper: "mPLUG-DocOwl: Modularized Multimodal Large Language Model for Document Understanding" (Alibaba, 2023)</item></list></para>
 /// <para><b>For Beginners:</b> MPLUGDocOwl is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("mPLUG-DocOwl: Modularized Multimodal Large Language Model for Document Understanding", "https://arxiv.org/abs/2307.02499", Year = 2023, Authors = "Ye et al.")]
 public class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly MPLUGDocOwlOptions _options; public override ModelOptions GetOptions() => _options;

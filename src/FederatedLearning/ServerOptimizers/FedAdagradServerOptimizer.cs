@@ -3,10 +3,14 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.FederatedLearning.ServerOptimizers;
 
 /// <summary>
-/// FedAdagrad server optimizer.
+/// FedAdagrad server optimizer — adaptive learning rates using accumulated squared gradients.
 /// </summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> FedAdagradServerOptimizer provides AI safety functionality. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Adagrad automatically reduces the learning rate for parameters
+/// that have been updated frequently, allowing rarely-updated parameters to learn faster.
+/// In federated settings, this helps handle heterogeneous client updates.</para>
+///
+/// <para>Reference: Reddi, S., et al. (2021). "Adaptive Federated Optimization." ICLR 2021.</para>
 /// </remarks>
 public sealed class FedAdagradServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {

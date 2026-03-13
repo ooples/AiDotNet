@@ -96,8 +96,51 @@ public class GRaSPAlgorithm<T> : ScoreBasedBase<T>
                 ordering[pos] = v2;
                 ordering[pos + 1] = v1;
 
-                // Recompute parent sets for affected variables
-                var newParents = ComputeOptimalParents(data, ordering);
+                // Only recompute parent sets for the two swapped variables and their successors
+                // that could be affected, rather than recomputing all parent sets
+                var newParents = new HashSet<int>[d];
+                for (int k = 0; k < d; k++)
+                    newParents[k] = parentSets[k];
+
+                // Recompute only for variables at and after the swap position
+                // (predecessors' parent sets are unchanged since their predecessor sets didn't change)
+                for (int idx = pos; idx < d; idx++)
+                {
+                    int target = ordering[idx];
+                    var bestP = new HashSet<int>();
+                    double bestS = ComputeBIC(data, target, bestP);
+
+                    bool addImproved = true;
+                    while (addImproved && bestP.Count < MaxParents)
+                    {
+                        addImproved = false;
+                        int bestCand = -1;
+                        double bestCandScore = bestS;
+
+                        for (int predIdx = 0; predIdx < idx; predIdx++)
+                        {
+                            int candidate = ordering[predIdx];
+                            if (bestP.Contains(candidate)) continue;
+                            var testP = new HashSet<int>(bestP) { candidate };
+                            double score = ComputeBIC(data, target, testP);
+                            if (score > bestCandScore)
+                            {
+                                bestCandScore = score;
+                                bestCand = candidate;
+                            }
+                        }
+
+                        if (bestCand >= 0)
+                        {
+                            bestP.Add(bestCand);
+                            bestS = bestCandScore;
+                            addImproved = true;
+                        }
+                    }
+
+                    newParents[target] = bestP;
+                }
+
                 int newEdges = CountEdges(newParents, d);
                 double newScore = ComputeTotalScore(data, newParents, d);
 
@@ -239,30 +282,86 @@ public class GRaSPAlgorithm<T> : ScoreBasedBase<T>
         int n = data.Rows;
         var W = new Matrix<T>(d, d);
 
+        // Use multivariate OLS for each child regressed against all its parents jointly
         for (int child = 0; child < d; child++)
         {
-            foreach (int parent in parentSets[child])
+            var parents = parentSets[child].ToList();
+            if (parents.Count == 0) continue;
+
+            int p = parents.Count;
+            double meanC = 0;
+            var parentMeans = new double[p];
+            for (int i = 0; i < n; i++)
             {
-                double meanP = 0, meanC = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    meanP += NumOps.ToDouble(data[i, parent]);
-                    meanC += NumOps.ToDouble(data[i, child]);
-                }
-                meanP /= n; meanC /= n;
-
-                double cov = 0, varP = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double dp = NumOps.ToDouble(data[i, parent]) - meanP;
-                    cov += dp * (NumOps.ToDouble(data[i, child]) - meanC);
-                    varP += dp * dp;
-                }
-
-                W[parent, child] = NumOps.FromDouble(varP > 1e-10 ? cov / varP : 0);
+                meanC += NumOps.ToDouble(data[i, child]);
+                for (int j = 0; j < p; j++)
+                    parentMeans[j] += NumOps.ToDouble(data[i, parents[j]]);
             }
+            meanC /= n;
+            for (int j = 0; j < p; j++) parentMeans[j] /= n;
+
+            var XtX = new double[p, p];
+            var Xty = new double[p];
+            for (int i = 0; i < n; i++)
+            {
+                double dy = NumOps.ToDouble(data[i, child]) - meanC;
+                var dx = new double[p];
+                for (int j = 0; j < p; j++)
+                    dx[j] = NumOps.ToDouble(data[i, parents[j]]) - parentMeans[j];
+                for (int a = 0; a < p; a++)
+                {
+                    Xty[a] += dx[a] * dy;
+                    for (int b = a; b < p; b++)
+                        XtX[a, b] += dx[a] * dx[b];
+                }
+            }
+            for (int a = 0; a < p; a++)
+            {
+                XtX[a, a] += 1e-10;
+                for (int b = a + 1; b < p; b++)
+                    XtX[b, a] = XtX[a, b];
+            }
+
+            var beta = SolveSmallSystem(XtX, Xty, p);
+            for (int j = 0; j < p; j++)
+                W[parents[j], child] = NumOps.FromDouble(beta[j]);
         }
 
         return W;
+    }
+
+    private static double[] SolveSmallSystem(double[,] A, double[] b, int p)
+    {
+        var aug = new double[p, p + 1];
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = 0; j < p; j++) aug[i, j] = A[i, j];
+            aug[i, p] = b[i];
+        }
+        for (int col = 0; col < p; col++)
+        {
+            int maxRow = col;
+            for (int row = col + 1; row < p; row++)
+                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
+            if (maxRow != col)
+                for (int j = col; j <= p; j++)
+                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
+            double pivot = aug[col, col];
+            if (Math.Abs(pivot) < 1e-15) continue;
+            for (int row = col + 1; row < p; row++)
+            {
+                double factor = aug[row, col] / pivot;
+                for (int j = col; j <= p; j++) aug[row, j] -= factor * aug[col, j];
+            }
+        }
+        var x = new double[p];
+        for (int row = p - 1; row >= 0; row--)
+        {
+            double sum = aug[row, p];
+            for (int j = row + 1; j < p; j++) sum -= aug[row, j] * x[j];
+            double diag = aug[row, row];
+            x[row] = Math.Abs(diag) > 1e-15 ? sum / diag : 0;
+        }
+        return x;
     }
 }

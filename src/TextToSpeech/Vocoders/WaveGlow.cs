@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>WaveGlow: flow-based generative vocoder combining Glow invertible 1x1 convolutions with WaveNet affine coupling layers.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "WaveGlow: A Flow-based Generative Network for Speech Synthesis" (Prenger et al., 2019)</item></list></para><para><b>For Beginners:</b> WaveGlow: flow-based generative vocoder combining Glow invertible 1x1 convolutions with WaveNet affine coupling layers.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("WaveGlow: A Flow-based Generative Network for Speech Synthesis", "https://arxiv.org/abs/1811.00002", Year = 2019, Authors = "Prenger et al.")]
 public class WaveGlow<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly WaveGlowOptions _options; public override ModelOptions GetOptions() => _options;

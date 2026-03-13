@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// Google Cloud Speech-to-Text V2 provides production-grade ASR through Google's cloud API. The V2 API uses the Chirp universal speech model as its backbone, supporting 100+ languages with automatic language detection. Features include word-level timestamps, speaker diarization, profanity filtering, automatic punctuation, and speech adaptation for domain-specific vocabulary. The API supports batch and streaming modes with configurable models (short, long, telephony, medical).
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
 public class GoogleSpeechV2<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly GoogleSpeechV2Options _options; public override ModelOptions GetOptions() => _options;

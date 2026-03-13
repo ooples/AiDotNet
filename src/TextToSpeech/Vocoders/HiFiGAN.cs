@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -18,6 +20,12 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> /// HiFi-GAN: high-fidelity neural vocoder with multi-receptive field fusion for parallel waveform generation.
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("HiFi-GAN: Generative Adversarial Networks for Efficient and High Fidelity Speech Synthesis", "https://arxiv.org/abs/2010.05646", Year = 2020, Authors = "Kong et al.")]
 public class HiFiGAN<T> : TtsModelBase<T>, IVocoder<T>
 {
     private readonly HiFiGANOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,6 +1,8 @@
+using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.TextDetection;
 using AiDotNet.ComputerVision.OCR.Recognition;
+using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 
@@ -24,6 +26,13 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 /// - Optimized for clean text on uniform backgrounds
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class DocumentReader<T>
 {
     private readonly INumericOperations<T> _numOps;

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -29,6 +30,13 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 ///
 /// <para>Reference: He et al., "Mask R-CNN", ICCV 2017</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Mask R-CNN", "https://arxiv.org/abs/1703.06870", Year = 2017, Authors = "Kaiming He, Georgia Gkioxari, Piotr Dollár, Ross Girshick")]
 public class MaskRCNN<T> : InstanceSegmenterBase<T>
 {
     private readonly ResNet<T> _backbone;

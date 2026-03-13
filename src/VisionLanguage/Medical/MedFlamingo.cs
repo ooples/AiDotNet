@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <list type="bullet"><item>Paper: "Med-Flamingo: A Multimodal Medical Few-shot Learner (Various, 2023)"</item></list></para>
 /// <para><b>For Beginners:</b> MedFlamingo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Med-Flamingo: A Multimodal Medical Few-shot Learner", "https://arxiv.org/abs/2307.15189", Year = 2023, Authors = "Moor et al.")]
 public class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly MedFlamingoOptions _options; public override ModelOptions GetOptions() => _options;

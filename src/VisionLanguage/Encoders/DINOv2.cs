@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -22,6 +23,14 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "DINOv2: Learning Robust Visual Features without Supervision" (Oquab et al., 2024)</item></list></para>
 /// <para><b>For Beginners:</b> DINOv2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DINOv2: Learning Robust Visual Features without Supervision", "https://arxiv.org/abs/2304.07193", Year = 2024, Authors = "Oquab et al.")]
 public class DINOv2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly DINOv2Options _options; public override ModelOptions GetOptions() => _options;

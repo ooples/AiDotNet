@@ -53,20 +53,28 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
 
-    public CGNNAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
+    private readonly int? _seed;
+
+    public CGNNAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        ApplyDeepOptions(options);
+        _seed = options?.Seed;
+    }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
         int n = data.Rows;
         int d = data.Columns;
-        int h = Math.Min(HiddenUnits, 10);
+        int h = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var cov = ComputeCovarianceMatrix(data);
         var corr = CovarianceToCorrelation(cov);
-        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
-        T corrThreshold = NumOps.FromDouble(0.1);
+        var rng = _seed.HasValue
+            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
+            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        T corrThreshold = NumOps.FromDouble(EdgeThreshold);
         T eps = NumOps.FromDouble(1e-10);
 
         var result = new Matrix<T>(d, d);
@@ -113,15 +121,16 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
     }
 
     /// <summary>
-    /// Trains a small MLP to predict target from source+noise and returns the MMD
-    /// between predicted and actual target distributions.
+    /// Trains a small MLP to predict target from source+noise and returns the distribution
+    /// distance (mean + variance discrepancy) between predicted and actual target values.
     /// </summary>
     private T TrainAndComputeMMD(Matrix<T> data, int source, int target, int h, int n, Random rng)
     {
-        T scale = NumOps.FromDouble(Math.Sqrt(2.0 / 2)); // 2 inputs: source + noise
+        int inputDim = 2; // source + noise
+        T scale = NumOps.FromDouble(Math.Sqrt(2.0 / inputDim));
         T lr = NumOps.FromDouble(LearningRate);
 
-        // MLP: [source, noise] → hidden(h) → target
+        // MLP: [source, noise] -> hidden(h) -> target
         var wh = new Matrix<T>(2, h);
         var wo = new Matrix<T>(h, 1);
         for (int k = 0; k < h; k++)
@@ -131,10 +140,9 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
             wo[k, 0] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
         }
 
-        int trainSteps = Math.Min(MaxEpochs, 50);
         T invN = NumOps.FromDouble(1.0 / n);
 
-        for (int step = 0; step < trainSteps; step++)
+        for (int step = 0; step < MaxEpochs; step++)
         {
             var gWh = new Matrix<T>(2, h);
             var gWo = new Matrix<T>(h, 1);
@@ -142,19 +150,7 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
             for (int s = 0; s < n; s++)
             {
                 T noise = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-                var hidden = new T[h];
-
-                for (int k = 0; k < h; k++)
-                {
-                    T z = NumOps.Add(NumOps.Multiply(data[s, source], wh[0, k]),
-                                     NumOps.Multiply(noise, wh[1, k]));
-                    double sv = NumOps.ToDouble(z);
-                    hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-                }
-
-                T pred = NumOps.Zero;
-                for (int k = 0; k < h; k++)
-                    pred = NumOps.Add(pred, NumOps.Multiply(hidden[k], wo[k, 0]));
+                var (pred, hidden) = ForwardMLP(data[s, source], noise, wh, wo, h);
 
                 T residual = NumOps.Multiply(NumOps.Subtract(pred, data[s, target]), invN);
 
@@ -176,27 +172,16 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
             }
         }
 
-        // Compute MMD: ||mean(predicted) - mean(actual)||^2 + |var(predicted) - var(actual)|
+        // Compute distribution distance: ||mean(predicted) - mean(actual)||^2 + |var(predicted) - var(actual)|
         T meanPred = NumOps.Zero, meanActual = NumOps.Zero;
-        T varPred = NumOps.Zero, varActual = NumOps.Zero;
         T nT = NumOps.FromDouble(n);
 
+        var predictions = new T[n];
         for (int s = 0; s < n; s++)
         {
             T noise = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-            var hidden = new T[h];
-            for (int k = 0; k < h; k++)
-            {
-                T z = NumOps.Add(NumOps.Multiply(data[s, source], wh[0, k]),
-                                 NumOps.Multiply(noise, wh[1, k]));
-                double sv = NumOps.ToDouble(z);
-                hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-            }
-
-            T pred = NumOps.Zero;
-            for (int k = 0; k < h; k++)
-                pred = NumOps.Add(pred, NumOps.Multiply(hidden[k], wo[k, 0]));
-
+            var (pred, _) = ForwardMLP(data[s, source], noise, wh, wo, h);
+            predictions[s] = pred;
             meanPred = NumOps.Add(meanPred, pred);
             meanActual = NumOps.Add(meanActual, data[s, target]);
         }
@@ -204,31 +189,38 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
         meanPred = NumOps.Divide(meanPred, nT);
         meanActual = NumOps.Divide(meanActual, nT);
 
+        T varPred = NumOps.Zero, varActual = NumOps.Zero;
         for (int s = 0; s < n; s++)
         {
-            T noise = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-            var hidden = new T[h];
-            for (int k = 0; k < h; k++)
-            {
-                T z = NumOps.Add(NumOps.Multiply(data[s, source], wh[0, k]),
-                                 NumOps.Multiply(noise, wh[1, k]));
-                double sv = NumOps.ToDouble(z);
-                hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-            }
-
-            T pred = NumOps.Zero;
-            for (int k = 0; k < h; k++)
-                pred = NumOps.Add(pred, NumOps.Multiply(hidden[k], wo[k, 0]));
-
-            T dpred = NumOps.Subtract(pred, meanPred);
+            T dpred = NumOps.Subtract(predictions[s], meanPred);
             varPred = NumOps.Add(varPred, NumOps.Multiply(dpred, dpred));
             T dact = NumOps.Subtract(data[s, target], meanActual);
             varActual = NumOps.Add(varActual, NumOps.Multiply(dact, dact));
         }
 
-        // MMD approximation
         T meanDiff = NumOps.Subtract(meanPred, meanActual);
         T varDiff = NumOps.Subtract(NumOps.Divide(varPred, nT), NumOps.Divide(varActual, nT));
         return NumOps.Add(NumOps.Multiply(meanDiff, meanDiff), NumOps.Abs(varDiff));
+    }
+
+    /// <summary>
+    /// Forward pass through the 2-input MLP: sigmoid hidden layer, linear output.
+    /// </summary>
+    private (T prediction, T[] hidden) ForwardMLP(T sourceVal, T noise, Matrix<T> wh, Matrix<T> wo, int h)
+    {
+        var hidden = new T[h];
+        for (int k = 0; k < h; k++)
+        {
+            T z = NumOps.Add(NumOps.Multiply(sourceVal, wh[0, k]),
+                             NumOps.Multiply(noise, wh[1, k]));
+            double sv = NumOps.ToDouble(z);
+            hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
+        }
+
+        T pred = NumOps.Zero;
+        for (int k = 0; k < h; k++)
+            pred = NumOps.Add(pred, NumOps.Multiply(hidden[k], wo[k, 0]));
+
+        return (pred, hidden);
     }
 }

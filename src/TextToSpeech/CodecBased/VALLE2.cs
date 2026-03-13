@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>VALLE2: VALL-E 2: Neural Codec Language Models are Human Parity Zero-Shot TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VALL-E 2: Neural Codec Language Models are Human Parity Zero-Shot TTS" (Chen et al., 2024)</item></list></para><para><b>For Beginners:</b> VALLE2: VALL-E 2: Neural Codec Language Models are Human Parity Zero-Shot TTS.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("VALL-E 2: Neural Codec Language Models are Human Parity Zero-Shot Text to Speech Synthesizers", "https://arxiv.org/abs/2406.05370", Year = 2024, Authors = "Chen et al.")]
 public class VALLE2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VALLE2Options _options; public override ModelOptions GetOptions() => _options;

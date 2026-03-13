@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -24,6 +25,15 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// <list type="bullet"><item>Paper: "xGen-MM (BLIP-3): A Family of Open Large Multimodal Models" (Salesforce, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> BLIP3 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("xGen-MM (BLIP-3): A Family of Open Large Multimodal Models", "https://arxiv.org/abs/2408.08872", Year = 2024, Authors = "Xue et al.")]
 public class BLIP3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly BLIP3Options _options; public override ModelOptions GetOptions() => _options;

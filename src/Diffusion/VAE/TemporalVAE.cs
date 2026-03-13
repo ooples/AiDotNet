@@ -1,7 +1,10 @@
 using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -47,6 +50,12 @@ namespace AiDotNet.Diffusion.VAE;
 /// - Output: [batch, channels, frames, height, width] reconstructed video
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class TemporalVAE<T> : VAEModelBase<T>
 {
     /// <summary>

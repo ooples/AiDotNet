@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,13 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// Chirp is Google's production multilingual ASR model based on the USM architecture, deployed in Google Cloud Speech-to-Text V2. It supports 100+ languages and dialects with a single model. The model uses USM's universal encoder with optimized serving infrastructure for low-latency production deployment. Chirp achieves significant WER reductions over the previous V1 system across all supported languages.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Google USM: Scaling Automatic Speech Recognition Beyond 100 Languages", "https://arxiv.org/abs/2303.01037", Year = 2023, Authors = "Zhang et al.")]
 public class Chirp<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ChirpOptions _options; public override ModelOptions GetOptions() => _options;

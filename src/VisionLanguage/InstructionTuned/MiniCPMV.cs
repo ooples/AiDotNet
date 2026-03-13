@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "MiniCPM-V: A GPT-4V Level MLLM on Your Phone" (OpenBMB, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> MiniCPMV is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MiniCPM-V: A GPT-4V Level MLLM on Your Phone", "https://arxiv.org/abs/2408.01800", Year = 2024, Authors = "Yao et al.")]
 public class MiniCPMV<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniCPMVOptions _options; public override ModelOptions GetOptions() => _options;

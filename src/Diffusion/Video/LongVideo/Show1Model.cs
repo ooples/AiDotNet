@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -33,6 +35,14 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.VideoGeneration)]
+[ModelTask(ModelTask.TextToVideo)]
+[ModelTask(ModelTask.ImageToVideo)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Show-1: Marrying Pixel and Latent Diffusion Models for Text-to-Video Generation", "https://arxiv.org/abs/2309.15818", Year = 2023, Authors = "Zhang et al.")]
 public class Show1Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

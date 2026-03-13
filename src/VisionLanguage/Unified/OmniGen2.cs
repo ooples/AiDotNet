@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// <list type="bullet"><item>Paper: "OmniGen2: Advancing Unified Image Generation with Dual-Path Architecture" (THU, 2025)</item></list></para>
 /// <para><b>For Beginners:</b> OmniGen2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("OmniGen2: Advancing Unified Image Generation with Dual-Path Architecture", "https://arxiv.org/abs/2503.01324", Year = 2025, Authors = "Xiao et al.")]
 public class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
 {
     private readonly OmniGen2Options _options; public override ModelOptions GetOptions() => _options;

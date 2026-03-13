@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,13 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <list type="bullet"><item>Paper: "Scaling Open-Vocabulary Object Detection" (Google, 2023)</item></list></para>
 /// <para><b>For Beginners:</b> OWLv2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Detection)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Scaling Open-Vocabulary Object Detection", "https://arxiv.org/abs/2306.09683", Year = 2023, Authors = "Minderer et al.")]
 public class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly OWLv2Options _options; public override ModelOptions GetOptions() => _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,14 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// W2v-BERT combines the contrastive learning objective of wav2vec 2.0 with the masked prediction objective of BERT. The lower Transformer layers solve a contrastive task to produce discrete tokens, while upper layers perform masked language modeling over these tokens. This two-stage approach within a single model produces representations that capture both acoustic and linguistic information, achieving strong ASR performance.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("w2v-BERT: Combining Contrastive Learning and Masked Language Modeling for Self-Supervised Speech Pre-Training", "https://arxiv.org/abs/2108.06209", Year = 2021, Authors = "Chung et al.")]
 public class W2vBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly W2vBERTOptions _options; public override ModelOptions GetOptions() => _options;

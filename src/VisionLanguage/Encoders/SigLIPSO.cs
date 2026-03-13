@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -22,6 +23,13 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <list type="bullet"><item>Paper: "Sigmoid Loss for Language Image Pre-Training" (Zhai et al., ICCV 2023)</item></list></para>
 /// <para><b>For Beginners:</b> SigLIPSO is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Sigmoid Loss for Language Image Pre-Training", "https://arxiv.org/abs/2303.15343", Year = 2023, Authors = "Zhai et al.")]
 public class SigLIPSO<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SigLIPSOOptions _options; public override ModelOptions GetOptions() => _options;

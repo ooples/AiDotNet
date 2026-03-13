@@ -57,7 +57,13 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsTimeSeries => true;
 
-    public TCDFAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
+    private readonly int? _seed;
+
+    public TCDFAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        ApplyDeepOptions(options);
+        _seed = options?.Seed;
+    }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
@@ -67,7 +73,9 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
         int kernelSize = Math.Min(4, n / 3);
         if (n < 6 || d < 2 || kernelSize < 2) return new Matrix<T>(d, d);
 
-        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        var rng = _seed.HasValue
+            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
+            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / kernelSize));
         var cov = ComputeCovarianceMatrix(data);
         T eps = NumOps.FromDouble(1e-10);
@@ -96,7 +104,7 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
             for (int j = 0; j < d; j++)
             {
                 // Softmax over sigmoid(attnLogits[i,j]) for i in [0..d)
-                T maxVal = NumOps.FromDouble(-1e10);
+                T maxVal = NumOps.FromDouble(double.MinValue);
                 for (int i = 0; i < d; i++)
                 {
                     double sv = NumOps.ToDouble(attnLogits[i, j]);

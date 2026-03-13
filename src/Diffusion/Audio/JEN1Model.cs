@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -72,6 +74,13 @@ namespace AiDotNet.Diffusion.Audio;
 ///     seed: 42);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("JEN-1: Text-Guided Universal Music Generation with Omnidirectional Diffusion Models", "https://arxiv.org/abs/2308.04729", Year = 2023, Authors = "Li et al.")]
 public class JEN1Model<T> : AudioDiffusionModelBase<T>
 {
     #region Constants

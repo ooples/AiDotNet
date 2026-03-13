@@ -58,9 +58,13 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
     public NeuralGrangerAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyTimeSeriesOptions(options);
-        _hiddenUnits = Math.Min(options?.HiddenUnits ?? 10, 10);
+        _hiddenUnits = options?.HiddenUnits ?? 10;
         _learningRate = options?.LearningRate ?? 1e-3;
-        _maxEpochs = options?.MaxIterations ?? 100;
+        _maxEpochs = options?.MaxEpochs ?? options?.MaxIterations ?? 100;
+        if (_learningRate <= 0)
+            throw new ArgumentException("LearningRate must be positive.");
+        if (_maxEpochs < 1)
+            throw new ArgumentException("MaxEpochs must be at least 1.");
     }
 
     /// <inheritdoc/>
@@ -72,7 +76,10 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
         int inputDim = d * MaxLag; // All variables' lags as input
         int h = _hiddenUnits;
 
-        if (effectiveN < inputDim + 3 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"NeuralGranger requires at least 2 variables, got {d}.");
+        if (effectiveN < inputDim + 3)
+            throw new ArgumentException($"NeuralGranger requires at least {inputDim + 3 + MaxLag} samples for {d} variables with lag {MaxLag}, got {n}.");
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / inputDim));

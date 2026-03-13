@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,16 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <b>Reference:</b> Ren et al., "Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks", arXiv 2024.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Tracking)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks", "https://arxiv.org/abs/2401.14159", Year = 2024, Authors = "Ren et al.")]
 public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly GroundedSAM2Options _options;

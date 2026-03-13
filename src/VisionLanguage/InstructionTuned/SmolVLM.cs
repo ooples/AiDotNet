@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "SmolVLM: Redefining Small and Efficient Multimodal Models" (HuggingFace, 2025)</item></list></para>
 /// <para><b>For Beginners:</b> SmolVLM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SmolVLM: Redefining Small and Efficient Multimodal Models", "https://huggingface.co/blog/smolvlm", Year = 2025, Authors = "HuggingFace")]
 public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly SmolVLMOptions _options; public override ModelOptions GetOptions() => _options;

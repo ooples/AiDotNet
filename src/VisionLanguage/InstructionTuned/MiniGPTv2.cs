@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -26,6 +27,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "MiniGPT-v2: Large Language Model as a Unified Interface for Vision-Language Multi-task Learning" (Chen et al., 2023)</item></list></para>
 /// <para><b>For Beginners:</b> MiniGPTv2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MiniGPT-v2: Large Language Model as a Unified Interface for Vision-Language Multi-task Learning", "https://arxiv.org/abs/2310.09478", Year = 2023, Authors = "Chen et al.")]
 public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MiniGPTv2Options _options; public override ModelOptions GetOptions() => _options;

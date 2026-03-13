@@ -13,7 +13,7 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// latent adjacency matrix A via learned node embeddings, and the decoder reconstructs
 /// data using X_hat = X * A. The NOTEARS acyclicity constraint h(A) = tr(e^(A*A)) - d
 /// is enforced via augmented Lagrangian. Edge probabilities are computed as
-/// A[i,j] = sigmoid(Z_i^T * Z_j) from learned embeddings Z.
+/// A[i,j] = sigmoid(Zs_i^T * Zt_j) from separate source/target embeddings Zs, Zt.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> DAG-GNN trains a special neural network (GNN) to simultaneously
@@ -48,17 +48,22 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int embDim = Math.Min(HiddenUnits, 8);
+        int embDim = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
 
-        // Node embeddings: Z is d x embDim
-        var Z = new Matrix<T>(d, embDim);
+        // Separate source and target embeddings to break symmetry:
+        // P[i,j] = sigmoid(Zs_i . Zt_j) != P[j,i] = sigmoid(Zs_j . Zt_i)
+        var Zs = new Matrix<T>(d, embDim);
+        var Zt = new Matrix<T>(d, embDim);
         for (int i = 0; i < d; i++)
             for (int k = 0; k < embDim; k++)
-                Z[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+            {
+                Zs[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+                Zt[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+            }
 
         T lr = NumOps.FromDouble(LearningRate);
         T alpha = NumOps.Zero;
@@ -68,7 +73,7 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
-            // Compute edge probabilities: P[i,j] = sigmoid(Z_i . Z_j)
+            // Compute edge probabilities: P[i,j] = sigmoid(Zs_i . Zt_j)
             var P = new Matrix<T>(d, d);
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
@@ -76,13 +81,25 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                     if (i == j) continue;
                     T dot = NumOps.Zero;
                     for (int k = 0; k < embDim; k++)
-                        dot = NumOps.Add(dot, NumOps.Multiply(Z[i, k], Z[j, k]));
+                        dot = NumOps.Add(dot, NumOps.Multiply(Zs[i, k], Zt[j, k]));
                     double sv = NumOps.ToDouble(dot);
                     P[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
 
-            // Gradient w.r.t. Z
-            var gradZ = new Matrix<T>(d, embDim);
+            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+            var PSq = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    PSq[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
+            var expPSq = MatrixExponentialTaylor(PSq, d);
+            T hVal = NumOps.Zero;
+            for (int i = 0; i < d; i++)
+                hVal = NumOps.Add(hVal, expPSq[i, i]);
+            hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
+
+            // Gradient w.r.t. Zs and Zt
+            var gradZs = new Matrix<T>(d, embDim);
+            var gradZt = new Matrix<T>(d, embDim);
 
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
@@ -95,36 +112,38 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                     T corrSq = NumOps.Divide(NumOps.Multiply(cov[i, j], cov[i, j]), varI);
                     T dataGrad = NumOps.Negate(corrSq);
 
-                    // Acyclicity
-                    T acycGrad = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, P[i, j])),
-                        NumOps.FromDouble(2));
+                    // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+                    T acycGrad = NumOps.Multiply(
+                        NumOps.Add(alpha, NumOps.Multiply(rho, hVal)),
+                        NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), P[i, j])));
                     T totalGradP = NumOps.Add(dataGrad, acycGrad);
 
                     T sigDeriv = NumOps.Multiply(P[i, j], NumOps.Subtract(NumOps.One, P[i, j]));
                     T gradScale = NumOps.Multiply(totalGradP, sigDeriv);
 
+                    // d(Zs_i . Zt_j)/dZs_i = Zt_j, d(Zs_i . Zt_j)/dZt_j = Zs_i
                     for (int k = 0; k < embDim; k++)
                     {
-                        gradZ[i, k] = NumOps.Add(gradZ[i, k], NumOps.Multiply(gradScale, Z[j, k]));
-                        gradZ[j, k] = NumOps.Add(gradZ[j, k], NumOps.Multiply(gradScale, Z[i, k]));
+                        gradZs[i, k] = NumOps.Add(gradZs[i, k], NumOps.Multiply(gradScale, Zt[j, k]));
+                        gradZt[j, k] = NumOps.Add(gradZt[j, k], NumOps.Multiply(gradScale, Zs[i, k]));
                     }
                 }
 
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
-                    Z[i, k] = NumOps.Subtract(Z[i, k], NumOps.Multiply(lr, gradZ[i, k]));
+                {
+                    Zs[i, k] = NumOps.Subtract(Zs[i, k], NumOps.Multiply(lr, gradZs[i, k]));
+                    Zt[i, k] = NumOps.Subtract(Zt[i, k], NumOps.Multiply(lr, gradZt[i, k]));
+                }
 
             // Update augmented Lagrangian
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    if (i != j) hVal = NumOps.Add(hVal, NumOps.Multiply(P[i, j], P[i, j]));
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            T rhoMax = NumOps.FromDouble(1e+16);
+            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)) && !NumOps.GreaterThan(rho, rhoMax))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
-        // Final output
+        // Final output using trained embeddings
         var result = new Matrix<T>(d, d);
         T threshold = NumOps.FromDouble(0.3);
         for (int i = 0; i < d; i++)
@@ -133,9 +152,10 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                 if (i == j) continue;
                 T dot = NumOps.Zero;
                 for (int k = 0; k < embDim; k++)
-                    dot = NumOps.Add(dot, NumOps.Multiply(Z[i, k], Z[j, k]));
+                    dot = NumOps.Add(dot, NumOps.Multiply(Zs[i, k], Zt[j, k]));
                 double sv = NumOps.ToDouble(dot);
-                if (sv > 0)
+                double prob = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
+                if (prob > 0.5)
                 {
                     T varI = cov[i, i];
                     if (NumOps.GreaterThan(varI, eps))
@@ -149,4 +169,5 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
 
         return result;
     }
+
 }

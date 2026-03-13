@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -48,6 +50,12 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Mokady et al., "Null-text Inversion for Editing Real Images using Guided Diffusion Models", CVPR 2023
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Editing)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Null-text Inversion for Editing Real Images using Guided Diffusion Models", "https://arxiv.org/abs/2211.09794", Year = 2023, Authors = "Mokady et al.")]
 public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

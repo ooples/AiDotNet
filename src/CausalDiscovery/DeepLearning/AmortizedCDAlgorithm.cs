@@ -60,7 +60,7 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int h = Math.Min(HiddenUnits, 10);
+        int h = HiddenUnits;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -116,8 +116,7 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                         T sum = NumOps.Zero;
                         for (int f = 0; f < featDim; f++)
                             sum = NumOps.Add(sum, NumOps.Multiply(features[idx, f], W1[f, k]));
-                        double sv = NumOps.ToDouble(sum);
-                        hiddenCache[idx, k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
+                        hiddenCache[idx, k] = NumOps.FromDouble(Sigmoid(NumOps.ToDouble(sum)));
                     }
 
                     // Logit = hidden * W2
@@ -126,12 +125,20 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                         logit = NumOps.Add(logit, NumOps.Multiply(hiddenCache[idx, k], W2[k, 0]));
                     logits[i, j] = logit;
 
-                    double sv2 = NumOps.ToDouble(logit);
-                    P[i, j] = NumOps.FromDouble(sv2 > 20 ? 1.0 : sv2 < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv2)));
+                    P[i, j] = NumOps.FromDouble(Sigmoid(NumOps.ToDouble(logit)));
                 }
 
-            // Reconstruction loss using covariance: ||cov - P * cov||_F^2 (simplified)
-            // Gradient w.r.t. P[i,j]: data-fit + acyclicity
+            // Compute NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+            var PSquared = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    PSquared[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
+            var expWW = MatrixExponentialTaylor(PSquared, d);
+            T hValPrev = NumOps.Zero;
+            for (int i = 0; i < d; i++)
+                hValPrev = NumOps.Add(hValPrev, expWW[i, i]);
+            hValPrev = NumOps.Subtract(hValPrev, NumOps.FromDouble(d));
+
             var gW1 = new Matrix<T>(featDim, h);
             var gW2 = new Matrix<T>(h, 1);
 
@@ -146,9 +153,11 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                     T absCorr = NumOps.Abs(corr[i, j]);
                     T dataGrad = NumOps.Subtract(pij, absCorr);
 
-                    // Acyclicity gradient
-                    T acycGrad = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
-                        NumOps.FromDouble(2));
+                    // Acyclicity gradient: d/dP[i,j] of (alpha * h + rho/2 * h^2)
+                    // where h = tr(exp(P∘P)) - d, gradient = (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+                    T acycGrad = NumOps.Multiply(
+                        NumOps.Add(alpha, NumOps.Multiply(rho, hValPrev)),
+                        NumOps.Multiply(expWW[j, i], NumOps.Multiply(pij, NumOps.FromDouble(2))));
 
                     T totalGradP = NumOps.Add(dataGrad, acycGrad);
 
@@ -188,13 +197,10 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
             for (int k = 0; k < h; k++)
                 W2[k, 0] = NumOps.Subtract(W2[k, 0], NumOps.Multiply(lr, gW2[k, 0]));
 
-            // Update augmented Lagrangian
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    if (i != j) hVal = NumOps.Add(hVal, NumOps.Multiply(P[i, j], P[i, j]));
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            // Update augmented Lagrangian with NOTEARS h(P) = tr(exp(P∘P)) - d
+            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValPrev));
+            T rhoMax = NumOps.FromDouble(1e+16);
+            if (NumOps.GreaterThan(hValPrev, NumOps.FromDouble(0.25)) && !NumOps.GreaterThan(rho, rhoMax))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
@@ -213,13 +219,11 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                     T sum = NumOps.Zero;
                     for (int f = 0; f < featDim; f++)
                         sum = NumOps.Add(sum, NumOps.Multiply(features[idx, f], W1[f, k]));
-                    double sv = NumOps.ToDouble(sum);
-                    T hid = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
+                    T hid = NumOps.FromDouble(Sigmoid(NumOps.ToDouble(sum)));
                     logit = NumOps.Add(logit, NumOps.Multiply(hid, W2[k, 0]));
                 }
 
-                double sv2 = NumOps.ToDouble(logit);
-                double prob = sv2 > 20 ? 1.0 : sv2 < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv2));
+                double prob = Sigmoid(NumOps.ToDouble(logit));
                 if (prob > NumOps.ToDouble(threshold))
                 {
                     T varI = cov[i, i];
@@ -234,4 +238,8 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
 
         return result;
     }
+
+    private static double Sigmoid(double x) =>
+        x > 20 ? 1.0 : x < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-x));
+
 }

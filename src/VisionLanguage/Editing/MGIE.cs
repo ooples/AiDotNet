@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -20,6 +21,14 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// <list type="bullet"><item>Paper: "Guiding Instruction-Based Image Editing via Multimodal Large Language Models" (Apple, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> MGIE is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Guiding Instruction-Based Image Editing via Multimodal Large Language Models", "https://arxiv.org/abs/2309.17102", Year = 2024, Authors = "Fu et al.")]
 public class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly MGIEOptions _options; public override ModelOptions GetOptions() => _options;

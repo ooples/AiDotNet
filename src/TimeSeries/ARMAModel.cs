@@ -41,7 +41,7 @@ namespace AiDotNet.TimeSeries;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193", Year = 1970, Authors = "George E. P. Box, Gwilym M. Jenkins")]
 public class ARMAModel<T> : TimeSeriesModelBase<T>
 {

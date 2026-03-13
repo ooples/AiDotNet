@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -17,9 +18,20 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "SkyEyeGPT: Unifying Remote Sensing Vision-Language Tasks (Various, 2025)"</item></list></para>
+/// <list type="bullet"><item>Paper: "SkyEyeGPT: Unifying Remote Sensing Vision-Language Tasks via Instruction Tuning with Large Language Model (Zhan et al., 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> SkyEyeGPT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Science)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SkyEyeGPT: Unifying Remote Sensing Vision-Language Tasks via Instruction Tuning with Large Language Model", "https://arxiv.org/abs/2401.09712", Year = 2024, Authors = "Zhan et al.")]
 public class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly SkyEyeGPTOptions _options; public override ModelOptions GetOptions() => _options;

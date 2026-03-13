@@ -32,7 +32,7 @@ namespace AiDotNet.Finance.Volatility;
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
 public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatilityModel<T>
 {

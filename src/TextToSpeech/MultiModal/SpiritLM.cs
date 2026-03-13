@@ -1,8 +1,25 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>Spirit-LM: interleaved text-speech language model bridging written and spoken communication.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Spirit-LM: Interleaved Spoken and Written Language Model" (Nguyen et al., 2024)</item></list></para><para><b>For Beginners:</b> Spirit-LM: interleaved text-speech language model bridging written and spoken communication.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Spirit-LM: Interleaved Spoken and Written Language Model", "https://arxiv.org/abs/2402.05755", Year = 2024, Authors = "Nguyen et al.")]
 public class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SpiritLMOptions _options; public override ModelOptions GetOptions() => _options;

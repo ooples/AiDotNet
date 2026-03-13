@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,16 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <list type="bullet"><item>Paper: "RadFM: Towards Generalist Foundation Model for Radiology (Various, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> RadFM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Healthcare)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Towards Generalist Foundation Model for Radiology by Leveraging Web-scale 2D&3D Medical Data", "https://arxiv.org/abs/2308.02463", Year = 2024, Authors = "Wu et al.")]
 public class RadFM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly RadFMOptions _options; public override ModelOptions GetOptions() => _options;

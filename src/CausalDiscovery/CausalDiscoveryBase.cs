@@ -31,6 +31,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
 
     /// <summary>
     /// Gets the global execution engine for accelerated vector/matrix operations.
+    /// Subclasses should prefer using specific helper methods (e.g., DotProduct) when available.
     /// </summary>
     protected IEngine Engine => AiDotNetEngine.Current;
 
@@ -472,6 +473,13 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// <returns>Result matrix [m x n].</returns>
     protected Matrix<T> MatMul(Matrix<T> a, Matrix<T> b)
     {
+        if (a.Columns != b.Rows)
+        {
+            throw new ArgumentException(
+                $"Matrix dimension mismatch in MatMul: A is [{a.Rows}x{a.Columns}] but B is [{b.Rows}x{b.Columns}]. " +
+                $"A.Columns ({a.Columns}) must equal B.Rows ({b.Rows}).");
+        }
+
         int m = a.Rows;
         int k = a.Columns;
         int n = b.Columns;
@@ -559,7 +567,50 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// </summary>
     protected Vector<T> MatVecMul(Matrix<T> m, Vector<T> v)
     {
+        if (m.Columns != v.Length)
+        {
+            throw new ArgumentException(
+                $"Dimension mismatch in MatVecMul: matrix is [{m.Rows}x{m.Columns}] but vector length is {v.Length}. " +
+                $"Matrix columns ({m.Columns}) must equal vector length ({v.Length}).");
+        }
+
         return Engine.MatrixVectorMultiply(m, v);
+    }
+
+    /// <summary>
+    /// Computes the matrix exponential via Taylor series: exp(M) = sum_{k=0}^{terms} M^k / k!
+    /// </summary>
+    /// <param name="M">The input square matrix.</param>
+    /// <param name="d">Dimension of the matrix.</param>
+    /// <param name="terms">Number of Taylor series terms (default 10).</param>
+    /// <returns>The matrix exponential approximation.</returns>
+    protected Matrix<T> MatrixExponentialTaylor(Matrix<T> M, int d, int terms = 10)
+    {
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            result[i, i] = NumOps.One;
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            power[i, i] = NumOps.One;
+        T runningFactorial = NumOps.One;
+        for (int k = 1; k <= terms; k++)
+        {
+            var next = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int l = 0; l < d; l++)
+                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, l], M[l, j]));
+                    next[i, j] = sum;
+                }
+            power = next;
+            runningFactorial = NumOps.Multiply(runningFactorial, NumOps.FromDouble(k));
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    result[i, j] = NumOps.Add(result[i, j], NumOps.Divide(power[i, j], runningFactorial));
+        }
+        return result;
     }
 
     /// <summary>

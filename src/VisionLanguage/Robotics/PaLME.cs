@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <list type="bullet"><item>Paper: "PaLM-E: An Embodied Multimodal Language Model (Google, 2023)"</item></list></para>
 /// <para><b>For Beginners:</b> PaLME is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Robotics)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PaLM-E: An Embodied Multimodal Language Model", "https://arxiv.org/abs/2303.03378", Year = 2023, Authors = "Driess et al.")]
 public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly PaLMEOptions _options; public override ModelOptions GetOptions() => _options;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,12 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// Robust Conformer uses adversarial training and speech reconstruction objectives to improve noise robustness. The model adds a speech reconstruction head during training that forces the encoder to preserve clean speech information even when processing noisy input. An adversarial noise classifier encourages the encoder to produce noise-invariant representations. The dual objective produces a Conformer encoder that maintains accuracy across clean and noisy conditions without explicit noise estimation.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Improving Noise Robustness of Contrastive Speech Representation Learning with Speech Reconstruction", "https://arxiv.org/abs/2306.01500", Year = 2023, Authors = "Chang et al.")]
 public class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly RobustConformerOptions _options; public override ModelOptions GetOptions() => _options;

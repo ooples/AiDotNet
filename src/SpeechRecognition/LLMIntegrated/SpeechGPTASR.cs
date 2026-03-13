@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -21,6 +22,13 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// SpeechGPT extends a large language model with intrinsic speech understanding and generation capabilities. For ASR, speech is discretized into tokens using HuBERT + k-means clustering, then these discrete speech tokens are treated as a new modality in the LLM's vocabulary. The model learns to translate between speech tokens and text tokens through instruction tuning. This enables seamless multi-modal conversation without separate encoder/decoder components.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.SpeechRecognition)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities", "https://arxiv.org/abs/2305.11000", Year = 2023, Authors = "Zhang et al.")]
 public class SpeechGPTASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SpeechGPTASROptions _options; public override ModelOptions GetOptions() => _options;

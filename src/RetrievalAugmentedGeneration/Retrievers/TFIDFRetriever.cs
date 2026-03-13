@@ -18,7 +18,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     /// ensuring accuracy while maximizing performance.
     /// </para>
     /// <para><b>For Beginners:</b> TF-IDF ranks documents by how unique and frequent terms are.
-    /// 
+    ///
     /// This implementation uses a cache to avoid recalculating term statistics on every search,
     /// dramatically improving performance for repeated queries. The cache is automatically refreshed
     /// when documents are added or removed.

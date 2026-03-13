@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
@@ -35,6 +36,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 /// <b>Reference:</b> de Geus et al., "CUPS: Comprehensive Use of Pixels and Semantics for Panoptic Segmentation", arXiv 2023.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Segmentation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CUPS: Comprehensive Use of Pixels and Semantics for Panoptic Segmentation", "https://arxiv.org/abs/2212.05920", Year = 2023, Authors = "Daan de Geus, Gijs Dubbelman")]
 public class CUPS<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly CUPSOptions _options;

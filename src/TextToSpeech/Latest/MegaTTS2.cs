@@ -1,8 +1,23 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.TextToSpeech.Interfaces;
+
 namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>MegaTTS2: Mega-TTS 2: Boosting Prompting Mechanisms for Zero-Shot Speech Synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Mega-TTS 2: Boosting Prompting Mechanisms for Zero-Shot Speech Synthesis" (Jiang et al., 2024)</item></list></para><para><b>For Beginners:</b> MegaTTS2: Mega-TTS 2: Boosting Prompting Mechanisms for Zero-Shot Speech Synthesis.. This model converts text input into speech audio output.</para></remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Mega-TTS 2: Boosting Prompting Mechanisms for Zero-Shot Speech Synthesis", "https://arxiv.org/abs/2307.07218", Year = 2024, Authors = "Jiang et al.")]
 public class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MegaTTS2Options _options; public override ModelOptions GetOptions() => _options;

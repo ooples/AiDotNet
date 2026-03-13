@@ -1,4 +1,14 @@
-using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.Tokenization; using AiDotNet.Tokenization.Interfaces; using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.Classic;
 /// <summary>
 /// PortaSpeech: portable TTS with word-level prosody modeling and normalizing flow-based post-net for expressiveness.
@@ -10,6 +20,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> /// PortaSpeech: portable TTS with word-level prosody modeling and normalizing flow-based post-net for expressiveness.
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Audio)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("PortaSpeech: Portable and High-Quality Generative Text-to-Speech", "https://arxiv.org/abs/2109.15166", Year = 2021, Authors = "Ren et al.")]
 public class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly PortaSpeechOptions _options; public override ModelOptions GetOptions() => _options;

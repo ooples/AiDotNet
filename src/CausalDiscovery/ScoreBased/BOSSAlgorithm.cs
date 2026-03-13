@@ -17,7 +17,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 /// <para>
 /// <b>Algorithm:</b>
 /// <list type="number">
-/// <item>Initialize with a variable ordering (e.g., correlation-based)</item>
+/// <item>Initialize with a variable ordering based on marginal variance (ascending)</item>
 /// <item>For each variable v in the ordering:</item>
 /// <item>  Remove v from its current position</item>
 /// <item>  Try inserting v at every possible position (0 to d-1)</item>
@@ -66,7 +66,7 @@ public class BOSSAlgorithm<T> : ScoreBasedBase<T>
 
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
-        // Initialize ordering using correlation-based heuristic
+        // Initialize ordering using marginal variance (ascending — exogenous variables first)
         var ordering = new List<int>(Enumerable.Range(0, d));
         SortByMarginalVariance(data, ordering, n);
 
@@ -78,12 +78,16 @@ public class BOSSAlgorithm<T> : ScoreBasedBase<T>
             changed = false;
             iteration++;
 
+            // Iterate over a snapshot of the ordering to avoid mutating during iteration
+            var snapshot = new List<int>(ordering);
             for (int idx = 0; idx < d; idx++)
             {
-                int v = ordering[idx];
+                int v = snapshot[idx];
 
                 // Remove v from current position
-                ordering.RemoveAt(idx);
+                int currentPos = ordering.IndexOf(v);
+                if (currentPos < 0) continue;
+                ordering.RemoveAt(currentPos);
 
                 // Find the best position for v
                 double bestScore = double.NegativeInfinity;
@@ -241,32 +245,90 @@ public class BOSSAlgorithm<T> : ScoreBasedBase<T>
             parentSets[target] = bestParents;
         }
 
-        // Build adjacency matrix with OLS edge weights
+        // Build adjacency matrix with joint multivariate OLS edge weights
         var W = new Matrix<T>(d, d);
         for (int child = 0; child < d; child++)
         {
-            foreach (int parent in parentSets[child])
+            var parents = parentSets[child].ToList();
+            if (parents.Count == 0) continue;
+
+            int p = parents.Count;
+
+            // Compute means
+            double meanC = 0;
+            var parentMeans = new double[p];
+            for (int i = 0; i < n; i++)
             {
-                double meanP = 0, meanC = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    meanP += NumOps.ToDouble(data[i, parent]);
-                    meanC += NumOps.ToDouble(data[i, child]);
-                }
-                meanP /= n; meanC /= n;
-
-                double cov = 0, varP = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double dp = NumOps.ToDouble(data[i, parent]) - meanP;
-                    cov += dp * (NumOps.ToDouble(data[i, child]) - meanC);
-                    varP += dp * dp;
-                }
-
-                W[parent, child] = NumOps.FromDouble(varP > 1e-10 ? cov / varP : 0);
+                meanC += NumOps.ToDouble(data[i, child]);
+                for (int j = 0; j < p; j++)
+                    parentMeans[j] += NumOps.ToDouble(data[i, parents[j]]);
             }
+            meanC /= n;
+            for (int j = 0; j < p; j++) parentMeans[j] /= n;
+
+            // Build normal equations
+            var XtX = new double[p, p];
+            var Xty = new double[p];
+            for (int i = 0; i < n; i++)
+            {
+                double dy = NumOps.ToDouble(data[i, child]) - meanC;
+                var dx = new double[p];
+                for (int j = 0; j < p; j++)
+                    dx[j] = NumOps.ToDouble(data[i, parents[j]]) - parentMeans[j];
+                for (int a = 0; a < p; a++)
+                {
+                    Xty[a] += dx[a] * dy;
+                    for (int b = a; b < p; b++)
+                        XtX[a, b] += dx[a] * dx[b];
+                }
+            }
+            for (int a = 0; a < p; a++)
+            {
+                XtX[a, a] += 1e-10;
+                for (int b = a + 1; b < p; b++)
+                    XtX[b, a] = XtX[a, b];
+            }
+
+            var beta = SolveSmallSystem(XtX, Xty, p);
+            for (int j = 0; j < p; j++)
+                W[parents[j], child] = NumOps.FromDouble(beta[j]);
         }
 
         return W;
+    }
+
+    private static double[] SolveSmallSystem(double[,] A, double[] b, int p)
+    {
+        var aug = new double[p, p + 1];
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = 0; j < p; j++) aug[i, j] = A[i, j];
+            aug[i, p] = b[i];
+        }
+        for (int col = 0; col < p; col++)
+        {
+            int maxRow = col;
+            for (int row = col + 1; row < p; row++)
+                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
+            if (maxRow != col)
+                for (int j = col; j <= p; j++)
+                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
+            double pivot = aug[col, col];
+            if (Math.Abs(pivot) < 1e-15) continue;
+            for (int row = col + 1; row < p; row++)
+            {
+                double factor = aug[row, col] / pivot;
+                for (int j = col; j <= p; j++) aug[row, j] -= factor * aug[col, j];
+            }
+        }
+        var x = new double[p];
+        for (int row = p - 1; row >= 0; row--)
+        {
+            double sum = aug[row, p];
+            for (int j = row + 1; j < p; j++) sum -= aug[row, j] * x[j];
+            double diag = aug[row, row];
+            x[row] = Math.Abs(diag) > 1e-15 ? sum / diag : 0;
+        }
+        return x;
     }
 }

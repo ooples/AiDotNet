@@ -47,6 +47,7 @@ namespace AiDotNet.Audio.VoiceActivity;
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.SignalProcessing)]
 [ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Detection)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class EnergyBasedVad<T> : VoiceActivityDetectorBase<T>

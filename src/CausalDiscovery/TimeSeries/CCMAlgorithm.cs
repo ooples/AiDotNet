@@ -53,9 +53,14 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
 
+    private readonly double _convergenceThreshold;
+    private readonly double _correlationThreshold;
+
     public CCMAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyTimeSeriesOptions(options);
+        _convergenceThreshold = options?.EdgeThreshold ?? 0.05;
+        _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
     }
 
     /// <inheritdoc/>
@@ -63,11 +68,15 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int embDim = Math.Min(MaxLag + 1, 3);
+        // Use MaxLag + 1 as embedding dimension (uncapped)
+        int embDim = MaxLag + 1;
         int tau = 1;
         int minLib = embDim + 2;
 
-        if (n < minLib * 2 || d < 2) return new Matrix<T>(d, d);
+        if (d < 2)
+            throw new ArgumentException($"CCM requires at least 2 variables, got {d}.");
+        if (n < minLib * 2)
+            throw new ArgumentException($"CCM requires at least {minLib * 2} samples for embedding dimension {embDim}, got {n}.");
 
         var result = new Matrix<T>(d, d);
 
@@ -90,7 +99,7 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
                 double rhoHalf = ComputeCrossMapCorrelation(data, embeddings, i, validN / 2, embDim);
 
                 double convergence = rhoFull - rhoHalf;
-                if (convergence > 0.01 && rhoFull > 0.1)
+                if (convergence > _convergenceThreshold && rhoFull > _correlationThreshold)
                     result[i, j] = NumOps.FromDouble(rhoFull);
             }
 

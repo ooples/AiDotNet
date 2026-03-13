@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,6 +21,15 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <list type="bullet"><item>Paper: "Octo: An Open-Source Generalist Robot Policy (Berkeley, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> Octo is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelDomain(ModelDomain.Robotics)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.FoundationModel)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Octo: An Open-Source Generalist Robot Policy", "https://arxiv.org/abs/2405.12213", Year = 2024, Authors = "Ghosh et al.")]
 public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly OctoOptions _options; public override ModelOptions GetOptions() => _options;

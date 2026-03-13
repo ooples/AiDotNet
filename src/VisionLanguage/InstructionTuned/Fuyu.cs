@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,6 +26,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// <list type="bullet"><item>Paper: "Fuyu-8B: A Multimodal Architecture for AI Agents" (Adept, 2023)</item></list></para>
 /// <para><b>For Beginners:</b> Fuyu is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Fuyu-8B: A Multimodal Architecture for AI Agents", "https://www.adept.ai/blog/fuyu-8b", Year = 2023, Authors = "Bavishi et al.")]
 public class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly FuyuOptions _options; public override ModelOptions GetOptions() => _options;
