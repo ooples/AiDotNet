@@ -22,7 +22,7 @@ namespace AiDotNet.MetaLearning.Models;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<double>>, ICloneable
+public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double>>, ICloneable
 {
     private Vector<double> _parameters;
     private readonly int _inputDim;
@@ -48,7 +48,7 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public Vector<double> Predict(Matrix<double> input)
+    public override Vector<double> Predict(Matrix<double> input)
     {
         Guard.NotNull(input);
         var output = new Vector<double>(input.Rows);
@@ -71,14 +71,14 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public void Train(Matrix<double> input, Vector<double> expectedOutput)
+    public override void Train(Matrix<double> input, Vector<double> expectedOutput)
     {
         var gradients = ComputeGradients(input, expectedOutput, DefaultLossFunction);
         ApplyGradients(gradients, _learningRate);
     }
 
     /// <inheritdoc/>
-    public ModelMetadata<double> GetModelMetadata() => new()
+    public override ModelMetadata<double> GetModelMetadata() => new()
     {
         Name = "LinearVectorModel",
         FeatureCount = _inputDim,
@@ -86,10 +86,10 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     };
 
     /// <inheritdoc/>
-    public Vector<double> GetParameters() => _parameters.Clone();
+    public override Vector<double> GetParameters() => _parameters.Clone();
 
     /// <inheritdoc/>
-    public void SetParameters(Vector<double> parameters)
+    public override void SetParameters(Vector<double> parameters)
     {
         Guard.NotNull(parameters);
         if (parameters.Length != _parameters.Length)
@@ -103,10 +103,10 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public int ParameterCount => _parameters.Length;
+    public override int ParameterCount => _parameters.Length;
 
     /// <inheritdoc/>
-    public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
+    public override IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
         var model = new LinearVectorModel(_inputDim, _learningRate);
         model.SetParameters(parameters);
@@ -114,23 +114,20 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public virtual IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
+    public override IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
     {
         var copy = new LinearVectorModel(_inputDim, _learningRate);
         copy.SetParameters(_parameters);
         return copy;
     }
 
-    /// <inheritdoc/>
-    public virtual IFullModel<double, Matrix<double>, Vector<double>> Clone() => DeepCopy();
-
     object ICloneable.Clone() => DeepCopy();
 
     /// <inheritdoc/>
-    public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+    public override ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 
     /// <inheritdoc/>
-    public Vector<double> ComputeGradients(
+    public override Vector<double> ComputeGradients(
         Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null)
     {
         Guard.NotNull(input);
@@ -165,7 +162,7 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public void ApplyGradients(Vector<double> gradients, double learningRate)
+    public override void ApplyGradients(Vector<double> gradients, double learningRate)
     {
         Guard.NotNull(gradients);
         if (gradients.Length != _parameters.Length)
@@ -182,17 +179,17 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public byte[] Serialize() => Encoding.UTF8.GetBytes(SerializeParameters());
+    public override byte[] Serialize() => Encoding.UTF8.GetBytes(SerializeParameters());
 
     /// <inheritdoc/>
-    public void Deserialize(byte[] data)
+    public override void Deserialize(byte[] data)
     {
         Guard.NotNull(data);
         DeserializeParameters(Encoding.UTF8.GetString(data));
     }
 
     /// <inheritdoc/>
-    public void SaveModel(string filePath)
+    public override void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
@@ -203,7 +200,7 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public void LoadModel(string filePath)
+    public override void LoadModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
         {
@@ -219,7 +216,7 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public void SaveState(Stream stream)
+    public override void SaveState(Stream stream)
     {
         Guard.NotNull(stream);
         using var writer = new StreamWriter(stream, Encoding.UTF8, 1024, leaveOpen: true);
@@ -228,7 +225,7 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public void LoadState(Stream stream)
+    public override void LoadState(Stream stream)
     {
         Guard.NotNull(stream);
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true,
@@ -237,18 +234,18 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputDim);
+    public override IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputDim);
 
     /// <inheritdoc/>
-    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
     }
 
     /// <inheritdoc/>
-    public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _inputDim;
+    public override bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _inputDim;
 
     /// <inheritdoc/>
-    public Dictionary<string, double> GetFeatureImportance()
+    public override Dictionary<string, double> GetFeatureImportance()
     {
         var importance = new Dictionary<string, double>();
         if (_inputDim == 0)
@@ -266,10 +263,10 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc/>
-    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
+    public override ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
     {
         throw new NotSupportedException("JIT compilation is not supported.");
     }

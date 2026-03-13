@@ -60,21 +60,9 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("LightGBM: A Highly Efficient Gradient Boosting Decision Tree", "https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree", Year = 2017, Authors = "Guolin Ke, Qi Meng, Thomas Finley, Taifeng Wang, Wei Chen, Weidong Ma, Qiwei Ye, Tie-Yan Liu")]
-public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector<T>>, IConfigurableModel<T>
+public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<T>>, IConfigurableModel<T>
 {
     #region Fields
-
-    /// <summary>
-    /// Provides numeric operations for generic type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This allows the algorithm to perform math operations
-    /// (add, subtract, multiply, etc.) on the generic type T, which could be
-    /// float, double, or other numeric types.
-    /// </para>
-    /// </remarks>
-    protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
     /// Configuration options for the histogram gradient boosting algorithm.
@@ -175,7 +163,6 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     public HistGradientBoostingRegression(HistGradientBoostingOptions? options = null)
     {
         _options = options ?? new HistGradientBoostingOptions();
-        NumOps = MathHelper.GetNumericOperations<T>();
         _initialPrediction = NumOps.Zero;
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
@@ -206,7 +193,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// This allows the entire ensemble to be exported as a computation graph.
     /// </para>
     /// </remarks>
-    public bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Trains the model on the provided data.
@@ -225,7 +212,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     ///    c. Add the tree's predictions to the ensemble
     /// </para>
     /// </remarks>
-    public void Train(Matrix<T> x, Vector<T> y)
+    public override void Train(Matrix<T> x, Vector<T> y)
     {
         _numFeatures = x.Columns;
 
@@ -293,7 +280,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// The prediction is: initial_prediction + learning_rate * sum(tree_predictions)
     /// </para>
     /// </remarks>
-    public Vector<T> Predict(Matrix<T> input)
+    public override Vector<T> Predict(Matrix<T> input)
     {
         if (_trees is null || _binThresholds is null)
         {
@@ -325,7 +312,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// <summary>
     /// Gets model metadata.
     /// </summary>
-    public ModelMetadata<T> GetModelMetadata()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
         {
@@ -346,7 +333,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// <summary>
     /// Gets the feature importance scores.
     /// </summary>
-    public Dictionary<string, T> GetFeatureImportance()
+    public override Dictionary<string, T> GetFeatureImportance()
     {
         var result = new Dictionary<string, T>();
 
@@ -369,7 +356,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// <summary>
     /// Gets model parameters.
     /// </summary>
-    public Vector<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         // Return initial prediction and tree count as parameters
         var parameters = new Vector<T>(2);
@@ -381,7 +368,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// <summary>
     /// Sets model parameters.
     /// </summary>
-    public void SetParameters(Vector<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length >= 1)
         {
@@ -392,7 +379,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// <summary>
     /// Creates a new instance with the given parameters.
     /// </summary>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newModel = new HistGradientBoostingRegression<T>(_options);
         newModel.SetParameters(parameters);
@@ -402,7 +389,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// <summary>
     /// Serializes the model to a byte array.
     /// </summary>
-    public byte[] Serialize()
+    public override byte[] Serialize()
     {
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
@@ -473,7 +460,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// <summary>
     /// Deserializes the model from a byte array.
     /// </summary>
-    public void Deserialize(byte[] data)
+    public override void Deserialize(byte[] data)
     {
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
@@ -548,7 +535,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// This allows gradient-based optimization and hardware acceleration.
     /// </para>
     /// </remarks>
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
         if (_trees is null || _trees.Count == 0 || _binThresholds is null)
         {
@@ -613,7 +600,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// squared difference between predictions and actual values.
     /// </para>
     /// </remarks>
-    public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
+    public override ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
     /// Gets the number of parameters in the model.
@@ -625,7 +612,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// This is a simplification since the actual model is tree-structured.
     /// </para>
     /// </remarks>
-    public int ParameterCount
+    public override int ParameterCount
     {
         get
         {
@@ -651,7 +638,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// load it later without retraining.
     /// </para>
     /// </remarks>
-    public void SaveModel(string filePath)
+    public override void SaveModel(string filePath)
     {
         byte[] data = Serialize();
         File.WriteAllBytes(filePath, data);
@@ -667,7 +654,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// it for predictions without retraining.
     /// </para>
     /// </remarks>
-    public void LoadModel(string filePath)
+    public override void LoadModel(string filePath)
     {
         byte[] data = File.ReadAllBytes(filePath);
         Deserialize(data);
@@ -683,7 +670,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// or for storing models in databases/memory.
     /// </para>
     /// </remarks>
-    public void SaveState(Stream stream)
+    public override void SaveState(Stream stream)
     {
         byte[] data = Serialize();
         using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
@@ -701,7 +688,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// <b>For Beginners:</b> This restores a model from a checkpoint or database.
     /// </para>
     /// </remarks>
-    public void LoadState(Stream stream)
+    public override void LoadState(Stream stream)
     {
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
         int length = reader.ReadInt32();
@@ -718,7 +705,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// Features not used by any split may be irrelevant for predictions.
     /// </para>
     /// </remarks>
-    public IEnumerable<int> GetActiveFeatureIndices()
+    public override IEnumerable<int> GetActiveFeatureIndices()
     {
         if (_activeFeatureIndices is null)
         {
@@ -744,7 +731,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// the model should consider. Usually computed automatically during training.
     /// </para>
     /// </remarks>
-    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         _activeFeatureIndices = new HashSet<int>(featureIndices);
     }
@@ -760,7 +747,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// predictions. Unused features can be removed from future training data.
     /// </para>
     /// </remarks>
-    public bool IsFeatureUsed(int featureIndex)
+    public override bool IsFeatureUsed(int featureIndex)
     {
         var activeFeatures = GetActiveFeatureIndices();
         return activeFeatures.Contains(featureIndex);
@@ -776,26 +763,11 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// Changes to the copy won't affect the original.
     /// </para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         var copy = new HistGradientBoostingRegression<T>(_options);
         copy.Deserialize(Serialize());
         return copy;
-    }
-
-    /// <summary>
-    /// Creates a shallow copy of the model.
-    /// </summary>
-    /// <returns>A new instance sharing data with the original.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy that shares some internal data
-    /// with the original. For this model, we use deep copy for safety.
-    /// </para>
-    /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        return DeepCopy();
     }
 
     /// <summary>
@@ -812,7 +784,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// the difference between predictions and targets.
     /// </para>
     /// </remarks>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         var loss = lossFunction ?? _defaultLossFunction;
         var predictions = Predict(input);
@@ -842,7 +814,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// update that shifts predictions in the direction of the gradients.
     /// </para>
     /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // For gradient boosting, we adjust the initial prediction based on average gradient
         if (gradients.Length > 0)
