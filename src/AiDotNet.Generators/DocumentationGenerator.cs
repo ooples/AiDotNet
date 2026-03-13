@@ -28,6 +28,7 @@ public class DocumentationGenerator : IIncrementalGenerator
     private const string ModelComplexityAttr = "AiDotNet.Attributes.ModelComplexityAttribute";
     private const string ModelPaperAttr = "AiDotNet.Attributes.ModelPaperAttribute";
     private const string ModelInputAttr = "AiDotNet.Attributes.ModelInputAttribute";
+    private const string ModelMetadataExemptAttr = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -92,6 +93,7 @@ public class DocumentationGenerator : IIncrementalGenerator
         var complexityAttrSymbol = compilation.GetTypeByMetadataName(ModelComplexityAttr);
         var paperAttrSymbol = compilation.GetTypeByMetadataName(ModelPaperAttr);
         var inputAttrSymbol = compilation.GetTypeByMetadataName(ModelInputAttr);
+        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
 
         if (domainAttrSymbol is null || categoryAttrSymbol is null ||
             taskAttrSymbol is null || complexityAttrSymbol is null)
@@ -109,6 +111,10 @@ public class DocumentationGenerator : IIncrementalGenerator
 
             var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             if (!seen.Add(fullName)) continue;
+
+            // Skip classes marked with [ModelMetadataExempt]
+            if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
+                continue;
 
             var entry = ExtractDocEntry(modelClass, fullName,
                 domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
@@ -601,6 +607,16 @@ public class DocumentationGenerator : IIncrementalGenerator
         }
 
         return normalized.ToString().Trim();
+    }
+
+    private static bool HasAttribute(ImmutableArray<AttributeData> attributes, INamedTypeSymbol attributeType)
+    {
+        foreach (var attr in attributes)
+        {
+            if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, attributeType))
+                return true;
+        }
+        return false;
     }
 
     private class DocEntry

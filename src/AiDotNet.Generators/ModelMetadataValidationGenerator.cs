@@ -73,6 +73,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
     private const string ModelComplexityAttributeName = "AiDotNet.Attributes.ModelComplexityAttribute";
     private const string ModelInputAttributeName = "AiDotNet.Attributes.ModelInputAttribute";
     private const string ModelPaperAttributeName = "AiDotNet.Attributes.ModelPaperAttribute";
+    private const string ModelMetadataExemptAttributeName = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
     // Interface/base type names to detect model classes
     private const string IFullModelName = "AiDotNet.Interfaces.IFullModel";
@@ -165,6 +166,8 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         var inputAttr = compilation.GetTypeByMetadataName(ModelInputAttributeName);
         var paperAttr = compilation.GetTypeByMetadataName(ModelPaperAttributeName);
 
+        var exemptAttr = compilation.GetTypeByMetadataName(ModelMetadataExemptAttributeName);
+
         // If attributes don't exist in the compilation yet, skip validation
         if (domainAttr is null || categoryAttr is null || taskAttr is null ||
             complexityAttr is null || inputAttr is null)
@@ -179,6 +182,10 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
                 continue;
 
             if (!seen.Add(modelClass))
+                continue;
+
+            // Skip classes marked with [ModelMetadataExempt]
+            if (exemptAttr is not null && HasAttribute(modelClass.GetAttributes(), exemptAttr))
                 continue;
 
             ValidateRequiredAttributes(context, modelClass, domainAttr, categoryAttr, taskAttr, complexityAttr, inputAttr);

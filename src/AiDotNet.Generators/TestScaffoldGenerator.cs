@@ -23,6 +23,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 {
     private const string IFullModelName = "AiDotNet.Interfaces.IFullModel";
     private const string ModelDomainAttr = "AiDotNet.Attributes.ModelDomainAttribute";
+    private const string ModelMetadataExemptAttr = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
     private static readonly DiagnosticDescriptor UntestedModel = new(
         id: "AIDN040",
@@ -145,6 +146,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Compilation compilation)
     {
         var domainAttrSymbol = compilation.GetTypeByMetadataName(ModelDomainAttr);
+        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
 
         // Build test class name set for fast lookup
         var testNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
@@ -165,6 +167,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             if (!seen.Add(fullName))
+                continue;
+
+            // Skip classes marked with [ModelMetadataExempt]
+            if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
                 continue;
 
             // Only include models with [ModelDomain] attribute
@@ -410,6 +416,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (angleBracketIdx >= 0)
             name = name.Substring(0, angleBracketIdx);
         return name;
+    }
+
+    private static bool HasAttribute(ImmutableArray<AttributeData> attributes, INamedTypeSymbol attributeType)
+    {
+        foreach (var attr in attributes)
+        {
+            if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, attributeType))
+                return true;
+        }
+        return false;
     }
 
     private class ModelTestInfo

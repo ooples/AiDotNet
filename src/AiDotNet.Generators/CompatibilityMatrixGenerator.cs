@@ -24,6 +24,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     private const string IFullModelName = "AiDotNet.Interfaces.IFullModel";
     private const string ModelCategoryAttr = "AiDotNet.Attributes.ModelCategoryAttribute";
     private const string ModelTaskAttr = "AiDotNet.Attributes.ModelTaskAttribute";
+    private const string ModelMetadataExemptAttr = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
     // Diagnostic for suspicious model/optimizer combinations
     private static readonly DiagnosticDescriptor SuspiciousOptimizer = new(
@@ -86,6 +87,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         Compilation compilation)
     {
         var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
+        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
 
         if (categoryAttrSymbol is null || candidates.IsDefaultOrEmpty)
         {
@@ -103,6 +105,10 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
 
             var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             if (!seen.Add(fullName))
+                continue;
+
+            // Skip classes marked with [ModelMetadataExempt]
+            if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
                 continue;
 
             var categories = new List<int>();
@@ -528,6 +534,16 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
             return string.Empty;
 
         return string.Join(", ", items.Select(v => $"\"{v}\""));
+    }
+
+    private static bool HasAttribute(ImmutableArray<AttributeData> attributes, INamedTypeSymbol attributeType)
+    {
+        foreach (var attr in attributes)
+        {
+            if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, attributeType))
+                return true;
+        }
+        return false;
     }
 
     private class CompatEntry
