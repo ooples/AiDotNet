@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Decentralized;
 
 /// <summary>
@@ -19,6 +21,10 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// <para>Reference: Time-Varying Communication Topologies for Decentralized FL (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class TimeVaryingTopology<T> : Infrastructure.FederatedLearningComponentBase<T>, IDecentralizedTopology
 {
     /// <summary>Topology generation strategy.</summary>

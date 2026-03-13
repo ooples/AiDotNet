@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Decentralized;
 
 /// <summary>
@@ -21,6 +23,11 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// TMLR 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Decentralized Federated Averaging with Momentum", "https://arxiv.org/abs/2306.02774", Year = 2023, Authors = "Sun et al.")]
 public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _momentum;

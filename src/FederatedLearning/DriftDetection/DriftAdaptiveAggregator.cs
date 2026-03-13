@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -26,6 +27,11 @@ namespace AiDotNet.FederatedLearning.DriftDetection;
 /// It modifies the weights before aggregation happens.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class DriftAdaptiveAggregator<T> : FederatedLearningComponentBase<T>
 {
     private readonly FederatedDriftOptions _options;

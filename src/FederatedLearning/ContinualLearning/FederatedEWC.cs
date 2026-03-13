@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.ContinualLearning;
 
 /// <summary>
@@ -22,6 +24,12 @@ namespace AiDotNet.FederatedLearning.ContinualLearning;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Overcoming Catastrophic Forgetting in Neural Networks", "https://arxiv.org/abs/1612.00796", Year = 2017, Authors = "Kirkpatrick et al.")]
 public class FederatedEWC<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedContinualLearningStrategy<T>
 {
     private readonly int _fisherSamples;

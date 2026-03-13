@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Decentralized;
 
 /// <summary>
@@ -19,6 +21,11 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// Reference: Boyd et al. (2006), "Randomized Gossip Algorithms".
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("Randomized Gossip Algorithms", "https://web.stanford.edu/~boyd/papers/pdf/gossip.pdf", Year = 2006, Authors = "Boyd et al.")]
 public class GossipProtocol : IDecentralizedTopology
 {
     private readonly int _fanout;

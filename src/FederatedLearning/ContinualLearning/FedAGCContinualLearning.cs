@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.ContinualLearning;
 
 /// <summary>
@@ -23,6 +25,11 @@ namespace AiDotNet.FederatedLearning.ContinualLearning;
 /// <para>Reference: FedAGC: Adaptive Gradient Correction for Federated Continual Learning (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedContinualLearningStrategy<T>
 {
     private readonly double _correctionStrength;

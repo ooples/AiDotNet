@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -13,6 +14,10 @@ namespace AiDotNet.FederatedLearning.Cryptography;
 /// clients are simulated as encrypting their weighted updates, the server adds ciphertexts, and the trusted key holder decrypts the result.
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public sealed class SealHomomorphicEncryptionProvider<T> : HomomorphicEncryptionProviderBase<T>
 {
     public override Vector<T> AggregateEncryptedWeightedAverage(

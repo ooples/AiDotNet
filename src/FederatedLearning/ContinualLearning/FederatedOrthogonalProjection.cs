@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.ContinualLearning;
 
 /// <summary>
@@ -24,6 +26,12 @@ namespace AiDotNet.FederatedLearning.ContinualLearning;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Orthogonal Gradient Descent for Continual Learning", "https://arxiv.org/abs/1910.07104", Year = 2020, Authors = "Farajtabar et al.")]
 public class FederatedOrthogonalProjection<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedContinualLearningStrategy<T>
 {
     private readonly double _projectionThreshold;

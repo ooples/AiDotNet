@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Distillation;
 
 /// <summary>
@@ -20,6 +22,12 @@ namespace AiDotNet.FederatedLearning.Distillation;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("FedMD: Heterogeneous Federated Learning via Model Distillation", "https://arxiv.org/abs/1910.03581", Year = 2019, Authors = "Li and Wang")]
 public class FedMDDistillation<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedDistillationStrategy<T>
 {
     private readonly double _temperature;

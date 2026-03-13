@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Decentralized;
 
 /// <summary>
@@ -22,6 +24,10 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// Decentralized Learning." 2024.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class SegmentedGossipProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _numSegments;
