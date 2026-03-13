@@ -42,7 +42,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Medium,
             inputSize: 2,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -73,7 +73,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .BuildAsync();
 
-        var trainedModel = Assert.IsType<NeuralNetworkModel<double>>(result.OptimizationResult.BestSolution);
+        var trainedModel = Assert.IsType<NeuralNetwork<double>>(result.OptimizationResult.BestSolution);
         var injectedMcDropoutLayers = trainedModel.Network.LayersReadOnly.OfType<MCDropoutLayer<double>>().ToList();
         Assert.NotEmpty(injectedMcDropoutLayers);
 
@@ -116,7 +116,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Medium,
             inputSize: 2,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -142,7 +142,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var result = await builder
             .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .BuildAsync();
-        var trainedModel = Assert.IsType<NeuralNetworkModel<double>>(result.OptimizationResult.BestSolution);
+        var trainedModel = Assert.IsType<NeuralNetwork<double>>(result.OptimizationResult.BestSolution);
         var parameters = trainedModel.Network.GetParameters();
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -210,7 +210,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Medium,
             inputSize: 1,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -270,7 +270,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 2,
             outputSize: 3);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
 
@@ -336,7 +336,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 2,
             outputSize: 3);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
 
@@ -388,7 +388,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 2,
             outputSize: 2);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
 
@@ -445,7 +445,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 1,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -497,7 +497,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 2,
             outputSize: 2);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
 
@@ -555,7 +555,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 1,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -611,7 +611,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 2,
             outputSize: 3);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
 
@@ -666,7 +666,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Medium,
             inputSize: 1,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -754,7 +754,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Medium,
             inputSize: 2,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
         var xTrain = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]

@@ -108,12 +108,12 @@ public static class ModelHelper<T, TInput, TOutput>
     /// <para>
     /// This method creates an appropriate default model based on the input and output types.
     /// It supports creating VectorModel for linear models with matrix input and vector output,
-    /// and NeuralNetworkModel for models with tensor input and output.
+    /// and NeuralNetwork for models with tensor input and output.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps create a starting point model based on your data types.
-    /// 
+    ///
     /// - For simple linear models (like regression), it creates a VectorModel.
-    /// - For more complex models (like neural networks), it creates a NeuralNetworkModel.
+    /// - For more complex models (like neural networks), it creates a NeuralNetwork.
     /// - If your data types don't match these patterns, it will throw an error to let you know.
     /// 
     /// This is useful when you need a basic model to start with, which you can then customize or optimize.

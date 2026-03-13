@@ -5404,7 +5404,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     return output.ToVector();
                 }
 
-                // Fallback for non-NeuralNetworkModel: call Predict and convert result
+                // Fallback for non-neural-network models: call Predict and convert result
                 TOutput modelOutput = studentModel.Predict(modelInput);
                 return ConversionsHelper.ConvertToVector<T, TOutput>(modelOutput);
             };
@@ -7055,9 +7055,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         for (int memberIndex = members.Count; memberIndex < ensembleSize; memberIndex++)
         {
-            var memberModel = deepEnsembleTemplate is Models.NeuralNetworkModel<T> nnTemplate
-                ? (IFullModel<T, TInput, TOutput>)(object)new Models.NeuralNetworkModel<T>(nnTemplate.Architecture)
-                : deepEnsembleTemplate.DeepCopy();
+            var memberModel = deepEnsembleTemplate.DeepCopy();
 
             PerturbInitialParametersIfSupported(memberModel, baseSeed, memberIndex, options.DeepEnsembleInitialNoiseStdDev);
 
@@ -7342,11 +7340,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             return;
         }
 
-        if (model is not Models.NeuralNetworkModel<T> neuralNetworkModel)
+        if (model is not NeuralNetworks.NeuralNetworkBase<T> neuralNetworkModel)
         {
             throw new InvalidOperationException(
                 "Uncertainty quantification is currently supported for neural network models only. " +
-                "ConfigureModel(new NeuralNetworkModel<T>(...)) to enable Monte Carlo Dropout uncertainty estimation.");
+                "Use a NeuralNetworkBase<T> subclass to enable Monte Carlo Dropout uncertainty estimation.");
         }
 
         var injectedCount = TryInjectMonteCarloDropoutLayers(neuralNetworkModel, options);
@@ -7360,10 +7358,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     private static int TryInjectMonteCarloDropoutLayers(
-        Models.NeuralNetworkModel<T> neuralNetworkModel,
+        NeuralNetworks.NeuralNetworkBase<T> neuralNetworkModel,
         UncertaintyQuantificationOptions options)
     {
-        var layers = neuralNetworkModel.Network.LayersReadOnly;
+        var layers = neuralNetworkModel.LayersReadOnly;
         if (layers.OfType<MCDropoutLayer<T>>().Any())
         {
             return -1;
@@ -7393,7 +7391,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
 
             int? seed = options.RandomSeed.HasValue ? options.RandomSeed.Value + i : (int?)null;
-            neuralNetworkModel.Network.InsertLayerIntoCollection(i + 1, new MCDropoutLayer<T>(options.MonteCarloDropoutRate, mcMode: false, randomSeed: seed));
+            neuralNetworkModel.InsertLayerIntoCollection(i + 1, new MCDropoutLayer<T>(options.MonteCarloDropoutRate, mcMode: false, randomSeed: seed));
             injectedCount++;
             i++;
         }
