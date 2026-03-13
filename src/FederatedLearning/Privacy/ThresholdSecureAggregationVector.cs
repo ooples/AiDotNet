@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.FederatedLearning.Infrastructure;
 
@@ -24,6 +25,11 @@ namespace AiDotNet.FederatedLearning.Privacy;
 /// Reference: Bonawitz, K., et al. (2017). "Practical Secure Aggregation for Privacy-Preserving Machine Learning."
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Practical Secure Aggregation for Privacy-Preserving Machine Learning", "https://dl.acm.org/doi/10.1145/3133956.3133982", Year = 2017, Authors = "Bonawitz et al.")]
 public sealed class ThresholdSecureAggregationVector<T> : FederatedLearningComponentBase<T>, IDisposable
 {
     private const int SelfMaskSeedLength = 32;

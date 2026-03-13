@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Interfaces;
 
@@ -9,6 +10,10 @@ namespace AiDotNet.FederatedLearning.Privacy.Accounting;
 /// <remarks>
 /// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class PrivacyAccountantBase : FederatedLearningComponentBase<double>, IPrivacyAccountant
 {
     public abstract void AddRound(double epsilon, double delta, double samplingRate);

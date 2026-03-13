@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
@@ -12,6 +13,10 @@ namespace AiDotNet.FederatedLearning.Privacy;
 /// individual data points cannot be inferred from the update, while the overall signal remains useful.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class GaussianDifferentialPrivacyVector<T> : PrivacyMechanismBase<Vector<T>, T>
 {
     private readonly object _sync = new object();

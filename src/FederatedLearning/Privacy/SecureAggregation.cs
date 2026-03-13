@@ -3,6 +3,7 @@ namespace AiDotNet.FederatedLearning.Privacy;
 using System;
 using System.Security.Cryptography;
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.FederatedLearning.Infrastructure;
 
@@ -71,6 +72,11 @@ using AiDotNet.FederatedLearning.Infrastructure;
 /// Machine Learning." CCS 2017.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Practical Secure Aggregation for Privacy-Preserving Machine Learning", "https://dl.acm.org/doi/10.1145/3133956.3133982", Year = 2017, Authors = "Bonawitz et al.")]
 public class SecureAggregation<T> : FederatedLearningComponentBase<T>, IDisposable
 {
     private readonly Dictionary<long, byte[]> _pairwiseMaskSeeds;

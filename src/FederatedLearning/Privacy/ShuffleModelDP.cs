@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Privacy;
 
 /// <summary>
@@ -33,6 +35,11 @@ namespace AiDotNet.FederatedLearning.Privacy;
 /// Shuffle Model." Crypto 2019.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("The Privacy Blanket of the Shuffle Model", "https://eprint.iacr.org/2019/733", Year = 2019, Authors = "Balle et al.")]
 public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T>
 {
     private readonly double _localEpsilon;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Privacy;
@@ -10,6 +11,10 @@ namespace AiDotNet.FederatedLearning.Privacy;
 /// This wrapper adapts that representation to the vector-based secure aggregation core.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
 public sealed class ThresholdSecureAggregation<T> : FederatedLearningComponentBase<T>, IDisposable
 {
     private readonly ThresholdSecureAggregationVector<T> _inner;
