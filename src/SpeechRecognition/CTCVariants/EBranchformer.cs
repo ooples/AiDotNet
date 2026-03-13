@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("E-Branchformer: Branchformer with Enhanced Merging for Speech Recognition", "https://arxiv.org/abs/2210.00077", Year = 2023, Authors = "Kim et al.")]
+[ModelPaper("E-Branchformer: Branchformer with Enhanced Merging for Speech Recognition", "https://arxiv.org/abs/2210.00077", Year = 2022, Authors = "Kim et al.")]
 public class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly CTCEBranchformerOptions _options; public override ModelOptions GetOptions() => _options;
