@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 
@@ -15,6 +16,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 /// which part of the graph is relevant to your query.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class CommunityIndex<T>
 {
     private readonly Dictionary<int, Dictionary<int, CommunitySummary>> _index = [];

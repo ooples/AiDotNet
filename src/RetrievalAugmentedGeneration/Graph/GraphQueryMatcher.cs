@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
 using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
@@ -40,6 +41,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// This is much more natural for relationship-heavy data!
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class GraphQueryMatcher<T>
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

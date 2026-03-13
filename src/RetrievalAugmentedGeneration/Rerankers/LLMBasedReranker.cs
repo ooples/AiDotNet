@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
@@ -9,6 +10,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
     /// LLM-based reranking using language model relevance assessment.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [ModelDomain(ModelDomain.Language)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.Medium)]
     public class LLMBasedReranker<T> : Rerankers.RerankerBase<T>
     {
         private readonly string _llmEndpoint;

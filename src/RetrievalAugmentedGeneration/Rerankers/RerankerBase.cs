@@ -1,5 +1,6 @@
 
 using System.Collections.Generic;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -23,6 +24,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// - This ensures all rerankers work consistently
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class RerankerBase<T> : IReranker<T>
 {
     /// <summary>

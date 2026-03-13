@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -18,6 +19,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// you can predict that "Berlin" + "capital_of" ≈ "Germany".
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Translating Embeddings for Modeling Multi-relational Data", "https://papers.nips.cc/paper/2013/hash/1cecc7a77928ca8133fa24680a88d2f9-Abstract.html", Year = 2013, Authors = "Bordes et al.")]
 public class TransEEmbedding<T> : KGEmbeddingBase<T>
 {
     /// <inheritdoc />

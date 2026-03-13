@@ -1,4 +1,5 @@
 
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -51,6 +52,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// - Reranking 1000s of docs: Too slow, only rerank top candidates
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class CrossEncoderReranker<T> : RerankerBase<T>
 {
     private readonly Func<string, string, T> _scoreFunction;

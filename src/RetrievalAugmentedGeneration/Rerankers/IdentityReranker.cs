@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
@@ -34,6 +35,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// Later, replace with CrossEncoderReranker for better results without changing your code.
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Low)]
 public class IdentityReranker<T> : RerankerBase<T>
 {
     /// <summary>

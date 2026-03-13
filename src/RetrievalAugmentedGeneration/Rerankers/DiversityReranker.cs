@@ -1,4 +1,5 @@
 
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -67,6 +68,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// - After initial retrieval that returns many similar docs
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Language)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class DiversityReranker<T> : RerankerBase<T>
 {
     private readonly T _lambda;
