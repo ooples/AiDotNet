@@ -47,7 +47,7 @@ namespace AiDotNet.TimeSeries;
 [ModelTask(ModelTask.Forecasting)]
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Predicting the Present with Bayesian Structural Time Series", "https://doi.org/10.1214/14-AOAS788", Year = 2015, Authors = "Steven L. Scott, Hal R. Varian")]
 public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
 {

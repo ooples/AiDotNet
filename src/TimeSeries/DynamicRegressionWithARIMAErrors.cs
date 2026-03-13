@@ -47,7 +47,7 @@ namespace AiDotNet.TimeSeries;
 [ModelCategory(ModelCategory.Regression)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Forecasting: Principles and Practice", "https://otexts.com/fpp3/", Year = 2021, Authors = "Rob J. Hyndman, George Athanasopoulos")]
 public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
 {
