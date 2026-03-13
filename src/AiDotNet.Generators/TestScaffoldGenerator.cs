@@ -193,7 +193,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 ClassName = className,
                 FullyQualifiedName = fullName,
                 TypeParameterCount = modelClass.TypeParameters.Length,
-                Domains = domains
+                Domains = domains,
+                Location = modelClass.Locations.Length > 0 ? modelClass.Locations[0] : null
             };
 
             // Check for matching test class
@@ -212,6 +213,31 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         testedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
         untestedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
+
+        // Emit AIDN040 diagnostic for each untested model
+        foreach (var model in untestedModels)
+        {
+            if (model.Location is not null)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UntestedModel,
+                    model.Location,
+                    model.ClassName));
+            }
+        }
+
+        // Emit AIDN041 summary diagnostic
+        var totalCount = testedModels.Count + untestedModels.Count;
+        if (totalCount > 0)
+        {
+            var coveragePct = testedModels.Count * 100.0 / totalCount;
+            context.ReportDiagnostic(Diagnostic.Create(
+                CoverageSummary,
+                Location.None,
+                testedModels.Count,
+                totalCount,
+                coveragePct));
+        }
 
         EmitTestCoverageClass(context, testedModels, untestedModels);
     }
@@ -393,5 +419,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public int TypeParameterCount { get; set; }
         public List<int> Domains { get; set; } = new List<int>();
         public bool HasTests { get; set; }
+        public Location? Location { get; set; }
     }
 }

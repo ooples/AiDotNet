@@ -123,12 +123,30 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     ClassName = modelClass.Name,
                     FullyQualifiedName = fullName,
                     TypeParameterCount = modelClass.TypeParameters.Length,
-                    Categories = categories
+                    Categories = categories,
+                    Location = modelClass.Locations.Length > 0 ? modelClass.Locations[0] : null
                 });
             }
         }
 
         entries.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
+
+        // Emit AIDN030 diagnostics for models with compatibility warnings
+        foreach (var entry in entries)
+        {
+            var (_, _, _, warnings) = GetCompatibilityRules(entry.Categories);
+            if (warnings.Count > 0 && entry.Location is not null)
+            {
+                foreach (var warning in warnings)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        SuspiciousOptimizer,
+                        entry.Location,
+                        entry.ClassName,
+                        string.Join(", ", entry.Categories)));
+                }
+            }
+        }
 
         EmitCompatibilityClass(context, entries);
     }
@@ -226,6 +244,62 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         sb.AppendLine("        var info = GetInfo(modelType);");
         sb.AppendLine("        return info is not null ? info.RecommendedPreprocessors : Array.Empty<string>();");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // IsCompatible method
+        sb.AppendLine("    /// <summary>Checks whether the given model type is compatible with the given optimizer type.</summary>");
+        sb.AppendLine("    /// <param name=\"modelType\">The model type to check.</param>");
+        sb.AppendLine("    /// <param name=\"optimizerType\">The optimizer type to check against.</param>");
+        sb.AppendLine("    /// <returns><c>true</c> if the combination is compatible or the model is unknown; otherwise <c>false</c>.</returns>");
+        sb.AppendLine("    public static bool IsCompatible(Type modelType, Type optimizerType)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var info = GetInfo(modelType);");
+        sb.AppendLine("        if (info is null)");
+        sb.AppendLine("            return true; // Unknown models are assumed compatible");
+        sb.AppendLine();
+        sb.AppendLine("        var optimizerName = optimizerType.Name;");
+        sb.AppendLine("        var backtick = optimizerName.IndexOf('`');");
+        sb.AppendLine("        if (backtick >= 0)");
+        sb.AppendLine("            optimizerName = optimizerName.Substring(0, backtick);");
+        sb.AppendLine();
+        sb.AppendLine("        foreach (var compat in info.CompatibleOptimizers)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (string.Equals(compat, optimizerName, StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine("                return true;");
+        sb.AppendLine("            if (optimizerName.IndexOf(compat, StringComparison.OrdinalIgnoreCase) >= 0)");
+        sb.AppendLine("                return true;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        return false;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // IsCompatibleLossFunction method
+        sb.AppendLine("    /// <summary>Checks whether the given model type is compatible with the given loss function type.</summary>");
+        sb.AppendLine("    /// <param name=\"modelType\">The model type to check.</param>");
+        sb.AppendLine("    /// <param name=\"lossFunctionType\">The loss function type to check against.</param>");
+        sb.AppendLine("    /// <returns><c>true</c> if the combination is compatible or the model is unknown; otherwise <c>false</c>.</returns>");
+        sb.AppendLine("    public static bool IsCompatibleLossFunction(Type modelType, Type lossFunctionType)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var info = GetInfo(modelType);");
+        sb.AppendLine("        if (info is null)");
+        sb.AppendLine("            return true; // Unknown models are assumed compatible");
+        sb.AppendLine();
+        sb.AppendLine("        var lossName = lossFunctionType.Name;");
+        sb.AppendLine("        var backtick = lossName.IndexOf('`');");
+        sb.AppendLine("        if (backtick >= 0)");
+        sb.AppendLine("            lossName = lossName.Substring(0, backtick);");
+        sb.AppendLine();
+        sb.AppendLine("        foreach (var compat in info.CompatibleLossFunctions)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (string.Equals(compat, lossName, StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine("                return true;");
+        sb.AppendLine("            if (lossName.IndexOf(compat, StringComparison.OrdinalIgnoreCase) >= 0)");
+        sb.AppendLine("                return true;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        return false;");
         sb.AppendLine("    }");
         sb.AppendLine();
 
@@ -462,5 +536,6 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         public string FullyQualifiedName { get; set; } = string.Empty;
         public int TypeParameterCount { get; set; }
         public List<int> Categories { get; set; } = new List<int>();
+        public Location? Location { get; set; }
     }
 }
