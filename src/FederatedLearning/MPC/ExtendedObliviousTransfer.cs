@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Cryptography;
 
 namespace AiDotNet.FederatedLearning.MPC;
@@ -22,6 +23,10 @@ namespace AiDotNet.FederatedLearning.MPC;
 ///
 /// <para><b>Reference:</b> IKNP OT Extension (Ishai, Kilian, Nissim, Petrank, CRYPTO 2003).</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.High)]
 public class ExtendedObliviousTransfer : IObliviousTransfer
 {
     private readonly IObliviousTransfer _baseOt;

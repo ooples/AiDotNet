@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.MPC;
 
@@ -23,6 +24,11 @@ namespace AiDotNet.FederatedLearning.MPC;
 ///
 /// <para><b>Reference:</b> ABY framework (NDSS 2015) for arithmetic, boolean, and Yao sharing.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("ABY - A Framework for Efficient Mixed-Protocol Secure Two-Party Computation", "https://encrypto.de/papers/DSZ15.pdf", Year = 2015, Authors = "Demmler et al.")]
 public class BooleanSecretSharing
 {
     private readonly int _numberOfParties;

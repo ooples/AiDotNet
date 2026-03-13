@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.FederatedLearning.PSI;
@@ -12,6 +13,10 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// building alignment mappings from intersection results, and timing execution.
 /// Each concrete PSI protocol only needs to implement the core intersection algorithm.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Low)]
 public abstract class PsiBase : IPrivateSetIntersection
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

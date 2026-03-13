@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.PSI;
 
@@ -23,6 +24,11 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// <para>Reference: Optimized Private Set Analytics for Federated Learning (2025).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public class OptimizedPrivateSetAnalytics<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _sketchWidth;

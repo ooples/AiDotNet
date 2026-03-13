@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.FederatedLearning.PSI;
@@ -43,6 +44,10 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// var multiResult = aligner.AlignMultipleParties(partySets, options);
 /// </code>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Low)]
 public class EntityAligner
 {
     private readonly IPrivateSetIntersection _defaultProtocol;
