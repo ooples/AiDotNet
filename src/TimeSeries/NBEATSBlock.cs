@@ -30,11 +30,6 @@ namespace AiDotNet.TimeSeries;
 /// Multiple blocks work together, with each one focusing on different aspects of the data.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.TimeSeries)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Forecasting)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
 public class NBEATSBlock<T>
 {
     private readonly INumericOperations<T> _numOps;

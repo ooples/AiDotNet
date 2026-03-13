@@ -27,7 +27,6 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Generation)]
-[ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control", "https://arxiv.org/abs/2307.15818", Year = 2023, Authors = "Brohan et al.")]

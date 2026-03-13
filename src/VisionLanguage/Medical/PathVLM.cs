@@ -27,6 +27,7 @@ namespace AiDotNet.VisionLanguage.Medical;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("A Foundational Multimodal Vision Language AI Assistant for Human Pathology", "https://arxiv.org/abs/2312.07814", Year = 2024, Authors = "Sun et al.")]

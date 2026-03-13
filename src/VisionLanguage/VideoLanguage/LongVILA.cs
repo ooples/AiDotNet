@@ -25,7 +25,6 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Classification)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]

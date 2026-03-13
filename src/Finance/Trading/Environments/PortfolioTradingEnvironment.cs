@@ -24,10 +24,6 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
-[ModelCategory(ModelCategory.ReinforcementLearningAgent)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public sealed class PortfolioTradingEnvironment<T> : TradingEnvironment<T>
 {
     /// <inheritdoc/>

@@ -27,7 +27,6 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Generation)]
-[ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("PaLM-E: An Embodied Multimodal Language Model", "https://arxiv.org/abs/2303.03378", Year = 2023, Authors = "Driess et al.")]
