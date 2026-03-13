@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Aggregators;
 
 /// <summary>
@@ -35,6 +37,11 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// https://arxiv.org/abs/2312.09672</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("BOBA: Bayesian Optimal Byzantine-robust Aggregation", "https://arxiv.org/abs/2312.09672", Year = 2024, Authors = "El Mhamdi et al.")]
 public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _priorHonest;

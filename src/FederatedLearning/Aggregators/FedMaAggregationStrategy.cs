@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Aggregators;
 
 /// <summary>
@@ -21,6 +23,11 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// ICLR 2020.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Federated Learning with Matched Averaging", "https://arxiv.org/abs/2002.06440", Year = 2020, Authors = "Wang et al.")]
 public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly int _matchingIterations;

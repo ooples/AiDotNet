@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
@@ -10,6 +11,10 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// it *clips* them to the nearest remaining value before averaging. This reduces the impact of outliers
 /// while keeping the same number of values in the average.
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutput> :
     RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 {

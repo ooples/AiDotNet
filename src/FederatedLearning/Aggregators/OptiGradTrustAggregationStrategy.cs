@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Aggregators;
 
 /// <summary>
@@ -22,6 +24,10 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <para>Reference: Optimized Gradient Trust Scoring for Federated Learning (2025).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class OptiGradTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _momentum;

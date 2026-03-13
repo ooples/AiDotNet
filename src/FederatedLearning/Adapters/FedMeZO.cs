@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Adapters;
 
 /// <summary>
@@ -27,6 +29,11 @@ namespace AiDotNet.FederatedLearning.Adapters;
 /// Passes." NeurIPS 2023. FedMeZO extension for federated settings (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Fine-Tuning Language Models with Just Forward Passes", "https://arxiv.org/abs/2305.17333", Year = 2023, Authors = "Malladi et al.")]
 public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedAdapterStrategy<T>
 {
     private readonly double _perturbationScale;

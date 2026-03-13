@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Aggregators;
 
 /// <summary>
@@ -50,6 +52,11 @@ public enum FedSamVariant
 /// by Seeking Flat Minima."</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("Improving Generalization in Federated Learning by Seeking Flat Minima", "https://arxiv.org/abs/2203.11834", Year = 2022, Authors = "Caldarola et al.")]
 public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _perturbationRadius;

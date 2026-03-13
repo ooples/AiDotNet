@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
@@ -9,6 +10,10 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// <b>For Beginners:</b> This strategy sorts each parameter across clients, drops the extreme values
 /// on both ends, then averages the remaining values. This reduces the impact of outliers.
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
 public sealed class TrimmedMeanFullModelAggregationStrategy<T, TInput, TOutput> :
     RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 {

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Aggregators;
 
 /// <summary>
@@ -44,6 +46,11 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// from Decentralized Data." AISTATS 2017.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("Communication-Efficient Learning of Deep Networks from Decentralized Data", "https://arxiv.org/abs/1602.05629", Year = 2017, Authors = "McMahan et al.")]
 public class FedAvgAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     /// <summary>

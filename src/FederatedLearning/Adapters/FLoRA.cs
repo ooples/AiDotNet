@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Adapters;
 
 /// <summary>
@@ -23,6 +25,11 @@ namespace AiDotNet.FederatedLearning.Adapters;
 /// Models with Heterogeneous Low-Rank Adaptations." arXiv:2405.14739.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("FLoRA: Federated Fine-Tuning Large Language Models with Heterogeneous Low-Rank Adaptations", "https://arxiv.org/abs/2405.14739", Year = 2024, Authors = "Wang et al.")]
 public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedAdapterStrategy<T>
 {
     private readonly int _rank;

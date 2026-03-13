@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Aggregators;
 
 /// <summary>
@@ -23,6 +25,11 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// CVPR 2021.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("Model-Contrastive Federated Learning", "https://arxiv.org/abs/2103.16257", Year = 2021, Authors = "Li et al.")]
 public class MoonAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private const double CosineDenominatorEpsilon = 1e-10;

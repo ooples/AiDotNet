@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Aggregators;
 
 /// <summary>
@@ -60,6 +62,11 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// ICDE 2021.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("Federated Learning on Non-IID Data Silos: An Experimental Study", "https://arxiv.org/abs/2102.02079", Year = 2021, Authors = "Li et al.")]
 public class FedBNAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly HashSet<string> _batchNormLayerPatterns;
