@@ -34,7 +34,7 @@ namespace AiDotNet.Finance.Volatility;
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Generalized Autoregressive Conditional Heteroskedasticity", "https://doi.org/10.1016/0304-4076(86)90063-1", Year = 1986, Authors = "Tim Bollerslev")]
 public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
 {

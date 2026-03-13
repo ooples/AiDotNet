@@ -49,7 +49,7 @@ namespace AiDotNet.CausalInference;
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Estimation and Inference of Heterogeneous Treatment Effects using Random Forests", "https://doi.org/10.1080/01621459.2017.1319839", Year = 2018, Authors = "Stefan Wager, Susan Athey")]
 public class CausalForest<T> : CausalModelBase<T>
 {

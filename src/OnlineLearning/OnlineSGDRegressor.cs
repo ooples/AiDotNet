@@ -50,7 +50,7 @@ namespace AiDotNet.OnlineLearning;
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Large-Scale Machine Learning with Stochastic Gradient Descent", "https://doi.org/10.1007/978-3-7908-2604-3_16", Year = 2010, Authors = "Léon Bottou")]
 public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
 {

@@ -57,7 +57,7 @@ namespace AiDotNet.CausalInference;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class InverseProbabilityWeighting<T> : CausalModelBase<T>
 {
     /// <summary>

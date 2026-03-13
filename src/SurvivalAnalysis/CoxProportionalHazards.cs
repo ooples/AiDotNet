@@ -51,7 +51,7 @@ namespace AiDotNet.SurvivalAnalysis;
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Regression Models and Life-Tables", "https://doi.org/10.1111/j.2517-6161.1972.tb00899.x", Year = 1972, Authors = "David R. Cox")]
 public class CoxProportionalHazards<T> : SurvivalModelBase<T>
 {

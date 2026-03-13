@@ -48,7 +48,7 @@ namespace AiDotNet.CausalInference;
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Vector<>), typeof(Vector<>))]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class TLearner<T> : CausalModelBase<T>
 {
     /// <summary>
