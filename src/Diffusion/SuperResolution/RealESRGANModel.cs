@@ -100,6 +100,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.GAN)]
 [ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SuperResolution)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Real-ESRGAN: Training Real-World Blind Super-Resolution with Pure Synthetic Data", "https://arxiv.org/abs/2107.10833", Year = 2021, Authors = "Wang et al.")]

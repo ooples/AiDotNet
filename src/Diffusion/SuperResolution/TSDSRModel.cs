@@ -43,6 +43,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SuperResolution)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Timestep Shifted Diffusion Schedule Towards Faster and Better Image Super-Resolution", "https://arxiv.org/abs/2411.18263", Year = 2025, Authors = "Dong et al.")]

@@ -44,6 +44,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SuperResolution)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Improving the Stability and Efficiency of Diffusion Models for Content Consistent Super-Resolution", "https://arxiv.org/abs/2401.00877", Year = 2024, Authors = "Sun et al.")]

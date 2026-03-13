@@ -99,6 +99,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SuperResolution)]
 [ModelTask(ModelTask.Inpainting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]

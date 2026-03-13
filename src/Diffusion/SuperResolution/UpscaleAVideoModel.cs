@@ -102,8 +102,10 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SuperResolution)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Upscale-A-Video: Temporal-Consistent Diffusion Model for Real-World Video Super-Resolution", "https://arxiv.org/abs/2312.06640", Year = 2024, Authors = "Zhou et al.")]
