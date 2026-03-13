@@ -158,6 +158,12 @@ public enum ModelTask
     ImageEditing,
 
     /// <summary>
+    /// Modifies or manipulates existing data based on instructions, conditions, or references.
+    /// Example: editing speech in an audio recording or modifying a 3D scene.
+    /// </summary>
+    Editing,
+
+    /// <summary>
     /// Generates images from text descriptions.
     /// Example: creating a photorealistic image from "a cat sitting on a rainbow."
     /// </summary>

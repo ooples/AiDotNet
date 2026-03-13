@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -32,6 +34,13 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Zhou et al., "Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model", 2024
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Multimodal)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Translation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model", "https://arxiv.org/abs/2408.11039", Year = 2024, Authors = "Zhou et al.")]
 public class TransfusionModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;
