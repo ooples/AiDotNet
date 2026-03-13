@@ -84,9 +84,11 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Meissonic: Revitalizing Masked Generative Transformers for Efficient High-Resolution Text-to-Image Synthesis", "https://arxiv.org/abs/2410.08261", Year = 2024, Authors = "Bai et al.")]

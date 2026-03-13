@@ -101,8 +101,10 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis", "https://arxiv.org/abs/2307.01952", Year = 2023, Authors = "Podell et al.")]

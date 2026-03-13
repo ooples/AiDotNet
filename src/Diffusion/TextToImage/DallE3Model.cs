@@ -27,8 +27,10 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Improving Image Generation with Better Captions", "https://cdn.openai.com/papers/dall-e-3.pdf", Year = 2023, Authors = "Betker et al.")]

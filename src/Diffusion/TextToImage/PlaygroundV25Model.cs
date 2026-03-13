@@ -82,8 +82,10 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Playground v2.5: Three Insights towards Enhancing Aesthetic Quality in Text-to-Image Generation", "https://arxiv.org/abs/2402.17245", Year = 2024, Authors = "Li et al.")]

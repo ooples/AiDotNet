@@ -56,8 +56,10 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("eDiff-I: Text-to-Image Diffusion Models with an Ensemble of Expert Denoisers", "https://arxiv.org/abs/2211.01324", Year = 2022, Authors = "Balaji et al.")]

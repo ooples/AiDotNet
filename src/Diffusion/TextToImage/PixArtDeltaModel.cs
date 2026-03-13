@@ -57,9 +57,11 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("PixArt-delta: Fast and Controllable Image Generation with Latent Consistency Models", "https://arxiv.org/abs/2401.05252", Year = 2024, Authors = "Chen et al.")]

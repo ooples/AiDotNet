@@ -77,8 +77,10 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
+[ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Kandinsky: an Improved Text-to-Image Synthesis with Image Prior and Latent Diffusion", "https://arxiv.org/abs/2310.03502", Year = 2023, Authors = "Razzhigaev et al.")]

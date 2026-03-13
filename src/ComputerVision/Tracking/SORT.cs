@@ -28,6 +28,7 @@ namespace AiDotNet.ComputerVision.Tracking;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Detection)]
+[ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Simple Online and Realtime Tracking",
