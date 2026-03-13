@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.Models.Options;
 
@@ -26,6 +27,10 @@ namespace AiDotNet.FederatedLearning.TEE;
 /// made via P/Invoke to the SGX SDK in a production deployment.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Compression)]
+[ModelComplexity(ModelComplexity.High)]
 public class IntelSgxTeeProvider<T> : TeeProviderBase<T>
 {
     /// <summary>
