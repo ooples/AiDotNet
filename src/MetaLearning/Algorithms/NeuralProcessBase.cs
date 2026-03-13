@@ -305,7 +305,7 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
 }
 
 /// <summary>Adapted model for Neural Process family algorithms.</summary>
-internal class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+public class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
     private Vector<T> _params;
     private readonly Vector<T>? _contextRepresentation;

@@ -734,7 +734,7 @@ namespace AiDotNet.AutoML
     /// Wrapper model that combines diffusion components into an IFullModel.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    internal class DiffusionAutoMLModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+    public class DiffusionAutoMLModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     {
         private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
         private static IEngine Engine => AiDotNetEngine.Current;

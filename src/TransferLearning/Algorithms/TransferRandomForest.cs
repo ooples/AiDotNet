@@ -241,7 +241,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// <summary>
 /// Wrapper model that applies feature mapping before prediction.
 /// </summary>
-internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
+public class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
     private const int WrapperMagic = 0x4D52464D; // 'MRFM'
     private readonly IFullModel<T, Matrix<T>, Vector<T>> _baseModel;
