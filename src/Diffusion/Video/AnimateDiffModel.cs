@@ -1,8 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -75,6 +78,15 @@ namespace AiDotNet.Diffusion.Video;
 ///     numFrames: 16);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.VideoGeneration)]
+[ModelTask(ModelTask.TextToVideo)]
+[ModelTask(ModelTask.ImageToVideo)]
+[ModelTask(ModelTask.VideoToVideo)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning", "https://arxiv.org/abs/2307.04725", Year = 2023, Authors = "Guo et al.")]
 public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

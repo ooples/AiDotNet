@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -33,6 +35,15 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.VideoGeneration)]
+[ModelTask(ModelTask.TextToVideo)]
+[ModelTask(ModelTask.ImageToVideo)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer", "https://arxiv.org/abs/2408.06072", Year = 2024, Authors = "Yang et al.")]
 public class CogVideoX15Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

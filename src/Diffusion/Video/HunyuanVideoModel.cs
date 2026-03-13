@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -99,6 +101,15 @@ namespace AiDotNet.Diffusion.Video;
 ///     numInferenceSteps: 50);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.VideoGeneration)]
+[ModelTask(ModelTask.TextToVideo)]
+[ModelTask(ModelTask.ImageToVideo)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("HunyuanVideo: A Systematic Framework For Large Video Generative Models", "https://arxiv.org/abs/2412.03603", Year = 2024, Authors = "Kong et al.")]
 public class HunyuanVideoModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants

@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -73,6 +75,14 @@ namespace AiDotNet.Diffusion.Video;
 ///     seed: 42);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.VideoGeneration)]
+[ModelTask(ModelTask.TextToVideo)]
+[ModelTask(ModelTask.ImageToVideo)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("CogVideo: Large-scale Pretraining for Text-to-Video Generation via Transformers", "https://arxiv.org/abs/2205.15868", Year = 2023, Authors = "Hong et al.")]
 public class CogVideoModel<T> : VideoDiffusionModelBase<T>
 {
     #region Constants
