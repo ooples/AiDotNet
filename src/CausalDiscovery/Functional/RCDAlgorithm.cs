@@ -180,7 +180,7 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
         if (n < 4) return 0;
 
         // Number of bins via Sturges' rule
-        int numBins = Math.Max(3, (int)Math.Ceiling(Math.Log2(n) + 1));
+        int numBins = Math.Max(3, (int)Math.Ceiling(Math.Log(n, 2) + 1));
 
         // Find ranges for each variable
         double min1 = double.MaxValue, max1 = double.MinValue;

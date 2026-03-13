@@ -144,15 +144,15 @@ public class LeidenCommunityDetector<T>
 
         foreach (var edge in graph.GetAllEdges())
         {
-            if (!adj.ContainsKey(edge.SourceId) || !adj.ContainsKey(edge.TargetId))
+            if (!adj.TryGetValue(edge.SourceId, out var sourceAdj) || !adj.TryGetValue(edge.TargetId, out var targetAdj))
                 continue;
 
             // Undirected: add both directions
-            adj[edge.SourceId].TryGetValue(edge.TargetId, out double w1);
-            adj[edge.SourceId][edge.TargetId] = w1 + edge.Weight;
+            sourceAdj.TryGetValue(edge.TargetId, out double w1);
+            sourceAdj[edge.TargetId] = w1 + edge.Weight;
 
-            adj[edge.TargetId].TryGetValue(edge.SourceId, out double w2);
-            adj[edge.TargetId][edge.SourceId] = w2 + edge.Weight;
+            targetAdj.TryGetValue(edge.SourceId, out double w2);
+            targetAdj[edge.SourceId] = w2 + edge.Weight;
         }
 
         return adj;
@@ -373,12 +373,17 @@ public class LeidenCommunityDetector<T>
         foreach (var nodeId in nodes)
         {
             int comm = partition[nodeId];
-            double strength = adjacency.ContainsKey(nodeId) ? adjacency[nodeId].Values.Sum() : 0.0;
+            if (!adjacency.TryGetValue(nodeId, out var nodeAdj))
+            {
+                communityStrength.TryGetValue(comm, out double cs0);
+                communityStrength[comm] = cs0;
+                continue;
+            }
+            double strength = nodeAdj.Values.Sum();
             communityStrength.TryGetValue(comm, out double cs);
             communityStrength[comm] = cs + strength;
 
-            if (!adjacency.ContainsKey(nodeId)) continue;
-            foreach (var (neighbor, weight) in adjacency[nodeId])
+            foreach (var (neighbor, weight) in nodeAdj)
             {
                 if (partition.TryGetValue(neighbor, out int neighborComm) && neighborComm == comm)
                 {

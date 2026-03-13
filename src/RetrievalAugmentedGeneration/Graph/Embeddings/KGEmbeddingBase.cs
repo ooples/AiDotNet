@@ -126,7 +126,7 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
             }
 
             OnPostEpoch(epoch);
-            epochLosses.Add(batchCount > 0 ? epochLoss / (triples.Count * negSamples) : 0.0);
+            epochLosses.Add(batchCount > 0 ? epochLoss / ((double)triples.Count * negSamples) : 0.0);
         }
 
         IsTrained = true;
@@ -230,9 +230,7 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
         foreach (var node in graph.GetAllNodes())
         {
             if (!_entityIndex.ContainsKey(node.Id))
-            {
                 _entityIndex[node.Id] = _entityIndex.Count;
-            }
         }
 
         foreach (var edge in graph.GetAllEdges())
