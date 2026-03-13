@@ -1,9 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -88,6 +90,12 @@ namespace AiDotNet.Diffusion.ThreeD;
 ///     guidanceScale: 7.5);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Wonder3D: Single Image to 3D using Cross-Domain Diffusion", "https://arxiv.org/abs/2310.15008", Year = 2024, Authors = "Long et al.")]
 public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
 {
     #region Constants

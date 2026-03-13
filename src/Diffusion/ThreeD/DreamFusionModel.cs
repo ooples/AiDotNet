@@ -1,11 +1,13 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -53,6 +55,12 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// - Supports mesh extraction via marching cubes
 /// </para>
 /// </remarks>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("DreamFusion: Text-to-3D using 2D Diffusion", "https://arxiv.org/abs/2209.14988", Year = 2022, Authors = "Poole et al.")]
 public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
 {
     #region Constants
