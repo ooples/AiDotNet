@@ -79,7 +79,8 @@ public class ModelCardTests
             Version = "2.0.0",
             Date = new DateTime(2024, 1, 15),
             Developers = "Test Team",
-                        TrainingData = "Test dataset with 10,000 samples"
+            ModelType = "Classification",
+            TrainingData = "Test dataset with 10,000 samples"
         };
 
         Assert.Equal("Test Model", card.ModelName);
