@@ -24,8 +24,8 @@ namespace AiDotNet.FederatedLearning.DriftDetection;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 public class StatisticalDriftDetector<T> : FederatedLearningComponentBase<T>, IFederatedDriftDetector<T>
 {

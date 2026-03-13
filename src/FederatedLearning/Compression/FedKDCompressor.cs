@@ -26,7 +26,7 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelTask(ModelTask.Compression)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelPaper("Communication-Efficient Federated Learning via Knowledge Distillation", "https://arxiv.org/abs/2108.13323", Year = 2022, Authors = "Wu et al.")]

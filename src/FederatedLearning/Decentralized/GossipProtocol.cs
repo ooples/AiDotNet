@@ -22,8 +22,8 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelPaper("Randomized Gossip Algorithms", "https://web.stanford.edu/~boyd/papers/pdf/gossip.pdf", Year = 2006, Authors = "Boyd et al.")]
 public class GossipProtocol : IDecentralizedTopology

@@ -24,7 +24,7 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 public class GroupFairnessConstraint<T> : FederatedLearningComponentBase<T>, IFairnessConstraint<T>

@@ -26,8 +26,8 @@ namespace AiDotNet.FederatedLearning.Graph;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelTask(ModelTask.Clustering)]
 [ModelComplexity(ModelComplexity.Medium)]
 public class FederatedGraphPartitioner<T> : FederatedLearningComponentBase<T>
 {

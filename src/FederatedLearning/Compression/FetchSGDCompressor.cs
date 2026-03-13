@@ -25,8 +25,8 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelPaper("FetchSGD: Communication-Efficient Federated Learning with Sketching", "https://arxiv.org/abs/2007.07682", Year = 2020, Authors = "Rothchild et al.")]
 public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>

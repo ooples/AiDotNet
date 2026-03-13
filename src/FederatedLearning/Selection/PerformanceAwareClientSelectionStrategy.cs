@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models;
 
 namespace AiDotNet.FederatedLearning.Selection;
@@ -8,6 +9,10 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <remarks>
 /// <para><b>For Beginners:</b> PerformanceAwareClientSelectionStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Ranking)]
+[ModelComplexity(ModelComplexity.Low)]
 public sealed class PerformanceAwareClientSelectionStrategy : ClientSelectionStrategyBase
 {
     private readonly double _explorationRate;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models;
 
 namespace AiDotNet.FederatedLearning.Selection;
@@ -8,6 +9,10 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <remarks>
 /// <para><b>For Beginners:</b> WeightedRandomClientSelectionStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Clustering)]
+[ModelComplexity(ModelComplexity.Low)]
 public sealed class WeightedRandomClientSelectionStrategy : ClientSelectionStrategyBase
 {
     public override List<int> SelectClients(ClientSelectionRequest request)

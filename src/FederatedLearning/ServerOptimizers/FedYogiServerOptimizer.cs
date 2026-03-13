@@ -1,13 +1,24 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.ServerOptimizers;
 
 /// <summary>
-/// FedYogi server optimizer.
+/// FedYogi server optimizer — adaptive learning rates with controlled second-moment growth.
 /// </summary>
 /// <remarks>
-/// <b>For Beginners:</b> Yogi is similar to Adam, but it can be more stable when updates are noisy or sparse.
+/// <para><b>For Beginners:</b> Yogi is similar to Adam but more stable with noisy or sparse updates.
+/// While Adam's second moment can grow unboundedly (causing vanishingly small learning rates),
+/// Yogi uses an additive update that only grows the second moment when the gradient magnitude
+/// exceeds the current estimate, preventing premature convergence.</para>
+///
+/// <para>Reference: Reddi, S., et al. (2021). "Adaptive Federated Optimization." ICLR 2021.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("Adaptive Federated Optimization", "https://arxiv.org/abs/2003.00295", Year = 2021, Authors = "Reddi et al.")]
 public sealed class FedYogiServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;

@@ -15,8 +15,8 @@ namespace AiDotNet.FederatedLearning.Cryptography;
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.High)]
 public sealed class SealHomomorphicEncryptionProvider<T> : HomomorphicEncryptionProviderBase<T>
 {

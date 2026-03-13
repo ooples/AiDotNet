@@ -28,8 +28,8 @@ namespace AiDotNet.FederatedLearning.DriftDetection;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
+[ModelCategory(ModelCategory.AnomalyDetection)]
+[ModelTask(ModelTask.AnomalyDetection)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 public class DriftAdaptiveAggregator<T> : FederatedLearningComponentBase<T>

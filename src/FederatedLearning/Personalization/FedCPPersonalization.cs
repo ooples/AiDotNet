@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Personalization;
 
 /// <summary>
@@ -21,6 +23,11 @@ namespace AiDotNet.FederatedLearning.Personalization;
 /// KDD 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("Federated Learning with Conditional Computation", "https://arxiv.org/abs/2305.11322", Year = 2023, Authors = "Zhang et al.")]
 public class FedCPPersonalization<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _numExperts;

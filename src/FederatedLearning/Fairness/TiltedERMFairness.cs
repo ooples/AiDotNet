@@ -24,7 +24,7 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Optimization)]
 [ModelTask(ModelTask.Classification)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]

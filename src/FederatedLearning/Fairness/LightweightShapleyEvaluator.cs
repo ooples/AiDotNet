@@ -22,8 +22,8 @@ namespace AiDotNet.FederatedLearning.Fairness;
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Ranking)]
 [ModelComplexity(ModelComplexity.Medium)]
 public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningComponentBase<T>, IClientContributionEvaluator<T>
 {

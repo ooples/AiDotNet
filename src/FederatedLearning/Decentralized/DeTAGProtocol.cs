@@ -23,8 +23,8 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
 {

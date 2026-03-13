@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Personalization;
 
 /// <summary>
@@ -23,6 +25,11 @@ namespace AiDotNet.FederatedLearning.Personalization;
 /// <para>Reference: FedPAC: Personalization via Aggregation and Calibration (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class FedPACPersonalization<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _similarityThreshold;

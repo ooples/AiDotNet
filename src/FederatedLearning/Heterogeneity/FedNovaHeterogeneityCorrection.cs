@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models;
 
 namespace AiDotNet.FederatedLearning.Heterogeneity;
@@ -10,6 +11,11 @@ namespace AiDotNet.FederatedLearning.Heterogeneity;
 /// normalizing their updates before aggregation.
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("Tackling the Objective Inconsistency Problem in Heterogeneous Federated Optimization", "https://arxiv.org/abs/2007.07481", Year = 2020, Authors = "Wang et al.")]
 public sealed class FedNovaHeterogeneityCorrection<T> : FederatedHeterogeneityCorrectionBase<T>
 {
     public override Vector<T> Correct(int clientId, int roundNumber, Vector<T> globalParameters, Vector<T> localParameters, int localEpochs)

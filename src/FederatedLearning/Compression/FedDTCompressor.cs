@@ -29,8 +29,8 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>
 {

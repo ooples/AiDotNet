@@ -20,8 +20,8 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 public class DecentralizedAggregator<T> : Infrastructure.FederatedLearningComponentBase<T>
 {

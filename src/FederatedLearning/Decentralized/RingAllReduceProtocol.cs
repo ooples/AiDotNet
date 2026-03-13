@@ -21,8 +21,8 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 public class RingAllReduceProtocol : IDecentralizedTopology
 {

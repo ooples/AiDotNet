@@ -23,8 +23,8 @@ namespace AiDotNet.FederatedLearning.Graph;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.GraphNetwork)]
+[ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 public class SubgraphExpander<T> : FederatedLearningComponentBase<T>
 {

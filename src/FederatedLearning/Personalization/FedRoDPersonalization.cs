@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.FederatedLearning.Personalization;
 
 /// <summary>
@@ -21,6 +23,11 @@ namespace AiDotNet.FederatedLearning.Personalization;
 /// Federated Learning for Image Classification." ICLR 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelPaper("On Bridging Generic and Personalized Federated Learning for Image Classification", "https://arxiv.org/abs/2107.00778", Year = 2023, Authors = "Chen and Chao")]
 public class FedRoDPersonalization<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _headFraction;

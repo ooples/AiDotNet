@@ -24,8 +24,8 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelPaper("Sparse Communication for Distributed Gradient Descent", "https://arxiv.org/abs/1704.05021", Year = 2017, Authors = "Aji and Heafield")]
 public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>

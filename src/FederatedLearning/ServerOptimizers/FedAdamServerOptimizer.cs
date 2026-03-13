@@ -1,13 +1,23 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.ServerOptimizers;
 
 /// <summary>
-/// FedAdam server optimizer.
+/// FedAdam server optimizer — adaptive learning rates with momentum and second-moment estimation.
 /// </summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> FedAdamServerOptimizer provides AI safety functionality. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Adam combines the benefits of Adagrad (adaptive learning rates)
+/// and momentum (smoothed gradient direction). FedAdam applies this at the server level,
+/// treating aggregated client updates as pseudo-gradients for server-side optimization.</para>
+///
+/// <para>Reference: Reddi, S., et al. (2021). "Adaptive Federated Optimization." ICLR 2021.</para>
 /// </remarks>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelPaper("Adaptive Federated Optimization", "https://arxiv.org/abs/2003.00295", Year = 2021, Authors = "Reddi et al.")]
 public sealed class FedAdamServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;

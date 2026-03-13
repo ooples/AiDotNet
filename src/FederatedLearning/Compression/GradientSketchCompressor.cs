@@ -28,8 +28,8 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
 [ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
+[ModelCategory(ModelCategory.Statistical)]
+[ModelTask(ModelTask.Compression)]
 [ModelComplexity(ModelComplexity.High)]
 public class GradientSketchCompressor<T> : FederatedLearningComponentBase<T>
 {
