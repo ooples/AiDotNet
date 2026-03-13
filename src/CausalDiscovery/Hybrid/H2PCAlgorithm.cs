@@ -260,9 +260,9 @@ public class H2PCAlgorithm<T> : HybridBase<T>
             var XtX = new double[p, p];
             var XtI = new double[p];
             var XtJ = new double[p];
+            var dx = new double[p];
             for (int k = 0; k < n; k++)
             {
-                var dx = new double[p];
                 for (int ci = 0; ci < p; ci++)
                     dx[ci] = NumOps.ToDouble(data[k, condSet[ci]]) - condMeans[ci];
                 double di = NumOps.ToDouble(data[k, i]) - meanI;
@@ -275,9 +275,14 @@ public class H2PCAlgorithm<T> : HybridBase<T>
                         XtX[a, b] += dx[a] * dx[b];
                 }
             }
+            // Scale-aware ridge: proportional to average diagonal magnitude
+            double avgDiag = 0;
+            for (int a = 0; a < p; a++)
+                avgDiag += Math.Abs(XtX[a, a]);
+            double ridge = Math.Max(1e-10, avgDiag / p * 1e-8);
             for (int a = 0; a < p; a++)
             {
-                XtX[a, a] += 1e-10;
+                XtX[a, a] += ridge;
                 for (int b = a + 1; b < p; b++)
                     XtX[b, a] = XtX[a, b];
             }

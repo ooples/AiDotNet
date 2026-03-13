@@ -86,8 +86,9 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
 
         if (d < 2)
             throw new ArgumentException($"CORL requires at least 2 variables, got {d}.");
-        if (n < d + 3)
-            throw new ArgumentException($"CORL requires at least {d + 3} samples for {d} variables, got {n}.");
+        int minSamples = Math.Max(_maxParents + 3, d + 1);
+        if (n < minSamples)
+            throw new ArgumentException($"CORL requires at least {minSamples} samples (max parents={_maxParents}, variables={d}), got {n}.");
 
         // Compute sample covariance using base class utility
         var S = ComputeCovarianceMatrix(data);
@@ -121,36 +122,41 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
                 bestOrdering = (int[])ordering.Clone();
             }
 
-            // Proper softmax REINFORCE gradient:
-            // For each position, grad_log_pi for sampled action a is (1 - p(a)) for the
-            // chosen variable, and -p(v) for all competing variables
+            // REINFORCE gradient matching the masked sampling in SampleOrdering:
+            // At each position, only available (not-yet-chosen) variables participate in softmax.
             T advantage = NumOps.FromDouble(reward - baselineReward);
             T lr = NumOps.FromDouble(_learningRate);
+            var availableSet = new HashSet<int>(Enumerable.Range(0, d));
             for (int pos = 0; pos < d; pos++)
             {
                 int chosenVar = ordering[pos];
-                // Compute softmax probabilities for this position
+                var available = availableSet.ToList();
+
+                // Compute softmax only over available variables (matching SampleOrdering)
                 double maxLogit = double.NegativeInfinity;
-                for (int v = 0; v < d; v++)
+                foreach (int v in available)
                     maxLogit = Math.Max(maxLogit, NumOps.ToDouble(scores[v, pos]));
                 double sumExp = 0;
-                var probs = new double[d];
-                for (int v = 0; v < d; v++)
+                var probs = new Dictionary<int, double>();
+                foreach (int v in available)
                 {
-                    probs[v] = Math.Exp(NumOps.ToDouble(scores[v, pos]) - maxLogit);
-                    sumExp += probs[v];
+                    double p = Math.Exp(NumOps.ToDouble(scores[v, pos]) - maxLogit);
+                    probs[v] = p;
+                    sumExp += p;
                 }
-                for (int v = 0; v < d; v++)
+                foreach (int v in available)
                     probs[v] /= sumExp;
 
                 // REINFORCE: update = lr * advantage * grad_log_pi
                 // grad_log_pi[chosen] = 1 - p(chosen), grad_log_pi[other] = -p(other)
-                for (int v = 0; v < d; v++)
+                foreach (int v in available)
                 {
                     double gradLogPi = (v == chosenVar) ? (1.0 - probs[v]) : (-probs[v]);
                     T update = NumOps.Multiply(lr, NumOps.Multiply(advantage, NumOps.FromDouble(gradLogPi)));
                     scores[v, pos] = NumOps.Add(scores[v, pos], update);
                 }
+
+                availableSet.Remove(chosenVar);
             }
         }
 

@@ -53,7 +53,12 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
         if (options.MaxIterations.HasValue) MaxEpochs = options.MaxIterations.Value;
         if (options.MaxEpochs.HasValue) MaxEpochs = options.MaxEpochs.Value;
         if (options.LearningRate.HasValue) LearningRate = options.LearningRate.Value;
-        if (options.HiddenUnits.HasValue) HiddenUnits = options.HiddenUnits.Value;
+        if (options.HiddenUnits.HasValue)
+        {
+            if (options.HiddenUnits.Value <= 0)
+                throw new ArgumentException("HiddenUnits must be greater than 0.");
+            HiddenUnits = options.HiddenUnits.Value;
+        }
         if (options.EdgeThreshold.HasValue) EdgeThreshold = options.EdgeThreshold.Value;
     }
 

@@ -35,7 +35,6 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelCategory(ModelCategory.CausalModel)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelTask(ModelTask.CausalInference)]
-[ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ModelPaper("DYNOTEARS: Structure Learning from Time-Series Data", "https://proceedings.mlr.press/v108/pamfil20a.html", Year = 2020, Authors = "Roxana Pamfil, Nisara Sriwattanaworachai, Shaan Desai, Philip Pilgerstorfer, Konstantinos Georgatzis, Paul Maygsidt, Jesse M. Sheridan")]

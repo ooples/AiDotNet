@@ -278,6 +278,7 @@ public class IAMBAlgorithm<T> : ConstraintBasedBase<T>
                     {
                         if (k == i || k == j) continue;
                         if (!adj[i, k] || oriented[i, k] || oriented[k, i]) continue;
+                        if (adj[j, k]) continue; // j must NOT be adjacent to k
 
                         bool found = false;
                         for (int l = 0; l < d; l++)

@@ -60,11 +60,11 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
         ApplyTimeSeriesOptions(options);
         _hiddenUnits = options?.HiddenUnits ?? 10;
         _learningRate = options?.LearningRate ?? 1e-3;
-        _maxEpochs = options?.MaxIterations ?? 100;
+        _maxEpochs = options?.MaxEpochs ?? options?.MaxIterations ?? 100;
         if (_learningRate <= 0)
             throw new ArgumentException("LearningRate must be positive.");
         if (_maxEpochs < 1)
-            throw new ArgumentException("MaxIterations must be at least 1.");
+            throw new ArgumentException("MaxEpochs must be at least 1.");
     }
 
     /// <inheritdoc/>

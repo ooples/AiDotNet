@@ -242,11 +242,12 @@ public class CDNODAlgorithm<T> : ConstraintBasedBase<T>
                     }
                     if (oriented[i, j]) continue;
 
-                    // Meek Rule 4: i — j, i — k, k → l → j ⇒ orient i → j
+                    // Meek Rule 4: i — j, i — k, k → l → j, j NOT adj k ⇒ orient i → j
                     for (int k = 0; k < d; k++)
                     {
                         if (k == i || k == j) continue;
                         if (!adj[i, k] || oriented[i, k] || oriented[k, i]) continue; // i — k undirected
+                        if (adj[j, k]) continue; // j must NOT be adjacent to k
 
                         bool found = false;
                         for (int l = 0; l < d; l++)

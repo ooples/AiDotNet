@@ -257,10 +257,10 @@ public class RSMAX2Algorithm<T> : HybridBase<T>
             int p = predictors.Count;
             var XtX = new double[p, p];
             var Xty = new double[p];
+            var dx = new double[p];
             for (int i = 0; i < n; i++)
             {
                 double dy = NumOps.ToDouble(data[i, target]) - means[0];
-                var dx = new double[p];
                 for (int j = 0; j < p; j++)
                     dx[j] = NumOps.ToDouble(data[i, predictors[j]]) - means[j + 1];
                 for (int a = 0; a < p; a++)

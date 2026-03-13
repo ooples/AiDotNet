@@ -242,17 +242,26 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
                         gALogits[i, j] = NumOps.Add(gALogits[i, j], NumOps.Multiply(dataFitGrad, aSigD));
                     }
 
-                // Gradient w.r.t. encoder weights
+                // Backprop dZ through causal layer: dEps = (I-A)^{-T} * dZ
+                var dEps = new T[d];
                 for (int j = 0; j < d; j++)
                 {
-                    T reconGrad2 = NumOps.Multiply(NumOps.Subtract(xhat[j], data[s, j]), invN);
+                    dEps[j] = NumOps.Zero;
+                    for (int m = 0; m < d; m++)
+                        dEps[j] = NumOps.Add(dEps[j], NumOps.Multiply(IminusAinv[m, j], dZ[m]));
+                }
+
+                // Gradient w.r.t. encoder weights through z = (I-A)^{-1} * eps
+                // dL/dWmu[k,j] = dL/dEps[j] * d(eps[j])/dWmu[k,j] = dEps[j] * hEnc[k]
+                for (int j = 0; j < d; j++)
+                {
                     for (int k = 0; k < h; k++)
                     {
+                        gWmu[k, j] = NumOps.Add(gWmu[k, j], NumOps.Multiply(dEps[j], hEnc[k]));
                         T sigD = NumOps.Multiply(hEnc[k], NumOps.Subtract(NumOps.One, hEnc[k]));
-                        T dHEnc = NumOps.Multiply(reconGrad2, NumOps.Multiply(Wmu[k, j], sigD));
+                        T dHEnc = NumOps.Multiply(dEps[j], NumOps.Multiply(Wmu[k, j], sigD));
                         for (int i = 0; i < d; i++)
                             gWenc[i, k] = NumOps.Add(gWenc[i, k], NumOps.Multiply(dHEnc, data[s, i]));
-                        gWmu[k, j] = NumOps.Add(gWmu[k, j], NumOps.Multiply(reconGrad2, hEnc[k]));
                     }
                 }
             }
@@ -337,33 +346,4 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
         return result;
     }
 
-    private Matrix<T> MatrixExponentialTaylor(Matrix<T> M, int d, int terms = 10)
-    {
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            result[i, i] = NumOps.One;
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            power[i, i] = NumOps.One;
-        for (int k = 1; k <= terms; k++)
-        {
-            var next = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int l = 0; l < d; l++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, l], M[l, j]));
-                    next[i, j] = sum;
-                }
-            power = next;
-            T factorial = NumOps.FromDouble(1.0);
-            for (int f = 2; f <= k; f++)
-                factorial = NumOps.Multiply(factorial, NumOps.FromDouble(f));
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    result[i, j] = NumOps.Add(result[i, j], NumOps.Divide(power[i, j], factorial));
-        }
-        return result;
-    }
 }

@@ -69,6 +69,12 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         _innerIterations = options?.InnerIterations ?? 20;
         _seed = options?.Seed;
         if (options?.MaxPenalty is { } maxPenalty) _rhoMax = maxPenalty;
+        if (_maxRank <= 0)
+            throw new ArgumentException("MaxRank must be greater than 0.");
+        if (_learningRateValue <= 0 || double.IsNaN(_learningRateValue) || double.IsInfinity(_learningRateValue))
+            throw new ArgumentException("LearningRate must be positive and finite.");
+        if (_innerIterations < 1)
+            throw new ArgumentException("InnerIterations must be at least 1.");
     }
 
     /// <inheritdoc/>

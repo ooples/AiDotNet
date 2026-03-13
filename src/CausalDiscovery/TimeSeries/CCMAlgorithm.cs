@@ -60,7 +60,7 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
     {
         ApplyTimeSeriesOptions(options);
         _convergenceThreshold = options?.EdgeThreshold ?? 0.05;
-        _correlationThreshold = options?.SignificanceLevel ?? 0.1;
+        _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
     }
 
     /// <inheritdoc/>

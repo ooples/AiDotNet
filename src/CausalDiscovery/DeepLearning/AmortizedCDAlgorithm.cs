@@ -199,7 +199,8 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
 
             // Update augmented Lagrangian with NOTEARS h(P) = tr(exp(P∘P)) - d
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValPrev));
-            if (NumOps.GreaterThan(hValPrev, NumOps.FromDouble(0.25)))
+            T rhoMax = NumOps.FromDouble(1e+16);
+            if (NumOps.GreaterThan(hValPrev, NumOps.FromDouble(0.25)) && !NumOps.GreaterThan(rho, rhoMax))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
@@ -241,45 +242,4 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
     private static double Sigmoid(double x) =>
         x > 20 ? 1.0 : x < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-x));
 
-    /// <summary>
-    /// Computes matrix exponential via Taylor series: exp(M) = I + M + M^2/2! + ... + M^k/k!
-    /// Used for NOTEARS acyclicity constraint h(W) = tr(exp(W∘W)) - d.
-    /// </summary>
-    private Matrix<T> MatrixExponentialTaylor(Matrix<T> M, int d, int terms = 10)
-    {
-        // result = I
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            result[i, i] = NumOps.One;
-
-        // power = I initially, accumulate M^k / k!
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            power[i, i] = NumOps.One;
-
-        for (int k = 1; k <= terms; k++)
-        {
-            // power = power * M
-            var next = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int l = 0; l < d; l++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, l], M[l, j]));
-                    next[i, j] = sum;
-                }
-            power = next;
-
-            // result += power / k!
-            T factorial = NumOps.FromDouble(1.0);
-            for (int f = 2; f <= k; f++)
-                factorial = NumOps.Multiply(factorial, NumOps.FromDouble(f));
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    result[i, j] = NumOps.Add(result[i, j], NumOps.Divide(power[i, j], factorial));
-        }
-
-        return result;
-    }
 }

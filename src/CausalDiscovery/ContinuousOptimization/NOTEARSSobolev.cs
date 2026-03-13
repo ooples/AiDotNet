@@ -99,8 +99,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         if (options?.HiddenUnits is { } hiddenUnits)
             _hiddenSize = hiddenUnits;
         _seed = options?.Seed;
-        // Sobolev weight is distinct from sparsity (Lambda1) — Lambda1 is set via ApplyOptions above.
-        _sobolevWeight = DEFAULT_SOBOLEV_WEIGHT;
+        _sobolevWeight = options?.SobolevWeight ?? DEFAULT_SOBOLEV_WEIGHT;
     }
 
     /// <inheritdoc/>

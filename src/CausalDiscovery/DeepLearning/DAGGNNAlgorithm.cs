@@ -138,7 +138,8 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
 
             // Update augmented Lagrangian
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            T rhoMax = NumOps.FromDouble(1e+16);
+            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)) && !NumOps.GreaterThan(rho, rhoMax))
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
@@ -169,33 +170,4 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
         return result;
     }
 
-    private Matrix<T> MatrixExponentialTaylor(Matrix<T> M, int d, int terms = 10)
-    {
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            result[i, i] = NumOps.One;
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            power[i, i] = NumOps.One;
-        for (int k = 1; k <= terms; k++)
-        {
-            var next = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int l = 0; l < d; l++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, l], M[l, j]));
-                    next[i, j] = sum;
-                }
-            power = next;
-            T factorial = NumOps.FromDouble(1.0);
-            for (int f = 2; f <= k; f++)
-                factorial = NumOps.Multiply(factorial, NumOps.FromDouble(f));
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    result[i, j] = NumOps.Add(result[i, j], NumOps.Divide(power[i, j], factorial));
-        }
-        return result;
-    }
 }

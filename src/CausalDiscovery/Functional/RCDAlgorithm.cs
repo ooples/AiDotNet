@@ -68,8 +68,8 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     public RCDAlgorithm(CausalDiscoveryOptions? options = null)
     {
         _threshold = options?.EdgeThreshold ?? 0.1;
-        // Dedicated independence cutoff for MI-based test (not reusing p-value option)
-        _independenceCutoff = options?.EdgeThreshold ?? 0.1;
+        // Dedicated independence cutoff for MI-based test (decoupled from EdgeThreshold)
+        _independenceCutoff = options?.SignificanceLevel ?? 0.05;
     }
 
     /// <inheritdoc/>
@@ -103,6 +103,8 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             int bestVar = -1;
             double bestScore = double.MaxValue;
 
+            // Cache pairwise MI scores within each round to avoid recomputation
+            var miCache = new Dictionary<(int, int), double>();
             foreach (int candidate in remaining)
             {
                 // Compute total mutual information of this variable's residuals with all others
@@ -110,7 +112,13 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
                 foreach (int other in remaining)
                 {
                     if (other == candidate) continue;
-                    totalMI += ComputeEntropyBasedMI(residualData, n, candidate, other);
+                    var key = (Math.Min(candidate, other), Math.Max(candidate, other));
+                    if (!miCache.TryGetValue(key, out double mi))
+                    {
+                        mi = ComputeEntropyBasedMI(residualData, n, candidate, other);
+                        miCache[key] = mi;
+                    }
+                    totalMI += mi;
                 }
 
                 // Normalize by number of comparisons

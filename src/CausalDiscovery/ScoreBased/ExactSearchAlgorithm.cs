@@ -137,7 +137,7 @@ public class ExactSearchAlgorithm<T> : ScoreBasedBase<T>
         // lastInOrder[S] = which variable was last in the optimal ordering for S
         var dp = new double[totalSubsets];
         var lastInOrder = new int[totalSubsets];
-        Array.Fill(dp, double.NegativeInfinity);
+        ArrayPolyfill.Fill(dp, double.NegativeInfinity);
         dp[0] = 0;
 
         for (int s = 1; s < totalSubsets; s++)

@@ -68,6 +68,12 @@ public class CCDrAlgorithm<T> : FunctionalBase<T>
         _gamma = options?.ConcavityParameter ?? 2.0;
         _threshold = options?.EdgeThreshold ?? 0.1;
         _maxIterations = options?.MaxIterations ?? 100;
+        if (_gamma <= 1.0)
+            throw new ArgumentException("ConcavityParameter (MCP gamma) must be > 1.0.");
+        if (_lambda < 0)
+            throw new ArgumentException("SparsityPenalty must be non-negative.");
+        if (_maxIterations < 1)
+            throw new ArgumentException("MaxIterations must be at least 1.");
     }
 
     /// <inheritdoc/>

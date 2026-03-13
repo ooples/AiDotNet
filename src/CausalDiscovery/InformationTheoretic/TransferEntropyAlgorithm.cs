@@ -63,7 +63,7 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         _maxLag = options?.MaxLag ?? 2;
         _threshold = options?.EdgeThreshold ?? 0.05;
         if (_maxLag < 1)
-            throw new ArgumentException("MaxIterations (lag) must be at least 1.");
+            throw new ArgumentException("MaxLag must be at least 1.");
         if (double.IsNaN(_threshold) || double.IsInfinity(_threshold) || _threshold < 0)
             throw new ArgumentException("EdgeThreshold must be non-negative and finite.");
     }

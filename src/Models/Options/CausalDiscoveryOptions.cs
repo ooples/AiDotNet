@@ -195,6 +195,15 @@ public class CausalDiscoveryOptions
     public double? ConcavityParameter { get; set; }
 
     /// <summary>
+    /// Sobolev regularization weight for NOTEARS Sobolev. Default: null (0.1).
+    /// </summary>
+    /// <remarks>
+    /// <para>Controls the strength of the Sobolev smoothness penalty, which encourages
+    /// smoothly varying causal functions. Distinct from <see cref="SparsityPenalty"/> (L1).</para>
+    /// </remarks>
+    public double? SobolevWeight { get; set; }
+
+    /// <summary>
     /// Maximum number of training epochs for deep learning-based methods. Default: null (algorithm-specific).
     /// </summary>
     /// <remarks>

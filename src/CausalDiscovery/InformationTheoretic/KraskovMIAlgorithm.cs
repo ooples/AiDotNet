@@ -46,6 +46,8 @@ namespace AiDotNet.CausalDiscovery.InformationTheoretic;
 [ModelPaper("Estimating Mutual Information", "https://doi.org/10.1103/PhysRevE.69.066138", Year = 2004, Authors = "Alexander Kraskov, Harald Stoegbauer, Peter Grassberger")]
 public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
 {
+    private const double CoincidenceTolerance = 1e-15;
+
     /// <inheritdoc/>
     public override string Name => "KraskovMI";
 
@@ -133,7 +135,7 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
             // Handle zero-distance ties: when duplicate samples collapse epsilon to 0,
             // strict < epsilon would leave nx/ny at 0, producing spurious MI.
             // Use <= for ties and ensure at least k neighbors are counted.
-            if (epsilon < 1e-15)
+            if (epsilon < CoincidenceTolerance)
             {
                 // Degenerate case: k-th neighbor is at distance ~0
                 // Count exact duplicates in each marginal
@@ -141,8 +143,8 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
                 for (int j = 0; j < n; j++)
                 {
                     if (j == i) continue;
-                    if (Math.Abs(x[j] - x[i]) < 1e-15) nx0++;
-                    if (Math.Abs(y[j] - y[i]) < 1e-15) ny0++;
+                    if (Math.Abs(x[j] - x[i]) < CoincidenceTolerance) nx0++;
+                    if (Math.Abs(y[j] - y[i]) < CoincidenceTolerance) ny0++;
                 }
                 sumPsiNx += Digamma(Math.Max(nx0, 1) + 1);
                 sumPsiNy += Digamma(Math.Max(ny0, 1) + 1);

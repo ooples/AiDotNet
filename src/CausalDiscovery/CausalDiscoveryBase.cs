@@ -33,7 +33,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// Gets the global execution engine for accelerated vector/matrix operations.
     /// Subclasses should prefer using specific helper methods (e.g., DotProduct) when available.
     /// </summary>
-    private protected IEngine Engine => AiDotNetEngine.Current;
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <inheritdoc/>
     public abstract string Name { get; }
@@ -575,6 +575,42 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
         }
 
         return Engine.MatrixVectorMultiply(m, v);
+    }
+
+    /// <summary>
+    /// Computes the matrix exponential via Taylor series: exp(M) = sum_{k=0}^{terms} M^k / k!
+    /// </summary>
+    /// <param name="M">The input square matrix.</param>
+    /// <param name="d">Dimension of the matrix.</param>
+    /// <param name="terms">Number of Taylor series terms (default 10).</param>
+    /// <returns>The matrix exponential approximation.</returns>
+    protected Matrix<T> MatrixExponentialTaylor(Matrix<T> M, int d, int terms = 10)
+    {
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            result[i, i] = NumOps.One;
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            power[i, i] = NumOps.One;
+        T runningFactorial = NumOps.One;
+        for (int k = 1; k <= terms; k++)
+        {
+            var next = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int l = 0; l < d; l++)
+                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, l], M[l, j]));
+                    next[i, j] = sum;
+                }
+            power = next;
+            runningFactorial = NumOps.Multiply(runningFactorial, NumOps.FromDouble(k));
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    result[i, j] = NumOps.Add(result[i, j], NumOps.Divide(power[i, j], runningFactorial));
+        }
+        return result;
     }
 
     /// <summary>
