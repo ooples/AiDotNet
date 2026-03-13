@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -22,6 +23,11 @@ namespace AiDotNet.FederatedLearning.Graph;
 /// (FeatureAverage, GeneratorBased, ZeroFill) is controlled by <see cref="FederatedGraphOptions"/>.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class SubgraphFederatedTrainer<T> : FederatedLearningComponentBase<T>, IFederatedGraphTrainer<T>
 {
     private readonly FederatedGraphOptions _options;

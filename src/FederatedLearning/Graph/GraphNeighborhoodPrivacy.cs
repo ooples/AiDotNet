@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
 
@@ -25,6 +26,10 @@ namespace AiDotNet.FederatedLearning.Graph;
 /// Lower epsilon = stronger privacy but more noise.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[ModelDomain(ModelDomain.General)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.FeatureExtraction)]
+[ModelComplexity(ModelComplexity.High)]
 public class GraphNeighborhoodPrivacy<T> : FederatedLearningComponentBase<T>
 {
     private readonly double _epsilon;
