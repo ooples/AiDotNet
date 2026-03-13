@@ -16,7 +16,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ModelPaper("Reinforcement Learning: An Introduction",
-        "http://incompleteideas.net/book/the-book-2nd.html",
+        "https://incompleteideas.net/book/the-book-2nd.html",
         Year = 2018,
         Authors = "Sutton, R. S. & Barto, A. G.")]
     public class NoExploration<T> : ExplorationStrategyBase<T>

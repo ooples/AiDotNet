@@ -26,7 +26,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ModelPaper("Reinforcement Learning: An Introduction",
-        "http://incompleteideas.net/book/the-book-2nd.html",
+        "https://incompleteideas.net/book/the-book-2nd.html",
         Year = 2018,
         Authors = "Sutton, R. S. & Barto, A. G.")]
     public class MixedPolicy<T> : PolicyBase<T>

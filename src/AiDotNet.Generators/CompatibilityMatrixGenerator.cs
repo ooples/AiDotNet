@@ -31,7 +31,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         title: "Suspicious model-optimizer combination",
         messageFormat: "Model '{0}' uses category '{1}' which may not work well with SGD optimizer. Consider Adam or RMSProp.",
         category: "AiDotNet.Compatibility",
-        defaultSeverity: DiagnosticSeverity.Info,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     public void Initialize(IncrementalGeneratorInitializationContext context)

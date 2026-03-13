@@ -24,7 +24,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ModelPaper("Deterministic Policy Gradient Algorithms",
-        "http://proceedings.mlr.press/v32/silver14.pdf",
+        "https://proceedings.mlr.press/v32/silver14.pdf",
         Year = 2014,
         Authors = "Silver, D., Lever, G., Heess, N., Degris, T., Wierstra, D., & Riedmiller, M.")]
     public class DeterministicPolicy<T> : PolicyBase<T>
