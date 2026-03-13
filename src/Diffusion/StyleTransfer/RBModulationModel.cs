@@ -35,6 +35,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.StyleTransfer)]
+[ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("RB-Modulation: Training-Free Personalization of Diffusion Models using Stochastic Optimal Control", "https://arxiv.org/abs/2405.17401", Year = 2024, Authors = "Rout et al.")]

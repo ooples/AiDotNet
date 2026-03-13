@@ -31,8 +31,10 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.StyleTransfer)]
+[ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("K-LoRA: Unlocking Training-Free Fusion of Any Subject and Style LoRAs", "https://arxiv.org/abs/2502.18461", Year = 2025, Authors = "Ouyang et al.")]
 public class KLoRAStyleModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

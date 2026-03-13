@@ -31,8 +31,10 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.StyleTransfer)]
+[ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("StyleStudio: Text-Driven Style Transfer with Selective Control of Style Elements", "https://arxiv.org/abs/2412.08503", Year = 2024, Authors = "Jiang et al.")]
 public class StyleStudioModel<T> : LatentDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 4;

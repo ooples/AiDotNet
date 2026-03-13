@@ -31,6 +31,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.StyleTransfer)]
+[ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SASTDModel<T> : LatentDiffusionModelBase<T>

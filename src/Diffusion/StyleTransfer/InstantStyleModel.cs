@@ -34,6 +34,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.StyleTransfer)]
+[ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("InstantStyle: Free Lunch towards Style-Preserving in Text-to-Image Generation", "https://arxiv.org/abs/2407.00788", Year = 2024, Authors = "Wang et al.")]
