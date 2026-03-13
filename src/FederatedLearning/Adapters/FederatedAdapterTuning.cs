@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Adapters;
 
@@ -22,10 +21,6 @@ namespace AiDotNet.FederatedLearning.Adapters;
 /// Bottleneck Adapters." NeurIPS Workshop 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
 public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedAdapterStrategy<T>
 {
     private readonly int _modelDim;

@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Cryptography;
 
 namespace AiDotNet.FederatedLearning.MPC;
@@ -23,10 +22,6 @@ namespace AiDotNet.FederatedLearning.MPC;
 /// <para><b>Performance:</b> Each base OT requires public-key operations. Use
 /// <see cref="ExtendedObliviousTransfer"/> to amortize this cost for many transfers.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Compression)]
-[ModelComplexity(ModelComplexity.High)]
 public class BaseObliviousTransfer : IObliviousTransfer
 {
     private int _baseTransferCount;

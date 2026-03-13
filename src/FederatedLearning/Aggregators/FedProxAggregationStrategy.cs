@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -56,11 +55,6 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// MLSys 2020.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Federated Optimization in Heterogeneous Networks", "https://arxiv.org/abs/1812.06127", Year = 2020, Authors = "Li et al.")]
 public class FedProxAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _mu;

@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -10,10 +9,6 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <remarks>
 /// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Clustering)]
-[ModelComplexity(ModelComplexity.Low)]
 public abstract class ClientSelectionStrategyBase : IClientSelectionStrategy
 {
     public abstract List<int> SelectClients(ClientSelectionRequest request);

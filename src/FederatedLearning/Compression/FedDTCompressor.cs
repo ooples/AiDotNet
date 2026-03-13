@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Compression;
 
@@ -28,10 +27,6 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// <para>Reference: FedDT: Decision-Tree Compression for Heterogeneous Federated Learning (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.DecisionTree)]
-[ModelTask(ModelTask.Compression)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _maxTreeDepth;

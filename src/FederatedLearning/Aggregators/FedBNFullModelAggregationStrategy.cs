@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -13,10 +12,6 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// while aggregating all other parameters using weighted averaging.
 /// <para><b>For Beginners:</b> FedBNFullModelAggregationStrategy provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
     AggregationStrategyBase<IFullModel<T, TInput, TOutput>, T>
 {

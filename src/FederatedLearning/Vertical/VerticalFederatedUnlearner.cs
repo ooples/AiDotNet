@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -36,10 +35,6 @@ namespace AiDotNet.FederatedLearning.Vertical;
 /// </list>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.High)]
 public class VerticalFederatedUnlearner<T> : FederatedLearningComponentBase<T>
 {
     private readonly VflUnlearningOptions _options;

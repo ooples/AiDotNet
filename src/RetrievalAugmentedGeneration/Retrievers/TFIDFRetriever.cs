@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -25,10 +24,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     /// when documents are added or removed.
     /// </para>
     /// </remarks>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Low)]
     public class TFIDFRetriever<T> : RetrieverBase<T>
     {
         private readonly IDocumentStore<T> _documentStore;

@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -24,11 +23,6 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// via Trust Bootstrapping." NDSS 2021.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("FLTrust: Byzantine-robust Federated Learning via Trust Bootstrapping", "https://arxiv.org/abs/2012.13995", Year = 2021, Authors = "Cao et al.")]
 public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private Dictionary<string, T[]>? _serverGradient;

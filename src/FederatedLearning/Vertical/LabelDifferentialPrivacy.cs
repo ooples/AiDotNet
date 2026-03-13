@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -25,11 +24,6 @@ namespace AiDotNet.FederatedLearning.Vertical;
 /// <para><b>Reference:</b> Abadi et al., "Deep Learning with Differential Privacy", ACM CCS 2016.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Deep Learning with Differential Privacy", "https://dl.acm.org/doi/10.1145/2976749.2978318", Year = 2016, Authors = "Abadi et al.")]
 public class LabelDifferentialPrivacy<T> : FederatedLearningComponentBase<T>, ILabelProtector<T>
 {
     private readonly double _epsilon;

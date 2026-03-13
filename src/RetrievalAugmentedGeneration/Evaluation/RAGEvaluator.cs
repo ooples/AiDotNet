@@ -1,5 +1,4 @@
 
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -35,10 +34,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// - Make data-driven optimization decisions
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class RAGEvaluator<T>
 {
     private readonly IReadOnlyList<IRAGMetric<T>> _metrics;

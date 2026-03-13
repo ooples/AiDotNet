@@ -1,5 +1,4 @@
 
-using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -65,10 +64,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 /// - Fact lookups: "Paris population" (one correct answer)
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
 {
     private readonly double _lambda;

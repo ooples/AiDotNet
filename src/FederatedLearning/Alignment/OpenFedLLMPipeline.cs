@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Alignment;
 
@@ -38,13 +37,6 @@ public enum FedLLMStage
 /// Decentralized Private Data via Federated Learning." arXiv:2402.06954.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Generation)]
-[ModelTask(ModelTask.Classification)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("OpenFedLLM: Training Large Language Models on Decentralized Private Data via Federated Learning", "https://arxiv.org/abs/2402.06954", Year = 2024, Authors = "Ye et al.")]
 public class OpenFedLLMPipeline<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly OpenFedLLMOptions _options;

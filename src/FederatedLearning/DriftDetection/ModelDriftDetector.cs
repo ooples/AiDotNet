@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -25,10 +24,6 @@ namespace AiDotNet.FederatedLearning.DriftDetection;
 /// </list>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.AnomalyDetection)]
-[ModelTask(ModelTask.AnomalyDetection)]
-[ModelComplexity(ModelComplexity.High)]
 public class ModelDriftDetector<T> : FederatedLearningComponentBase<T>, IFederatedDriftDetector<T>
 {
     private readonly FederatedDriftOptions _options;

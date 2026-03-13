@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -83,11 +82,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// - Limited to max iterations (prevents infinite loops)
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection", "https://arxiv.org/abs/2310.11511", Year = 2023, Authors = "Asai et al.")]
 public class SelfCorrectingRetriever<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

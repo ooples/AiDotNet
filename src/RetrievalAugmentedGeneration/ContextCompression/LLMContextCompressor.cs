@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -11,10 +10,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ContextCompression
     /// LLM-based context compression to reduce token usage while preserving key information.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Medium)]
     public class LLMContextCompressor<T> : ContextCompressorBase<T>
     {
         private readonly string _llmEndpoint;

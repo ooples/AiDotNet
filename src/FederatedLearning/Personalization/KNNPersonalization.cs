@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Personalization;
 
@@ -23,11 +22,6 @@ namespace AiDotNet.FederatedLearning.Personalization;
 /// Personalization for Federated Learning." ICML 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.InstanceBased)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("kNN-Per: Nearest Neighbor-Based Personalization for Federated Learning", "https://arxiv.org/abs/2305.18457", Year = 2023, Authors = "Marfoq et al.")]
 public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _k;

@@ -6,7 +6,6 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 
@@ -53,10 +52,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// - Distributed systems (use Neo4j or similar instead)
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class FileGraphStore<T> : IGraphStore<T>, IDisposable
 {
     private readonly string _storageDirectory;

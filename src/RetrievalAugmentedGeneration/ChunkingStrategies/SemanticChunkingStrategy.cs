@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
@@ -9,10 +8,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
     /// <summary>
     /// Semantic-based text chunking that uses embeddings to group related content.
     /// </summary>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Medium)]
     public class SemanticChunkingStrategy : ChunkingStrategyBase
     {
         /// <summary>

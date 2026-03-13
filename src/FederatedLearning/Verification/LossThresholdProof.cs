@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Verification;
@@ -22,10 +21,6 @@ namespace AiDotNet.FederatedLearning.Verification;
 /// <para><b>Reference:</b> ZKP-FedEval (2025) — privacy-preserving FL evaluation using ZKPs.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.AnomalyDetection)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class LossThresholdProof<T> : FederatedLearningComponentBase<T>, IVerifiableComputation
 {
     private readonly IZkProofSystem _proofSystem;

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
@@ -65,11 +64,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 /// </code>
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Tree of Thoughts: Deliberate Problem Solving with Large Language Models", "https://arxiv.org/abs/2305.10601", Year = 2023, Authors = "Yao et al.")]
 public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
 {
     private readonly IGenerator<T> _generator;

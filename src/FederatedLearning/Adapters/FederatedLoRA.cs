@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Adapters;
 
@@ -29,11 +28,6 @@ namespace AiDotNet.FederatedLearning.Adapters;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("LoRA: Low-Rank Adaptation of Large Language Models", "https://arxiv.org/abs/2106.09685", Year = 2021, Authors = "Hu et al.")]
 public class FederatedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedAdapterStrategy<T>
 {
     private readonly int _rank;

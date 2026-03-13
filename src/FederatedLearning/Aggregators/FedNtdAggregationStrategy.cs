@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -23,11 +22,6 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// by Not-True Distillation in Federated Learning." NeurIPS 2022.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Preservation of the Global Knowledge by Not-True Distillation in Federated Learning", "https://arxiv.org/abs/2106.03097", Year = 2022, Authors = "Lee et al.")]
 internal class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _distillationWeight;

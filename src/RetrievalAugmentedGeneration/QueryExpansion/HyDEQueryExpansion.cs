@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
@@ -9,11 +8,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
     /// <summary>
     /// Hypothetical Document Embeddings (HyDE) query expansion strategy.
     /// </summary>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.High)]
-    [ModelPaper("Precise Zero-Shot Dense Retrieval without Relevance Labels", "https://arxiv.org/abs/2212.10496", Year = 2022, Authors = "Gao et al.")]
     public class HyDEQueryExpansion : QueryExpansionBase
     {
         /// <summary>

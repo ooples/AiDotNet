@@ -1,6 +1,5 @@
 using System.Linq;
 using System.Text.RegularExpressions;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
@@ -28,10 +27,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// This makes your searches clearer and gets better results!
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class QueryRewritingProcessor<T> : QueryProcessorBase
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

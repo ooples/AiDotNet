@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -36,10 +35,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Medium)]
     public class PineconeDocumentStore<T> : DocumentStoreBase<T>
     {
         private readonly Dictionary<string, VectorDocument<T>> _documents;

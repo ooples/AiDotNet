@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -20,11 +19,6 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// via Logits Calibration." ICML 2022.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Federated Learning with Label Distribution Skew via Logits Calibration", "https://arxiv.org/abs/2209.00189", Year = 2022, Authors = "Zhang et al.")]
 public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _calibrationTemperature;

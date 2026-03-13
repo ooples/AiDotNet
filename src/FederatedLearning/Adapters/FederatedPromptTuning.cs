@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Adapters;
 
@@ -25,11 +24,6 @@ namespace AiDotNet.FederatedLearning.Adapters;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("The Power of Scale for Parameter-Efficient Prompt Tuning", "https://arxiv.org/abs/2104.08691", Year = 2021, Authors = "Lester et al.")]
 public class FederatedPromptTuning<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedAdapterStrategy<T>
 {
     private readonly int _numPromptTokens;

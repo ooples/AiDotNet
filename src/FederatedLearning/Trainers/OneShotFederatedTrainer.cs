@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -25,11 +24,6 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// arXiv:1902.11175. Practical variants: Li et al. (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("One-Shot Federated Learning", "https://arxiv.org/abs/1902.11175", Year = 2019, Authors = "Guha et al.")]
 internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _localEpochs;

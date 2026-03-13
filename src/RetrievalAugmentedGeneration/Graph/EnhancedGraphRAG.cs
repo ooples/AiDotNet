@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 
@@ -38,10 +37,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// 4. Repeat refinement for N iterations
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
 public class EnhancedGraphRAG<T>
 {
     // Context items per topK result: each entity generates ~3 lines (entity + outgoing + incoming edges)

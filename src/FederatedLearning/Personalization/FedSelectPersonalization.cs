@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Personalization;
 
@@ -22,11 +21,6 @@ namespace AiDotNet.FederatedLearning.Personalization;
 /// <para>Reference: FedSelect: Personalizing FL with Learned Parameter Selection (2023).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
 public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _maskThreshold;

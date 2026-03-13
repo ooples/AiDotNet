@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Privacy.Accounting;
 
@@ -11,10 +10,6 @@ namespace AiDotNet.FederatedLearning.Privacy.Accounting;
 /// - delta_total = sum(delta_round)
 /// This is simple but can be pessimistic compared to tighter accountants.
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.Low)]
 public sealed class BasicCompositionPrivacyAccountant : PrivacyAccountantBase
 {
     private double _epsilonTotal;

@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Adapters;
 
@@ -25,11 +24,6 @@ namespace AiDotNet.FederatedLearning.Adapters;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("FlexLoRA: Stacking-based Heterogeneous LoRA Aggregation", "https://arxiv.org/abs/2407.11815", Year = 2024, Authors = "Bai et al.")]
 public class HeterogeneousLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedAdapterStrategy<T>
 {
     private readonly int _targetRank;

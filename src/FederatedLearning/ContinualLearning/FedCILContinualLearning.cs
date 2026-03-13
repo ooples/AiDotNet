@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.ContinualLearning;
 
@@ -26,11 +25,6 @@ namespace AiDotNet.FederatedLearning.ContinualLearning;
 /// Learning." CVPR 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Better Generative Replay for Continual Federated Learning", "https://arxiv.org/abs/2302.13001", Year = 2023, Authors = "Qi et al.")]
 public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedContinualLearningStrategy<T>
 {
     private readonly double _prototypeDecay;

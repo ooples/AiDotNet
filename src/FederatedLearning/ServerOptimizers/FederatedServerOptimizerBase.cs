@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Interfaces;
 
@@ -10,10 +9,6 @@ namespace AiDotNet.FederatedLearning.ServerOptimizers;
 /// <remarks>
 /// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.Low)]
 public abstract class FederatedServerOptimizerBase<T> : FederatedLearningComponentBase<T>, IFederatedServerOptimizer<T>
 {
     public abstract Vector<T> Step(Vector<T> currentGlobalParameters, Vector<T> aggregatedTargetParameters);

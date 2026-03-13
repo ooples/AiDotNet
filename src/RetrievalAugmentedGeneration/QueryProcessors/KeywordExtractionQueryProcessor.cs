@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
@@ -27,10 +26,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// This focuses your search on what really matters!
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Low)]
 public class KeywordExtractionQueryProcessor : QueryProcessorBase
 {
     /// <summary>

@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.Models;
 
 namespace AiDotNet.FederatedLearning.Heterogeneity;
@@ -11,11 +10,6 @@ namespace AiDotNet.FederatedLearning.Heterogeneity;
 /// accumulates how the client tends to move away from the global model.
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("FedDyn: Regularized and Data-Driven Federated Learning", "https://arxiv.org/abs/2111.04263", Year = 2021, Authors = "Acar et al.")]
 public sealed class FedDynHeterogeneityCorrection<T> : FederatedHeterogeneityCorrectionBase<T>
 {
     private readonly double _alpha;

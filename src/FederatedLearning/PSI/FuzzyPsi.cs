@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.FederatedLearning.PSI;
@@ -16,10 +15,6 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// approximate matching to find candidate pairs, then runs the underlying PSI protocol
 /// on the matched identifiers.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Clustering)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class FuzzyPsi : PsiBase
 {
     private readonly IPrivateSetIntersection _innerProtocol;

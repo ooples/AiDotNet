@@ -1,15 +1,10 @@
 using System.Collections.Generic;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion
 {
     /// <summary>
     /// Base class for query expansion strategies.
     /// </summary>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Low)]
     public abstract class QueryExpansionBase
     {
         /// <summary>

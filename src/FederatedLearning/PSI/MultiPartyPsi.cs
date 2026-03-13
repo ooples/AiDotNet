@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.FederatedLearning.PSI;
@@ -29,11 +28,6 @@ namespace AiDotNet.FederatedLearning.PSI;
 /// <para><b>Reference:</b> Kolesnikov et al., "Efficient Batched Oblivious PRF with Applications
 /// to Private Set Intersection", ACM CCS 2016. Li et al., "Lightweight MP-PSI", 2025.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Clustering)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Efficient Batched Oblivious PRF with Applications to Private Set Intersection", "https://dl.acm.org/doi/10.1145/2976749.2978381", Year = 2016, Authors = "Kolesnikov et al.")]
 public class MultiPartyPsi : PsiBase
 {
     private readonly IPrivateSetIntersection _twoPartyProtocol;

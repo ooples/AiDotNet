@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -36,11 +35,6 @@ namespace AiDotNet.FederatedLearning.MPC;
 /// </list>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Compression)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.High)]
 public class HybridMpcProtocol<T> : FederatedLearningComponentBase<T>, ISecureComputationProtocol<T>
 {
     private readonly ArithmeticSecretSharing<T> _arithmeticSS;

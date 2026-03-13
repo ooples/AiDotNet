@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -13,10 +12,6 @@ using AiDotNet.Interfaces;
 /// <remarks>
 /// <para><b>For Beginners:</b> for provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Low)]
 public abstract class AggregationStrategyBase<TModel, T> : FederatedLearningComponentBase<T>, IAggregationStrategy<TModel>
 {
     public abstract TModel Aggregate(Dictionary<int, TModel> clientModels, Dictionary<int, double> clientWeights);

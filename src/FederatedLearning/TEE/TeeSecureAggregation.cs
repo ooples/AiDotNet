@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -31,10 +30,6 @@ namespace AiDotNet.FederatedLearning.TEE;
 /// aggregated result leaves the enclave.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.High)]
 public class TeeSecureAggregation<T> : FederatedLearningComponentBase<T>, ITeeSecureAggregator<T>
 {
     private readonly ITeeProvider<T> _provider;

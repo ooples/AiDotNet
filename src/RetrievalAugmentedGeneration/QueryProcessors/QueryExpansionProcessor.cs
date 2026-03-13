@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
@@ -20,10 +19,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// This helps you find documents even when they use different words for the same concept!
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Low)]
 public class QueryExpansionProcessor : QueryProcessorBase
 {
     private readonly Dictionary<string, string[]> _synonyms;

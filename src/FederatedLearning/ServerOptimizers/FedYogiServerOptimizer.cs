@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.FederatedLearning.ServerOptimizers;
@@ -14,11 +13,6 @@ namespace AiDotNet.FederatedLearning.ServerOptimizers;
 ///
 /// <para>Reference: Reddi, S., et al. (2021). "Adaptive Federated Optimization." ICLR 2021.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Adaptive Federated Optimization", "https://arxiv.org/abs/2003.00295", Year = 2021, Authors = "Reddi et al.")]
 public sealed class FedYogiServerOptimizer<T> : FederatedServerOptimizerBase<T>
 {
     private readonly double _learningRate;

@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Security.Cryptography;
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
 
@@ -28,11 +27,6 @@ namespace AiDotNet.FederatedLearning.Verification;
 /// <para><b>Reference:</b> Pedersen (CRYPTO 1991). Used in RiseFL (VLDB 2024) for scalable FL verification.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Compression)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Non-Interactive and Information-Theoretic Secure Verifiable Secret Sharing", "https://link.springer.com/chapter/10.1007/3-540-46766-1_9", Year = 1991, Authors = "Pedersen")]
 public class PedersenCommitment<T> : FederatedLearningComponentBase<T>, IGradientCommitment<T>, IZkProofSystem
 {
     private readonly BigInteger _p; // Prime modulus

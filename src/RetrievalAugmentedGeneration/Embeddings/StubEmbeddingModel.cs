@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
@@ -35,10 +34,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Low)]
 public class StubEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly int _embeddingDimension;

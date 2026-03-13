@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.Models.Options;
 
@@ -19,10 +18,6 @@ namespace AiDotNet.FederatedLearning.TEE;
 /// against a compromised host. Use <see cref="TeeOptions.SimulationMode"/> = false in production.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Compression)]
-[ModelComplexity(ModelComplexity.Low)]
 public class SimulatedTeeProvider<T> : TeeProviderBase<T>
 {
     private string _simulatedMeasurement = string.Empty;

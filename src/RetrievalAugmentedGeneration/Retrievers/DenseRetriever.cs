@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -13,10 +12,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     /// Dense retrieval using vector similarity search.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.Transformer)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Medium)]
     public class DenseRetriever<T> : RetrieverBase<T>
     {
         private readonly IDocumentStore<T> _documentStore;

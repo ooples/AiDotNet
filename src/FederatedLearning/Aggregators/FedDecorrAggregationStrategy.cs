@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -29,11 +28,6 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// in Heterogeneous Federated Learning." ICML 2023.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Towards Understanding and Mitigating Dimensional Collapse in Heterogeneous Federated Learning", "https://arxiv.org/abs/2210.00226", Year = 2023, Authors = "Shi et al.")]
 internal class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _decorrelationWeight;

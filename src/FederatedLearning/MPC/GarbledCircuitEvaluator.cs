@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Cryptography;
 
 namespace AiDotNet.FederatedLearning.MPC;
@@ -24,10 +23,6 @@ namespace AiDotNet.FederatedLearning.MPC;
 /// inputs because each wire label is a random cryptographic value that reveals nothing about
 /// the underlying bit.</para>
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Compression)]
-[ModelComplexity(ModelComplexity.High)]
 public class GarbledCircuitEvaluator : IGarbledCircuit
 {
     private readonly bool _enableFreeXor;

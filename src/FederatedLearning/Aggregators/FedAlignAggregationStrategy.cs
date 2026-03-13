@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -28,11 +27,6 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// in Federated Learning." CVPR 2022.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelPaper("Local Learning Matters: Rethinking Data Heterogeneity in Federated Learning", "https://arxiv.org/abs/2111.14213", Year = 2022, Authors = "Mendieta et al.")]
 public class FedAlignAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _alignmentWeight;

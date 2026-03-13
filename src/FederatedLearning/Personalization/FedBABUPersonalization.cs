@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Personalization;
 
@@ -24,12 +23,6 @@ namespace AiDotNet.FederatedLearning.Personalization;
 /// Federated Image Classification." ICLR 2022.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.Classification)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("FedBABU: Toward Enhanced Representation for Federated Image Classification", "https://arxiv.org/abs/2106.06042", Year = 2022, Authors = "Oh et al.")]
 public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly double _headFraction;

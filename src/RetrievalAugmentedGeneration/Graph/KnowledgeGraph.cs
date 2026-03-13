@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 
@@ -41,10 +40,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// - Neo4jGraphStore: Professional graph database (future)
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class KnowledgeGraph<T>
 {
     private readonly IGraphStore<T> _store;

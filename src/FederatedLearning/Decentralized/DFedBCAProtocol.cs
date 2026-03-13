@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Decentralized;
 
@@ -25,10 +24,6 @@ namespace AiDotNet.FederatedLearning.Decentralized;
 /// <para>Reference: DFedBCA: Block Coordinate Ascent for Decentralized Federated Learning (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelTask(ModelTask.Compression)]
-[ModelComplexity(ModelComplexity.High)]
 internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly int _numBlocks;

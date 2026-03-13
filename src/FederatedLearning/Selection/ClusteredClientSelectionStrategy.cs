@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.Models;
 
 namespace AiDotNet.FederatedLearning.Selection;
@@ -10,10 +9,6 @@ namespace AiDotNet.FederatedLearning.Selection;
 /// <b>For Beginners:</b> This strategy tries to pick clients from different "types" of behavior by clustering
 /// clients into groups and sampling from each cluster.
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Clustering)]
-[ModelTask(ModelTask.Clustering)]
-[ModelComplexity(ModelComplexity.Medium)]
 public sealed class ClusteredClientSelectionStrategy : ClientSelectionStrategyBase
 {
     private readonly int _clusterCount;

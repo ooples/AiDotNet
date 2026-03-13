@@ -1,5 +1,4 @@
 using System;
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -24,11 +23,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 /// It achieves this by using complex numbers, which naturally distinguish direction.
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("Complex Embeddings for Simple Link Prediction", "https://arxiv.org/abs/1606.06357", Year = 2016, Authors = "Trouillon et al.")]
 public class ComplExEmbedding<T> : KGEmbeddingBase<T>
 {
     /// <inheritdoc />

@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
@@ -111,10 +110,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// - Training time increases with model size and dataset size
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
 public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
 {
     private readonly string _baseModelPath;

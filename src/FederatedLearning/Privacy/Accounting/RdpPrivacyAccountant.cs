@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Privacy.Accounting;
 
@@ -10,10 +9,6 @@ namespace AiDotNet.FederatedLearning.Privacy.Accounting;
 /// than basic composition. This implementation uses a conservative Gaussian-mechanism RDP bound
 /// and converts it back to an (epsilon, delta) style report.
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Statistical)]
-[ModelTask(ModelTask.Regression)]
-[ModelComplexity(ModelComplexity.Medium)]
 public sealed class RdpPrivacyAccountant : PrivacyAccountantBase
 {
     private readonly double _clipNorm;

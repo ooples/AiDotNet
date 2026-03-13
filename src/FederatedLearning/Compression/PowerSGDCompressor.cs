@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -29,11 +28,6 @@ namespace AiDotNet.FederatedLearning.Compression;
 /// the gradient subspace changes slowly between rounds.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelTask(ModelTask.Compression)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("PowerSGD: Practical Low-Rank Gradient Compression for Distributed Optimization", "https://arxiv.org/abs/1905.13727", Year = 2019, Authors = "Vogels et al.")]
 public class PowerSGDCompressor<T> : FederatedLearningComponentBase<T>
 {
     private readonly AdvancedCompressionOptions _options;

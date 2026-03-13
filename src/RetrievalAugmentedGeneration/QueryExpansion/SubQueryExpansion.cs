@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
-using AiDotNet.Attributes;
 using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
@@ -60,10 +59,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 /// - When retrieval latency is critical (multiple searches = slower)
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class SubQueryExpansion : QueryExpansionBase
 {
     /// <summary>

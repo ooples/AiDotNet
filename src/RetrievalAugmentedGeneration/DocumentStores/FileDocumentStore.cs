@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using AiDotNet.Attributes;
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -57,10 +56,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
 {
     // File names within the store directory

@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -24,11 +23,6 @@ namespace AiDotNet.FederatedLearning.Trainers;
 /// <para>Reference: AsyncFedED: Entropy-Driven Scheduling for Asynchronous Federated Learning (2024).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelTask(ModelTask.Regression)]
-[ModelTask(ModelTask.Ranking)]
-[ModelComplexity(ModelComplexity.High)]
 public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBase<T>
 {
     private readonly object _stateLock = new();

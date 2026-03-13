@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -28,11 +27,6 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// Learning." USENIX Security 2022.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters.</typeparam>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
-[ModelPaper("FLAME: Taming Backdoors in Federated Learning", "https://arxiv.org/abs/2101.02281", Year = 2022, Authors = "Nguyen et al.")]
 public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrategyBase<T>
 {
     private readonly double _noiseMultiplier;

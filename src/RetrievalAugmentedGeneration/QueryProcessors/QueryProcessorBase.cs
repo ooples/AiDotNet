@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 
@@ -23,10 +22,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.QueryProcessors;
 /// 3. Everything else is handled for you
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Low)]
 public abstract class QueryProcessorBase : IQueryProcessor
 {
     /// <summary>

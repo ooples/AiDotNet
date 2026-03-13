@@ -1,4 +1,3 @@
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 
@@ -12,10 +11,6 @@ namespace AiDotNet.FederatedLearning.Aggregators;
 /// minimizes the sum of distances to all client updates. This is more robust when some clients are
 /// outliers or adversarial.
 /// </remarks>
-[ModelDomain(ModelDomain.General)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.High)]
 public sealed class RfaFullModelAggregationStrategy<T, TInput, TOutput> :
     RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
 {

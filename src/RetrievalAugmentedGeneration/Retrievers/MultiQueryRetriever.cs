@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -12,10 +11,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     /// Multi-query retriever that generates multiple query variations and merges results.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
-    [ModelDomain(ModelDomain.Language)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.Medium)]
     public class MultiQueryRetriever<T> : RetrieverBase<T>
     {
         private readonly IRetriever<T> _baseRetriever;

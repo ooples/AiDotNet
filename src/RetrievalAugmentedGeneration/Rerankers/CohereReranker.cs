@@ -1,7 +1,6 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Rerankers;
@@ -74,10 +73,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 /// - When initial retrieval is already highly accurate
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.FeatureExtraction)]
-[ModelComplexity(ModelComplexity.Medium)]
 public class CohereReranker<T> : RerankerBase<T>
 {
     private readonly string _apiKey;
