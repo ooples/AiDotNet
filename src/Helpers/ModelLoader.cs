@@ -156,7 +156,12 @@ public static class ModelLoader
             }
         }
 
-        model.Deserialize(payload);
+        // Wrap in InternalOperation so that Deserialize() guard does not
+        // double-count (LoadEncrypted is already a guarded path)
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            model.Deserialize(payload);
+        }
 
         // Optional shape validation if the model implements IModelShape
         if (model is IModelShape shapeModel)
@@ -208,8 +213,13 @@ public static class ModelLoader
         inputShape ??= Array.Empty<int>();
         outputShape ??= Array.Empty<int>();
 
-        // Serialize the model
-        byte[] plaintext = model.Serialize();
+        // Serialize the model — wrap in InternalOperation so that Serialize()
+        // guard does not double-count (SaveEncrypted is already a guarded path)
+        byte[] plaintext;
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            plaintext = model.Serialize();
+        }
 
         // Build AAD from model metadata
         var modelType = model.GetType();

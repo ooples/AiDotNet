@@ -7,7 +7,7 @@ const base = import.meta.env.BASE_URL;
 
 <BaseLayout
   title="Pricing - AiDotNet"
-  description="AiDotNet pricing plans. Free open-source library with Apache 2.0. Pro adds cloud API hosting, priority support, and direct team access. Enterprise for large organizations."
+  description="AiDotNet BSL pricing. Free community license for open-source, education, and small teams. Professional and Enterprise licenses for commercial use."
 >
   <section class="pt-32 pb-20 lg:pb-28 relative overflow-hidden">
     <!-- Background -->
@@ -24,16 +24,36 @@ const base = import.meta.env.BASE_URL;
           Simple, transparent pricing
         </h1>
         <p class="gsap-fade-up text-lg text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
-          The full AI/ML library is free and open source forever. Upgrade for cloud-hosted API access, priority support, and dedicated engineering.
+          Training and inference are always free. License keys unlock model save/load for commercial use.
+          Every version converts to Apache 2.0 after four years.
         </p>
       </div>
 
       <!-- Success/cancel banners -->
       <div id="success-banner" class="hidden mb-8 p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-center font-medium">
-        Payment successful! Check your email for setup instructions.
+        Payment successful! Your license key has been generated and is available in your <a href={`${base}account/licenses/`} class="underline font-semibold">account dashboard</a>.
       </div>
       <div id="cancel-banner" class="hidden mb-8 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-center font-medium">
         Checkout was cancelled. No charges were made.
+      </div>
+
+      <!-- Community license registration success -->
+      <div id="community-success" class="hidden mb-8 p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-center">
+        <p class="font-semibold mb-1">Community license created!</p>
+        <p class="text-sm">Your license key: <code id="community-key-display" class="px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 font-mono text-xs"></code></p>
+        <p class="text-xs mt-2 opacity-80">Set <code>AIDOTNET_LICENSE_KEY</code> or save to <code>~/.aidotnet/license.key</code></p>
+      </div>
+
+      <!-- Community license existing key notice -->
+      <div id="community-existing" class="hidden mb-8 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-center">
+        <p class="font-semibold mb-1">You already have a community license!</p>
+        <p class="text-sm">Your license key: <code id="existing-key-display" class="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 font-mono text-xs"></code></p>
+        <p class="text-xs mt-2 opacity-80">Manage your licenses in your <a href={`${base}account/licenses/`} class="underline font-semibold">account dashboard</a>.</p>
+      </div>
+
+      <!-- Error banner -->
+      <div id="error-banner" class="hidden mb-8 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-center font-medium">
+        <span id="error-message"></span>
       </div>
 
       <!-- Billing toggle -->
@@ -56,43 +76,38 @@ const base = import.meta.env.BASE_URL;
       <!-- Pricing cards -->
       <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
         <PricingCard
-          tier="Free / Open Source"
+          tier="Community"
           price="$0"
           interval="forever"
-          description="The complete AI/ML library. Train and run models locally with full GPU acceleration."
+          description="For open-source projects, education, personal projects, and companies under $1M revenue with fewer than 5 developers."
           features={[
-            '8,100+ public classes across 139 modules',
-            '160+ neural network layer types',
-            '155+ classical ML algorithms',
-            '115+ computer vision models',
-            '75+ diffusion models (image, video, audio)',
-            '250+ audio/speech implementations',
-            '50+ reinforcement learning agents',
-            'GPU acceleration on any GPU (NVIDIA, AMD, Intel)',
-            'AiModelBuilder facade with 130+ config methods',
-            'SIMD/AVX-512 optimized tensors',
-            '.NET 10 + .NET Framework 4.7.1',
-            'Apache 2.0 license',
+            'Training and inference (always free)',
+            'Model save/load with license key',
+            '3 machine activations',
+            'All library features included',
+            'Open-source and personal projects',
+            'Academic and educational use',
+            'Companies under $1M revenue',
+            'Community support via GitHub',
           ]}
-          cta="Install Now"
-          ctaHref={`${base}docs/getting-started/installation/`}
+          cta="Get Free License"
+          stripeTier="community"
         />
 
         <PricingCard
-          tier="Pro"
+          tier="Professional"
           price="$29"
-          interval="month"
-          description="For teams shipping AI products. Cloud API hosting, priority support, and direct access to the engineering team."
+          interval="month / seat"
+          description="For commercial use by individual developers and small teams shipping AI-powered products."
           features={[
-            'Everything in Free',
-            'Cloud-hosted inference API',
-            'Pre-built REST endpoints for your models',
-            'Model encryption (AES-256-GCM)',
-            'API key management for your customers',
-            'License key generation & verification',
-            'Stripe billing integration',
+            'Everything in Community',
+            '5 machine activations per seat',
+            'Commercial use authorized',
+            'Production deployments',
             'Priority GitHub issues',
-            'Direct email support from engineering',
+            'Direct email support',
+            'Model encryption (AES-256-GCM)',
+            'API key management',
           ]}
           cta="Subscribe"
           highlighted={true}
@@ -101,21 +116,72 @@ const base = import.meta.env.BASE_URL;
 
         <PricingCard
           tier="Enterprise"
-          price="Custom"
-          description="For large organizations that need dedicated support, SLAs, and custom integration."
+          price="$99"
+          interval="month / seat"
+          description="For large organizations that need dedicated support, custom SLAs, and volume licensing."
           features={[
-            'Everything in Pro',
+            'Everything in Professional',
+            '10 machine activations per seat',
             'Dedicated support engineer',
-            'Custom SLA with guaranteed response time',
+            'Custom SLA with guaranteed response',
             'On-premises deployment assistance',
             'Custom model encryption keys',
             'Multi-seat team licenses',
             'Architecture review and consulting',
-            'Private Slack/Teams channel',
           ]}
-          cta="Contact Sales"
-          ctaHref="mailto:sales@ooples.com?subject=AiDotNet%20Enterprise%20Inquiry"
+          cta="Subscribe"
+          stripeTier="enterprise"
         />
+      </div>
+
+      <!-- What's always free -->
+      <div class="mt-16 max-w-3xl mx-auto">
+        <div class="gsap-fade-up bg-gradient-to-r from-green-500/5 to-emerald-500/5 dark:from-green-500/10 dark:to-emerald-500/10 rounded-2xl border border-green-500/20 p-8">
+          <h2 class="text-xl font-bold text-slate-900 dark:text-white mb-4 text-center">Always free, no license needed</h2>
+          <div class="grid sm:grid-cols-2 gap-4 text-sm text-slate-600 dark:text-slate-300">
+            <ul class="space-y-2">
+              <li class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                Model training (all algorithms)
+              </li>
+              <li class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                Model inference and prediction
+              </li>
+              <li class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                Data preprocessing
+              </li>
+            </ul>
+            <ul class="space-y-2">
+              <li class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                AutoML and NAS
+              </li>
+              <li class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                GPU acceleration on any GPU
+              </li>
+              <li class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                All utility functions
+              </li>
+            </ul>
+          </div>
+          <p class="text-xs text-center mt-4 text-slate-500 dark:text-slate-400">
+            Only model save/load operations require a license after the free trial (30 days or 10 operations).
+          </p>
+        </div>
+      </div>
+
+      <!-- Apache 2.0 conversion notice -->
+      <div class="mt-8 max-w-3xl mx-auto text-center">
+        <p class="gsap-fade-up text-sm text-slate-500 dark:text-slate-400">
+          Licensed under <a href={`${base}license/`} class="text-brand-blue hover:underline">Business Source License 1.1</a>.
+          Each version automatically converts to
+          <span class="font-semibold text-slate-700 dark:text-slate-300">Apache License 2.0</span>
+          four years after release.
+        </p>
       </div>
 
       <!-- FAQ -->
@@ -125,24 +191,28 @@ const base = import.meta.env.BASE_URL;
         </h2>
         <div class="space-y-6">
           <div class="gsap-fade-up">
-            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Is the library really free?</h3>
-            <p class="text-sm text-slate-500 dark:text-slate-400">Yes. The full AiDotNet library &mdash; all 8,100+ classes, every neural network, every ML algorithm, every vision model, full GPU acceleration &mdash; is open source under the Apache 2.0 license. You can use it in any project, commercial or otherwise, forever.</p>
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">What requires a license?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Only model persistence operations: SaveModel, LoadModel, Serialize, and Deserialize. Training, inference, preprocessing, AutoML, GPU acceleration, and all utility functions are always free with no license needed.</p>
           </div>
           <div class="gsap-fade-up">
-            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">What does Pro add?</h3>
-            <p class="text-sm text-slate-500 dark:text-slate-400">Pro gives you cloud-hosted inference API endpoints so you can deploy your trained models without managing servers. It also includes model encryption to protect your intellectual property, API key management for distributing models to your customers, and priority support with direct access to the engineering team.</p>
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Is there a free trial?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Yes. You get 30 days or 10 save/load operations (whichever comes first) with no license key needed. After that, register for a free Community license or purchase a paid plan.</p>
           </div>
           <div class="gsap-fade-up">
-            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Do I need Pro for GPU acceleration?</h3>
-            <p class="text-sm text-slate-500 dark:text-slate-400">No. GPU acceleration on NVIDIA, AMD, and Intel GPUs, SIMD optimizations, and all performance features are included in the free tier. Pro is for cloud deployment, model protection, and support.</p>
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Who qualifies for the free Community license?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">Open-source projects, educational and academic use, personal learning projects, and companies with annual revenue under $1M USD and fewer than 5 developers. Create a free account and your license key is generated instantly.</p>
           </div>
           <div class="gsap-fade-up">
-            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">How is this different from Hugging Face or W&B?</h3>
-            <p class="text-sm text-slate-500 dark:text-slate-400">AiDotNet is a native .NET library &mdash; everything runs in your .NET process without Python, Docker, or external runtimes. Hugging Face and W&B are Python-centric platforms. If your stack is .NET, AiDotNet integrates directly with zero overhead.</p>
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">What does BSL 1.1 mean?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">The Business Source License 1.1 allows free non-commercial use. Commercial use of model persistence requires a license. Every version automatically converts to the fully open-source Apache License 2.0 after four years. Read the <a href={`${base}license/`} class="text-brand-blue hover:underline">full license text</a>.</p>
           </div>
           <div class="gsap-fade-up">
             <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Can I switch plans?</h3>
             <p class="text-sm text-slate-500 dark:text-slate-400">Yes. You can upgrade, downgrade, or cancel at any time. If you switch from monthly to yearly, you'll get a prorated credit for the remaining time on your current billing period.</p>
+          </div>
+          <div class="gsap-fade-up">
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white mb-2">Do I need a license for GPU acceleration?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400">No. GPU acceleration on NVIDIA, AMD, Intel, and Apple GPUs is always free. SIMD optimizations, tensor operations, and all performance features are included at no cost.</p>
           </div>
         </div>
       </div>
@@ -150,6 +220,8 @@ const base = import.meta.env.BASE_URL;
   </section>
 
   <script>
+    import { supabase } from '../lib/supabase';
+
     document.addEventListener('DOMContentLoaded', () => {
       // Check for success/cancel URL params
       const params = new URLSearchParams(window.location.search);
@@ -197,30 +269,45 @@ const base = import.meta.env.BASE_URL;
             labelYearly.classList.toggle('dark:text-slate-400', !isYearly);
           }
 
-          // Update price display
-          const proPriceEl = document.querySelector('[data-tier="pro"]')?.closest('[class*="gsap-fade-up"]')?.querySelector('.text-4xl');
-          if (proPriceEl) {
-            proPriceEl.textContent = isYearly ? '$290' : '$29';
-          }
-          const proIntervalEl = proPriceEl?.nextElementSibling;
-          if (proIntervalEl) {
-            proIntervalEl.textContent = isYearly ? '/year' : '/month';
-          }
+          // Update price displays for pro and enterprise
+          document.querySelectorAll('[data-monthly-price]').forEach((el) => {
+            const monthly = el.getAttribute('data-monthly-price') || '';
+            const yearly = el.getAttribute('data-yearly-price') || '';
+            el.textContent = isYearly ? yearly : monthly;
+          });
+          document.querySelectorAll('[data-monthly-interval]').forEach((el) => {
+            const monthly = el.getAttribute('data-monthly-interval') || '';
+            const yearly = el.getAttribute('data-yearly-interval') || '';
+            el.textContent = isYearly ? yearly : monthly;
+          });
         });
       }
 
-      // Checkout buttons - redirect to Stripe Payment Links
+      // Checkout / registration handlers
       const PAYMENT_LINKS: Record<string, Record<string, string>> = {
         pro: {
           month: (import.meta.env.PUBLIC_STRIPE_PRO_MONTHLY_LINK || '').trim(),
           year: (import.meta.env.PUBLIC_STRIPE_PRO_YEARLY_LINK || '').trim(),
         },
+        enterprise: {
+          month: (import.meta.env.PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK || '').trim(),
+          year: (import.meta.env.PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK || '').trim(),
+        },
       };
 
       document.querySelectorAll('.checkout-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           const tier = (btn as HTMLElement).dataset.tier;
-          if (tier && PAYMENT_LINKS[tier]) {
+          if (!tier) return;
+
+          // Community tier — self-service registration
+          if (tier === 'community') {
+            await registerCommunityLicense(btn as HTMLButtonElement);
+            return;
+          }
+
+          // Paid tiers — redirect to Stripe Payment Link
+          if (PAYMENT_LINKS[tier]) {
             const interval = isYearly ? 'year' : 'month';
             const link = PAYMENT_LINKS[tier][interval];
             if (link) {
@@ -231,6 +318,80 @@ const base = import.meta.env.BASE_URL;
           }
         });
       });
+
+      async function registerCommunityLicense(btn: HTMLButtonElement) {
+        const originalText = btn.textContent || '';
+        btn.textContent = 'Registering...';
+        btn.disabled = true;
+
+        try {
+          // Check if user is logged in
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) {
+            // Redirect to login with return URL
+            const base = import.meta.env.BASE_URL || '/';
+            window.location.href = `${base}login/?redirect=${encodeURIComponent(window.location.pathname + '?register=community')}`;
+            return;
+          }
+
+          // Call the Edge Function to register community license
+          const { data, error } = await supabase.functions.invoke('register-community-license', {
+            method: 'POST',
+          });
+
+          if (error) {
+            showError('Failed to register community license. Please try again.');
+            return;
+          }
+
+          if (data.success) {
+            if (data.is_existing) {
+              // Show existing key notice
+              const existingEl = document.getElementById('community-existing');
+              const existingKeyEl = document.getElementById('existing-key-display');
+              if (existingEl && existingKeyEl) {
+                existingKeyEl.textContent = data.license_key;
+                existingEl.classList.remove('hidden');
+                existingEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            } else {
+              // Show new key success
+              const successEl = document.getElementById('community-success');
+              const keyEl = document.getElementById('community-key-display');
+              if (successEl && keyEl) {
+                keyEl.textContent = data.license_key;
+                successEl.classList.remove('hidden');
+                successEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }
+          } else {
+            showError(data.message || 'Failed to register community license.');
+          }
+        } catch (err) {
+          showError('An unexpected error occurred. Please try again.');
+        } finally {
+          btn.textContent = originalText;
+          btn.disabled = false;
+        }
+      }
+
+      function showError(message: string) {
+        const errorBanner = document.getElementById('error-banner');
+        const errorMessage = document.getElementById('error-message');
+        if (errorBanner && errorMessage) {
+          errorMessage.textContent = message;
+          errorBanner.classList.remove('hidden');
+          errorBanner.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+
+      // Auto-trigger community registration if redirected back from login
+      if (params.get('register') === 'community') {
+        const communityBtn = document.querySelector('[data-tier="community"]') as HTMLButtonElement;
+        if (communityBtn) {
+          communityBtn.click();
+        }
+      }
     });
   </script>
 </BaseLayout>

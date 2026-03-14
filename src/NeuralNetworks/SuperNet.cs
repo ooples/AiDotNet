@@ -806,6 +806,8 @@ namespace AiDotNet.NeuralNetworks
 
         public void SaveModel(string filePath)
         {
+            Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
@@ -859,6 +861,8 @@ namespace AiDotNet.NeuralNetworks
         }
         public void LoadModel(string filePath)
         {
+            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 

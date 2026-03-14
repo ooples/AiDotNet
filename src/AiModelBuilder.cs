@@ -3329,11 +3329,37 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public void SaveModel(AiModelResult<T, TInput, TOutput> modelResult, string filePath)
     {
-        // When a license key is configured, enforce encrypted save. Fail closed if
-        // the key cannot be resolved rather than silently downgrading to plaintext.
+        if (modelResult is null)
+        {
+            throw new ArgumentNullException(nameof(modelResult));
+        }
+
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        }
+
+        if (modelResult.Model is not Interfaces.IModelSerializer serializer)
+        {
+            throw new InvalidOperationException(
+                "The model does not implement IModelSerializer. " +
+                "Cannot save as encrypted AIMF format.");
+        }
+
+        int[] inputShape = modelResult.Model is Interfaces.IModelShape shape
+            ? shape.GetInputShape()
+            : Array.Empty<int>();
+        int[] outputShape = modelResult.Model is Interfaces.IModelShape outShape
+            ? outShape.GetOutputShape()
+            : Array.Empty<int>();
+
+        // Resolve encryption key: license key > build key > trial key
         string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
+        byte[]? decryptionToken = null;
+
         if (_licenseKey is not null && resolvedKey is null)
         {
+            // A license key was configured but could not be resolved — fail closed
             throw new InvalidOperationException(
                 "A license key was configured but could not be resolved. " +
                 "Verify the license key is valid. Cannot save model without a resolved key.");
@@ -3341,43 +3367,56 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         if (resolvedKey is not null)
         {
-            if (modelResult.Model is not Interfaces.IModelSerializer serializer)
-            {
-                throw new InvalidOperationException(
-                    "A license key is configured but the model does not implement IModelSerializer. " +
-                    "Cannot save as encrypted AIMF. Either remove the license key to save unencrypted, " +
-                    "or use a model that implements IModelSerializer.");
-            }
-
-            int[] inputShape = modelResult.Model is Interfaces.IModelShape shape
-                ? shape.GetInputShape()
-                : Array.Empty<int>();
-            int[] outputShape = modelResult.Model is Interfaces.IModelShape outShape
-                ? outShape.GetOutputShape()
-                : Array.Empty<int>();
-
-            // Validate license status before saving (allow-list: only Active and ValidationPending)
-            byte[]? decryptionToken = null;
+            // Licensed user — validate license status before saving
             if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
             {
                 var validationResult = ValidateLicense();
                 if (validationResult.Status != LicenseKeyStatus.Active &&
                     validationResult.Status != LicenseKeyStatus.ValidationPending)
                 {
-                    throw new InvalidOperationException(
-                        $"License validation failed with status '{validationResult.Status}'. " +
-                        (validationResult.Message ?? "Cannot save encrypted model."));
+                    throw new Exceptions.LicenseRequiredException(
+                        validationResult.Status switch
+                        {
+                            LicenseKeyStatus.Expired => Exceptions.TrialExpirationReason.LicenseExpired,
+                            LicenseKeyStatus.Revoked => Exceptions.TrialExpirationReason.LicenseInvalid,
+                            LicenseKeyStatus.SeatLimitReached => Exceptions.TrialExpirationReason.SeatLimitReached,
+                            _ => Exceptions.TrialExpirationReason.LicenseInvalid
+                        });
                 }
 
                 decryptionToken = validationResult.DecryptionToken;
             }
+        }
+        else
+        {
+            // No license key — enforce trial limits
+            var trialManager = new TrialStateManager();
+            trialManager.RecordOperationOrThrow();
 
-            ModelLoader.SaveEncrypted(serializer, filePath, resolvedKey, inputShape, outputShape,
-                decryptionToken: decryptionToken);
-            return;
+            // Use a deterministic trial encryption key derived from the machine fingerprint.
+            // This ensures trial-saved models can be loaded on the same machine during the trial,
+            // but cannot be loaded on other machines or after the trial expires without a license.
+            resolvedKey = GenerateTrialEncryptionKey();
         }
 
-        File.WriteAllBytes(filePath, SerializeModel(modelResult));
+        ModelLoader.SaveEncrypted(serializer, filePath, resolvedKey, inputShape, outputShape,
+            decryptionToken: decryptionToken);
+    }
+
+    /// <summary>
+    /// Generates a deterministic encryption key for trial-mode saves.
+    /// The key is derived from the machine fingerprint so that trial models
+    /// can be loaded on the same machine during the trial period.
+    /// </summary>
+    private static string GenerateTrialEncryptionKey()
+    {
+        string machineId = MachineFingerprint.GetMachineId();
+        byte[] keyMaterial = System.Text.Encoding.UTF8.GetBytes("AiDotNet.Trial.EncKey.v1:" + machineId);
+
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        byte[] hash = sha.ComputeHash(keyMaterial);
+
+        return Convert.ToBase64String(hash);
     }
 
     /// <summary>
@@ -3396,73 +3435,103 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public AiModelResult<T, TInput, TOutput> LoadModel(string filePath)
     {
-        // Check if the file is an encrypted AIMF model
-        if (ModelFileHeader.HasHeader(filePath))
+        if (string.IsNullOrWhiteSpace(filePath))
         {
-            var info = ModelLoader.Inspect(filePath);
-            if (info.IsEncrypted)
-            {
-                // Validate license if server URL is configured (allow-list: Active or ValidationPending only)
-                byte[]? decryptionToken = null;
-                if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
-                {
-                    var validationResult = ValidateLicense();
-
-                    if (validationResult.Status != LicenseKeyStatus.Active &&
-                        validationResult.Status != LicenseKeyStatus.ValidationPending)
-                    {
-                        throw new InvalidOperationException(
-                            $"License validation failed with status '{validationResult.Status}'. " +
-                            (validationResult.Message ?? "Cannot load encrypted model."));
-                    }
-
-                    decryptionToken = validationResult.DecryptionToken;
-                }
-
-                string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
-                if (string.IsNullOrWhiteSpace(resolvedKey))
-                {
-                    throw new InvalidOperationException(
-                        "This model is encrypted. Provide a license key via the AiModelBuilder constructor, " +
-                        "the AIDOTNET_LICENSE_KEY environment variable, or ~/.aidotnet/license.key file.");
-                }
-
-                // Load via ModelLoader which handles decryption and deserialization.
-                // The returned model is already deserialized from the encrypted AIMF payload.
-                byte[] data = File.ReadAllBytes(filePath);
-                var model = ModelLoader.LoadFromBytes<T>(data, resolvedKey, decryptionToken);
-
-                // Cast to the full model type. IModelSerializer guarantees Serialize/Deserialize,
-                // but the model should also be a full model we can use for predictions.
-                if (model is Interfaces.IFullModel<T, TInput, TOutput> fullModel)
-                {
-                    var result = new AiModelResult<T, TInput, TOutput>();
-                    result.Model = fullModel;
-
-                    // Reattach Graph RAG components if configured
-                    if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
-                    {
-                        result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
-                    }
-
-                    // Reattach tokenizer if configured
-                    if (_tokenizer != null)
-                    {
-                        result.AttachTokenizer(_tokenizer, _tokenizationConfig);
-                    }
-
-                    return result;
-                }
-
-                // Fallback: serialize through the builder's format for non-IFullModel serializers.
-                // This preserves backwards compatibility but may lose model-specific state.
-                byte[] decryptedPayload = model.Serialize();
-                return DeserializeModel(decryptedPayload);
-            }
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
 
-        byte[] modelData = File.ReadAllBytes(filePath);
-        return DeserializeModel(modelData);
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Model file not found: {filePath}", filePath);
+        }
+
+        // Resolve encryption key and validate license/trial
+        string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
+        byte[]? decryptionToken = null;
+
+        if (_licenseKey is not null && resolvedKey is null)
+        {
+            throw new InvalidOperationException(
+                "A license key was configured but could not be resolved. " +
+                "Verify the license key is valid.");
+        }
+
+        if (resolvedKey is not null)
+        {
+            // Licensed user — validate license status
+            if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
+            {
+                var validationResult = ValidateLicense();
+                if (validationResult.Status != LicenseKeyStatus.Active &&
+                    validationResult.Status != LicenseKeyStatus.ValidationPending)
+                {
+                    throw new Exceptions.LicenseRequiredException(
+                        validationResult.Status switch
+                        {
+                            LicenseKeyStatus.Expired => Exceptions.TrialExpirationReason.LicenseExpired,
+                            LicenseKeyStatus.Revoked => Exceptions.TrialExpirationReason.LicenseInvalid,
+                            LicenseKeyStatus.SeatLimitReached => Exceptions.TrialExpirationReason.SeatLimitReached,
+                            _ => Exceptions.TrialExpirationReason.LicenseInvalid
+                        });
+                }
+
+                decryptionToken = validationResult.DecryptionToken;
+            }
+        }
+        else
+        {
+            // No license key — enforce trial limits
+            var trialManager = new TrialStateManager();
+            trialManager.RecordOperationOrThrow();
+
+            // Use trial encryption key for models saved during trial
+            resolvedKey = GenerateTrialEncryptionKey();
+        }
+
+        // All models must be encrypted AIMF format
+        if (!ModelFileHeader.HasHeader(filePath))
+        {
+            throw new InvalidOperationException(
+                "This file is not in the encrypted AIMF format. " +
+                "Only models saved with AiModelBuilder.SaveModel() can be loaded. " +
+                "Re-save your model using AiModelBuilder.SaveModel() to convert it.");
+        }
+
+        byte[] data = File.ReadAllBytes(filePath);
+        var model = ModelLoader.LoadFromBytes<T>(data, resolvedKey, decryptionToken);
+
+        if (model is Interfaces.IFullModel<T, TInput, TOutput> fullModel)
+        {
+            var result = new AiModelResult<T, TInput, TOutput>();
+            result.Model = fullModel;
+
+            // Reattach Graph RAG components if configured
+            if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
+            {
+                result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
+            }
+
+            // Reattach tokenizer if configured
+            if (_tokenizer != null)
+            {
+                result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+            }
+
+            return result;
+        }
+
+        // Fallback: serialize through the builder's format for non-IFullModel serializers.
+        // Wrap in InternalOperation to avoid double-counting (LoadModel already enforced above)
+        byte[] decryptedPayload;
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            decryptedPayload = model.Serialize();
+        }
+
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return DeserializeModel(decryptedPayload);
+        }
     }
 
     /// <summary>
@@ -3494,7 +3563,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public byte[] SerializeModel(AiModelResult<T, TInput, TOutput> modelResult)
     {
-        return modelResult.Serialize();
+        ModelPersistenceGuard.EnforceBeforeSave();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return modelResult.Serialize();
+        }
     }
 
     /// <summary>
@@ -3511,8 +3584,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public AiModelResult<T, TInput, TOutput> DeserializeModel(byte[] modelData)
     {
+        ModelPersistenceGuard.EnforceBeforeLoad();
         var result = new AiModelResult<T, TInput, TOutput>();
-        result.Deserialize(modelData);
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            result.Deserialize(modelData);
+        }
 
         // Automatically reattach Graph RAG components if they were configured on this builder
         // Graph RAG components cannot be serialized (file handles, WAL, etc.), so we reattach

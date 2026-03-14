@@ -220,6 +220,8 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         // Barrier before rank check to prevent deadlock if rank 0 fails
         Config.CommunicationBackend.Barrier();
 
@@ -242,6 +244,8 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     /// <inheritdoc/>
     public override void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         // Barrier before loading to ensure all processes start together
         Config.CommunicationBackend.Barrier();
 

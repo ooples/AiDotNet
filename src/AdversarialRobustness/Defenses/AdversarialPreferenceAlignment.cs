@@ -264,6 +264,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     /// <inheritdoc/>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var json = JsonConvert.SerializeObject(_options, Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
@@ -271,16 +272,25 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null) throw new ArgumentNullException(nameof(data));
         var json = Encoding.UTF8.GetString(data);
         _options = JsonConvert.DeserializeObject<AlignmentMethodOptions<T>>(json) ?? new AlignmentMethodOptions<T>();
     }
 
     /// <inheritdoc/>
-    public void SaveModel(string filePath) => File.WriteAllBytes(filePath, Serialize());
+    public void SaveModel(string filePath)
+    {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        File.WriteAllBytes(filePath, Serialize());
+    }
 
     /// <inheritdoc/>
-    public void LoadModel(string filePath) => Deserialize(File.ReadAllBytes(filePath));
+    public void LoadModel(string filePath)
+    {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+        Deserialize(File.ReadAllBytes(filePath));
+    }
 
     private Func<Vector<T>, Vector<T>, double> TrainRobustRewardModel(AlignmentFeedbackData<T> feedbackData)
     {

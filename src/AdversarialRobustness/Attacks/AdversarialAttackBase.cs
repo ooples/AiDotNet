@@ -99,6 +99,7 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// <inheritdoc/>
     public virtual byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var json = JsonConvert.SerializeObject(Options, Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
@@ -106,6 +107,7 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
             throw new ArgumentNullException(nameof(data));
@@ -121,6 +123,8 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
@@ -179,6 +183,8 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));

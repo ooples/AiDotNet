@@ -715,6 +715,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using MemoryStream ms = new();
         using BinaryWriter writer = new(ms);
         Serialize(writer);
@@ -732,6 +733,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         using MemoryStream ms = new(data);
         using BinaryReader reader = new(ms);
         ExpressionTree<T, TInput, TOutput> deserializedTree = Deserialize(reader);

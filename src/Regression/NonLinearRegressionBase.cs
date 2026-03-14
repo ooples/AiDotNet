@@ -551,6 +551,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// </remarks>
     public virtual byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
 
@@ -632,6 +633,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// </remarks>
     public virtual void Deserialize(byte[] modelData)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var ms = new MemoryStream(modelData);
         using var reader = new BinaryReader(ms);
 

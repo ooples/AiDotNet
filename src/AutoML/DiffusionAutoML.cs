@@ -954,12 +954,14 @@ namespace AiDotNet.AutoML
 
         public void SaveModel(string filePath)
         {
+            Helpers.ModelPersistenceGuard.EnforceBeforeSave();
             var data = Serialize();
             File.WriteAllBytes(filePath, data);
         }
 
         public void LoadModel(string filePath)
         {
+            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
             var data = File.ReadAllBytes(filePath);
             Deserialize(data);
         }
