@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>Spirit-LM: interleaved text-speech language model bridging written and spoken communication.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Spirit-LM: Interleaved Spoken and Written Language Model" (Nguyen et al., 2024)</item></list></para><para><b>For Beginners:</b> Spirit-LM: interleaved text-speech language model bridging written and spoken communication.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Spirit-LM model for interleaved text-speech language modeling
+/// // bridging written and spoken communication seamlessly
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SpiritLM&lt;double&gt;(architecture, "spiritlm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SpiritLM&lt;double&gt;(architecture, new SpiritLMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

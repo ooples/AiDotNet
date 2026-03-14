@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>LLaMA-Omni: seamless speech interaction with LLM, enabling low-latency speech-to-speech conversation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "LLaMA-Omni: Seamless Speech Interaction with Large Language Model" (Fang et al., 2024)</item></list></para><para><b>For Beginners:</b> LLaMA-Omni: seamless speech interaction with LLM, enabling low-latency speech-to-speech conversation.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a LLaMA-Omni model for seamless speech interaction
+/// // enabling low-latency speech-to-speech conversation with LLM
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LlamaOmni&lt;double&gt;(architecture, "llama_omni.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LlamaOmni&lt;double&gt;(architecture, new LlamaOmniOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

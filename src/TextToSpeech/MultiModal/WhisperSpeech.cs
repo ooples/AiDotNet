@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>WhisperSpeech: text-to-speech using Whisper encoder features as semantic tokens plus acoustic generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "WhisperSpeech: Inverse Whisper TTS" (Collabora, 2024)</item></list></para><para><b>For Beginners:</b> WhisperSpeech: text-to-speech using Whisper encoder features as semantic tokens plus acoustic generation.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a WhisperSpeech model for TTS using Whisper encoder features
+/// // as semantic tokens with acoustic generation for high-quality output
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new WhisperSpeech&lt;double&gt;(architecture, "whisperspeech.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new WhisperSpeech&lt;double&gt;(architecture, new WhisperSpeechOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

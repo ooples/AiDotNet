@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>MinMo: multimodal LLM with speech understanding and generation for seamless voice interaction.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MinMo: A Multimodal Large Language Model for Seamless Voice Interaction" (Chen et al., 2025)</item></list></para><para><b>For Beginners:</b> MinMo: multimodal LLM with speech understanding and generation for seamless voice interaction.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a MinMo model for multimodal voice interaction
+/// // with unified speech understanding and generation capabilities
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MinMo&lt;double&gt;(architecture, "minmo.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MinMo&lt;double&gt;(architecture, new MinMoOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

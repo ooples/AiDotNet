@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>SpeechGPT: empowering LLMs with intrinsic cross-modal conversational abilities via discrete speech tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities" (Zhang et al., 2023)</item></list></para><para><b>For Beginners:</b> SpeechGPT: empowering LLMs with intrinsic cross-modal conversational abilities via discrete speech tokens.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a SpeechGPT model for cross-modal conversation
+/// // using discrete speech tokens for intrinsic speech abilities
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SpeechGPT&lt;double&gt;(architecture, "speechgpt.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SpeechGPT&lt;double&gt;(architecture, new SpeechGPTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

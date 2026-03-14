@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>GLM-4-Voice: intelligent and human-like end-to-end spoken chatbot with emotion and prosody control.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "GLM-4-Voice: Towards Intelligent and Human-Like End-to-End Spoken Chatbot" (Zeng et al., 2024)</item></list></para><para><b>For Beginners:</b> GLM-4-Voice: intelligent and human-like end-to-end spoken chatbot with emotion and prosody control.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a GLM-4-Voice model for intelligent spoken chatbot
+/// // with emotion and prosody control for human-like dialogue
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GLM4Voice&lt;double&gt;(architecture, "glm4voice.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GLM4Voice&lt;double&gt;(architecture, new GLM4VoiceOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
