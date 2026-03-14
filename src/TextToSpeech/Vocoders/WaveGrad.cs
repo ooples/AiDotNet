@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>WaveGrad: gradient-based conditional waveform generation using continuous noise level conditioning.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "WaveGrad: Estimating Gradients for Waveform Generation" (Chen et al., 2021)</item></list></para><para><b>For Beginners:</b> WaveGrad: gradient-based conditional waveform generation using continuous noise level conditioning.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a WaveGrad vocoder for gradient-based waveform generation
+/// // with continuous noise level conditioning for iterative refinement
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new WaveGrad&lt;double&gt;(architecture, "wavegrad.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new WaveGrad&lt;double&gt;(architecture, new WaveGradOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

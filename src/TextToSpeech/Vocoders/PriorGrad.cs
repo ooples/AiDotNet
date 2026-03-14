@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>PriorGrad: adaptive diffusion vocoder that uses data-dependent prior (mel-conditioned noise) instead of isotropic Gaussian.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "PriorGrad: Improving Conditional Denoising Diffusion Models with Data-Dependent Adaptive Prior" (Lee et al., 2022)</item></list></para><para><b>For Beginners:</b> PriorGrad: adaptive diffusion vocoder that uses data-dependent prior (mel-conditioned noise) instead of isotropic Gaussian.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a PriorGrad vocoder with data-dependent adaptive prior
+/// // using mel-conditioned noise instead of isotropic Gaussian
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PriorGrad&lt;double&gt;(architecture, "priorgrad.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PriorGrad&lt;double&gt;(architecture, new PriorGradOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

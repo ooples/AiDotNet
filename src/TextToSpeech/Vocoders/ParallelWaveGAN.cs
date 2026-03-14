@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>Parallel WaveGAN: non-autoregressive GAN vocoder with multi-resolution STFT loss for stable training.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Parallel WaveGAN: A fast waveform generation model based on generative adversarial networks with multi-resolution spectrogram" (Yamamoto et al., 2020)</item></list></para><para><b>For Beginners:</b> Parallel WaveGAN: non-autoregressive GAN vocoder with multi-resolution STFT loss for stable training.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Parallel WaveGAN vocoder for non-autoregressive synthesis
+/// // with multi-resolution STFT loss for stable adversarial training
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ParallelWaveGAN&lt;double&gt;(architecture, "parallelwavegan.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ParallelWaveGAN&lt;double&gt;(architecture, new ParallelWaveGANOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

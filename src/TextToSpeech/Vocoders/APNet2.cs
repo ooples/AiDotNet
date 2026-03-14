@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>APNet2: improved amplitude-phase network with ResNet backbone and multi-resolution STFT loss for higher-quality waveform reconstruction.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "APNet 2: High-Quality and High-Efficiency Neural Vocoder with Direct Prediction of Amplitude and Phase Spectra" (Du et al., 2023)</item></list></para><para><b>For Beginners:</b> APNet2: improved amplitude-phase network with ResNet backbone and multi-resolution STFT loss for higher-quality waveform reconstruction.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an APNet2 vocoder with ResNet backbone
+/// // and multi-resolution STFT loss for high-quality waveform reconstruction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new APNet2&lt;double&gt;(architecture, "apnet2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new APNet2&lt;double&gt;(architecture, new APNet2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

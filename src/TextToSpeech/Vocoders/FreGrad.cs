@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>FreGrad: lightweight diffusion vocoder that operates in the frequency domain via DWT (discrete wavelet transform) for faster synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder" (Shin et al., 2022)</item></list></para><para><b>For Beginners:</b> FreGrad: lightweight diffusion vocoder that operates in the frequency domain via DWT (discrete wavelet transform) for faster synthesis.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a FreGrad vocoder for frequency-domain diffusion synthesis
+/// // using discrete wavelet transform (DWT) for faster generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new FreGrad&lt;double&gt;(architecture, "fregrad.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new FreGrad&lt;double&gt;(architecture, new FreGradOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

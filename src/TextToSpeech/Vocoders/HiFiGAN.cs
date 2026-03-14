@@ -20,6 +20,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> /// HiFi-GAN: high-fidelity neural vocoder with multi-receptive field fusion for parallel waveform generation.
 ///. This model converts text input into speech audio output.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a HiFi-GAN vocoder for high-fidelity parallel waveform generation
+/// // with multi-receptive field fusion and multi-period discriminator
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new HiFiGAN&lt;double&gt;(architecture, "hifigan.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new HiFiGAN&lt;double&gt;(architecture, new HiFiGANOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

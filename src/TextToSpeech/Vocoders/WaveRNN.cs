@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>WaveRNN: efficient autoregressive vocoder with dual softmax and subscale sample generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Efficient Neural Audio Synthesis" (Kalchbrenner et al., 2018)</item></list></para><para><b>For Beginners:</b> WaveRNN: efficient autoregressive vocoder with dual softmax and subscale sample generation.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a WaveRNN vocoder for efficient autoregressive synthesis
+/// // with dual softmax output and subscale sample generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new WaveRNN&lt;double&gt;(architecture, "wavernn.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new WaveRNN&lt;double&gt;(architecture, new WaveRNNOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
