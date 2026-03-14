@@ -88,7 +88,7 @@ public class ModelPersistenceGuardTests : IDisposable
     [Fact]
     public void EnforceBeforeSave_WithLicenseKey_DoesNotThrow()
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "test-key-12345");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
 
         // Should not throw — license key present bypasses trial
         ModelPersistenceGuard.EnforceBeforeSave();
@@ -97,7 +97,7 @@ public class ModelPersistenceGuardTests : IDisposable
     [Fact]
     public void EnforceBeforeLoad_WithLicenseKey_DoesNotThrow()
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "test-key-12345");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
 
         ModelPersistenceGuard.EnforceBeforeLoad();
     }
@@ -105,7 +105,7 @@ public class ModelPersistenceGuardTests : IDisposable
     [Fact]
     public void EnforceBeforeSerialize_WithLicenseKey_DoesNotThrow()
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "test-key-12345");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
 
         ModelPersistenceGuard.EnforceBeforeSerialize();
     }
@@ -113,7 +113,7 @@ public class ModelPersistenceGuardTests : IDisposable
     [Fact]
     public void EnforceBeforeDeserialize_WithLicenseKey_DoesNotThrow()
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "test-key-12345");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testkey1234.abcdefghijklmnop");
 
         ModelPersistenceGuard.EnforceBeforeDeserialize();
     }
@@ -353,7 +353,7 @@ public class ModelPersistenceGuardTests : IDisposable
         ResetDefaultTrial();
 
         // Set license key
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "valid-license-key");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.validlicens.abcdefghijklmnop");
 
         // Call enforce many times — should never count operations
         for (int i = 0; i < 50; i++)

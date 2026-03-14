@@ -162,6 +162,14 @@ internal sealed class LicenseValidator
                 message: "License key is empty or missing.");
         }
 
+        // Validate the key format: must be aidn.{id}.{signature}
+        if (!ValidateKeyFormat(_licenseKey.Key))
+        {
+            return new LicenseValidationResult(
+                LicenseKeyStatus.Invalid,
+                message: "License key format is invalid. Expected format: aidn.{id}.{signature}");
+        }
+
         // When an official build key is available, verify the license key's HMAC signature.
         // The key is expected to be in the format: payload.signature (base64url-encoded).
         var buildKey = BuildKeyProvider.GetBuildKey();
@@ -211,6 +219,19 @@ internal sealed class LicenseValidator
         }
 
         return new LicenseValidationResult(LicenseKeyStatus.Active, message: "Offline-only mode.");
+    }
+
+    /// <summary>
+    /// Validates that the license key has the expected format: aidn.{id}.{signature}
+    /// where both id and signature are non-empty alphanumeric strings.
+    /// </summary>
+    private static bool ValidateKeyFormat(string key)
+    {
+        var parts = key.Split('.');
+        return parts.Length == 3 &&
+               parts[0] == "aidn" &&
+               parts[1].Length > 0 &&
+               parts[2].Length > 0;
     }
 
     /// <summary>

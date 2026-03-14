@@ -64,7 +64,7 @@ public class AiModelBuilderLicensingTests : IDisposable
         var loader = DataLoaders.FromMatrixVector(x, y);
 
         // Set license key during training so we don't consume trial ops
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "training-bypass-key");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.trainbypass1.qrstuvwxyz123456");
 
         var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
@@ -79,7 +79,7 @@ public class AiModelBuilderLicensingTests : IDisposable
     [Fact]
     public void SerializeModel_WithLicenseKey_Succeeds()
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "test-license-key");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testlicense.abcdefghijklmnop");
         var result = TrainSimpleModel();
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
@@ -92,7 +92,7 @@ public class AiModelBuilderLicensingTests : IDisposable
     [Fact]
     public void DeserializeModel_WithLicenseKey_Succeeds()
     {
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "test-license-key");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testlicense.abcdefghijklmnop");
         var result = TrainSimpleModel();
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
@@ -128,7 +128,7 @@ public class AiModelBuilderLicensingTests : IDisposable
     public void DeserializeModel_WithoutLicense_CountsOneTrialOperation()
     {
         // Serialize with license key
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "test-license-key");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testlicense.abcdefghijklmnop");
         var result = TrainSimpleModel();
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
         byte[] data = builder.SerializeModel(result);
@@ -170,7 +170,7 @@ public class AiModelBuilderLicensingTests : IDisposable
     public void DeserializeModel_ExhaustedTrial_ThrowsLicenseRequiredException()
     {
         // Serialize with license key
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "test-license-key");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testlicense.abcdefghijklmnop");
         var result = TrainSimpleModel();
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
         byte[] data = builder.SerializeModel(result);
@@ -216,7 +216,7 @@ public class AiModelBuilderLicensingTests : IDisposable
 
         // Set a license key so any incidental internal serialization is allowed,
         // then verify the trial counter stays at zero (training itself doesn't count).
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "training-test-key");
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.traintest01.abcdefghijklmnop");
 
         var (x, y) = CreateLinearDataset(samples: 40, features: 3, seed: 42);
         var loader = DataLoaders.FromMatrixVector(x, y);
