@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>E2 TTS: fully non-autoregressive flow-matching TTS with character-level text input.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Embarrassingly Easy Text-to-Speech" (Eskimez et al., 2024)</item></list></para><para><b>For Beginners:</b> E2 TTS: fully non-autoregressive flow-matching TTS with character-level text input.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an E2 TTS model for flow-matching speech synthesis
+/// // with character-level text input and non-autoregressive generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new E2TTS&lt;double&gt;(architecture, "e2tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new E2TTS&lt;double&gt;(architecture, new E2TTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

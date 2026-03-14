@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>Matcha-TTS: optimal-transport conditional flow matching for fast non-autoregressive TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Matcha-TTS: A Fast TTS Architecture with Conditional Flow Matching" (Mehta et al., 2024)</item></list></para><para><b>For Beginners:</b> Matcha-TTS: optimal-transport conditional flow matching for fast non-autoregressive TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Matcha-TTS model for fast non-autoregressive TTS
+/// // using optimal-transport conditional flow matching
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MatchaTTS&lt;double&gt;(architecture, "matcha_tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MatchaTTS&lt;double&gt;(architecture, new MatchaTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

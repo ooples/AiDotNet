@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>VoiceFlow: rectified flow matching for non-autoregressive TTS with straight ODE paths.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VoiceFlow: Efficient Text-to-Speech with Rectified Flow Matching" (Guo et al., 2024)</item></list></para><para><b>For Beginners:</b> VoiceFlow: rectified flow matching for non-autoregressive TTS with straight ODE paths.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a VoiceFlow model for efficient TTS with rectified flow matching
+/// // using straight ODE paths for fast non-autoregressive synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VoiceFlow&lt;double&gt;(architecture, "voiceflow.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VoiceFlow&lt;double&gt;(architecture, new VoiceFlowOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

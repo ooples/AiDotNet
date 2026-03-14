@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>F5-TTS: non-autoregressive flow-matching TTS that generates speech from text using DiT backbone.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching" (Chen et al., 2024)</item></list></para><para><b>For Beginners:</b> F5-TTS: non-autoregressive flow-matching TTS that generates speech from text using DiT backbone.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an F5-TTS model for flow-matching TTS with DiT backbone
+/// // generating fluent and faithful speech from text
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new F5TTS&lt;double&gt;(architecture, "f5tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new F5TTS&lt;double&gt;(architecture, new F5TTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

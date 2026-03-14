@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>E3 TTS: non-autoregressive end-to-end diffusion TTS without explicit duration modeling.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Simple and Efficient Non-Autoregressive Text-to-Speech" (Gao et al., 2023)</item></list></para><para><b>For Beginners:</b> E3 TTS: non-autoregressive end-to-end diffusion TTS without explicit duration modeling.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an E3 TTS model for simple non-autoregressive diffusion TTS
+/// // without explicit duration modeling for streamlined synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new E3TTS&lt;double&gt;(architecture, "e3tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new E3TTS&lt;double&gt;(architecture, new E3TTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>CoMoSpeech: CoMoSpeech: One-Step Speech Synthesis via Consistency Model.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CoMoSpeech: One-Step Speech Synthesis via Consistency Model" (Ye et al., 2023)</item></list></para><para><b>For Beginners:</b> CoMoSpeech: CoMoSpeech: One-Step Speech Synthesis via Consistency Model.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a CoMoSpeech model for one-step speech synthesis
+/// // using consistency model distillation for ultra-fast generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CoMoSpeech&lt;double&gt;(architecture, "comospeech.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CoMoSpeech&lt;double&gt;(architecture, new CoMoSpeechOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

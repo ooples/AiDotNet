@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>DiTToTTS: DiTTo-TTS: Efficient and Scalable Zero-Shot TTS with Diffusion Transformer.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "DiTTo-TTS: Efficient and Scalable Zero-Shot TTS with Diffusion Transformer" (Lee et al., 2024)</item></list></para><para><b>For Beginners:</b> DiTToTTS: DiTTo-TTS: Efficient and Scalable Zero-Shot TTS with Diffusion Transformer.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a DiTTo-TTS model for efficient zero-shot TTS
+/// // using diffusion transformer architecture for scalable synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DiTToTTS&lt;double&gt;(architecture, "ditto_tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DiTToTTS&lt;double&gt;(architecture, new DiTToTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
