@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.Panorama;
 /// with Spherical Epipolar-Aware Diffusion", NeurIPS 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 2048, NumInferenceSteps = 30 };
+/// var model = new DiffPanoModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 256 });
+/// var panorama = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
