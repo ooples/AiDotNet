@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "mPLUG-Owl3: Towards Long Image-Sequence Understanding in Multi-Modal Large Language Models" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> MPLUGOwl3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> mPLUG-Owl3 tackles one of the biggest challenges in vision-language
+/// models: efficiently processing long sequences of images or video frames. Standard attention
+/// has quadratic cost — processing twice as many visual tokens takes four times the compute.
+/// mPLUG-Owl3 introduces "hyper-attention" that handles long visual sequences much more
+/// efficiently, making it practical to process many images or long videos. It uses Qwen2 as
+/// the language backbone and an enhanced visual abstractor that can handle extended sequences
+/// without the usual performance bottleneck. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an mPLUG-Owl3 model for long visual sequence understanding
+/// // using hyper-attention with Qwen2 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MPLUGOwl3&lt;double&gt;(architecture, "mplugowl3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MPLUGOwl3&lt;double&gt;(architecture, new MPLUGOwl3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

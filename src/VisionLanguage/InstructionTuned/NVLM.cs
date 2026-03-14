@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "NVLM: Open Frontier-Class Multimodal LLMs" (NVIDIA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> NVLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> NVLM from NVIDIA takes a hybrid approach that combines two
+/// ways of processing visual information: cross-attention (where the language model attends
+/// to visual features through dedicated cross-attention layers) and decoder-only (where image
+/// tokens are simply concatenated with text tokens). Most models use one or the other, but
+/// NVLM uses both, which lets it retain strong text-only performance while adding powerful
+/// vision capabilities. This is important because many multimodal models lose some text
+/// ability when adding vision — NVLM avoids this trade-off. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an NVLM model for hybrid cross-attention + decoder-only VLM
+/// // retaining strong text performance alongside vision capabilities
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new NVLM&lt;double&gt;(architecture, "nvlm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new NVLM&lt;double&gt;(architecture, new NVLMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

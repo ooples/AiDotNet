@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-NeXT: Improved reasoning, OCR, and world knowledge" (Liu et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> LLaVANeXT is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLaVA-NeXT extends LLaVA-1.5 with a key innovation called
+/// AnyRes (Any Resolution) — instead of resizing all images to a fixed size, it splits
+/// high-resolution images into multiple tiles and processes each tile separately. This
+/// dramatically improves the model's ability to read text in images (OCR), understand
+/// charts and tables, and reason about fine visual details. It uses LLaMA-3 as the language
+/// backbone for stronger reasoning. The result is a model much better at tasks requiring
+/// visual precision, like reading small text or understanding complex diagrams. Default
+/// values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LLaVA-NeXT model for high-resolution visual reasoning
+/// // using AnyRes dynamic resolution with LLaMA-3 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LLaVANeXT&lt;double&gt;(architecture, "llavanext.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LLaVANeXT&lt;double&gt;(architecture, new LLaVANeXTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

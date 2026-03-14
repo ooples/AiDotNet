@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Fuyu-8B: A Multimodal Architecture for AI Agents" (Adept, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> Fuyu is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Fuyu takes the simplest possible approach to combining vision
+/// and language: instead of using a separate vision encoder like CLIP or ViT, it feeds raw
+/// image patches directly into the transformer decoder. Each image patch is simply projected
+/// to the model's hidden dimension with a linear layer and treated like a text token. This
+/// means the same transformer processes both image and text tokens, making the architecture
+/// extremely simple. The trade-off is that it needs more compute to process images compared
+/// to models with dedicated vision encoders, but it avoids any information loss from
+/// pre-processing. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Fuyu model for encoder-free multimodal processing
+/// // feeding raw image patches directly into the transformer
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Fuyu&lt;double&gt;(architecture, "fuyu.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Fuyu&lt;double&gt;(architecture, new FuyuOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

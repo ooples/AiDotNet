@@ -24,8 +24,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Gemma 3 Technical Report" (Google, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> Gemma3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Gemma 3 from Google is a family of open vision-language models
+/// ranging from 3 billion to 72 billion parameters. It can process images at their native
+/// resolution using Dynamic Resolution ViT, meaning it adapts to each image's actual size
+/// rather than forcing all images to a fixed size. With a 128K token context window, it can
+/// handle very long conversations and documents. It supports 29 languages and uses a
+/// SigLIP-based vision encoder with an MLP projection to connect visual features to the
+/// language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Gemma 3 model for multilingual visual understanding
+/// // with dynamic resolution ViT and 128K context window
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Gemma3&lt;double&gt;(architecture, "gemma3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Gemma3&lt;double&gt;(architecture, new Gemma3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

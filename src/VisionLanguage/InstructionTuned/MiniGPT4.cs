@@ -25,8 +25,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models" (Zhu et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> MiniGPT4 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> MiniGPT-4 was one of the first models to show that you can
+/// connect a frozen image understanding system (ViT + Q-Former from BLIP-2) to a powerful
+/// language model (Vicuna) with just a single linear projection layer and get impressive
+/// results. Its two-stage training is simple: first learn on millions of image-text pairs
+/// to align visual and text features, then fine-tune on a small set of curated instructions.
+/// This minimal approach unlocked capabilities like detailed image descriptions, creative
+/// writing from images, and visual reasoning that surprised the research community. Default
+/// values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MiniGPT-4 model for visual instruction following
+/// // using frozen ViT + Q-Former with Vicuna decoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MiniGPT4&lt;double&gt;(architecture, "minigpt4.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MiniGPT4&lt;double&gt;(architecture, new MiniGPT4Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

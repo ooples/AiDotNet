@@ -24,8 +24,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DeepSeek-VL2: Mixture-of-Experts Vision-Language Models for Advanced Multimodal Understanding" (Wu et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> DeepSeekVL2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DeepSeek-VL2 is a major upgrade that combines Mixture-of-Experts
+/// with dynamic image tiling. It has 64 total experts but only activates 6 per token, making
+/// it efficient despite its large capacity. Dynamic tiling lets it handle images at variable
+/// resolutions by splitting them into appropriately-sized tiles. It also uses multi-head latent
+/// attention (MLA) to compress the key-value cache, reducing memory usage during inference.
+/// Available in 1.8B, 4.5B, and 27B sizes for different compute budgets. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeepSeek-VL2 model for advanced multimodal understanding
+/// // using MoE architecture with dynamic tiling and MLA attention
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DeepSeekVL2&lt;double&gt;(architecture, "deepseekvl2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DeepSeekVL2&lt;double&gt;(architecture, new DeepSeekVL2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

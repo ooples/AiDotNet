@@ -23,8 +23,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "mPLUG-Owl2: Revolutionizing Multi-modal Large Language Model with Modality Collaboration" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> MPLUGOwl2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> mPLUG-Owl2 improves on its predecessor with an enhanced visual
+/// abstractor and LLaMA-2 backbone for better multi-image understanding. The key upgrade is
+/// "modality collaboration" — the model learns to better coordinate between different types
+/// of input (images, text, and their relationships) rather than treating them independently.
+/// This gives it improved reasoning capabilities, especially when dealing with multiple
+/// images or complex visual scenes that require understanding spatial relationships and
+/// interactions between objects. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an mPLUG-Owl2 model for multi-image understanding
+/// // with enhanced modality collaboration and LLaMA-2 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MPLUGOwl2&lt;double&gt;(architecture, "mplugowl2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MPLUGOwl2&lt;double&gt;(architecture, new MPLUGOwl2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

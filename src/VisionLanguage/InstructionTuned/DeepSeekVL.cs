@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DeepSeek-VL: Towards Real-World Vision-Language Understanding" (Lu et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> DeepSeekVL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DeepSeek-VL uses two vision encoders working together instead
+/// of just one: SigLIP captures the semantic meaning of the image (what objects are present),
+/// while SAM-B captures fine-grained spatial details (exact shapes and boundaries). Their
+/// outputs are merged through an MLP projector and fed into the DeepSeek language model for
+/// text generation. This hybrid approach gives the model both high-level understanding and
+/// pixel-level precision for real-world tasks like reading documents, understanding charts,
+/// and answering detailed visual questions. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeepSeek-VL model for real-world visual understanding
+/// // using hybrid SigLIP + SAM-B dual vision encoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DeepSeekVL&lt;double&gt;(architecture, "deepseekvl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DeepSeekVL&lt;double&gt;(architecture, new DeepSeekVLOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

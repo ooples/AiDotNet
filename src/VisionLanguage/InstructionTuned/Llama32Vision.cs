@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "The Llama 3 Herd of Models" (Meta, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Llama32Vision is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Llama 3.2 Vision adds image understanding to Meta's popular
+/// Llama 3.2 language model. Available in 11B and 90B parameter sizes, it uses a ViT vision
+/// encoder connected through an MLP projection to the Llama decoder. The 11B variant is
+/// particularly notable for being optimized for edge and mobile deployment — it can run on
+/// devices like phones and laptops rather than requiring expensive cloud servers. The 90B
+/// variant provides stronger performance for server-side use. Both models can describe images,
+/// answer visual questions, and reason about visual content. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Llama 3.2 Vision model for edge/mobile visual AI
+/// // using ViT encoder with Llama 3.2 decoder backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Llama32Vision&lt;double&gt;(architecture, "llama32vision.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Llama32Vision&lt;double&gt;(architecture, new Llama32VisionOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

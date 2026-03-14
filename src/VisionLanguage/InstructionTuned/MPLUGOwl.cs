@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "mPLUG-Owl: Modularization Empowers Large Language Models with Multimodality" (Ye et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> MPLUGOwl is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> mPLUG-Owl from Alibaba uses a modular design where different
+/// components can be trained independently. Its key innovation is the "visual abstractor" — a
+/// module that sits between the vision encoder and language model, using learnable queries with
+/// cross-attention to compress and align visual features into a format the language model can
+/// understand. Think of it as a translator that converts raw image features into something
+/// the text model can work with effectively. The modular design means you can upgrade
+/// individual components without retraining the whole model. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an mPLUG-Owl model for modular visual-language alignment
+/// // using visual abstractor with learnable cross-attention queries
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MPLUGOwl&lt;double&gt;(architecture, "mplugowl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MPLUGOwl&lt;double&gt;(architecture, new MPLUGOwlOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

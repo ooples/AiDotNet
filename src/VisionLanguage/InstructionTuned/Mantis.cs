@@ -17,10 +17,41 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Mantis (Jiang et al., 2024) is specifically designed for multi-image reasoning tasks where the
+/// model must understand relationships between multiple images presented together. It uses interleaved
+/// multi-image instruction tuning, where images and text are interleaved in the input sequence,
+/// enabling the model to compare, contrast, and reason across multiple visual inputs simultaneously.
+/// This is particularly useful for tasks like "spot the difference", visual storytelling across
+/// image sequences, and multi-view reasoning.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Mantis: Interleaved Multi-Image Instruction Tuning" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> Mantis is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Most vision-language models process one image at a time, but
+/// Mantis is designed to handle multiple images together. It can compare two photos, track
+/// changes across a sequence of images, or reason about relationships between different
+/// views. It does this through interleaved instruction tuning — training on examples where
+/// multiple images and text are woven together, teaching the model to understand how images
+/// relate to each other. This makes it great for tasks like "what changed between these two
+/// photos?" or "describe the story across these images." Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Mantis model for multi-image visual reasoning
+/// // using interleaved image-text instruction tuning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Mantis&lt;double&gt;(architecture, "mantis.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Mantis&lt;double&gt;(architecture, new MantisOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

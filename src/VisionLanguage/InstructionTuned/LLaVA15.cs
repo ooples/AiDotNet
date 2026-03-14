@@ -25,8 +25,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Improved Baselines with Visual Instruction Tuning" (Liu et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> LLaVA15 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLaVA-1.5 is an improved version of the original LLaVA (Large
+/// Language and Vision Assistant) that makes simple but effective upgrades: it replaces the
+/// single linear projection with a two-layer MLP connector (for better visual-to-text mapping),
+/// uses a higher-resolution CLIP-ViT-L/14 encoder at 336 pixels (for sharper visual detail),
+/// and adds academic VQA training data. Despite these minimal changes, it achieved
+/// state-of-the-art results on 11 benchmarks, demonstrating that careful engineering of
+/// the basics often matters more than complex architectural innovations. Default values
+/// follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LLaVA-1.5 model for visual instruction following
+/// // using CLIP-ViT-L/14 at 336px with MLP cross-modal connector
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LLaVA15&lt;double&gt;(architecture, "llava15.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LLaVA15&lt;double&gt;(architecture, new LLaVA15Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

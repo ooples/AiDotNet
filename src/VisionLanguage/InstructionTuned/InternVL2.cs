@@ -24,8 +24,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "InternVL2: Better than the Best - Expanding Performance Boundaries of Open-Source Multimodal Models" (Chen et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> InternVL2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> InternVL2 improves on InternVL by adding dynamic resolution
+/// support — it can process images at different sizes by splitting them into tiles and using
+/// a "pixel shuffle" technique to efficiently downsample the visual features. This means it
+/// handles both small icons and large high-resolution images well. It switches the language
+/// backbone to InternLM2 and achieves performance competitive with commercial models like
+/// GPT-4V on many benchmarks, making it one of the strongest open-source multimodal models
+/// available. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an InternVL2 model for dynamic resolution visual understanding
+/// // using pixel shuffle downsampling with InternLM2 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new InternVL2&lt;double&gt;(architecture, "internvl2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new InternVL2&lt;double&gt;(architecture, new InternVL2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

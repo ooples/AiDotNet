@@ -17,10 +17,40 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// SmolVLM (HuggingFace, 2025) is designed from the ground up to be small and efficient while
+/// maintaining strong visual understanding capabilities. It targets edge deployment scenarios
+/// where memory and compute are severely constrained. The model uses efficient tokenization
+/// and compact architecture choices to minimize its footprint while preserving the ability
+/// to understand images, answer visual questions, and follow instructions about visual content.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SmolVLM: Redefining Small and Efficient Multimodal Models" (HuggingFace, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> SmolVLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> SmolVLM from HuggingFace is built for maximum efficiency on
+/// edge devices. Unlike models that are large and then distilled down, SmolVLM is designed
+/// from scratch to be compact — every architecture choice prioritizes keeping the model small
+/// while maintaining quality. It uses efficient visual tokenization to reduce the number of
+/// tokens needed to represent an image, cutting memory and compute requirements. This makes
+/// it ideal for deploying visual AI on phones, tablets, IoT devices, and other hardware
+/// where larger models simply won't fit. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SmolVLM model for ultra-efficient edge deployment
+/// // with compact architecture optimized for constrained devices
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SmolVLM&lt;double&gt;(architecture, "smolvlm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SmolVLM&lt;double&gt;(architecture, new SmolVLMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

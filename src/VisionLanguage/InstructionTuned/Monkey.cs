@@ -17,10 +17,41 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Monkey (Li et al., 2024) demonstrates that image resolution and text label quality are crucial
+/// for multimodal model performance. It processes images at high resolution (up to 1344x896) by
+/// dividing them into patches and encoding each at full resolution, then generates multi-level
+/// descriptions — from brief captions to detailed paragraph-level descriptions — using a
+/// carefully curated training dataset with high-quality text annotations.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Monkey: Image Resolution and Text Label Are Important Things for Large Multi-modal Models" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> Monkey is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Monkey focuses on two things that turn out to be critical for
+/// vision-language models: high image resolution and high-quality text labels. Most models
+/// downscale images to a fixed small size, losing fine details. Monkey instead processes
+/// images at up to 1344x896 resolution by splitting them into patches. It also uses
+/// carefully curated training data with detailed, accurate text descriptions. The result
+/// is a model that can generate descriptions at multiple levels of detail — from a brief
+/// one-line caption to a rich multi-paragraph description — and excels at understanding
+/// fine visual details like small text and intricate patterns. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Monkey model for high-resolution visual understanding
+/// // with multi-level description generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Monkey&lt;double&gt;(architecture, "monkey.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Monkey&lt;double&gt;(architecture, new MonkeyOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

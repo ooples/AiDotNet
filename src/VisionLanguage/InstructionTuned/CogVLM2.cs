@@ -25,8 +25,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "CogVLM2: Visual Language Models for Image and Video Understanding" (Hong et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> CogVLM2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> CogVLM2 is the successor to CogVLM that upgrades the language
+/// backbone from Vicuna to GLM-4 (or LLaMA-3) and adds video understanding. It keeps the
+/// same "visual expert" approach — dedicated visual expert modules in every decoder layer with
+/// separate attention weights for image tokens versus text tokens. The key additions are temporal
+/// attention for processing video frame sequences and improved training that gives it stronger
+/// performance on both image and video tasks. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CogVLM2 model for image and video understanding
+/// // using visual expert modules with GLM-4 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CogVLM2&lt;double&gt;(architecture, "cogvlm2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CogVLM2&lt;double&gt;(architecture, new CogVLM2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

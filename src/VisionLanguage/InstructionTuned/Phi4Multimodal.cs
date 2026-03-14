@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Phi-4-Multimodal Technical Report" (Microsoft, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> Phi4Multimodal is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Phi-4-Multimodal from Microsoft extends the Phi-4 language model
+/// to natively handle images, audio, and text in a single unified framework. Rather than having
+/// separate models for different input types, Phi-4-Multimodal processes all modalities through
+/// one architecture. It uses a SigLIP vision encoder with MLP projection for images and adds
+/// audio understanding capabilities. This unified approach means a single model can answer
+/// questions about photos, transcribe and understand speech, and process text — all without
+/// switching between different specialized models. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Phi-4-Multimodal model for unified vision + audio + text
+/// // using SigLIP encoder with Phi-4 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Phi4Multimodal&lt;double&gt;(architecture, "phi4multimodal.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Phi4Multimodal&lt;double&gt;(architecture, new Phi4MultimodalOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

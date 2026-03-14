@@ -25,8 +25,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Qwen2-VL: Enhancing Vision-Language Model's Perception of the World at Any Resolution" (Wang et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Qwen2VL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Qwen2-VL introduces two key innovations. First, "Naive Dynamic
+/// Resolution" lets it process images at any resolution without padding or cropping — the model
+/// adapts to each image's natural size. Second, Multimodal RoPE (M-RoPE) extends positional
+/// encoding across three dimensions: text position, spatial location in images, and temporal
+/// position in videos. This means the model naturally understands not just what tokens say,
+/// but where they are in text, where they are in an image, and when they appear in a video.
+/// This unified positional encoding enables native video understanding alongside image
+/// comprehension. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Qwen2-VL model for any-resolution visual understanding
+/// // using Naive Dynamic Resolution with M-RoPE positional encoding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Qwen2VL&lt;double&gt;(architecture, "qwen2vl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Qwen2VL&lt;double&gt;(architecture, new Qwen2VLOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -17,10 +17,38 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Eagle 2.5 (NVIDIA, 2025) extends Eagle with long-context post-training to handle extended
+/// visual sequences including video understanding. It uses specialized post-training techniques
+/// to boost the model's ability to process long sequences of visual frames while maintaining
+/// strong performance on single-image tasks. The model supports extended context windows for
+/// processing multi-frame video content and long document sequences.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Eagle 2.5: Boosting Long-Context Post-Training for Frontier Vision-Language Models" (2025)</item></list></para>
-/// <para><b>For Beginners:</b> Eagle25 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Eagle 2.5 extends the original Eagle model with the ability
+/// to understand videos and long sequences of images. Through specialized long-context
+/// post-training, it can process many visual frames in sequence — useful for video
+/// understanding, multi-page document analysis, and tasks that require tracking information
+/// across many images. It maintains strong single-image performance while adding this
+/// extended context capability. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Eagle 2.5 model for long-context video understanding
+/// // with extended visual sequence support
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Eagle25&lt;double&gt;(architecture, "eagle25.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Eagle25&lt;double&gt;(architecture, new Eagle25Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

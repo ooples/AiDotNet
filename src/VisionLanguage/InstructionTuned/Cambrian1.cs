@@ -24,8 +24,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Cambrian-1: A Fully Open, Vision-Centric Exploration of Multimodal LLMs" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> Cambrian1 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Cambrian-1 takes a unique approach to vision by combining
+/// multiple different vision encoders (CLIP, DINOv2, SigLIP, ConvNeXt — over 35 combinations
+/// tested) rather than using just one. Its Spatial Vision Aggregator (SVA) uses cross-attention
+/// to dynamically select and fuse the most useful features from each encoder based on what part
+/// of the image is relevant. This gives it stronger visual understanding than any single encoder
+/// alone, and it uses LLaMA-3 as its language backbone. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Cambrian-1 model for multi-encoder visual understanding
+/// // using Spatial Vision Aggregator with 35+ vision encoder combinations
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Cambrian1&lt;double&gt;(architecture, "cambrian1.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Cambrian1&lt;double&gt;(architecture, new Cambrian1Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

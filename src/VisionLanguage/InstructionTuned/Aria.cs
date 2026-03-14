@@ -17,10 +17,39 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Aria (Rhymes AI, 2024) is a multimodal model that uses a Mixture-of-Experts (MoE) architecture
+/// for efficient scaling. It has 25.3 billion total parameters but only activates 3.9 billion per
+/// token, using 64 total experts with 8 active per token selected by a learned router. Each
+/// visual and text token is routed to its top-scoring experts, allowing different experts to
+/// specialize in different aspects of visual understanding. Aria supports a 64K multimodal
+/// context window for processing long sequences of interleaved images and text.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Aria: An Open Multimodal Native Mixture-of-Experts Model" (Rhymes AI, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Aria is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Aria is a multimodal model that uses a "mixture of experts"
+/// approach — instead of running every parameter for every token, it has 64 specialized expert
+/// modules and routes each token to only the 8 most relevant ones. This makes the model very
+/// efficient (only 3.9B of 25.3B parameters are active at once) while still being highly capable.
+/// It can process images and long documents with up to 64K tokens of combined visual and text
+/// context. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Aria model for efficient multimodal understanding
+/// // using Mixture-of-Experts with 64 experts, 8 active per token
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Aria&lt;double&gt;(architecture, "aria.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Aria&lt;double&gt;(architecture, new AriaOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

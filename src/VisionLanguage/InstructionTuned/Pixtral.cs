@@ -24,8 +24,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Pixtral 12B" (Mistral, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Pixtral is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Pixtral is Mistral's entry into multimodal AI, pairing a compact
+/// 400M parameter vision encoder with the powerful 12B Mistral language model. It processes
+/// high-resolution images at 1024 pixels and uses an MLP projection to connect visual features
+/// to the language decoder. The result is a model that combines Mistral's strong language
+/// capabilities (reasoning, coding, instruction following) with image understanding. It can
+/// describe images, answer visual questions, read text in photos, and reason about visual
+/// content. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Pixtral model for high-resolution visual understanding
+/// // using 400M vision encoder with Mistral 12B backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Pixtral&lt;double&gt;(architecture, "pixtral.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Pixtral&lt;double&gt;(architecture, new PixtralOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

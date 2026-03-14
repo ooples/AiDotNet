@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone" (Abdin et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Phi3Vision is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Phi-3-Vision from Microsoft proves that you don't need a
+/// massive model to get strong visual AI. At just 4.2 billion parameters, it's small enough
+/// to run on a phone, yet achieves performance that rivals much larger models. The secret
+/// is high-quality training data — Microsoft carefully curated the training examples to
+/// maximize what the model learns from each one. It uses a CLIP-ViT vision encoder connected
+/// to the Phi-3 language model through an MLP projection, keeping the architecture simple
+/// while relying on data quality for performance. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Phi-3-Vision model for compact on-device visual AI
+/// // using CLIP-ViT with Phi-3 backbone at only 4.2B parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Phi3Vision&lt;double&gt;(architecture, "phi3vision.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Phi3Vision&lt;double&gt;(architecture, new Phi3VisionOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "InternVL: Scaling up Vision Foundation Models and Aligning for Generic Visual-Linguistic Tasks" (Chen et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> InternVL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> InternVL uses a massive 6 billion parameter vision encoder
+/// called InternViT-6B — one of the largest vision-only models ever built. It progressively
+/// aligns this vision encoder with a LLaMA language model through a two-stage training
+/// process: first contrastive learning (matching images to text) and then generative training
+/// (learning to produce text from images). The huge vision encoder provides extremely rich
+/// visual representations that capture both fine details and high-level semantics, making it
+/// effective for a wide range of visual understanding tasks. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an InternVL model for visual-linguistic understanding
+/// // using InternViT-6B with progressive LLaMA alignment
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new InternVL&lt;double&gt;(architecture, "internvl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new InternVL&lt;double&gt;(architecture, new InternVLOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -25,8 +25,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Qwen-VL: A Versatile Vision-Language Model for Understanding, Localization, Text Reading, and Beyond" (Bai et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> QwenVL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Qwen-VL from Alibaba is a versatile model that goes beyond
+/// just describing images — it can locate objects by outputting bounding box coordinates.
+/// It uses visual window attention (processing image regions locally for efficiency) and a
+/// cross-attention resampler that compresses the large number of visual tokens into a fixed
+/// smaller set before feeding them to the language model. It supports images at multiple
+/// resolutions and can handle tasks like visual question answering, text reading (OCR),
+/// and visual grounding (finding where objects are in an image). Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Qwen-VL model for visual understanding and grounding
+/// // using window attention with cross-attention resampler
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new QwenVL&lt;double&gt;(architecture, "qwenvl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new QwenVL&lt;double&gt;(architecture, new QwenVLOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -17,10 +17,39 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// MiniCPM-V (OpenBMB, 2024) is an efficient multimodal model designed to run on mobile devices
+/// while achieving performance comparable to GPT-4V on many tasks. Despite its small size, it
+/// features strong OCR capabilities for reading text in images and supports over 30 languages.
+/// It uses adaptive visual encoding to handle different image resolutions efficiently and a
+/// compact language backbone optimized for on-device deployment.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MiniCPM-V: A GPT-4V Level MLLM on Your Phone" (OpenBMB, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> MiniCPMV is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> MiniCPM-V is designed to bring GPT-4V-level vision understanding
+/// to your phone. Despite being small enough to run on mobile devices, it achieves surprisingly
+/// strong performance on visual tasks like reading text in images (OCR), understanding documents,
+/// and answering questions about photos. It supports over 30 languages and uses adaptive visual
+/// encoding to efficiently handle images at different resolutions. This makes it ideal for
+/// applications where you need on-device visual AI without cloud connectivity. Default values
+/// follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MiniCPM-V model for efficient on-device visual AI
+/// // with strong OCR and 30+ language support
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MiniCPMV&lt;double&gt;(architecture, "minicpmv.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MiniCPMV&lt;double&gt;(architecture, new MiniCPMVOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

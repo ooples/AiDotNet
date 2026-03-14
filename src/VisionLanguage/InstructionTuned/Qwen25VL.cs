@@ -24,8 +24,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Qwen2.5-VL Technical Report" (2025)</item></list></para>
-/// <para><b>For Beginners:</b> Qwen25VL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Qwen2.5-VL extends Qwen2-VL with visual agent capabilities —
+/// it can not only understand images and videos but also interact with visual interfaces
+/// like a human user would. It supports understanding videos over 1 hour long, locating
+/// objects with bounding boxes and point coordinates, and excels at reading complex documents
+/// and charts. The model works as a visual agent that can navigate UIs, understand screenshots,
+/// and perform actions based on what it sees. Available in multiple sizes for different
+/// compute budgets. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Qwen2.5-VL model for visual agent capabilities
+/// // with 1hr+ video understanding and object localization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Qwen25VL&lt;double&gt;(architecture, "qwen25vl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Qwen25VL&lt;double&gt;(architecture, new Qwen25VLOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

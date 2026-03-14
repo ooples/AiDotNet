@@ -24,8 +24,32 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Pixtral Large" (Mistral, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> PixtralLarge is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Pixtral Large is the scaled-up version of Pixtral, increasing
+/// from 12B to 124B total parameters with a 1B vision encoder (up from 400M). It uses
+/// Mistral-Large as the language backbone, which provides much stronger reasoning,
+/// instruction following, and knowledge capabilities than the standard Mistral model.
+/// The larger vision encoder also captures more detailed visual information. This model
+/// targets server-side deployment where maximum quality is more important than model
+/// size, making it suitable for high-stakes applications like medical image analysis,
+/// detailed document understanding, and complex visual reasoning. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Pixtral Large model for frontier visual reasoning
+/// // using 1B vision encoder with Mistral-Large 124B backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PixtralLarge&lt;double&gt;(architecture, "pixtrallarge.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PixtralLarge&lt;double&gt;(architecture, new PixtralLargeOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

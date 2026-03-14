@@ -25,8 +25,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MiniGPT-v2: Large Language Model as a Unified Interface for Vision-Language Multi-task Learning" (Chen et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> MiniGPTv2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> MiniGPT-v2 upgrades MiniGPT-4 to handle multiple visual tasks
+/// in a single model using a clever trick: task-specific identifier tokens. Instead of needing
+/// separate models for different tasks, you prepend a special token that tells the model what
+/// type of task you want — like "[vqa]" for visual question answering, "[caption]" for image
+/// captioning, or "[grounding]" for locating objects. The model learns to produce the right
+/// kind of output based on which task token it sees. It also upgrades the language backbone
+/// from Vicuna to LLaMA-2. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MiniGPT-v2 model for unified multi-task visual learning
+/// // using task-specific tokens with LLaMA-2 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MiniGPTv2&lt;double&gt;(architecture, "minigptv2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MiniGPTv2&lt;double&gt;(architecture, new MiniGPTv2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

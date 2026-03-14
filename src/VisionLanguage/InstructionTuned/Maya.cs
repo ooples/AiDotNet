@@ -17,10 +17,39 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Maya (Gupta et al., 2024) is a multilingual multimodal model designed to understand images
+/// and generate text in 8 languages. Unlike most VLMs that focus primarily on English, Maya uses
+/// instruction fine-tuning with multilingual visual question answering data to support diverse
+/// languages including Hindi, Spanish, French, Arabic, Bengali, Chinese, Japanese, and English.
+/// It follows the LLaVA-style architecture with a vision encoder and language model connected
+/// through a projector.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Maya: An Instruction Finetuned Multilingual Multimodal Model" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> Maya is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Maya is built specifically for multilingual use — it can look
+/// at an image and answer questions about it in 8 different languages. While most vision-language
+/// models work well only in English, Maya was instruction-tuned with visual QA data across
+/// multiple languages so it can understand and respond in Hindi, Spanish, French, Arabic,
+/// Bengali, Chinese, Japanese, and English. This makes it useful for applications serving
+/// diverse global audiences. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Maya model for multilingual visual question answering
+/// // supporting 8 languages with instruction fine-tuning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Maya&lt;double&gt;(architecture, "maya.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Maya&lt;double&gt;(architecture, new MayaOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
