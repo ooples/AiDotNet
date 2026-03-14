@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <list type="bullet"><item>Paper: "MVBench: A Comprehensive Multi-modal Video Understanding Benchmark" (Shanghai AI Lab, 2023)</item></list></para>
 /// <para><b>For Beginners:</b> VideoChat2 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VideoChat2 model for video conversation
+/// // with progressive training on diverse video-text data
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VideoChat2&lt;double&gt;(architecture, "videochat2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VideoChat2&lt;double&gt;(architecture, new VideoChat2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Video)]

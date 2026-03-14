@@ -20,6 +20,22 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <list type="bullet"><item>Paper: "SlowFast-LLaVA: A Strong Training-Free Baseline for Video Large Language Models" (Meta, 2025)</item></list></para>
 /// <para><b>For Beginners:</b> SlowFastLLaVA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SlowFast-LLaVA model for long video understanding
+/// // with token-efficient dual slow/fast pathways for temporal modeling
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SlowFastLLaVA&lt;double&gt;(architecture, "slowfastllava.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SlowFastLLaVA&lt;double&gt;(architecture, new SlowFastLLaVAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Video)]

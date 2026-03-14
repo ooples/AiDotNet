@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <list type="bullet"><item>Paper: "Video-LLaVA: Learning United Visual Representation by Alignment Before Projection" (PKU, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> VideoLLaVA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Video-LLaVA model for unified video understanding
+/// // with aligned visual representations before projection
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VideoLLaVA&lt;double&gt;(architecture, "videollava.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VideoLLaVA&lt;double&gt;(architecture, new VideoLLaVAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Video)]

@@ -20,6 +20,22 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// <list type="bullet"><item>Paper: "LongVILA: Scaling Long-Context Visual Language Models for Long Videos" (NVIDIA, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> LongVILA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LongVILA model for long-context video understanding
+/// // capable of processing 1hr+ videos with long-context attention
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LongVILA&lt;double&gt;(architecture, "longvila.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LongVILA&lt;double&gt;(architecture, new LongVILAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Video)]
