@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// MemFlow augments flow estimation with an explicit memory module that aggregates historical motion information for improved temporal consistency.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MemFlow model for memory-augmented optical flow estimation
+/// var memFlow = new MemFlow&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new MemFlow&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

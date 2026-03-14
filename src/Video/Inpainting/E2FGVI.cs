@@ -34,6 +34,19 @@ namespace AiDotNet.Video.Inpainting;
 /// - Temporal consistency enforcement
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an E2FGVI model for flow-guided video inpainting
+/// var e2fgvi = new E2FGVI&lt;double&gt;();
+///
+/// // Or configure with custom feature dimensions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new E2FGVI&lt;double&gt;(architecture, numFeatures: 128);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

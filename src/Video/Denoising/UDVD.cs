@@ -29,6 +29,19 @@ namespace AiDotNet.Video.Denoising;
 /// unidirectionally using only past frames, enabling real-time streaming operation.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UDVD model for blind self-supervised video denoising
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new UDVDOptions();
+/// var udvd = new UDVD&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for streaming inference
+/// var udvdOnnx = new UDVD&lt;double&gt;(architecture, "udvd_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

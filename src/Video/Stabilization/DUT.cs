@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Stabilization;
 /// to produce smooth warping fields without requiring paired stable/unstable training data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DUT model for unsupervised video stabilization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new DUTOptions();
+/// var dut = new DUT&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var dutOnnx = new DUT&lt;double&gt;(architecture, "dut_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

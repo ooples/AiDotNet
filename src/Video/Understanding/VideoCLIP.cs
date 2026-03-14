@@ -46,6 +46,19 @@ namespace AiDotNet.Video.Understanding;
 /// EMNLP 2021.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VideoCLIP model for video-text understanding
+/// var videoCLIP = new VideoCLIP&lt;double&gt;();
+///
+/// // Or configure with custom embedding dimensions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 400);
+/// var model = new VideoCLIP&lt;double&gt;(architecture, numFrames: 32, embeddingDim: 512);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]

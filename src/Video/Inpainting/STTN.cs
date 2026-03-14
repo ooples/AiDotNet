@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Inpainting;
 /// feature scales enables both fine-grained texture transfer and large-scale structure completion.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an STTN model for spatial-temporal video inpainting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new STTNOptions();
+/// var sttn = new STTN&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var sttnOnnx = new STTN&lt;double&gt;(architecture, "sttn_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

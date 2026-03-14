@@ -41,6 +41,19 @@ namespace AiDotNet.Video.Depth;
 /// <b>Reference:</b> Yang et al., "Depth Anything V2" 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Depth Anything V2 model for monocular depth estimation
+/// var depthModel = new DepthAnythingV2&lt;double&gt;();
+///
+/// // Or configure with a specific backbone size
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
+/// var model = new DepthAnythingV2&lt;double&gt;(architecture, modelSize: ModelSize.Large);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

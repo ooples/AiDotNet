@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// FlowDiffuser applies diffusion models to optical flow estimation with iterative refinement, producing accurate and smooth flow fields.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FlowDiffuser model for diffusion-based optical flow estimation
+/// var flowDiffuser = new FlowDiffuser&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new FlowDiffuser&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

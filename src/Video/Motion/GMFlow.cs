@@ -39,6 +39,19 @@ namespace AiDotNet.Video.Motion;
 /// CVPR 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GMFlow model for global matching optical flow estimation
+/// var gmFlow = new GMFlow&lt;double&gt;();
+///
+/// // Or configure with custom architecture
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new GMFlow&lt;double&gt;(architecture, numFeatures: 128);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

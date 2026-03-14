@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// SKFlow uses selective kernel attention mechanisms to efficiently capture multi-scale motion information for optical flow estimation.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an SKFlow model for selective-kernel optical flow estimation
+/// var skFlow = new SKFlow&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new SKFlow&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

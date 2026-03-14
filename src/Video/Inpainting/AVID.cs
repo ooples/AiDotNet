@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Inpainting;
 /// that maintains temporal consistency across the full sequence.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an AVID model for diffusion-based video inpainting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new AVIDOptions();
+/// var avid = new AVID&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var avidOnnx = new AVID&lt;double&gt;(architecture, "avid_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

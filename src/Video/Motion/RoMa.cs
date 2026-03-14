@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// RoMa achieves robust dense feature matching using DINOv2 foundation features, producing pixel-dense correspondence maps for geometry estimation.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RoMa model for robust dense feature matching
+/// var roma = new RoMa&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new RoMa&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

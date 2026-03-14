@@ -42,6 +42,20 @@ namespace AiDotNet.Video.ActionRecognition;
 /// NeurIPS 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VideoMAE model for action recognition on Kinetics-400
+/// var videoMAE = new VideoMAE&lt;double&gt;();
+///
+/// // Or configure with a custom architecture and parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3,
+///     outputSize: 400);
+/// var model = new VideoMAE&lt;double&gt;(architecture, numClasses: 400, numFrames: 16);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -40,6 +40,19 @@ namespace AiDotNet.Video.Motion;
 /// ECCV 2020.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RAFT model for recurrent optical flow estimation
+/// var raft = new RAFT&lt;double&gt;();
+///
+/// // Or configure with custom architecture
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new RAFT&lt;double&gt;(architecture, numFeatures: 128, numIterations: 12);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

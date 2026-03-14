@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Denoising;
 /// parameter reduction while maintaining quality.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a lightweight LiteDVDNet model for efficient video denoising
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new LiteDVDNetOptions();
+/// var liteDvdNet = new LiteDVDNet&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for real-time inference
+/// var liteDvdNetOnnx = new LiteDVDNet&lt;double&gt;(architecture, "litedvdnet_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

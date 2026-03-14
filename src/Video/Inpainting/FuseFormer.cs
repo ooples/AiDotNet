@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Inpainting;
 /// local texture details and global structure across frames for high-quality inpainting.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FuseFormer model for transformer-based video inpainting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new FuseFormerOptions();
+/// var fuseFormer = new FuseFormer&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var fuseFormerOnnx = new FuseFormer&lt;double&gt;(architecture, "fuseformer_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

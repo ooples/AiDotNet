@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Stabilization;
 /// intentional cinematographic movements while removing distracting shake near gaze targets.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GaVS model for gaze-aware video stabilization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new GaVSOptions();
+/// var gavs = new GaVS&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var gavsOnnx = new GaVS&lt;double&gt;(architecture, "gavs_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
