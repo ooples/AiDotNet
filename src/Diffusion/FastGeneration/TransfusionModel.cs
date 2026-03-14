@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Zhou et al., "Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 256, Width = 256, NumInferenceSteps = 20 };
+/// var model = new TransfusionModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 32, 32 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Multimodal)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.Diffusion)]
