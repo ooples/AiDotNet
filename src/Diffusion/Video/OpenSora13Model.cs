@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 480, Width = 848, NumInferenceSteps = 30 };
+/// var model = new OpenSora13Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 51, 60, 106 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
