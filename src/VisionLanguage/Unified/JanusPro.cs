@@ -17,9 +17,16 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Janus-Pro (DeepSeek, 2025) scales the Janus architecture with larger models and optimized
+/// training strategies. It maintains the decoupled visual encoding design while improving
+/// both understanding and generation quality through expanded training data, curriculum learning,
+/// and architectural refinements to the cross-modal interaction layers.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling" (DeepSeek, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> JanusPro is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Janus-Pro is an improved version of Janus with better performance
+/// through data and model scaling. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

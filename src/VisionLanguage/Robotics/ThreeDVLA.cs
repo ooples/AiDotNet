@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// 3D-VLA (UMass, 2024) connects vision-language-action models to the 3D world via a generative
+/// world model. It processes 3D point cloud observations alongside language instructions and
+/// generates both predicted future states (as a world model) and robot actions, enabling
+/// planning through imagination in 3D space.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "3D-VLA: A 3D Vision-Language-Action Generative World Model (UMass, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> ThreeDVLA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> 3D-VLA is a vision-language-action model that uses 3D world
+/// modeling for robot planning and action generation. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

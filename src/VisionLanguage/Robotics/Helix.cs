@@ -17,9 +17,16 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Helix (Figure AI, 2025) is the first vision-language-action model for full humanoid upper body
+/// control. It processes visual observations and language instructions to generate coordinated
+/// motor commands for both arms and hands simultaneously, enabling dexterous bimanual manipulation
+/// tasks in real-world environments.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Helix: A Vision-Language-Action Model for Humanoid Robots (Figure AI, 2025)"</item></list></para>
-/// <para><b>For Beginners:</b> Helix is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Helix is a vision-language-action model from Figure AI for
+/// humanoid robot dexterous manipulation. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// SEED-X (Tencent, 2024) is a multimodal model with unified multi-granularity comprehension
+/// and generation. It processes visual information at multiple granularity levels from global
+/// scene understanding to fine-grained detail recognition, using a SEED visual tokenizer that
+/// captures both high-level semantics and low-level visual details for generation tasks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SEED-X: Multimodal Models with Unified Multi-granularity Comprehension and Generation" (Tencent, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> SEEDX is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> SEED-X is a unified model for multi-granularity visual
+/// understanding and generation from Tencent. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

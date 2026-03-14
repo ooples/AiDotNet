@@ -17,9 +17,18 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Transfusion (Meta, 2024) combines autoregressive next-token prediction and continuous
+/// diffusion loss within a single multi-modal transformer. Text tokens use cross-entropy loss
+/// while image patches use diffusion denoising loss, allowing the model to both generate
+/// text autoregressively and produce high-quality images through diffusion within a unified
+/// architecture.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model" (Meta, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Transfusion is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Transfusion is a unified model that combines autoregressive
+/// text generation with diffusion-based image generation. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Show-o (NUS, 2024) uses a single transformer to unify multimodal understanding and generation.
+/// It combines autoregressive next-token prediction for text with discrete diffusion for image
+/// generation within the same model, switching between generation modes based on the output
+/// modality while sharing all transformer parameters.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Show-o: One Single Transformer to Unify Multimodal Understanding and Generation" (NUS, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> ShowO is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Show-o is a unified transformer model that handles both
+/// multimodal understanding and image generation. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

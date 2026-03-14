@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Chameleon (Meta, 2024) is a mixed-modal early-fusion foundation model that represents all
+/// modalities (text, images, code) as discrete tokens in a unified vocabulary. Images are
+/// quantized via a VQ-VAE encoder into discrete visual tokens, enabling a single autoregressive
+/// transformer to generate and understand any combination of text and images natively.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Chameleon: Mixed-Modal Early-Fusion Foundation Models" (Meta, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Chameleon is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Chameleon is a unified model that handles text and images
+/// using the same discrete token vocabulary. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

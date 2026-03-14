@@ -17,9 +17,18 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Janus (DeepSeek, 2024) decouples visual encoding into separate pathways for understanding
+/// and generation. It uses a SigLIP encoder for visual understanding tasks and a VQ tokenizer
+/// for image generation, both feeding into a shared LLM backbone. This decoupling resolves
+/// the tension between high-level semantic features needed for understanding and low-level
+/// visual tokens needed for generation.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Janus: Decoupling Visual Encoding for Unified Multimodal Understanding and Generation" (DeepSeek, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Janus is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Janus is a unified vision-language model from DeepSeek that
+/// uses separate visual paths for understanding and generation. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

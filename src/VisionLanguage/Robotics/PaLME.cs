@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// PaLM-E (Google, 2023) is a 562 billion parameter embodied multimodal language model that
+/// integrates vision, language, and robot control. It injects continuous sensor observations
+/// (images, point clouds, robot state) as tokens into the PaLM language model, enabling
+/// embodied reasoning, task planning, and real-world robotic manipulation from natural language.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PaLM-E: An Embodied Multimodal Language Model (Google, 2023)"</item></list></para>
-/// <para><b>For Beginners:</b> PaLME is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> PaLM-E is a massive embodied vision-language model from Google
+/// for robotic planning and multimodal reasoning. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

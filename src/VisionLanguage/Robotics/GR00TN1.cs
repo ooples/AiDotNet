@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// GR00T N1 (NVIDIA, 2025) is an open foundation model for generalist humanoid robots with
+/// a dual-system vision-language-action architecture. System 1 handles reactive motor control
+/// at high frequency, while System 2 provides deliberative planning through a vision-language
+/// backbone, enabling dexterous whole-body manipulation from language instructions and visual input.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GR00T N1: An Open Foundation Model for Generalist Humanoid Robots (NVIDIA, 2025)"</item></list></para>
-/// <para><b>For Beginners:</b> GR00TN1 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> GR00T N1 is a vision-language-action model from NVIDIA for
+/// controlling humanoid robots with language instructions. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

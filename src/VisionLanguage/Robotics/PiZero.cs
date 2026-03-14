@@ -17,9 +17,16 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// pi-zero (Black et al., 2024) is a vision-language-action flow model built on PaliGemma VLM
+/// with a dedicated action expert for general robot control. It uses flow matching to generate
+/// continuous robot actions, trained across 8 different robot embodiments for dexterous
+/// manipulation including folding, assembly, and bin-picking tasks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "pi0: A Vision-Language-Action Flow Model for General Robot Control (Black et al., 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> PiZero is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> pi-zero is a vision-language-action model for general robot
+/// control across multiple robot platforms. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

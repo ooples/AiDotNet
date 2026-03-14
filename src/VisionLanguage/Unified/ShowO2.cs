@@ -17,9 +17,16 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Show-o2 (NUS, 2025) improves upon Show-o with enhanced native unified multimodal capabilities.
+/// It refines the discrete diffusion approach for image generation with improved visual token
+/// quality and strengthens the multimodal understanding pathway through better cross-modal
+/// attention and scaled training on larger multimodal datasets.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Show-o2: Improved Unified Multimodal Understanding and Generation" (NUS, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> ShowO2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Show-o2 is an improved version of Show-o with enhanced
+/// understanding and generation quality. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

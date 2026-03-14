@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// RT-2 (Google DeepMind, 2023) is a vision-language-action model that transfers web-scale
+/// knowledge to robotic control. It fine-tunes a large vision-language model (PaLI-X or PaLM-E)
+/// on robot demonstration data, encoding robot actions as text tokens so that web knowledge
+/// about objects, scenes, and spatial relationships directly improves robotic manipulation.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control (Google DeepMind, 2023)"</item></list></para>
-/// <para><b>For Beginners:</b> RT2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> RT-2 is a vision-language-action model from Google DeepMind
+/// that uses web knowledge for improved robot control. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

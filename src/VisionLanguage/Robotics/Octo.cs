@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Octo (Berkeley, 2024) is an open-source generalist robot policy trained on 800K demonstrations
+/// from the Open X-Embodiment dataset. It uses a transformer backbone that processes interleaved
+/// image observations and language task specifications, outputting continuous robot actions
+/// that generalize across different robot embodiments and manipulation tasks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Octo: An Open-Source Generalist Robot Policy (Berkeley, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> Octo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Octo is an open-source vision-language-action model for generalist
+/// robot control across different robot platforms. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

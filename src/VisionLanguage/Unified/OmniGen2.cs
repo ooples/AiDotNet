@@ -17,9 +17,16 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// OmniGen2 (THU, 2025) advances unified image generation with a dual-path architecture that
+/// decouples understanding and generation parameters. One path handles visual comprehension
+/// while the other specializes in image generation via diffusion, allowing each path to be
+/// independently optimized while sharing a common language backbone for instruction following.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OmniGen2: Advancing Unified Image Generation with Dual-Path Architecture" (THU, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> OmniGen2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> OmniGen2 is a unified model for image generation using dual-path
+/// architecture with parameter decoupling. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>
