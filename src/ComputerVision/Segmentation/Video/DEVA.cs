@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 /// <b>Reference:</b> Cheng et al., "Tracking Anything with Decoupled Video Segmentation", ICCV 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DEVA model for decoupled video object segmentation and tracking
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 480, inputWidth: 480, inputDepth: 3, outputSize: 1);
+/// var model = new DEVA&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for video tracking inference
+/// var onnxModel = new DEVA&lt;double&gt;(architecture, "deva.onnx", numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

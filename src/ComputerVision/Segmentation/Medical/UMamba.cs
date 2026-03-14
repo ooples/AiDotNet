@@ -37,6 +37,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Ma et al., "U-Mamba: Enhancing Long-range Dependency for Biomedical Image Segmentation", arXiv 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a U-Mamba model for medical image segmentation with long-range dependencies
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 1, outputSize: 14);
+/// var model = new UMamba&lt;double&gt;(architecture, numClasses: 14);
+///
+/// // Or load a pre-trained ONNX model for CT/MRI organ segmentation
+/// var onnxModel = new UMamba&lt;double&gt;(architecture, "umamba.onnx", numClasses: 14);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]

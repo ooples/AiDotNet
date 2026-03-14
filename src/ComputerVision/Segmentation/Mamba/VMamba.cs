@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 /// <b>Reference:</b> Liu et al., "VMamba: Visual State Space Model", NeurIPS 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VMamba model for hierarchical semantic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new VMamba&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model with cross-scan mechanism
+/// var onnxModel = new VMamba&lt;double&gt;(architecture, "vmamba.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Segmentation)]

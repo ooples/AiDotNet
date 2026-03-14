@@ -40,6 +40,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// <b>Reference:</b> Li et al., "OMG-Seg: Is One Model Good Enough For All Segmentation?", CVPR 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an OMG-Seg model for multi-task segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new OMGSeg&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for unified segmentation
+/// var onnxModel = new OMGSeg&lt;double&gt;(architecture, "omgseg.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]

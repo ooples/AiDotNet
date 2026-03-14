@@ -36,6 +36,16 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// <b>Reference:</b> Zhao et al., "Fast Segment Anything", arXiv 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FastSAM model for real-time segment anything via YOLOv8
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
+/// var model = new FastSAM&lt;double&gt;(architecture, numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Segmentation)]

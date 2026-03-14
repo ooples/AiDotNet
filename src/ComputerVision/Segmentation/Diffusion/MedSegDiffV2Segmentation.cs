@@ -37,6 +37,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 /// <b>Reference:</b> Wu et al., "MedSegDiff-V2: Diffusion-based Medical Image Segmentation with Transformer", AAAI 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MedSegDiff-V2 model for diffusion-based medical segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
+/// var model = new MedSegDiffV2Segmentation&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model
+/// var onnxModel = new MedSegDiffV2Segmentation&lt;double&gt;(architecture, "medsegdiffv2_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]

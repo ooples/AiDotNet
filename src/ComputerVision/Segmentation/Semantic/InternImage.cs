@@ -40,6 +40,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// with Deformable Convolutions", CVPR 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an InternImage model for large-scale semantic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new InternImage&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for scene parsing
+/// var onnxModel = new InternImage&lt;double&gt;(architecture, "internimage.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelCategory(ModelCategory.FoundationModel)]

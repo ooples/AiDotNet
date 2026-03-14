@@ -41,6 +41,19 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 /// Gradient Information", arXiv 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a YOLOv9-Seg model with programmable gradient information
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 640, inputWidth: 640, inputDepth: 3, outputSize: 80);
+/// var model = new YOLOv9Seg&lt;double&gt;(architecture, numClasses: 80);
+///
+/// // Or load a pre-trained ONNX model for industrial inspection
+/// var onnxModel = new YOLOv9Seg&lt;double&gt;(architecture, "yolov9c-seg.onnx", numClasses: 80);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Segmentation)]

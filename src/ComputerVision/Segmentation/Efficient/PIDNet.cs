@@ -36,6 +36,16 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// <b>Reference:</b> Xu et al., "PIDNet: A Real-time Semantic Segmentation Network Inspired by PID Controllers", CVPR 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PIDNet model for real-time semantic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 1024, inputDepth: 3, outputSize: 19);
+/// var model = new PIDNet&lt;double&gt;(architecture, numClasses: 19);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Segmentation)]

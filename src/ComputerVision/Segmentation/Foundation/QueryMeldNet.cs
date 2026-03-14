@@ -39,6 +39,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// <b>Reference:</b> "QueryMeldNet: Dynamic Query Melding for Multi-Dataset Segmentation", CVPR 2025.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a QueryMeldNet model for multi-dataset panoptic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 133);
+/// var model = new QueryMeldNet&lt;double&gt;(architecture, numClasses: 133);
+///
+/// // Or load a pre-trained ONNX model for cross-dataset segmentation
+/// var onnxModel = new QueryMeldNet&lt;double&gt;(architecture, "querymeldnet.onnx", numClasses: 133);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]

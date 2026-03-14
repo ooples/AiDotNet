@@ -37,6 +37,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Roy et al., "MedNeXt: Transformer-driven Scaling of ConvNets for Medical Image Segmentation", MICCAI 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MedNeXt model for CT/MRI organ segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 1, outputSize: 14);
+/// var model = new MedNeXt&lt;double&gt;(architecture, numClasses: 14);
+///
+/// // Or load a pre-trained ONNX model for medical image analysis
+/// var onnxModel = new MedNeXt&lt;double&gt;(architecture, "mednext.onnx", numClasses: 14);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Segmentation)]

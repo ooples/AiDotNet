@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 /// <b>Reference:</b> Zhu et al., "Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", ICML 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Vision Mamba model for efficient semantic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new VisionMamba&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for linear-complexity segmentation
+/// var onnxModel = new VisionMamba&lt;double&gt;(architecture, "vim.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Segmentation)]

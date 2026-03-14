@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Ma et al., "Segment Anything in Medical Images", Nature Communications 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MedSAM model for universal medical image segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
+/// var model = new MedSAM&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for box-prompted medical segmentation
+/// var onnxModel = new MedSAM&lt;double&gt;(architecture, "medsam.onnx", numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.Transformer)]

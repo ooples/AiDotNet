@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Hatamizadeh et al., "Swin UNETR: Swin Transformers for Semantic Segmentation of Brain Tumors in MRI Images", BrainLes 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SwinUNETR model for 3D brain tumor segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 1, outputSize: 14);
+/// var model = new SwinUNETR&lt;double&gt;(architecture, numClasses: 14);
+///
+/// // Or load a pre-trained ONNX model for brain MRI segmentation
+/// var onnxModel = new SwinUNETR&lt;double&gt;(architecture, "swinunetr.onnx", numClasses: 14);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.Transformer)]

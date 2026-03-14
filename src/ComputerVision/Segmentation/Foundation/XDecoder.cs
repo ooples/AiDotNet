@@ -40,6 +40,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// <b>Reference:</b> Zou et al., "Generalized Decoding for Pixel, Image, and Language", CVPR 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an X-Decoder model for vision-language segmentation and captioning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new XDecoder&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for referring and open-vocabulary segmentation
+/// var onnxModel = new XDecoder&lt;double&gt;(architecture, "xdecoder.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

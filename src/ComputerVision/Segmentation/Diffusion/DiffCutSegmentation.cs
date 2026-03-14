@@ -37,6 +37,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 /// <b>Reference:</b> Couairon et al., "DiffCut: Catalyzing Zero-Shot Semantic Segmentation with Diffusion Features and Recursive Normalized Cut", arXiv 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DiffCut model for zero-shot diffusion-based segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 1);
+/// var model = new DiffCutSegmentation&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model
+/// var onnxModel = new DiffCutSegmentation&lt;double&gt;(architecture, "diffcut_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Segmentation)]

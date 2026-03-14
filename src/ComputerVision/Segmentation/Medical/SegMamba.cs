@@ -37,6 +37,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Xing et al., "SegMamba: Long-range Sequential Modeling Mamba For 3D Medical Image Segmentation", arXiv 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SegMamba model for 3D medical volume segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 1, outputSize: 14);
+/// var model = new SegMamba&lt;double&gt;(architecture, numClasses: 14);
+///
+/// // Or load a pre-trained ONNX model for whole-body CT segmentation
+/// var onnxModel = new SegMamba&lt;double&gt;(architecture, "segmamba.onnx", numClasses: 14);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]

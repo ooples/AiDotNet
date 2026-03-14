@@ -39,6 +39,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// <b>Reference:</b> Niu et al., "Unsupervised Universal Image Segmentation", CVPR 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a U2Seg model for unsupervised universal segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new U2Seg&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for annotation-free segmentation
+/// var onnxModel = new U2Seg&lt;double&gt;(architecture, "u2seg.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]

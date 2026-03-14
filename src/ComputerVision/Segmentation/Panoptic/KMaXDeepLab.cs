@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 /// <b>Reference:</b> Yu et al., "k-means Mask Transformer", ECCV 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a kMaX-DeepLab model for panoptic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 133);
+/// var model = new KMaXDeepLab&lt;double&gt;(architecture, numClasses: 133);
+///
+/// // Or load a pre-trained ONNX model for autonomous driving scene parsing
+/// var onnxModel = new KMaXDeepLab&lt;double&gt;(architecture, "kmaxdeeplab.onnx", numClasses: 133);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
