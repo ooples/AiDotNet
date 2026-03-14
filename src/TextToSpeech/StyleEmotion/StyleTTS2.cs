@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <summary>StyleTTS 2: style diffusion and adversarial training with large SLMs for human-level expressive TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models" (Li et al., 2023)</item></list></para><para><b>For Beginners:</b> StyleTTS 2: style diffusion and adversarial training with large SLMs for human-level expressive TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a StyleTTS 2 model for human-level expressive TTS
+/// // with style diffusion, adversarial training, and WavLM discriminator
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new StyleTTS2&lt;double&gt;(architecture, "styletts2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new StyleTTS2&lt;double&gt;(architecture, new StyleTTS2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

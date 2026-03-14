@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <summary>EmotiVoice: multi-voice and prompt-controlled TTS with emotion and style control.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "EmotiVoice: A Multi-Voice and Prompt-Controlled TTS Engine" (NetEase Youdao, 2023)</item></list></para><para><b>For Beginners:</b> EmotiVoice: multi-voice and prompt-controlled TTS with emotion and style control.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an EmotiVoice model for emotion-controlled multi-voice TTS
+/// // with prompt-based emotion and style control (happy, sad, angry, etc.)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new EmotiVoice&lt;double&gt;(architecture, "emotivoice.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new EmotiVoice&lt;double&gt;(architecture, new EmotiVoiceOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

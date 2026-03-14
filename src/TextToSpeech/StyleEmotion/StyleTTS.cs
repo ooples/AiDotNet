@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <summary>StyleTTS: style-based generative model for expressive TTS with style diffusion and adversarial training.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "StyleTTS: A Style-Based Generative Model for Natural and Diverse Text-to-Speech Synthesis" (Li et al., 2022)</item></list></para><para><b>For Beginners:</b> StyleTTS: style-based generative model for expressive TTS with style diffusion and adversarial training.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a StyleTTS model for style-based expressive speech synthesis
+/// // with style diffusion and adversarial training for diverse prosody
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new StyleTTS&lt;double&gt;(architecture, "styletts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new StyleTTS&lt;double&gt;(architecture, new StyleTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
