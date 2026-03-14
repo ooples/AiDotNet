@@ -32,6 +32,14 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 /// Reference: Choi et al., "Improving Diffusion Models for Authentic Virtual Try-on in the Wild", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 768, NumInferenceSteps = 30 };
+/// var model = new IDMVTONModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 96 });
+/// var tryOn = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]

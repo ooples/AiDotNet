@@ -31,6 +31,14 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 /// Reference: Zhang et al., "MotionDiffuse: Text-Driven Human Motion Generation with Diffusion Model", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 263, Height = 1, Width = 196, NumInferenceSteps = 50 };
+/// var model = new MotionDiffuseModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 263, 196 });
+/// var motion = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]

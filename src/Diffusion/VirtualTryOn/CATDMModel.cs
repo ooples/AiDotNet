@@ -28,6 +28,14 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 /// fabric drapes, and other fine details of the garment's appearance.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 384, NumInferenceSteps = 30 };
+/// var model = new CATDMModel&lt;float&gt;(options);
+/// var personGarment = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 48 });
+/// var tryOn = model.Predict(personGarment);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]

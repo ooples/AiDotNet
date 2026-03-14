@@ -31,6 +31,14 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 /// Reference: Chong et al., "CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 384, NumInferenceSteps = 30 };
+/// var model = new CatVTONModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 48 });
+/// var tryOn = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]

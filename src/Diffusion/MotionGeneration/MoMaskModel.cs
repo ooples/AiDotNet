@@ -31,6 +31,14 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 /// Reference: Guo et al., "MoMask: Generative Masked Modeling of 3D Human Motions", CVPR 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 263, Height = 1, Width = 196, NumInferenceSteps = 10 };
+/// var model = new MoMaskModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 263, 196 });
+/// var motion = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
