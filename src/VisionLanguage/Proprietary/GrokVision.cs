@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Grok Vision is a reference implementation of xAI's real-time multimodal model. Grok processes
+/// images alongside text with access to real-time data, featuring a large context window and
+/// multimodal understanding capabilities for visual question answering, image analysis, and
+/// document understanding.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Grok Vision: real-time data processing with multimodal input (xAI, 2024-2025)</item></list></para>
-/// <para><b>For Beginners:</b> GrokVision is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Grok Vision is a proprietary multimodal model from xAI with
+/// real-time data access and visual understanding. Default values follow the model's recommended
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

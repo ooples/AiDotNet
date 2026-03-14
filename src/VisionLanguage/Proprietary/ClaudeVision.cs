@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Claude Vision is a reference implementation of Anthropic's multimodal reasoning model.
+/// The Claude 3/4 family features strong document and chart understanding, extended thinking
+/// for complex visual reasoning, and processes images alongside text in a unified transformer
+/// architecture with safety-focused RLHF training.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Claude 3/4 Vision: strong document and chart understanding with extended thinking (Anthropic, 2024-2025)</item></list></para>
-/// <para><b>For Beginners:</b> ClaudeVision is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Claude Vision is a proprietary multimodal model from Anthropic
+/// with strong visual reasoning and document understanding. Default values follow the model's
+/// recommended settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

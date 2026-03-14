@@ -17,9 +17,16 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// GeoChat (MBZUAI, 2024) is a grounded large vision-language model specialized for remote
+/// sensing. It provides spatially-aware understanding of satellite and aerial imagery with
+/// capabilities for scene classification, object grounding, region-level captioning, and
+/// visual question answering on remote sensing data.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GeoChat: Grounded Large Vision-Language Model for Remote Sensing (MBZUAI, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> GeoChat is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> GeoChat is a vision-language model for grounded understanding
+/// of satellite and aerial imagery. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Emu Edit (Meta, 2024) enables precise image editing by jointly training on recognition and
+/// generation tasks. The model learns to understand editing instructions through multi-task learning
+/// on 16 editing tasks including region-based editing, color/texture modifications, and object
+/// addition/removal, using a diffusion-based generation backbone conditioned on text instructions.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Emu Edit: Precise Image Editing via Recognition and Generation Tasks" (Meta, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> EmuEdit is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Emu Edit is a vision-language model for instruction-based image
+/// editing that understands natural language edit commands. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

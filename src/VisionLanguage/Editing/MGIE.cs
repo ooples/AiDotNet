@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// MGIE (Apple, 2024) guides instruction-based image editing through a multimodal LLM (LLaVA)
+/// that interprets and expands ambiguous editing instructions into detailed, expressive guidance.
+/// The LLM-derived guidance conditions a diffusion model for semantically faithful edits that
+/// align with user intent, bridging the gap between vague instructions and precise image modifications.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Guiding Instruction-Based Image Editing via Multimodal Large Language Models" (Apple, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> MGIE is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> MGIE is a vision-language model that uses an LLM to understand
+/// editing instructions and guide a diffusion model for precise image edits. Default values
+/// follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

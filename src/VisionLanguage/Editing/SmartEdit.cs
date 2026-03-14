@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// SmartEdit (2024) explores complex instruction-based image editing by leveraging multimodal
+/// LLMs to understand nuanced editing instructions. It enhances instruction comprehension through
+/// bidirectional interaction between the understanding and generation components, enabling edits
+/// that require reasoning about spatial relationships, object attributes, and complex scene context.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SmartEdit: Exploring Complex Instruction-based Image Editing with Multimodal LLMs" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> SmartEdit is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> SmartEdit is a vision-language model for complex instruction-based
+/// image editing that handles nuanced and multi-step editing commands. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

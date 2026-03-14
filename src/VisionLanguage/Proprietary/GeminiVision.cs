@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Gemini Vision is a reference implementation of Google's natively multimodal Mixture of Experts
+/// model. The Gemini family processes interleaved text, image, audio, and video tokens natively
+/// with 1M+ token context windows, using a sparse MoE architecture for efficient scaling across
+/// multiple modalities.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Gemini: Google's natively multimodal model family with 1M+ token context (Google, 2024-2026)</item></list></para>
-/// <para><b>For Beginners:</b> GeminiVision is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Gemini Vision is a proprietary multimodal model from Google that
+/// natively handles images, text, audio, and video. Default values follow the model's recommended
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

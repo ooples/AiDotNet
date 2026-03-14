@@ -17,9 +17,16 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// RSGPT (2024) is a remote sensing vision-language model built on the InstructBLIP architecture.
+/// It adapts the Q-Former cross-modal bridge for remote sensing imagery, providing satellite
+/// image captioning, visual question answering, and scene understanding capabilities with
+/// domain-specific visual encoders fine-tuned on remote sensing datasets.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RSGPT: A Remote Sensing Vision Language Model and Benchmark (Various, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> RSGPT is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> RSGPT is a vision-language model for remote sensing image
+/// captioning and question answering. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>
