@@ -21,6 +21,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <list type="bullet"><item>Paper: "FastSpeech 2: Fast and High-Quality End-to-End Text to Speech" (Ren et al., 2020)</item></list></para>
 /// <para><b>For Beginners:</b> /// FastSpeech 2: non-autoregressive TTS with variance adaptor for pitch, energy, and duration.
 ///. This model converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create a FastSpeech 2 model for non-autoregressive TTS
+/// // with variance adaptor for explicit pitch, energy, and duration control
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new FastSpeech2&lt;double&gt;(architecture, "fastspeech2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new FastSpeech2&lt;double&gt;(architecture, new FastSpeech2Options());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]

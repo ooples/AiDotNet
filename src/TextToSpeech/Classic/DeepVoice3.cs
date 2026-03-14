@@ -21,6 +21,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <list type="bullet"><item>Paper: "Deep Voice 3: Scaling Text-to-Speech with Convolutional Sequence Learning" (Ping et al., 2018)</item></list></para>
 /// <para><b>For Beginners:</b> /// Deep Voice 3: fully convolutional attention-based TTS with monotonic attention.
 ///. This model converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create a Deep Voice 3 model for fully convolutional TTS
+/// // with monotonic attention and multi-speaker support
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DeepVoice3&lt;double&gt;(architecture, "deepvoice3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DeepVoice3&lt;double&gt;(architecture, new DeepVoice3Options());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]

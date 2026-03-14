@@ -19,6 +19,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <list type="bullet"><item>Paper: "PortaSpeech: Portable and High-Quality Generative Text-to-Speech" (Ren et al., 2021)</item></list></para>
 /// <para><b>For Beginners:</b> /// PortaSpeech: portable TTS with word-level prosody modeling and normalizing flow-based post-net for expressiveness.
 ///. This model converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create a PortaSpeech model for portable high-quality TTS
+/// // with word-level prosody modeling and normalizing flow post-net
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PortaSpeech&lt;double&gt;(architecture, "portaspeech.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PortaSpeech&lt;double&gt;(architecture, new PortaSpeechOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]

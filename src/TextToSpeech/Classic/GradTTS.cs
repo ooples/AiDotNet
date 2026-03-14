@@ -21,6 +21,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <list type="bullet"><item>Paper: "Grad-TTS: A Diffusion Probabilistic Model for Text-to-Speech" (Popov et al., 2021)</item></list></para>
 /// <para><b>For Beginners:</b> /// Grad-TTS: diffusion-based acoustic model using score matching and stochastic differential equations.
 ///. This model converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create a Grad-TTS model for diffusion-based speech synthesis
+/// // using score matching and stochastic differential equations
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GradTTS&lt;double&gt;(architecture, "gradtts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GradTTS&lt;double&gt;(architecture, new GradTTSOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]

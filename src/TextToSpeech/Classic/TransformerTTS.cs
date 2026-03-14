@@ -21,6 +21,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <list type="bullet"><item>Paper: "Neural Speech Synthesis with Transformer Network" (Li et al., 2019)</item></list></para>
 /// <para><b>For Beginners:</b> /// Transformer TTS: multi-head self-attention based acoustic model replacing RNNs with transformers.
 ///. This model converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create a Transformer TTS model for multi-head self-attention based speech synthesis
+/// // replacing RNN-based sequence modeling with pure transformer architecture
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new TransformerTTS&lt;double&gt;(architecture, "transformer_tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new TransformerTTS&lt;double&gt;(architecture, new TransformerTTSOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]

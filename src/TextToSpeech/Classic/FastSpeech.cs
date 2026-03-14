@@ -21,6 +21,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <list type="bullet"><item>Paper: "FastSpeech: Fast, Robust and Controllable Text to Speech" (Ren et al., 2019)</item></list></para>
 /// <para><b>For Beginners:</b> /// FastSpeech: non-autoregressive TTS with knowledge-distilled duration predictor for parallel generation.
 ///. This model converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create a FastSpeech model for non-autoregressive parallel speech synthesis
+/// // with knowledge-distilled duration predictor for fast generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new FastSpeech&lt;double&gt;(architecture, "fastspeech.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new FastSpeech&lt;double&gt;(architecture, new FastSpeechOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]

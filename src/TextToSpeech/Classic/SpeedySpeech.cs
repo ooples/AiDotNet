@@ -21,6 +21,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <list type="bullet"><item>Paper: "SpeedySpeech: Efficient Neural Speech Synthesis" (Vainer and Durnov, 2020)</item></list></para>
 /// <para><b>For Beginners:</b> /// SpeedySpeech: lightweight non-autoregressive TTS with convolutional residual blocks and teacher-student duration distillation.
 ///. This model converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create a SpeedySpeech model for lightweight non-autoregressive TTS
+/// // with convolutional residual blocks and teacher-student duration distillation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SpeedySpeech&lt;double&gt;(architecture, "speedyspeech.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SpeedySpeech&lt;double&gt;(architecture, new SpeedySpeechOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]

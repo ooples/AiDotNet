@@ -20,6 +20,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Non-Attentive Tacotron: Robust and Controllable Neural TTS Synthesis Including Unsupervised Duration Modeling" (Shen et al., 2021)</item></list></para>
 /// <para><b>For Beginners:</b> Forward Tacotron is a non-autoregressive text-to-speech model that converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create a Forward Tacotron model for non-autoregressive TTS
+/// // using duration predictor instead of attention for robust alignment
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ForwardTacotron&lt;double&gt;(architecture, "forward_tacotron.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ForwardTacotron&lt;double&gt;(architecture, new ForwardTacotronOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
