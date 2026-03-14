@@ -49,6 +49,18 @@ namespace AiDotNet.PointCloud.Models;
 /// by Qi et al., CVPR 2017
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PointNet model for 3D object classification with 40 classes
+/// var pointNet = new PointNet&lt;float&gt;(
+///     numClasses: 40,
+///     useInputTransform: true,
+///     useFeatureTransform: true);
+/// // Process a point cloud (1024 points, 3 coordinates each)
+/// var pointCloud = new Tensor&lt;float&gt;(new[] { 1, 1024, 3 });
+/// Vector&lt;float&gt; classProbabilities = pointNet.Classify(pointCloud);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

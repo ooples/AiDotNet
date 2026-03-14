@@ -14,6 +14,19 @@ namespace AiDotNet.LinearAlgebra;
 /// Each node in the tree is either a number, a variable, or an operation (like addition or multiplication).
 /// This allows the AI to create and evolve mathematical formulas that can model your data.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a symbolic expression tree: (x0 * 2.5) + x1
+/// var tree = ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateOperation(
+///     ExpressionNodeType.Add,
+///     ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateOperation(
+///         ExpressionNodeType.Multiply,
+///         ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateVariable(0),
+///         ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateConstant(2.5)),
+///     ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateVariable(1));
+/// double result = tree.Evaluate(new double[] { 3.0, 1.0 }); // (3.0 * 2.5) + 1.0 = 8.5
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Interpretable)]
 [ModelCategory(ModelCategory.Optimization)]

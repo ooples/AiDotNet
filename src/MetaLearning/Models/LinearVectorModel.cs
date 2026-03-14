@@ -22,6 +22,16 @@ namespace AiDotNet.MetaLearning.Models;
 /// it ideal for verifying that meta-learning algorithms like MAML work correctly before
 /// scaling up to more complex models.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a simple linear model for meta-learning testing
+/// var model = new LinearVectorModel(inputDim: 5, learningRate: 0.01);
+/// var input = new Matrix&lt;double&gt;(10, 5);  // 10 samples, 5 features
+/// var labels = new Vector&lt;double&gt;(10);
+/// model.Train(input, labels);
+/// Vector&lt;double&gt; predictions = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelTask(ModelTask.Regression)]

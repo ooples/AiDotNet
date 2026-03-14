@@ -22,6 +22,16 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// like a student who has learned general problem-solving skills and then quickly adapts
 /// to a specific exam topic after seeing just a few practice questions.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an adapted model after MAML inner-loop adaptation
+/// var adaptedParams = new Vector&lt;float&gt;(baseModel.GetParameters().Length);
+/// // ... inner-loop gradient updates fill adaptedParams ...
+/// var adapted = new AdaptedMetaModel&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(
+///     baseModel, adaptedParams);
+/// Tensor&lt;float&gt; prediction = adapted.Predict(queryInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelTask(ModelTask.Classification)]

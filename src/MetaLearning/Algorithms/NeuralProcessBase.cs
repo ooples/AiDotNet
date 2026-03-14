@@ -313,6 +313,14 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
 /// from those examples and uses it to make predictions at new target points. Unlike
 /// gradient-based approaches, adaptation happens in a single forward pass.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Neural Process model after encoding context examples
+/// var npModel = new NeuralProcessModel&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(
+///     baseModel, aggregatedRepresentation);
+/// Vector&lt;float&gt; prediction = npModel.Predict(targetInputs);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

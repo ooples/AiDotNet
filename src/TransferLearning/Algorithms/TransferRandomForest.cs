@@ -24,6 +24,16 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// class can adapt them when the source and target domains have different feature spaces.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Transfer a Random Forest from source domain to target domain
+/// var options = new RandomForestRegressionOptions { NumberOfTrees = 100, MaxDepth = 10 };
+/// var transferRF = new TransferRandomForest&lt;double&gt;(options);
+/// IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt; adaptedModel =
+///     transferRF.Transfer(sourceModel, targetData, targetLabels);
+/// Vector&lt;double&gt; predictions = adaptedModel.Predict(newData);
+/// </code>
+/// </example>
 public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector<T>>
 {
     private readonly RandomForestRegressionOptions _options;

@@ -64,6 +64,17 @@ namespace AiDotNet.PointCloud.Models;
 /// by Qi et al., NeurIPS 2017
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PointNet++ model for hierarchical point cloud classification
+/// var options = new PointNetPlusPlusOptions
+/// {
+///     NumClasses = 40,
+///     UseMultiScaleGrouping = true
+/// };
+/// var pointNetPP = new PointNetPlusPlus&lt;float&gt;(options);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

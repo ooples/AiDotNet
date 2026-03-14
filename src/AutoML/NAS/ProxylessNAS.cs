@@ -25,13 +25,6 @@ namespace AiDotNet.AutoML.NAS
     /// Think of it as test-driving cars on the actual roads you will drive rather than a
     /// parking lot. It uses path binarization to keep memory usage manageable.</para>
     /// </remarks>
-    [ModelDomain(ModelDomain.MachineLearning)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelCategory(ModelCategory.Optimization)]
-    [ModelTask(ModelTask.Classification)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.High)]
-    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     /// <example>
     /// <code>
     /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
@@ -40,6 +33,13 @@ namespace AiDotNet.AutoML.NAS
     /// HardwareCost&lt;float&gt; cost = nas.EstimateArchitectureCost(inputChannels: 32, spatialSize: 224);
     /// </code>
     /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class ProxylessNAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

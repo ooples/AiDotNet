@@ -39,6 +39,18 @@ namespace AiDotNet.Models;
 /// making it a good starting point for many problems.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a linear model with 3 feature coefficients
+/// var coefficients = new Vector&lt;double&gt;(new double[] { 50000, 100, 20000 });
+/// var model = new VectorModel&lt;double&gt;(coefficients);
+///
+/// // Predict house price: 3 bedrooms, 1500 sqft, 2 bathrooms
+/// var input = new Matrix&lt;double&gt;(1, 3);
+/// input[0, 0] = 3; input[0, 1] = 1500; input[0, 2] = 2;
+/// Vector&lt;double&gt; prediction = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]

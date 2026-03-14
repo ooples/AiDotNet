@@ -36,6 +36,16 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// <b>Reference:</b> Wu et al., "Point Transformer V3: Simpler, Faster, Stronger", CVPR 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Point Transformer V3 for 3D semantic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 6, outputSize: 40, networkType: NetworkType.Classification);
+/// var ptv3 = new PointTransformerV3&lt;float&gt;(architecture,
+///     numClasses: 40, modelSize: PointTransformerV3ModelSize.Base);
+/// Tensor&lt;float&gt; labels = ptv3.Forward(pointCloudTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Transformer)]

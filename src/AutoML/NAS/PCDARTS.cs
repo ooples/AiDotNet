@@ -25,13 +25,6 @@ namespace AiDotNet.AutoML.NAS
     /// tasting a few spoonfuls from a pot instead of drinking the whole thing to judge
     /// the flavor. This enables searching on larger datasets and bigger architectures.</para>
     /// </remarks>
-    [ModelDomain(ModelDomain.MachineLearning)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelCategory(ModelCategory.Optimization)]
-    [ModelTask(ModelTask.Classification)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.High)]
-    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     /// <example>
     /// <code>
     /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
@@ -39,6 +32,13 @@ namespace AiDotNet.AutoML.NAS
     /// Architecture&lt;float&gt; architecture = pcdarts.DeriveArchitecture();
     /// </code>
     /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class PCDARTS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

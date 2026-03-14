@@ -141,7 +141,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 ///   5. Sort Gaussians by depth within each tile
 ///   6. For each pixel:
 ///      - Accumulate color from affecting Gaussians
-///      - Alpha blending: C = Σ α_i * c_i * Π(1 - α_j) for j<i
+///      - Alpha blending: C = Σ α_i * c_i * Π(1 - α_j) for j &lt; i
 ///   7. Output: Rendered image
 /// ```
 /// </para>
@@ -172,6 +172,15 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// by Kerbl et al., SIGGRAPH 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a 3D Gaussian Splatting model from an initial point cloud
+/// var options = new GaussianSplattingOptions { MaxGaussians = 100000, ShDegree = 3 };
+/// var pointCloud = new Matrix&lt;float&gt;(1000, 3); // 1000 initial 3D points
+/// var colors = new Matrix&lt;float&gt;(1000, 3);     // RGB colors per point
+/// var gs = new GaussianSplatting&lt;float&gt;(options, pointCloud, colors);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

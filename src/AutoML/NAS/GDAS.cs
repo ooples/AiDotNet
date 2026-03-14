@@ -25,13 +25,6 @@ namespace AiDotNet.AutoML.NAS
     /// them directly. Think of it as using calculus to navigate a menu of design choices
     /// rather than trying them all one by one.</para>
     /// </remarks>
-    [ModelDomain(ModelDomain.MachineLearning)]
-    [ModelCategory(ModelCategory.NeuralNetwork)]
-    [ModelCategory(ModelCategory.Optimization)]
-    [ModelTask(ModelTask.Classification)]
-    [ModelTask(ModelTask.FeatureExtraction)]
-    [ModelComplexity(ModelComplexity.High)]
-    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     /// <example>
     /// <code>
     /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
@@ -39,6 +32,13 @@ namespace AiDotNet.AutoML.NAS
     /// Architecture&lt;float&gt; architecture = gdas.DeriveArchitecture();
     /// </code>
     /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class GDAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
