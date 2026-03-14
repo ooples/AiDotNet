@@ -1,4 +1,6 @@
+using AiDotNet.Enums;
 using AiDotNet.Exceptions;
+using AiDotNet.Models;
 
 namespace AiDotNet.Helpers;
 
@@ -101,17 +103,56 @@ internal static class ModelPersistenceGuard
     }
 
     /// <summary>
-    /// Shared enforcement logic: checks for a license key first, then falls back
-    /// to trial operation counting. Emits anonymous telemetry events if enabled.
+    /// Cached LicenseValidator instance. Created once when a license key is first resolved,
+    /// then reused for subsequent validations (the validator caches its server response internally).
+    /// </summary>
+    private static LicenseValidator? _validator;
+    private static string? _validatorKey;
+    private static readonly object _validatorLock = new();
+
+    /// <summary>
+    /// Shared enforcement logic: checks for a license key first (with server validation),
+    /// then falls back to trial operation counting. Emits anonymous telemetry events if enabled.
     /// </summary>
     private static void EnforceCore()
     {
-        // If a license key is available (via env var or file), the user is licensed — allow
+        // Check if a license key is available (via env var or file)
         string? licenseKey = LicenseKeyResolver.Resolve(null);
         if (!string.IsNullOrWhiteSpace(licenseKey))
         {
-            LicensingTelemetryCollector.Instance.RecordLicensedOperation("persistence");
-            return;
+            // Validate the license key against the server (with caching)
+            string resolvedKey = licenseKey ?? string.Empty; // guaranteed non-null by IsNullOrWhiteSpace check
+            var result = ValidateLicenseKey(resolvedKey);
+
+            switch (result.Status)
+            {
+                case LicenseKeyStatus.Active:
+                case LicenseKeyStatus.ValidationPending:
+                    // Active or pending (within grace period) — allow the operation
+                    LicensingTelemetryCollector.Instance.RecordLicensedOperation("persistence");
+                    return;
+
+                case LicenseKeyStatus.Expired:
+                    LicensingTelemetryCollector.Instance.RecordLicensingError("license_expired");
+                    throw new LicenseRequiredException(
+                        TrialExpirationReason.LicenseExpired);
+
+                case LicenseKeyStatus.Revoked:
+                    LicensingTelemetryCollector.Instance.RecordLicensingError("license_revoked");
+                    throw new LicenseRequiredException(
+                        TrialExpirationReason.LicenseInvalid);
+
+                case LicenseKeyStatus.SeatLimitReached:
+                    LicensingTelemetryCollector.Instance.RecordLicensingError("seat_limit_reached");
+                    throw new LicenseRequiredException(
+                        TrialExpirationReason.SeatLimitReached);
+
+                case LicenseKeyStatus.Invalid:
+                default:
+                    LicensingTelemetryCollector.Instance.RecordLicensingError("license_invalid");
+                    throw new LicenseRequiredException(
+                        TrialExpirationReason.LicenseInvalid);
+            }
         }
 
         // No license key — enforce trial limits
@@ -134,6 +175,48 @@ internal static class ModelPersistenceGuard
                 ex.TrialDaysElapsed ?? 0);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Validates a license key using the cached <see cref="LicenseValidator"/> instance.
+    /// Keys resolved from env vars or files are validated in offline-only mode (format/signature check only).
+    /// Keys provided as explicit <see cref="AiDotNetLicenseKey"/> objects with a <c>ServerUrl</c>
+    /// are validated against the server.
+    /// </summary>
+    /// <param name="licenseKey">The license key string to validate.</param>
+    /// <param name="keyObject">The explicit license key object, or null if resolved from env/file.</param>
+    private static LicenseValidationResult ValidateLicenseKey(string licenseKey, AiDotNetLicenseKey? keyObject = null)
+    {
+        LicenseValidator validator;
+
+        lock (_validatorLock)
+        {
+            // Create a new validator if the key changed or no validator exists
+            if (_validator is null || !string.Equals(_validatorKey, licenseKey, StringComparison.Ordinal))
+            {
+                AiDotNetLicenseKey keyConfig;
+                if (keyObject is not null)
+                {
+                    // User-provided key object — respect their ServerUrl setting
+                    keyConfig = keyObject;
+                }
+                else
+                {
+                    // Env var or file — offline-only validation (format/signature check, no server call)
+                    keyConfig = new AiDotNetLicenseKey(licenseKey)
+                    {
+                        ServerUrl = string.Empty // explicit empty = offline-only mode
+                    };
+                }
+
+                _validator = new LicenseValidator(keyConfig);
+                _validatorKey = licenseKey;
+            }
+
+            validator = _validator;
+        }
+
+        return validator.Validate();
     }
 
     /// <summary>

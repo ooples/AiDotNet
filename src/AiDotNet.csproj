@@ -6,7 +6,7 @@
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<Version>0.0.5-preview</Version>
 		<Title>Ai for .Net</Title>
-		<Description>This is a preview library that will eventually showcase the latest and greatest in ai breakthroughs and bring them to the .net community</Description>
+		<Description>A comprehensive .NET library for machine learning, deep learning, NLP, computer vision, and AI model serving. Licensed under BSL 1.1 — free for non-commercial use, community license available at aidotnet.dev. Model save/load requires a free or paid license after a 10-operation trial. Optional anonymous telemetry (opt-in via AIDOTNET_TELEMETRY=true) collects usage metrics — no PII or model data is collected.</Description>
 		<Company>Ooples Finance</Company>
 		<Authors>ooples</Authors>
 		<Copyright>Ooples Finance LLC 2023</Copyright>
