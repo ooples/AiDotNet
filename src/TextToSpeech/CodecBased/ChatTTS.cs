@@ -13,6 +13,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>ChatTTS: conversational TTS with prosody control tokens for natural dialogue synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "ChatTTS: A generative speech model for daily dialogue" (2noise, 2024)</item></list></para><para><b>For Beginners:</b> ChatTTS: conversational TTS with prosody control tokens for natural dialogue synthesis.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a ChatTTS model for conversational speech synthesis
+/// // with prosody control tokens for natural dialogue generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ChatTTS&lt;double&gt;(architecture, "chattts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ChatTTS&lt;double&gt;(architecture, new ChatTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

@@ -22,6 +22,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// (detailed audio features using SoundStream codes). This two-stage approach allows the model
 /// to produce high-quality speech with very little labeled training data.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SPEAR-TTS model for high-fidelity synthesis
+/// // with minimal supervision using a speak-read-prompt pipeline
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SPEARTTS&lt;double&gt;(architecture, "speartts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SPEARTTS&lt;double&gt;(architecture, new SPEARTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

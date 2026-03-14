@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Zonos: zero-shot TTS with conditioning for speaker, emotion, and quality.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Zonos: Open-weight zero-shot TTS" (Zyphra, 2025)</item></list></para><para><b>For Beginners:</b> Zonos: zero-shot TTS with conditioning for speaker, emotion, and quality.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Zonos model for open-weight zero-shot TTS
+/// // with controllable speaker, emotion, and quality conditioning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Zonos&lt;double&gt;(architecture, "zonos.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Zonos&lt;double&gt;(architecture, new ZonosOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

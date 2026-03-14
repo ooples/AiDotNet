@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>SoundStorm: parallel audio generation via MaskGIT-style iterative decoding of SoundStream tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "SoundStorm: Efficient Parallel Audio Generation" (Borsos et al., 2023)</item></list></para><para><b>For Beginners:</b> SoundStorm: parallel audio generation via MaskGIT-style iterative decoding of SoundStream tokens.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a SoundStorm model for efficient parallel audio generation
+/// // via MaskGIT-style iterative decoding of SoundStream tokens
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SoundStorm&lt;double&gt;(architecture, "soundstorm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SoundStorm&lt;double&gt;(architecture, new SoundStormOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

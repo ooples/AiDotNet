@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>GPT-SoVITS: few-shot TTS combining GPT-style autoregressive with SoVITS decoder.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "GPT-SoVITS: 1 min voice data for good TTS" (RVC-Boss, 2024)</item></list></para><para><b>For Beginners:</b> GPT-SoVITS: few-shot TTS combining GPT-style autoregressive with SoVITS decoder.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a GPT-SoVITS model for few-shot voice cloning TTS
+/// // combining GPT-style autoregressive prediction with SoVITS decoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GPTSoVITS&lt;double&gt;(architecture, "gptsovits.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GPTSoVITS&lt;double&gt;(architecture, new GPTSoVITSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

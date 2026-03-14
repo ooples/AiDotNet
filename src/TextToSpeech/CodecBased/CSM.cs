@@ -13,6 +13,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>CSM: Conversational Speech Model for context-sensitive multi-turn dialogue synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "CSM: Conversational Speech Model" (Sesame, 2025)</item></list></para><para><b>For Beginners:</b> CSM: Conversational Speech Model for context-sensitive multi-turn dialogue synthesis.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a CSM (Conversational Speech Model) for multi-turn dialogue
+/// // with context-sensitive prosody and turn-taking awareness
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CSM&lt;double&gt;(architecture, "csm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CSM&lt;double&gt;(architecture, new CSMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

@@ -22,6 +22,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// saying any text. It works in two stages: first predicting coarse audio tokens autoregressively (one at a time),
 /// then filling in fine detail tokens all at once (non-autoregressively).</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VALL-E neural codec language model for zero-shot TTS
+/// // with autoregressive coarse and non-autoregressive fine token generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VALLE&lt;double&gt;(architecture, "valle.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VALLE&lt;double&gt;(architecture, new VALLEOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

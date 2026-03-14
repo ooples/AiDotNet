@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>CosyVoice 2: improved streaming TTS with chunk-aware causal flow matching and FSQ.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "CosyVoice 2: Scalable Streaming Speech Synthesis with LLMs" (Du et al., 2024)</item></list></para><para><b>For Beginners:</b> CosyVoice 2: improved streaming TTS with chunk-aware causal flow matching and FSQ.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a CosyVoice 2 model for streaming speech synthesis
+/// // with chunk-aware causal flow matching and finite scalar quantization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CosyVoice2&lt;double&gt;(architecture, "cosyvoice2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CosyVoice2&lt;double&gt;(architecture, new CosyVoice2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

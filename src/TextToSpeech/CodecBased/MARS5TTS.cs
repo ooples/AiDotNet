@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>MARS5-TTS: two-stage TTS with shallow AR for coarse prosody then deep NAR for fine acoustics.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MARS5-TTS: A Two-Stage Shallow AR, Deep NAR System" (CAMB AI, 2024)</item></list></para><para><b>For Beginners:</b> MARS5-TTS: two-stage TTS with shallow AR for coarse prosody then deep NAR for fine acoustics.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a MARS5-TTS model with two-stage synthesis
+/// // shallow AR for coarse prosody then deep NAR for fine acoustics
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MARS5TTS&lt;double&gt;(architecture, "mars5tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MARS5TTS&lt;double&gt;(architecture, new MARS5TTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

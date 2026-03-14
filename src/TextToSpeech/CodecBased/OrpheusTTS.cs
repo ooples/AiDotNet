@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Orpheus: real-time emotion-controllable TTS with SNAC codec and LLaMA backbone.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Orpheus: Real-time human-like speech" (Canopy Labs, 2025)</item></list></para><para><b>For Beginners:</b> Orpheus: real-time emotion-controllable TTS with SNAC codec and LLaMA backbone.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an Orpheus TTS model for real-time emotion-controllable synthesis
+/// // with SNAC codec and LLaMA backbone for human-like speech
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new OrpheusTTS&lt;double&gt;(architecture, "orpheus.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new OrpheusTTS&lt;double&gt;(architecture, new OrpheusTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

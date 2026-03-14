@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Seed-TTS: large-scale autoregressive TTS with self-distillation for in-context learning.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Seed-TTS: High-Quality Versatile Speech Generation Models" (Anastassiou et al., 2024)</item></list></para><para><b>For Beginners:</b> Seed-TTS: large-scale autoregressive TTS with self-distillation for in-context learning.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Seed-TTS model for large-scale autoregressive synthesis
+/// // with self-distillation for in-context learning and voice control
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SeedTTS&lt;double&gt;(architecture, "seedtts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SeedTTS&lt;double&gt;(architecture, new SeedTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

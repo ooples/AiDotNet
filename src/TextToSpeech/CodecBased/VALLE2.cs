@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>VALLE2: VALL-E 2: Neural Codec Language Models are Human Parity Zero-Shot TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VALL-E 2: Neural Codec Language Models are Human Parity Zero-Shot TTS" (Chen et al., 2024)</item></list></para><para><b>For Beginners:</b> VALLE2: VALL-E 2: Neural Codec Language Models are Human Parity Zero-Shot TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a VALL-E 2 model for human-parity zero-shot TTS
+/// // with repetition-aware sampling and grouped codec modeling
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VALLE2&lt;double&gt;(architecture, "valle2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VALLE2&lt;double&gt;(architecture, new VALLE2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

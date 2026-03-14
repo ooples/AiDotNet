@@ -13,6 +13,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Amphion: open-source audio toolkit supporting multiple TTS architectures.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Amphion: Open-Source Audio, Music, and Speech Toolkit" (Zhang et al., 2024)</item></list></para><para><b>For Beginners:</b> Amphion: open-source audio toolkit supporting multiple TTS architectures.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an Amphion model for codec-based TTS synthesis
+/// // using the open-source audio toolkit's multi-architecture approach
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Amphion&lt;double&gt;(architecture, "amphion.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Amphion&lt;double&gt;(architecture, new AmphionOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

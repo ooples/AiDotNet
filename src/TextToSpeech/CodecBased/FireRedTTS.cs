@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>FireRedTTS: foundation TTS model with large-scale training and multi-codebook generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "FireRedTTS: A Foundation TTS Framework" (Guo et al., 2024)</item></list></para><para><b>For Beginners:</b> FireRedTTS: foundation TTS model with large-scale training and multi-codebook generation.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a FireRedTTS foundation model for large-scale TTS
+/// // with multi-codebook generation for industry-level applications
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new FireRedTTS&lt;double&gt;(architecture, "fireredtts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new FireRedTTS&lt;double&gt;(architecture, new FireRedTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

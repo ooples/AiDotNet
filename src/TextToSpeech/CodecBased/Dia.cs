@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Dia: dialogue-oriented TTS generating multi-speaker conversations with expressive prosody.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Dia: Generate realistic dialogue" (Nari AI, 2025)</item></list></para><para><b>For Beginners:</b> Dia: dialogue-oriented TTS generating multi-speaker conversations with expressive prosody.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Dia model for dialogue-oriented multi-speaker TTS
+/// // generating realistic conversations with expressive prosody
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Dia&lt;double&gt;(architecture, "dia.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Dia&lt;double&gt;(architecture, new DiaOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

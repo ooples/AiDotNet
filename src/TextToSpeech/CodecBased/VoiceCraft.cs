@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>VoiceCraft: VoiceCraft: Zero-Shot Speech Editing and TTS in the Wild.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VoiceCraft: Zero-Shot Speech Editing and TTS in the Wild" (Peng et al., 2024)</item></list></para><para><b>For Beginners:</b> VoiceCraft: VoiceCraft: Zero-Shot Speech Editing and TTS in the Wild.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a VoiceCraft model for zero-shot speech editing and TTS
+/// // with token rearrangement for in-context learning from wild recordings
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VoiceCraft&lt;double&gt;(architecture, "voicecraft.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VoiceCraft&lt;double&gt;(architecture, new VoiceCraftOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

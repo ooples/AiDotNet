@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>FishSpeechV15: Fish Speech V1.5: Improved Multilingual TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Fish Speech V1.5: Improved Multilingual TTS" (Fish Audio Team, 2025)</item></list></para><para><b>For Beginners:</b> FishSpeechV15: Fish Speech V1.5: Improved Multilingual TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Fish Speech V1.5 model for improved multilingual TTS
+/// // with enhanced codec language modeling and zero-shot capabilities
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new FishSpeechV15&lt;double&gt;(architecture, "fishspeechv15.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new FishSpeechV15&lt;double&gt;(architecture, new FishSpeechV15Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

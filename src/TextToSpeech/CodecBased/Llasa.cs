@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Llasa: LLaMA-based speech synthesis using XCodec2 for multi-level codec representation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Llasa: Scaling Compute for Llama-based Speech Synthesis" (Ye et al., 2025)</item></list></para><para><b>For Beginners:</b> Llasa: LLaMA-based speech synthesis using XCodec2 for multi-level codec representation.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Llasa model for LLaMA-based speech synthesis
+/// // using XCodec2 multi-level codec representation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Llasa&lt;double&gt;(architecture, "llasa.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Llasa&lt;double&gt;(architecture, new LlasaOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

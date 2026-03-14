@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>TortoiseTTS: TorToise: Better Speech Synthesis Through Scaling.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "TorToise: Better Speech Synthesis Through Scaling" (Betker, 2023)</item></list></para><para><b>For Beginners:</b> TortoiseTTS: TorToise: Better Speech Synthesis Through Scaling.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a TorToise TTS model for high-quality synthesis through scaling
+/// // with multi-voice conditioning and CLVP re-ranking
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new TortoiseTTS&lt;double&gt;(architecture, "tortoisetts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new TortoiseTTS&lt;double&gt;(architecture, new TortoiseTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

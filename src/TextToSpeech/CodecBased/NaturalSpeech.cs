@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>NaturalSpeech: fully end-to-end TTS with VAE, normalizing flow, and bidirectional prior/posterior for human-level quality.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "NaturalSpeech: End-to-End Text to Speech Synthesis with Human-Level Quality" (Tan et al., 2022)</item></list></para><para><b>For Beginners:</b> NaturalSpeech: fully end-to-end TTS with VAE, normalizing flow, and bidirectional prior/posterior for human-level quality.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a NaturalSpeech model for human-level end-to-end TTS
+/// // with VAE, normalizing flow, and bidirectional prior/posterior
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new NaturalSpeech&lt;double&gt;(architecture, "naturalspeech.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new NaturalSpeech&lt;double&gt;(architecture, new NaturalSpeechOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

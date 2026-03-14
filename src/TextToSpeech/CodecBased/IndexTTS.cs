@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>IndexTTS: LLM-based zero-shot TTS with reference audio indexing for voice cloning.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "IndexTTS: An Industrial-Level Zero-Shot TTS System" (Index, 2024)</item></list></para><para><b>For Beginners:</b> IndexTTS: LLM-based zero-shot TTS with reference audio indexing for voice cloning.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an IndexTTS model for industrial zero-shot TTS
+/// // with LLM-based reference audio indexing for voice cloning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new IndexTTS&lt;double&gt;(architecture, "indextts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new IndexTTS&lt;double&gt;(architecture, new IndexTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

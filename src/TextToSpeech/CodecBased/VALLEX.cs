@@ -23,6 +23,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// to VALL-E's autoregressive and non-autoregressive transformer stages, enabling cross-lingual
 /// voice cloning without parallel training data.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VALL-E X model for cross-lingual zero-shot TTS
+/// // extending VALL-E with language ID conditioning for multilingual synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VALLEX&lt;double&gt;(architecture, "vallex.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VALLEX&lt;double&gt;(architecture, new VALLEXOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

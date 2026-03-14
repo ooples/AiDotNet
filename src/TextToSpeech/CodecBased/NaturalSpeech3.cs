@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>NaturalSpeech 3: factorized codec + diffusion for disentangled speech attribute control.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "NaturalSpeech 3: Zero-Shot Speech Synthesis with a Factorized Codec and Diffusion Models" (Ju et al., 2024)</item></list></para><para><b>For Beginners:</b> NaturalSpeech 3: factorized codec + diffusion for disentangled speech attribute control.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a NaturalSpeech 3 model for zero-shot speech synthesis
+/// // with factorized codec and diffusion for disentangled attribute control
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new NaturalSpeech3&lt;double&gt;(architecture, "naturalspeech3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new NaturalSpeech3&lt;double&gt;(architecture, new NaturalSpeech3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

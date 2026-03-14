@@ -24,6 +24,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// and cross-lingual speech generation. Unlike autoregressive models that generate speech one piece
 /// at a time, Voicebox generates all parts simultaneously, making it faster and more flexible.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Voicebox model for universal speech generation at scale
+/// // with non-autoregressive flow matching and infilling objective
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Voicebox&lt;double&gt;(architecture, "voicebox.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Voicebox&lt;double&gt;(architecture, new VoiceboxOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

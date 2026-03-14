@@ -13,6 +13,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Bark: GPT-based text-to-audio model generating speech, music, and sound effects from text prompts.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Bark: Text-to-Audio Model" (Suno AI, 2023)</item></list></para><para><b>For Beginners:</b> Bark: GPT-based text-to-audio model generating speech, music, and sound effects from text prompts.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Bark model for GPT-based text-to-audio generation
+/// // capable of producing speech, music, and sound effects from prompts
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Bark&lt;double&gt;(architecture, "bark.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Bark&lt;double&gt;(architecture, new BarkOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
