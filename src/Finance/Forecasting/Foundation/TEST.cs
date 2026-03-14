@@ -37,6 +37,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Sun et al., "TEST: Text Prototype Aligned Embedding to Activate LLM's Ability for Time Series", 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TEST model that aligns time series embeddings with text prototypes
+/// // Bridges language models and time series via contrastive learning on pattern descriptions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with text-prototype alignment
+/// var model = new TEST&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TEST&lt;double&gt;(architecture, "test_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

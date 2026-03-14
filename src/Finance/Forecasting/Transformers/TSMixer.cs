@@ -42,6 +42,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// Forecasting", TMLR 2023. https://arxiv.org/abs/2303.06053
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TSMixer for efficient time series forecasting using only MLPs
+/// // Alternates time-mixing and feature-mixing without attention mechanisms
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with alternating time/feature mixing layers
+/// var model = new TSMixer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TSMixer&lt;double&gt;(architecture, "tsmixer_weather.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -36,6 +36,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Tashiro et al., "CSDI: Conditional Score-based Diffusion Models for Probabilistic Time Series Imputation", NeurIPS 2021.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CSDI conditional score-based diffusion model for time series imputation
+/// // Uses score-matching for probabilistic forecasting and missing value imputation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with conditional score-based diffusion
+/// var model = new CSDI&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new CSDI&lt;double&gt;(architecture, "csdi.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -36,6 +36,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Dong et al., "SimMTM: A Simple Pre-Training Framework for Masked Time-Series Modeling", NeurIPS 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SimMTM model for masked time series pre-training with similarity learning
+/// // Reconstructs masked series using similar unmasked series from the training batch
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with similarity-weighted masked reconstruction
+/// var model = new SimMTM&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new SimMTM&lt;double&gt;(architecture, "simmtm.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

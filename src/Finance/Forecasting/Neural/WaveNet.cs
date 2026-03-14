@@ -60,6 +60,16 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// https://arxiv.org/abs/1609.03499
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new WaveNet&lt;double&gt;(architecture);
+/// var onnxModel = new WaveNet&lt;double&gt;(architecture, "wavenet.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

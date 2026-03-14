@@ -37,6 +37,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Talukder et al., "TOTEM: TOkenized Time Series EMbeddings for General Time Series Analysis", 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TOTEM model for tokenized time series embeddings via VQ-VAE
+/// // Converts continuous time series to discrete tokens for language-model-style processing
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with VQ-VAE encoder-decoder and vector quantization
+/// var model = new TOTEM&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TOTEM&lt;double&gt;(architecture, "totem.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

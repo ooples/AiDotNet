@@ -51,6 +51,16 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// Neural Networks", SIGIR 2018. https://arxiv.org/abs/1703.07015
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 168, inputWidth: 7, inputDepth: 1, outputSize: 24);
+/// var model = new LSTNet&lt;double&gt;(architecture);
+/// var onnxModel = new LSTNet&lt;double&gt;(architecture, "lstnet.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

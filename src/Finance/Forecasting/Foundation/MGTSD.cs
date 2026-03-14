@@ -36,6 +36,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Fan et al., "MG-TSD: Multi-Granularity Time Series Diffusion Models with Guided Learning Process", ICLR 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an MG-TSD multi-granularity time series diffusion model
+/// // Coarse-to-fine guidance: rough forecasts at monthly level guide daily predictions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with multi-granularity guided diffusion
+/// var model = new MGTSD&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new MGTSD&lt;double&gt;(architecture, "mgtsd.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

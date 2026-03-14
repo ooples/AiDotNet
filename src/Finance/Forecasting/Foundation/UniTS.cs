@@ -55,6 +55,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2403.00131
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UniTS unified model for multi-task time series processing
+/// // Handles forecasting, classification, anomaly detection, and imputation from a single backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with multi-scale temporal convolution and task-specific heads
+/// var model = new UniTS&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new UniTS&lt;double&gt;(architecture, "units_base.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

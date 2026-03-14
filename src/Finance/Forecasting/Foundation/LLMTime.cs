@@ -36,6 +36,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Gruver et al., "Large Language Models Are Zero-Shot Time Series Forecasters", NeurIPS 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an LLMTime model for zero-shot forecasting via LLM tokenization
+/// // Converts numeric time series to text strings and uses a frozen LLM for prediction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with text-based time series representation
+/// var model = new LLMTime&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new LLMTime&lt;double&gt;(architecture, "llmtime.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

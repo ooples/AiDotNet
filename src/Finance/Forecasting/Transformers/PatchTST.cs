@@ -35,6 +35,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// with Transformers", ICLR 2023. https://arxiv.org/abs/2211.14730
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PatchTST for long-term forecasting with patching and channel independence
+/// // Divides time series into patches (like words in a sentence) for efficient transformer processing
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with patch embedding and channel-independent processing
+/// var model = new PatchTST&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new PatchTST&lt;double&gt;(architecture, "patchtst_etth1.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

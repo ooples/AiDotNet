@@ -37,6 +37,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Rasul et al., "Autoregressive Denoising Diffusion Models for Multivariate Probabilistic Time Series Forecasting", ICML 2021.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimeGrad autoregressive diffusion model for probabilistic forecasting
+/// // Combines RNN with conditional diffusion for step-by-step forecast generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with RNN encoder and denoising diffusion decoder
+/// var model = new TimeGrad&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimeGrad&lt;double&gt;(architecture, "timegrad.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

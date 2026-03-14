@@ -38,6 +38,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Part of Amazon Chronos family, Nov 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Chronos-Bolt for fast non-autoregressive time series forecasting
+/// // Outputs all forecast quantiles in a single forward pass instead of iterative generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with direct quantile forecasting
+/// var model = new ChronosBolt&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new ChronosBolt&lt;double&gt;(architecture, "chronos_bolt.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

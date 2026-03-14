@@ -38,6 +38,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// with Mixture of Experts", ICLR 2025. https://openreview.net/forum?id=e1wDDFmlVu
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Time-MoE billion-scale foundation model with Mixture of Experts
+/// // 2.4B total parameters with only ~300M active per token via sparse expert routing
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with MoE layers and learned expert routing
+/// var model = new TimeMoE&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimeMoE&lt;double&gt;(architecture, "time_moe.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

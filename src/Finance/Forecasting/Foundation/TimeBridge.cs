@@ -37,6 +37,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> "TimeBridge: Non-Stationarity Matters for Long-term Time Series Forecasting", 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimeBridge model addressing non-stationarity in foundation models
+/// // Preserves and restores trend/level shift information lost during normalization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with bridge mechanism for non-stationary information
+/// var model = new TimeBridge&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimeBridge&lt;double&gt;(architecture, "timebridge.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

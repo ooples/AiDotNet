@@ -37,6 +37,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// ICLR 2024. https://arxiv.org/abs/2310.06625
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an iTransformer for multivariate forecasting with inverted attention
+/// // Treats each variable as a token instead of each time step for better cross-variable learning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with inverted variable-as-token attention
+/// var model = new ITransformer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new ITransformer&lt;double&gt;(architecture, "itransformer_traffic.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

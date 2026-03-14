@@ -57,6 +57,16 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// Recurrent Networks for Sequence Modeling", 2018. https://arxiv.org/abs/1803.01271
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new TCN&lt;double&gt;(architecture);
+/// var onnxModel = new TCN&lt;double&gt;(architecture, "tcn.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

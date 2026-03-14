@@ -34,6 +34,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// and resource allocation. Think of it as a forecasting model that has already learned from
 /// one of the largest e-commerce and cloud platforms in the world.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a YingLong model (Alibaba) for enterprise time series forecasting
+/// // Pre-trained on massive data from Alibaba's cloud and e-commerce infrastructure
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with transformer backbone for enterprise workloads
+/// var model = new YingLong&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new YingLong&lt;double&gt;(architecture, "yinglong.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

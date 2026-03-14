@@ -36,6 +36,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Yue et al., "TS2Vec: Towards Universal Representation of Time Series", AAAI 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TS2Vec model for universal time series representation learning
+/// // Hierarchical contrastive learning produces contextual representations at any granularity
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with dilated CNN encoder and contrastive objectives
+/// var model = new TS2Vec&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TS2Vec&lt;double&gt;(architecture, "ts2vec.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

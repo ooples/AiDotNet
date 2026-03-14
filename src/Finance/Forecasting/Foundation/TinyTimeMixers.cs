@@ -58,6 +58,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Thread Safety:</b> This class is NOT thread-safe. Create separate instances for concurrent usage.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Tiny Time Mixers (TTM) for compact, high-performance forecasting
+/// // MLP-Mixer architecture with only 1-5M parameters that rivals 20-40x larger models
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with temporal and channel mixing MLPs
+/// var model = new TinyTimeMixers&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TinyTimeMixers&lt;double&gt;(architecture, "ttm_base.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

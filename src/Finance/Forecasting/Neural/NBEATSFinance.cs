@@ -48,6 +48,16 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// interpretable time series forecasting", ICLR 2020. https://arxiv.org/abs/1905.10437
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new NBEATSFinance&lt;double&gt;(architecture);
+/// var onnxModel = new NBEATSFinance&lt;double&gt;(architecture, "nbeats.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

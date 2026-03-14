@@ -38,6 +38,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2502.00816
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Sundial GPT-style foundation model for time series forecasting
+/// // Decoder-only architecture with patch tokenization and quantile forecasting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with autoregressive patch prediction
+/// var model = new Sundial&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new Sundial&lt;double&gt;(architecture, "sundial.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

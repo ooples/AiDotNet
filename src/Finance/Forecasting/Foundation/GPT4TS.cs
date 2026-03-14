@@ -36,6 +36,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Zhou et al., "One Fits All: Power General Time Series Analysis by Pretrained LM", 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GPT4TS model using a frozen GPT-2 backbone for time series analysis
+/// // Demonstrates that pretrained LLMs transfer effectively to time series tasks
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with frozen GPT-2 backbone and task-specific heads
+/// var model = new GPT4TS&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new GPT4TS&lt;double&gt;(architecture, "gpt4ts.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

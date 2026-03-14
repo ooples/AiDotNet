@@ -75,6 +75,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// Create separate instances for concurrent usage scenarios.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Chronos foundation model for zero-shot time series forecasting
+/// // Tokenizes continuous values and uses a T5-style language model for prediction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with tokenization-based forecasting
+/// var model = new Chronos&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained Chronos model
+/// var onnxModel = new Chronos&lt;double&gt;(architecture, "chronos_t5_base.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

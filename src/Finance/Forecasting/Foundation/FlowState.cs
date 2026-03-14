@@ -37,6 +37,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> IBM Research, "SSM Time Series Model", 2025.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FlowState SSM-based foundation model (IBM, only 9.1M params)
+/// // Uses structured state spaces for linear-time processing of long sequences
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with state-space model layers
+/// var model = new FlowState&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new FlowState&lt;double&gt;(architecture, "flowstate.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

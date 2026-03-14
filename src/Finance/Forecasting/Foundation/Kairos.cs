@@ -38,6 +38,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2509.25826
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kairos model with Mixture-of-Size Encoder for adaptive tokenization
+/// // Automatically adjusts patch size based on local information density
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with adaptive multi-granularity patching
+/// var model = new Kairos&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new Kairos&lt;double&gt;(architecture, "kairos.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

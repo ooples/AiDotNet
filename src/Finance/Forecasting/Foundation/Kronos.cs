@@ -38,6 +38,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2508.02739
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kronos foundation model for financial market forecasting
+/// // Pre-trained on 12B+ candlestick records across 45 global exchanges
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 5, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with OHLCV-native decoder-only architecture
+/// var model = new Kronos&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new Kronos&lt;double&gt;(architecture, "kronos.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

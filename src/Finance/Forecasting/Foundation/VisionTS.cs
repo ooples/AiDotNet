@@ -39,6 +39,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// ICML 2025.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VisionTS model that repurposes visual MAE for time series forecasting
+/// // Converts time series into 2D image-like patch grids for cross-modal transfer
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with ViT encoder and MAE decoder
+/// var model = new VisionTS&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained vision model
+/// var onnxModel = new VisionTS&lt;double&gt;(architecture, "visionts.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelDomain(ModelDomain.Vision)]
