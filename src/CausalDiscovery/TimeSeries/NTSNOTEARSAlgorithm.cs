@@ -53,6 +53,11 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => false;
 
+    private const int DefaultMaxSegments = 3;
+    private const int MinSegments = 2;
+    private const int MaxSegmentsCap = 10;
+    private const int DefaultInnerSteps = 100;
+
     private readonly double _lambda1;
     private readonly double _wThreshold;
     private readonly int _maxSegments;
@@ -64,11 +69,15 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         ApplyTimeSeriesOptions(options);
         _lambda1 = options?.SparsityPenalty ?? 0.1;
         _wThreshold = options?.EdgeThreshold ?? 0.3;
-        // MaxSegments is a separate concept from optimizer iterations
-        _maxSegments = Math.Max(2, Math.Min(options?.MaxParents ?? 3, 5));
-        // MaxIterations controls the actual optimization convergence
+        _maxSegments = Math.Max(MinSegments, Math.Min(options?.MaxSegments ?? DefaultMaxSegments, MaxSegmentsCap));
         _maxOuterIterations = Math.Max(1, options?.MaxIterations ?? 20);
-        _maxInnerSteps = 100;
+        _maxInnerSteps = options?.InnerIterations ?? DefaultInnerSteps;
+        if (_lambda1 < 0)
+            throw new ArgumentException("SparsityPenalty must be non-negative.");
+        if (_wThreshold < 0)
+            throw new ArgumentException("EdgeThreshold must be non-negative.");
+        if (_maxInnerSteps < 1)
+            throw new ArgumentException("InnerIterations must be at least 1.");
     }
 
     /// <inheritdoc/>

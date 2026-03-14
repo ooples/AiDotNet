@@ -68,9 +68,12 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             {
                 ZsMu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
                 ZtMu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                ZsLogVar[i, k] = NumOps.FromDouble(-4);
+                ZsLogVar[i, k] = NumOps.FromDouble(-4);  // Initialize log-variance (updated during training)
                 ZtLogVar[i, k] = NumOps.FromDouble(-4);
             }
+
+        // KL weight for variational regularization (warm up to prevent posterior collapse)
+        double klWeight = 0.01;
 
         T lr = NumOps.FromDouble(LearningRate);
         T alpha = NumOps.Zero;
@@ -140,6 +143,8 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             // Gradient: dP/dZ via chain rule through sigmoid and dot product
             var gradZsMu = new Matrix<T>(d, embDim);
             var gradZtMu = new Matrix<T>(d, embDim);
+            var gradZsLogVar = new Matrix<T>(d, embDim);
+            var gradZtLogVar = new Matrix<T>(d, embDim);
 
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
@@ -165,32 +170,54 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                             NumOps.Multiply(gradScale, Zt[j, k]));
                         gradZtMu[j, k] = NumOps.Add(gradZtMu[j, k],
                             NumOps.Multiply(gradScale, Zs[i, k]));
+
+                        // Log-variance gradient via reparameterization: d/d(logvar) = gradScale * Zt_k * noise * 0.5 * exp(0.5*logvar)
+                        T stdS = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZsLogVar[i, k])));
+                        gradZsLogVar[i, k] = NumOps.Add(gradZsLogVar[i, k],
+                            NumOps.Multiply(gradScale, NumOps.Multiply(Zt[j, k],
+                            NumOps.Multiply(NumOps.FromDouble(0.5), stdS))));
+                        T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[j, k])));
+                        gradZtLogVar[j, k] = NumOps.Add(gradZtLogVar[j, k],
+                            NumOps.Multiply(gradScale, NumOps.Multiply(Zs[i, k],
+                            NumOps.Multiply(NumOps.FromDouble(0.5), stdT))));
                     }
                 }
 
-            // KL divergence gradient for embeddings: KL(N(mu, sigma^2) || N(0,1))
+            // KL divergence gradient: d/dmu = klWeight * mu, d/d(logvar) = klWeight * 0.5 * (exp(logvar) - 1)
+            T klW = NumOps.FromDouble(klWeight);
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
                 {
                     gradZsMu[i, k] = NumOps.Add(gradZsMu[i, k],
-                        NumOps.Multiply(NumOps.FromDouble(0.01), ZsMu[i, k]));
+                        NumOps.Multiply(klW, ZsMu[i, k]));
                     gradZtMu[i, k] = NumOps.Add(gradZtMu[i, k],
-                        NumOps.Multiply(NumOps.FromDouble(0.01), ZtMu[i, k]));
+                        NumOps.Multiply(klW, ZtMu[i, k]));
+                    gradZsLogVar[i, k] = NumOps.Add(gradZsLogVar[i, k],
+                        NumOps.Multiply(klW, NumOps.FromDouble(
+                            0.5 * (Math.Exp(NumOps.ToDouble(ZsLogVar[i, k])) - 1.0))));
+                    gradZtLogVar[i, k] = NumOps.Add(gradZtLogVar[i, k],
+                        NumOps.Multiply(klW, NumOps.FromDouble(
+                            0.5 * (Math.Exp(NumOps.ToDouble(ZtLogVar[i, k])) - 1.0))));
                 }
 
-            // Apply gradients
+            // Apply gradients to all parameters
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
                 {
                     ZsMu[i, k] = NumOps.Subtract(ZsMu[i, k], NumOps.Multiply(lr, gradZsMu[i, k]));
                     ZtMu[i, k] = NumOps.Subtract(ZtMu[i, k], NumOps.Multiply(lr, gradZtMu[i, k]));
+                    ZsLogVar[i, k] = NumOps.Subtract(ZsLogVar[i, k], NumOps.Multiply(lr, gradZsLogVar[i, k]));
+                    ZtLogVar[i, k] = NumOps.Subtract(ZtLogVar[i, k], NumOps.Multiply(lr, gradZtLogVar[i, k]));
                 }
 
-            // Update augmented Lagrangian
+            // Update augmented Lagrangian with rho clamped before assignment
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
             T rhoMax = NumOps.FromDouble(1e+16);
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)) && !NumOps.GreaterThan(rho, rhoMax))
-                rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            {
+                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+                rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
+            }
         }
 
         // Final output using trained embeddings

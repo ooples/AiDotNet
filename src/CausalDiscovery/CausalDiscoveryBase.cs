@@ -614,6 +614,50 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     }
 
     /// <summary>
+    /// Solves a small linear system Ax = b using Gaussian elimination with partial pivoting.
+    /// This shared utility replaces duplicate implementations across causal discovery algorithms.
+    /// </summary>
+    /// <param name="A">Coefficient matrix (p x p).</param>
+    /// <param name="b">Right-hand side vector (length p).</param>
+    /// <param name="p">System dimension.</param>
+    /// <returns>Solution vector x, with zero for near-singular pivots.</returns>
+    protected static double[] SolveSmallSystem(double[,] A, double[] b, int p)
+    {
+        const double pivotTolerance = 1e-15;
+        var aug = new double[p, p + 1];
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = 0; j < p; j++) aug[i, j] = A[i, j];
+            aug[i, p] = b[i];
+        }
+        for (int col = 0; col < p; col++)
+        {
+            int maxRow = col;
+            for (int row = col + 1; row < p; row++)
+                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
+            if (maxRow != col)
+                for (int j = col; j <= p; j++)
+                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
+            double pivot = aug[col, col];
+            if (Math.Abs(pivot) < pivotTolerance) continue;
+            for (int row = col + 1; row < p; row++)
+            {
+                double factor = aug[row, col] / pivot;
+                for (int j = col; j <= p; j++) aug[row, j] -= factor * aug[col, j];
+            }
+        }
+        var x = new double[p];
+        for (int row = p - 1; row >= 0; row--)
+        {
+            double sum = aug[row, p];
+            for (int j = row + 1; j < p; j++) sum -= aug[row, j] * x[j];
+            double diag = aug[row, row];
+            x[row] = Math.Abs(diag) > pivotTolerance ? sum / diag : 0;
+        }
+        return x;
+    }
+
+    /// <summary>
     /// Inverts a small matrix using Gauss-Jordan elimination. Returns null if singular.
     /// </summary>
     private Matrix<T>? InvertSmallMatrix(Matrix<T> matrix)

@@ -60,10 +60,10 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
     {
         ApplyInfoOptions(options);
         _threshold = options?.EdgeThreshold ?? 0.1;
-        if (double.IsNaN(_threshold) || _threshold < 0)
+        if (double.IsNaN(_threshold) || double.IsInfinity(_threshold) || _threshold < 0)
             throw new ArgumentException("EdgeThreshold must be non-negative and finite.");
         if (KNeighbors < 1)
-            throw new ArgumentException("KNeighbors must be at least 1.");
+            throw new ArgumentException($"KNeighbors must be at least 1, got {KNeighbors}.");
     }
 
     /// <inheritdoc/>
@@ -76,7 +76,7 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
         if (d < 2)
             throw new ArgumentException($"KraskovMI requires at least 2 variables, got {d}.");
         if (k < 1)
-            throw new ArgumentException($"KraskovMI requires at least {KNeighbors + 2} samples for k={KNeighbors}, got {n}.");
+            throw new ArgumentException($"KraskovMI requires at least {KNeighbors + 1} samples for k={KNeighbors} (k was clamped to {k}), got {n}.");
         if (n < k + 2)
             throw new ArgumentException($"KraskovMI requires at least {k + 2} samples for k={k}, got {n}.");
 

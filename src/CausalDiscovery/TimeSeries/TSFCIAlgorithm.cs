@@ -63,6 +63,8 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
     {
         ApplyTimeSeriesOptions(options);
         _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
+        if (_correlationThreshold < 0 || _correlationThreshold > 1)
+            throw new ArgumentException("CorrelationThreshold must be between 0 and 1.");
     }
 
     /// <inheritdoc/>
