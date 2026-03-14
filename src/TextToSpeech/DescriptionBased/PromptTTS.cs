@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
 /// <summary>PromptTTS: description-based TTS that controls speaker attributes via natural language prompts (e.g., "a young female with a cheerful tone").</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "PromptTTS: Controllable Text-to-Speech with Text Descriptions" (Guo et al., 2023)</item></list></para><para><b>For Beginners:</b> PromptTTS: description-based TTS that controls speaker attributes via natural language prompts (e.g., "a young female with a cheerful tone").. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a PromptTTS model for description-conditioned speech synthesis
+/// // controlling speaker attributes via natural language prompts
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PromptTTS&lt;double&gt;(architecture, "prompttts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PromptTTS&lt;double&gt;(architecture, new PromptTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
