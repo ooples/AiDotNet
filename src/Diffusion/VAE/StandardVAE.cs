@@ -52,6 +52,14 @@ namespace AiDotNet.Diffusion.VAE;
 /// - Output: [batch, 3, H, W] reconstructed image
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new StandardVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4, baseChannels: 128);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 512, 512 });
+/// var latent = vae.Encode(image);
+/// var decoded = vae.Decode(latent);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]

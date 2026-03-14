@@ -31,6 +31,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// Diffusion Models", NeurIPS 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new DeepCompressionVAE&lt;float&gt;(inputChannels: 3, latentChannels: 64, downsampleFactor: 32);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 512, 512 });
+/// var latent = vae.Encode(image); // 16x16x64
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]
