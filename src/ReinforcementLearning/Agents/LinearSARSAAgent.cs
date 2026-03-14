@@ -12,6 +12,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// Linear SARSA agent using linear function approximation with on-policy learning.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Linear SARSA is like Linear Q-Learning but learns on-policy,
+/// meaning it evaluates and improves the policy it is actually following. The name SARSA comes
+/// from the update sequence: State, Action, Reward, next State, next Action. This makes it
+/// safer for real-world applications because it accounts for the exploration the agent is doing,
+/// unlike Q-Learning which assumes optimal future behavior.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

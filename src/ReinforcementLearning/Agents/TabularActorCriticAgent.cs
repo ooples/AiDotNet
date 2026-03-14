@@ -12,6 +12,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// Tabular Actor-Critic agent combining policy and value learning.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Actor-Critic has two components working together:
+/// the Actor (decides which action to take) and the Critic (evaluates how good the action was).
+/// The Critic provides feedback to help the Actor improve, like a coach watching a player.
+/// This tabular version stores both policy preferences and value estimates in tables.
+/// It combines the benefits of policy-based methods (can learn stochastic policies) with
+/// value-based methods (lower variance updates).</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

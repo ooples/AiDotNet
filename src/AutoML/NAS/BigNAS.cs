@@ -18,6 +18,13 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "BigNAS: Scaling Up Neural Architecture Search with Big Single-Stage Models"
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> BigNAS trains one giant "super-network" that contains
+    /// many smaller networks inside it. After training, you can extract a network of any
+    /// size for your deployment needs without retraining. Think of it like buying one
+    /// adjustable tool instead of many fixed-size tools - the super-network adapts to
+    /// fit phones, tablets, or servers.</para>
+    /// </remarks>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

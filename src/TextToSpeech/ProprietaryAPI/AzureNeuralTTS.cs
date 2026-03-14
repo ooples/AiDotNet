@@ -11,6 +11,23 @@ using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>Azure Neural TTS: local neural synthesis model inspired by Microsoft's architecture.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Azure Neural TTS uses Microsoft's neural speech synthesis architecture
+/// to generate natural-sounding speech from text. It supports expressive styles like newscast,
+/// cheerful, and customer service tones. This local implementation provides offline inference
+/// compatible with the Azure Cognitive Services API surface.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 256, outputSize: 24000);
+///
+/// var model = new AzureNeuralTTS&lt;float&gt;(architecture, "azure_tts.onnx");
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Azure Neural TTS!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

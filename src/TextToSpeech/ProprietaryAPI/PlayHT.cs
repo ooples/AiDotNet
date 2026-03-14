@@ -11,6 +11,23 @@ using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>PlayHT: AI voice generation with 2.0 turbo model for ultra-realistic speech synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> PlayHT provides ultra-realistic AI voice generation using their
+/// 2.0 Turbo model. It supports instant voice cloning from short audio samples and offers
+/// low-latency streaming synthesis ideal for real-time applications like chatbots and
+/// voice assistants. This local implementation provides offline inference.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 256, outputSize: 24000);
+///
+/// var model = new PlayHT&lt;float&gt;(architecture, "playht.onnx");
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from PlayHT!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

@@ -13,8 +13,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// Off-Policy MC uses importance sampling to learn an optimal policy (target)
-/// while following a different exploratory policy (behavior).
+/// <para>Off-Policy MC uses importance sampling to learn an optimal policy (target)
+/// while following a different exploratory policy (behavior).</para>
+/// <para><b>For Beginners:</b> Off-policy MC learns the best strategy by watching someone
+/// else play (the behavior policy), then correcting for the difference using importance
+/// sampling weights. This is like learning optimal chess strategy by studying games played
+/// by beginners, adjusting for their suboptimal moves. The advantage is you can reuse old
+/// data collected under any policy, but importance sampling can introduce high variance.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]

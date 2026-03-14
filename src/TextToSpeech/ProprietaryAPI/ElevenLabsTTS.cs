@@ -11,6 +11,23 @@ using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>ElevenLabs: AI voice synthesis platform with voice cloning, emotion control, and multilingual support.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> ElevenLabs provides highly realistic AI voice synthesis with
+/// voice cloning (create a custom voice from a few minutes of audio), emotion control,
+/// and multilingual support across 29+ languages. This local implementation provides
+/// offline inference compatible with the ElevenLabs API surface.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 256, outputSize: 24000);
+///
+/// var model = new ElevenLabsTTS&lt;float&gt;(architecture, "elevenlabs.onnx");
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from ElevenLabs!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

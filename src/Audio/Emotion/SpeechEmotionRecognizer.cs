@@ -55,6 +55,25 @@ namespace AiDotNet.Audio.Emotion;
 /// - Valence: How positive/negative the emotion is (-1 to +1)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a speech emotion recognizer using a pre-trained ONNX model
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputSize: 80,
+///     outputSize: 7);
+///
+/// var recognizer = new SpeechEmotionRecognizer&lt;float&gt;(
+///     architecture: architecture,
+///     modelPath: "emotion_model.onnx",
+///     sampleRate: 16000);
+///
+/// // Classify emotions from audio
+/// var result = recognizer.RecognizeEmotion(audioTensor);
+/// // result.PredictedEmotion: "Happy", "Sad", "Angry", etc.
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]

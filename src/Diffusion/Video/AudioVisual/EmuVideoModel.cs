@@ -34,6 +34,18 @@ namespace AiDotNet.Diffusion.Video.AudioVisual;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Emu Video for text-to-video generation
+/// var model = new EmuVideoModel&lt;float&gt;();
+///
+/// // Generate video from text with factorized approach
+/// var video = model.GenerateFromText(
+///     prompt: "A serene lake at sunset with gentle ripples",
+///     width: 512, height: 512,
+///     numFrames: 16, fps: 16);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]

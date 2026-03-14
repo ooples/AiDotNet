@@ -14,8 +14,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// Value Iteration combines policy evaluation and improvement in a single update step,
-/// converging to the optimal value function.
+/// <para>Value Iteration combines policy evaluation and improvement in a single update step,
+/// converging to the optimal value function.</para>
+/// <para><b>For Beginners:</b> Value Iteration repeatedly updates state values using the
+/// Bellman optimality equation until they converge. Unlike Policy Iteration which does
+/// full evaluation then improvement, Value Iteration does both in a single sweep - making
+/// it simpler but potentially slower per iteration. Think of it like iteratively improving
+/// a GPS estimate: each pass gets closer to the true shortest path. Requires a complete
+/// model of the environment.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]

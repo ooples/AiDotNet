@@ -12,6 +12,21 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>UniAudio: unified multi-task audio tokenizer and language model for TTS, music, and sound effects.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "UniAudio: An Audio Foundation Model Toward Universal Audio Generation" (Yang et al., 2024)</item></list></para><para><b>For Beginners:</b> UniAudio: unified multi-task audio tokenizer and language model for TTS, music, and sound effects.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a UniAudio model for universal audio generation
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 512,
+///     outputSize: 24000);
+///
+/// var model = new UniAudio&lt;float&gt;(architecture, "uniaudio.onnx");
+///
+/// // Synthesize speech from text
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello, world!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

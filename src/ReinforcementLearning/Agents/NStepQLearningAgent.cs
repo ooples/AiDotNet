@@ -12,6 +12,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.NStepQLearning;
 /// N-step Q-Learning agent using multi-step off-policy returns.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> N-step Q-Learning extends regular Q-Learning by looking ahead
+/// n steps before bootstrapping. Regular Q-Learning updates based on the very next reward,
+/// while n-step looks at n future rewards. This propagates information faster (like seeing
+/// further down a road before deciding which way to turn). The trade-off: higher n means
+/// faster learning but more variance. Common values are n=3 to n=10.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

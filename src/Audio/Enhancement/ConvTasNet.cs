@@ -50,6 +50,25 @@ namespace AiDotNet.Audio.Enhancement;
 /// Magnitude Masking for Speech Separation.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Conv-TasNet model for audio source separation
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 16000,
+///     outputSize: 16000);
+///
+/// var model = new ConvTasNet&lt;float&gt;(
+///     architecture: architecture,
+///     modelPath: "conv_tasnet.onnx",
+///     sampleRate: 8000,
+///     numSources: 2);
+///
+/// // Separate mixed audio into individual sources
+/// Tensor&lt;float&gt;[] sources = model.Separate(mixedAudioTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

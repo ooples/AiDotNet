@@ -11,6 +11,23 @@ using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>WellSaid Labs: enterprise neural TTS with custom voice avatars for brand consistency.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> WellSaid Labs specializes in enterprise neural TTS with custom
+/// voice avatars that maintain brand consistency across all content. Their models focus on
+/// natural prosody and expressiveness, making them popular for corporate training,
+/// marketing, and internal communications. This local implementation provides offline inference.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 256, outputSize: 24000);
+///
+/// var model = new WellSaidLabs&lt;float&gt;(architecture, "wellsaid.onnx");
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from WellSaid Labs!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

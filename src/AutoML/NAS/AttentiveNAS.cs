@@ -18,6 +18,12 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "AttentiveNAS: Improving Neural Architecture Search via Attentive Sampling" (CVPR 2021)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> AttentiveNAS improves architecture search by paying
+    /// attention to which sub-networks perform well. Instead of sampling random architectures,
+    /// it learns to focus on promising designs, like a smart student who concentrates on
+    /// the most important study topics rather than studying everything equally.</para>
+    /// </remarks>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

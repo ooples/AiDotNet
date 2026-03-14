@@ -49,6 +49,25 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// with Feature Fusion and Keyword-to-Caption Augmentation.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CLAP model for audio-text alignment
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Embedding,
+///     inputSize: 48000,
+///     outputSize: 512);
+///
+/// var model = new CLAPModel&lt;float&gt;(
+///     architecture: architecture,
+///     audioEncoderPath: "clap_audio.onnx",
+///     textEncoderPath: "clap_text.onnx",
+///     sampleRate: 48000);
+///
+/// // Generate audio embeddings for similarity search
+/// Tensor&lt;float&gt; embedding = model.GetEmbedding(audioTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Multimodal)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

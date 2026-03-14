@@ -13,8 +13,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// Monte Carlo ES ensures exploration by starting each episode from a randomly
-/// chosen state-action pair, then following the greedy policy thereafter.
+/// <para>Monte Carlo ES ensures exploration by starting each episode from a randomly
+/// chosen state-action pair, then following the greedy policy thereafter.</para>
+/// <para><b>For Beginners:</b> Exploring Starts solves the exploration problem by guaranteeing
+/// every state-action pair has a chance of being the starting point. After the random start,
+/// the agent acts greedily (always picks the best known action). This ensures all state-action
+/// pairs are eventually tried, which is required for convergence. The downside is that random
+/// starts may not be possible in all real-world environments.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]

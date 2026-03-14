@@ -33,8 +33,13 @@ public class TransitionData<T>
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// Modified PI performs limited policy evaluation sweeps before improvement,
-/// trading off between the efficiency of VI and the stability of PI.
+/// <para>Modified PI performs limited policy evaluation sweeps before improvement,
+/// trading off between the efficiency of VI and the stability of PI.</para>
+/// <para><b>For Beginners:</b> Modified Policy Iteration is a middle ground between two classic
+/// algorithms: Value Iteration (fast but less stable) and Policy Iteration (stable but slow).
+/// Instead of fully evaluating a policy before improving it, it does a limited number of
+/// evaluation sweeps. Think of it like proofreading a draft: you do a few passes (not infinite)
+/// before revising. The number of evaluation sweeps controls the speed-stability trade-off.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]

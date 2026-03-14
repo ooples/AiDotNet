@@ -12,6 +12,21 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>Step-Audio: unified understanding and generation speech language model for intelligent voice interaction.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Step-Audio: Unified Understanding and Generation in Intelligent Speech Interaction" (StepFun, 2025)</item></list></para><para><b>For Beginners:</b> Step-Audio: unified understanding and generation speech language model for intelligent voice interaction.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create Step-Audio for intelligent voice interaction
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 512,
+///     outputSize: 16000);
+///
+/// var model = new StepAudio&lt;float&gt;(architecture, "step_audio.onnx");
+///
+/// // Synthesize speech with streaming support
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Step-Audio!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

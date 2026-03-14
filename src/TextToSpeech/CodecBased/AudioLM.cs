@@ -22,6 +22,21 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// that capture the meaning and content of speech, then generates detailed "acoustic" tokens that add
 /// the fine details needed for natural-sounding audio.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an AudioLM model for codec-based speech synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 512,
+///     outputSize: 16000);
+///
+/// var model = new AudioLM&lt;float&gt;(architecture, "audiolm.onnx");
+///
+/// // Synthesize speech from text
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello, world!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

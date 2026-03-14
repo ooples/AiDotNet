@@ -60,6 +60,26 @@ namespace AiDotNet.Audio.AudioGen;
 /// Reference: "AudioGen: Textually Guided Audio Generation" by Kreuk et al., 2022
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an AudioGen model for generating audio from text descriptions
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 512,
+///     outputSize: 32000);
+///
+/// var model = new AudioGenModel&lt;float&gt;(
+///     architecture: architecture,
+///     textEncoderPath: "text_encoder.onnx",
+///     languageModelPath: "language_model.onnx",
+///     audioDecoderPath: "audio_decoder.onnx",
+///     tokenizer: myTokenizer);
+///
+/// // Generate audio from a text prompt
+/// Tensor&lt;float&gt; audio = model.Generate("a dog barking loudly");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

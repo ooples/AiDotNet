@@ -23,7 +23,33 @@ namespace AiDotNet.NeuralNetworks;
 /// This network learns correspondences between audio and visual modalities,
 /// enabling sound source localization, audio-visual retrieval, and scene understanding.
 /// </para>
+/// <para><b>For Beginners:</b> This model learns to connect what it "hears" with what it "sees."
+///
+/// For example, if you show it a video of someone playing guitar, it learns that the
+/// guitar sound corresponds to the guitar in the image. This enables:
+/// - Sound source localization: "Where in the image is the sound coming from?"
+/// - Audio-visual retrieval: "Find images that match this sound"
+/// - Scene understanding: "What objects are making sounds in this scene?"
+///
+/// The network processes audio and video through separate encoders, then learns to
+/// align them in a shared embedding space using contrastive learning.
+/// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an audio-visual correspondence network
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Embedding,
+///     inputSize: 512,
+///     outputSize: 256);
+///
+/// var model = new AudioVisualCorrespondenceNetwork&lt;float&gt;(architecture);
+///
+/// // Compute correspondence between audio and visual inputs
+/// Tensor&lt;float&gt; embedding = model.Predict(inputTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Multimodal)]

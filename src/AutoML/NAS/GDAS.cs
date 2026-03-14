@@ -18,6 +18,13 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "Searching for A Robust Neural Architecture in Four GPU Hours" (CVPR 2019)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> GDAS finds good neural network architectures in just
+    /// 4 GPU hours using Gumbel-Softmax sampling. This technique makes discrete architecture
+    /// choices (which layer type to use) differentiable, so gradient descent can optimize
+    /// them directly. Think of it as using calculus to navigate a menu of design choices
+    /// rather than trying them all one by one.</para>
+    /// </remarks>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

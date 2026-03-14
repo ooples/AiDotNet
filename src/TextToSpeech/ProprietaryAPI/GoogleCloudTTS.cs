@@ -11,6 +11,23 @@ using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>Google Cloud Text-to-Speech: local WaveNet-style neural synthesis model inspired by Google's architecture.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Google Cloud TTS uses WaveNet technology (from DeepMind) to
+/// generate extremely natural-sounding speech. WaveNet models audio at the waveform level,
+/// producing speech that closely mimics human voice patterns including breathing and
+/// intonation. This local implementation provides offline WaveNet-style inference.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 256, outputSize: 24000);
+///
+/// var model = new GoogleCloudTTS&lt;float&gt;(architecture, "google_tts.onnx");
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Google Cloud TTS!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

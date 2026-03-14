@@ -18,6 +18,13 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "PC-DARTS: Partial Channel Connections for Memory-Efficient Architecture Search" (ICLR 2020)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> PC-DARTS makes architecture search more memory-efficient
+    /// by only using a subset of channels during the search phase. Regular DARTS uses all
+    /// channels which requires huge GPU memory. PC-DARTS samples partial channels, like
+    /// tasting a few spoonfuls from a pot instead of drinking the whole thing to judge
+    /// the flavor. This enables searching on larger datasets and bigger architectures.</para>
+    /// </remarks>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

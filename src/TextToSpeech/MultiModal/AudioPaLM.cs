@@ -12,6 +12,21 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>AudioPaLM: AudioPaLM: A Large Language Model That Can Speak and Listen.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "AudioPaLM: A Large Language Model That Can Speak and Listen" (Rubenstein et al., 2023)</item></list></para><para><b>For Beginners:</b> AudioPaLM: AudioPaLM: A Large Language Model That Can Speak and Listen.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create AudioPaLM for multimodal text-to-speech
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 512,
+///     outputSize: 16000);
+///
+/// var model = new AudioPaLM&lt;float&gt;(architecture, "audiopalm_tts.onnx");
+///
+/// // Convert text to natural speech
+/// Tensor&lt;float&gt; audio = model.Synthesize("Welcome to AiDotNet!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

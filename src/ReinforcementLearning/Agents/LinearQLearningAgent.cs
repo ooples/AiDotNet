@@ -12,6 +12,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// Linear Q-Learning agent using linear function approximation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Linear Q-Learning replaces the Q-table with a linear function
+/// Q(s,a) = w dot phi(s,a), where phi extracts features from state-action pairs. This allows
+/// handling continuous or large state spaces that would be impossible with tables. Think of it
+/// like using a formula instead of a lookup table. The trade-off is that it can only represent
+/// linear relationships, but it scales to much larger problems than tabular Q-learning.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

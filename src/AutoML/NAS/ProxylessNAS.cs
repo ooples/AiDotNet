@@ -18,6 +18,13 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "ProxylessNAS: Direct Neural Architecture Search on Target Task and Hardware" (ICLR 2019)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ProxylessNAS searches for architectures directly on the
+    /// target task and hardware, eliminating the need for proxy tasks. Most NAS methods
+    /// search on small datasets then transfer, but ProxylessNAS searches on the full task.
+    /// Think of it as test-driving cars on the actual roads you will drive rather than a
+    /// parking lot. It uses path binarization to keep memory usage manageable.</para>
+    /// </remarks>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

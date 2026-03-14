@@ -22,6 +22,22 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// AudioPaLM fuses the PaLM-2 text language model with AudioLM's speech processing capabilities into a single multimodal model. For ASR, speech is encoded using USM encoder features, which are projected into PaLM-2's embedding space. The model generates text tokens conditioned on the speech input, leveraging PaLM-2's massive language understanding. AudioPaLM achieves state-of-the-art on speech translation while maintaining competitive ASR performance.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create AudioPaLM for speech recognition using ONNX
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputSize: 80,
+///     outputSize: 32000);
+///
+/// var model = new AudioPaLM&lt;float&gt;(architecture, "audiopalm.onnx");
+///
+/// // Transcribe audio
+/// var result = model.Transcribe(audioTensor);
+/// Console.WriteLine(result.Text);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

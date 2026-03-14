@@ -13,6 +13,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 /// Prioritized Sweeping agent that focuses planning on high-priority state-actions.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Prioritized Sweeping is like Dyna-Q but smarter about which
+/// simulated updates to do. Instead of replaying random past experiences, it prioritizes
+/// updates where the biggest changes happened. Think of it like studying: focus on the
+/// topics where you got the most wrong. A priority queue tracks which state-actions need
+/// the most urgent updates, making planning much more efficient.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

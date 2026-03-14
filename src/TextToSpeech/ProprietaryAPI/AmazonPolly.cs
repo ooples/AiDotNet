@@ -11,6 +11,23 @@ using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>Amazon Polly: AWS neural TTS service with neural and standard engines.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Amazon Polly converts text into lifelike speech using deep learning.
+/// It offers multiple voices and languages, with neural and standard synthesis engines.
+/// The neural engine produces more natural-sounding speech but requires more compute.
+/// This local implementation provides API-compatible inference for offline use.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 256, outputSize: 22050);
+///
+/// var model = new AmazonPolly&lt;float&gt;(architecture, "polly.onnx");
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Amazon Polly!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

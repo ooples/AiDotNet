@@ -13,8 +13,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// On-Policy MC Control uses epsilon-greedy policy for both behavior and target,
-/// ensuring exploration while learning the optimal policy.
+/// <para>On-Policy MC Control uses epsilon-greedy policy for both behavior and target,
+/// ensuring exploration while learning the optimal policy.</para>
+/// <para><b>For Beginners:</b> On-policy MC learns by evaluating the same policy it uses
+/// to collect data. The agent follows an epsilon-greedy strategy (mostly best action,
+/// sometimes random) and improves that exact strategy over time. Think of learning to cook
+/// by actually cooking with your current recipe, then adjusting based on results. Simpler
+/// than off-policy methods but cannot reuse data from previous policies.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]

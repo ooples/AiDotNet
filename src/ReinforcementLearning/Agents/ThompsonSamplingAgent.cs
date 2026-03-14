@@ -13,6 +13,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// Thompson Sampling (Bayesian) Multi-Armed Bandit agent.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Thompson Sampling uses probability to decide which action to try.
+/// For each arm/action, it maintains a belief distribution (typically Beta distribution) about
+/// how good that action is. To choose an action, it draws a random sample from each distribution
+/// and picks the arm with the highest sample. Actions the agent is uncertain about naturally get
+/// explored more. This Bayesian approach often outperforms epsilon-greedy and UCB in practice
+/// and is widely used in A/B testing and recommendation systems.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.Bayesian)]

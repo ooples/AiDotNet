@@ -55,6 +55,25 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// Reference: Gong, Y., Chung, Y. A., &amp; Glass, J. (2021). AST: Audio Spectrogram Transformer.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an AST model for audio classification
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputSize: 128,
+///     outputSize: 527);
+///
+/// var model = new ASTModel&lt;float&gt;(
+///     architecture: architecture,
+///     modelPath: "ast_model.onnx",
+///     sampleRate: 16000,
+///     numClasses: 527);
+///
+/// // Classify audio events
+/// Tensor&lt;float&gt; predictions = model.Predict(audioTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.EmbeddingModel)]

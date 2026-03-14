@@ -742,6 +742,13 @@ namespace AiDotNet.AutoML
     /// Wrapper model that combines diffusion components into an IFullModel.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This model wraps a complete diffusion pipeline (noise predictor,
+    /// VAE encoder/decoder, noise scheduler, and conditioning) into a single model object.
+    /// It is automatically created by the DiffusionAutoML search process after finding the
+    /// best configuration. You typically do not create this directly - use DiffusionAutoML
+    /// to search for and build the optimal diffusion model.</para>
+    /// </remarks>
     [ModelDomain(ModelDomain.Generative)]
     [ModelCategory(ModelCategory.Diffusion)]
     [ModelTask(ModelTask.Generation)]

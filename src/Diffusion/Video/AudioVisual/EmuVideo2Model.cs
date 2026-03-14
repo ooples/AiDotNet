@@ -34,6 +34,18 @@ namespace AiDotNet.Diffusion.Video.AudioVisual;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Emu Video 2 for high-quality video generation
+/// var model = new EmuVideo2Model&lt;float&gt;();
+///
+/// // Generate video from text prompt
+/// var video = model.GenerateFromText(
+///     prompt: "A cat playing with a ball of yarn",
+///     width: 512, height: 512,
+///     numFrames: 32, fps: 16);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -13,6 +13,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// LSTD (Least-Squares Temporal Difference) agent using direct solution for value function weights.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> LSTD computes the value function weights directly using
+/// matrix operations instead of iterative updates. While standard TD learning takes many
+/// small steps toward the answer, LSTD solves for the answer in one computation (like
+/// solving a system of equations). This is much more sample-efficient but uses more memory
+/// and compute per update. Best for problems with linear function approximation and
+/// moderate state spaces.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Regression)]

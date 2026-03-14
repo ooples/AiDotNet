@@ -11,6 +11,23 @@ using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>Murf: enterprise AI voice platform with studio-quality text-to-speech generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Murf is an enterprise-grade AI voice platform that generates
+/// studio-quality speech. It supports 120+ voices across 20+ languages with fine-grained
+/// control over pitch, speed, and emphasis. Commonly used for e-learning, marketing videos,
+/// and audiobook production. This local implementation provides offline inference.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Generation,
+///     inputSize: 256, outputSize: 22050);
+///
+/// var model = new Murf&lt;float&gt;(architecture, "murf.onnx");
+/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Murf!");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

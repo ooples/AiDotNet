@@ -18,6 +18,13 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "Once for All: Train One Network and Specialize it for Efficient Deployment" (ICLR 2020)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Once-for-All trains a single super-network that can be
+    /// instantly adapted to any device without retraining. After one training session, you
+    /// can extract optimized networks for phones, tablets, or servers. Think of it like a
+    /// universal clothing pattern that can be tailored to any size without starting over.
+    /// This saves enormous compute compared to training separate models per device.</para>
+    /// </remarks>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

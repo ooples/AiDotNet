@@ -12,6 +12,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// Every-Visit Monte Carlo agent that updates all visits to states in an episode.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Every-Visit Monte Carlo learns by playing complete episodes
+/// (from start to finish) and then averaging the total reward received. Unlike First-Visit MC
+/// which only counts the first time a state is seen, this counts every visit. Think of it
+/// like a student who reviews every practice problem, not just the first attempt. This gives
+/// more data points per episode but with potentially correlated samples. Good for episodic
+/// tasks like board games where you learn from complete games.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

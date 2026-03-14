@@ -13,6 +13,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 /// Dyna-Q+ agent with exploration bonus for handling changing environments.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Dyna-Q+ extends Dyna-Q with an exploration bonus that
+/// encourages revisiting states not seen recently. This is crucial in changing environments
+/// where the optimal strategy may shift over time. The bonus grows with time since last
+/// visit, ensuring the agent periodically re-explores to detect environmental changes.
+/// Think of it as a curious learner who checks old paths to see if anything changed.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

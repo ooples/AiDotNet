@@ -18,6 +18,13 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "FBNet: Hardware-Aware Efficient ConvNet Design via Differentiable NAS" (CVPR 2019)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> FBNet (Facebook Net) finds architectures that are both
+    /// accurate and fast on specific hardware. It uses differentiable search with real
+    /// hardware latency measurements as constraints. Think of it as an architect who designs
+    /// buildings that are both beautiful and structurally efficient for a specific site,
+    /// rather than designing in the abstract.</para>
+    /// </remarks>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.ConvolutionalNetwork)]
