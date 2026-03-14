@@ -28,6 +28,23 @@ namespace AiDotNet.Diffusion.Control;
 /// less precise control signal adherence.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a lightweight ControlNet for fast inference
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 512,
+///     Width = 512,
+///     NumInferenceSteps = 15
+/// };
+/// var model = new ControlNetLiteModel&lt;float&gt;(options, ControlType.Depth);
+///
+/// // Generate with lightweight depth-guided control
+/// var depthMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 512, 512 });
+/// var result = model.Predict(depthMap);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]

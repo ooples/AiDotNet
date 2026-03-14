@@ -54,6 +54,23 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Wang et al., "InstantID: Zero-shot Identity-Preserving Generation in Seconds", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create InstantID for zero-shot identity-preserving generation
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 1024,
+///     Width = 1024,
+///     NumInferenceSteps = 30
+/// };
+/// var model = new InstantIDModel&lt;float&gt;(options);
+///
+/// // Generate images of a specific person from one reference photo
+/// var faceInput = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+/// var personalized = model.Predict(faceInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]

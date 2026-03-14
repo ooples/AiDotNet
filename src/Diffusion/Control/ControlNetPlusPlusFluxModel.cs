@@ -29,6 +29,23 @@ namespace AiDotNet.Diffusion.Control;
 /// powerful architecture for the best possible control over generated images.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create ControlNet++ for FLUX with reward-guided conditioning
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 16,
+///     Height = 1024,
+///     Width = 1024,
+///     NumInferenceSteps = 28
+/// };
+/// var model = new ControlNetPlusPlusFluxModel&lt;float&gt;(options, ControlType.Depth);
+///
+/// // Generate with enhanced depth-guided control on FLUX
+/// var depthMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 1024, 1024 });
+/// var result = model.Predict(depthMap);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]

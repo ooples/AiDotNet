@@ -28,6 +28,23 @@ namespace AiDotNet.Diffusion.Control;
 /// It's great for making images look clearer and more detailed.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ControlNet Tile model for upscaling and detail enhancement
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 1024,
+///     Width = 1024,
+///     NumInferenceSteps = 20
+/// };
+/// var model = new ControlNetTileModel&lt;float&gt;(options);
+///
+/// // Enhance a low-resolution image with regenerated details
+/// var blurryImage = Tensor&lt;float&gt;.Random(new[] { 1, 3, 1024, 1024 });
+/// var sharpResult = model.Predict(blurryImage);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Enhancement)]

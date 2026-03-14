@@ -33,6 +33,23 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Ye et al., "IP-Adapter: Text Compatible Image Prompt Adapter for Text-to-Image Diffusion Models", 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create IP-Adapter Plus for image-prompt-guided generation
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 512,
+///     Width = 512,
+///     NumInferenceSteps = 30
+/// };
+/// var model = new IPAdapterPlusModel&lt;float&gt;(options);
+///
+/// // Use a reference image to guide generation style and content
+/// var imageFeatures = Tensor&lt;float&gt;.Random(new[] { 1, 1024 });
+/// var result = model.Predict(imageFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]

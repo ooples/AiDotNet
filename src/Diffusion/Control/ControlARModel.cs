@@ -31,6 +31,23 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Li et al., "ControlAR: Controllable Image Generation with Autoregressive Models", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ControlAR model for edge-guided image generation
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 16,
+///     Height = 256,
+///     Width = 256,
+///     NumInferenceSteps = 30
+/// };
+/// var model = new ControlARModel&lt;float&gt;(options, ControlType.Canny);
+///
+/// // Generate an image guided by an edge map
+/// var edgeMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 256, 256 });
+/// var result = model.Predict(edgeMap);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]

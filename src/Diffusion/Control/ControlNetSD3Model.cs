@@ -29,6 +29,23 @@ namespace AiDotNet.Diffusion.Control;
 /// is specially designed to inject control signals into the transformer blocks.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ControlNet for Stable Diffusion 3
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 16,
+///     Height = 1024,
+///     Width = 1024,
+///     NumInferenceSteps = 28
+/// };
+/// var model = new ControlNetSD3Model&lt;float&gt;(options, ControlType.Canny);
+///
+/// // Generate with control on SD3's MMDiT architecture
+/// var controlImage = Tensor&lt;float&gt;.Random(new[] { 1, 1, 1024, 1024 });
+/// var result = model.Predict(controlImage);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
