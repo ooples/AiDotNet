@@ -36,6 +36,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Based on MMDiT architecture with parameter-efficient design
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new EMMDiTPredictor&lt;float&gt;(inputChannels: 4, contextDim: 768);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]

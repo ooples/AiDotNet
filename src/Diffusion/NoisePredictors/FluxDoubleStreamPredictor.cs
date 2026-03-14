@@ -33,6 +33,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Black Forest Labs, "FLUX.1 Technical Report", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new FluxDoubleStreamPredictor&lt;float&gt;(inputChannels: 16, hiddenSize: 3072, numLayers: 19, numHeads: 24);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]

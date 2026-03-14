@@ -40,6 +40,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Bao et al., "All are Worth Words: A ViT Backbone for Diffusion Models", CVPR 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new UViTNoisePredictor&lt;float&gt;(inputChannels: 4, hiddenSize: 1024, numLayers: 22, numHeads: 16);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]

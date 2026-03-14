@@ -33,6 +33,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Ma et al., "SiT: Exploring Flow and Diffusion-based Generative Models with Scalable Interpolant Transformers", ECCV 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new SiTPredictor&lt;float&gt;(inputChannels: 4, hiddenSize: 1152, numLayers: 28, numHeads: 16);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]

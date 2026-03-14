@@ -40,6 +40,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// - Time embedding injection via adaptive normalization
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new UNetNoisePredictor&lt;float&gt;(inputChannels: 4, baseChannels: 320, contextDim: 768);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]

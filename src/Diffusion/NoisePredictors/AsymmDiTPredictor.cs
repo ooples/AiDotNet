@@ -30,6 +30,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Genmo, "Mochi 1: A New SOTA in Open-Source Video Generation", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new AsymmDiTPredictor&lt;float&gt;(inputChannels: 16, hiddenSize: 3072, numLayers: 48, numHeads: 24);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 16, 24, 40 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]

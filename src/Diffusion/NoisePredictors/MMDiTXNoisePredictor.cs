@@ -35,6 +35,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Esser et al., "Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", ICML 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new MMDiTXNoisePredictor&lt;float&gt;(inputChannels: 16, hiddenSize: 1536, numLayers: 24, numHeads: 24);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
