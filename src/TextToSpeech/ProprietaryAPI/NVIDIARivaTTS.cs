@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>NVIDIARivaTTS: NVIDIA Riva TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "NVIDIA Riva TTS" (NVIDIA, 2021)</item></list></para><para><b>For Beginners:</b> NVIDIARivaTTS: NVIDIA Riva TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an NVIDIA Riva TTS model for GPU-optimized speech synthesis
+/// // with FastPitch acoustic model and HiFi-GAN vocoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new NVIDIARivaTTS&lt;double&gt;(architecture, "riva_tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new NVIDIARivaTTS&lt;double&gt;(architecture, new NVIDIARivaTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

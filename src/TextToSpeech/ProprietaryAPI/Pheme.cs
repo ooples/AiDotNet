@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <summary>Pheme: Pheme: Efficient and Conversational Speech Generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Pheme: Efficient and Conversational Speech Generation" (PolyAI Team, 2024)</item></list></para><para><b>For Beginners:</b> Pheme: Pheme: Efficient and Conversational Speech Generation.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Pheme model for efficient conversational speech generation
+/// // with turn-taking-aware natural prosody from PolyAI
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Pheme&lt;double&gt;(architecture, "pheme.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Pheme&lt;double&gt;(architecture, new PhemeOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
