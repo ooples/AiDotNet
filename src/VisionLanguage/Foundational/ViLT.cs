@@ -26,6 +26,22 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// <list type="bullet"><item>Paper: "ViLT: Vision-and-Language Transformer Without Convolution or Region Supervision" (Kim et al., ICML 2021)</item></list></para>
 /// <para><b>For Beginners:</b> ViLT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ViLT model for lightweight vision-language processing
+/// // with direct patch embeddings and no CNN/object detector overhead
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ViLT&lt;double&gt;(architecture, "vilt.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ViLT&lt;double&gt;(architecture, new ViLTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -26,6 +26,22 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// <list type="bullet"><item>Paper: "Oscar: Object-Semantics Aligned Pre-training for Vision-Language Tasks" (Li et al., ECCV 2020)</item></list></para>
 /// <para><b>For Beginners:</b> Oscar is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Oscar model for vision-language tasks
+/// // using object tags as anchor points for cross-modal alignment
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Oscar&lt;double&gt;(architecture, "oscar.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Oscar&lt;double&gt;(architecture, new OscarOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

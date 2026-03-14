@@ -26,6 +26,22 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// <list type="bullet"><item>Paper: "An Empirical Study of Training End-to-End Vision-and-Language Transformers" (Dou et al., CVPR 2022)</item></list></para>
 /// <para><b>For Beginners:</b> METER is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a METER model for vision-language pre-training
+/// // with CLIP ViT + RoBERTa co-attention fusion architecture
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new METER&lt;double&gt;(architecture, "meter.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new METER&lt;double&gt;(architecture, new METEROptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

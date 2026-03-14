@@ -26,6 +26,22 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// <list type="bullet"><item>Paper: "LXMERT: Learning Cross-Modality Encoder Representations from Transformers" (Tan and Bansal, EMNLP 2019)</item></list></para>
 /// <para><b>For Beginners:</b> LXMERT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an LXMERT model with three-encoder cross-modality architecture
+/// // for visual question answering and visual reasoning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LXMERT&lt;double&gt;(architecture, "lxmert.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LXMERT&lt;double&gt;(architecture, new LXMERTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

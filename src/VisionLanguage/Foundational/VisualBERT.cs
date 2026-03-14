@@ -26,6 +26,22 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// <list type="bullet"><item>Paper: "VisualBERT: A Simple and Performant Baseline for Vision and Language" (Li et al., 2019)</item></list></para>
 /// <para><b>For Beginners:</b> VisualBERT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VisualBERT model for vision-language understanding
+/// // with concatenated visual and text tokens in a single BERT stream
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VisualBERT&lt;double&gt;(architecture, "visualbert.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VisualBERT&lt;double&gt;(architecture, new VisualBERTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
