@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// GPT4Point (2024) is a unified framework for point cloud-language understanding and generation.
+/// It bridges 3D point cloud representations with language models through a point cloud encoder
+/// that projects geometric features into the LLM's embedding space, enabling both point cloud
+/// captioning and text-conditioned 3D point cloud generation in a single model.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GPT4Point: A Unified Framework for Point-Language Understanding and Generation (Various, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> GPT4Point is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> GPT4Point is a vision-language model for understanding and
+/// generating 3D point clouds using natural language. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

@@ -17,9 +17,16 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LEO-VL (2025) provides efficient 3D scene understanding from multi-view RGB-D inputs.
+/// It constructs 3D scene representations from multiple depth-camera views without requiring
+/// explicit 3D reconstruction, using a view aggregation module to fuse multi-view features
+/// into a coherent spatial representation for language-guided scene understanding and navigation.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LEO-VL: Efficient 3D Scene Understanding via Multi-View RGB-D (Various, 2025)"</item></list></para>
-/// <para><b>For Beginners:</b> LEOVL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LEO-VL is a vision-language model for 3D scene understanding
+/// using multi-view RGB-D camera inputs. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

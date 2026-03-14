@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// 3D-LLM (UCLA, 2023) injects 3D spatial features into large language models by rendering
+/// multi-view images from 3D scenes and projecting 2D features back into 3D space. This
+/// enables the LLM to understand spatial layouts, answer questions about 3D environments,
+/// and follow language-guided navigation instructions within reconstructed 3D scenes.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "3D-LLM: Injecting the 3D World into Large Language Models (UCLA, 2023)"</item></list></para>
-/// <para><b>For Beginners:</b> ThreeDLLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> 3D-LLM is a vision-language model that enables language
+/// understanding of 3D environments and scenes. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

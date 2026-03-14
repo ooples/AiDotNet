@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Kimi-VL-Thinking (Moonshot AI, 2025) extends Kimi-VL with long chain-of-thought reasoning
+/// capabilities trained through reinforcement learning alignment. It generates structured
+/// multi-step reasoning traces for complex visual problems, breaking down tasks into
+/// intermediate steps before producing final answers.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Kimi-VL Technical Report" (Moonshot AI, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> KimiVLThinking is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Kimi-VL-Thinking is a vision-language model specialized in
+/// long chain-of-thought reasoning for complex visual tasks. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

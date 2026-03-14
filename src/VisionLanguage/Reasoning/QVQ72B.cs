@@ -17,9 +17,18 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// QVQ-72B (Qwen Team, 2024) is the first open-source multimodal reasoning model, built
+/// on the Qwen architecture with 72 billion parameters. It features visual chain-of-thought
+/// reasoning where the model generates detailed step-by-step analysis of visual content
+/// before producing answers, achieving strong performance on mathematical and scientific
+/// visual reasoning benchmarks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "QVQ: To See the World with Wisdom" (Qwen Team, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> QVQ72B is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> QVQ-72B is a large open-source multimodal model with visual
+/// chain-of-thought reasoning capabilities. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

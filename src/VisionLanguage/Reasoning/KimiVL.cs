@@ -17,9 +17,16 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Kimi-VL (Moonshot AI, 2025) is a Mixture of Experts vision-language model featuring
+/// the MoonViT visual encoder and long-context processing capabilities. It uses sparse
+/// MoE routing for efficient scaling and supports extended context windows for processing
+/// high-resolution images and lengthy multi-turn conversations with visual inputs.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Kimi-VL Technical Report" (Moonshot AI, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> KimiVL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Kimi-VL is a vision-language model with MoE architecture
+/// for efficient multimodal reasoning. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

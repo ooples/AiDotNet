@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Dragonfly-Med (Together.ai, 2024) is a medical image understanding model that uses multi-resolution
+/// visual encoding to capture fine-grained clinical details at multiple scales. It processes medical
+/// images through a hierarchical vision encoder that handles both global context and localized
+/// pathological features, enabling accurate diagnosis support and medical visual question answering.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Dragonfly-Med: Multi-Resolution Visual Encoding for Medical Image Understanding (Together.ai, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> DragonflyMed is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Dragonfly-Med is a vision-language model specialized for medical
+/// image understanding with multi-resolution visual encoding. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

@@ -17,9 +17,16 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// 3DGraphLLM (CogAI, 2025) uses 3D scene graphs as structured input for large language models.
+/// It constructs semantic graphs from 3D scenes where nodes represent objects with their spatial
+/// properties and edges encode spatial relationships, providing the LLM with a structured
+/// representation for precise spatial reasoning, object counting, and relationship understanding.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "3DGraphLLM: 3D Scene Graph as Input for Large Language Models (CogAI, 2025)"</item></list></para>
-/// <para><b>For Beginners:</b> ThreeDGraphLLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> 3DGraphLLM is a vision-language model that uses scene graphs
+/// for structured 3D spatial reasoning. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

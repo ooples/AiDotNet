@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// RadFM (2024) is a generalist foundation model for radiology that uses a 3D Vision Transformer
+/// with a perceiver module to encode volumetric CT and MRI data. It handles both 2D radiographs
+/// and 3D volumetric scans, generating radiology reports, answering visual questions about
+/// medical images, and supporting multi-modal clinical decision-making.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RadFM: Towards Generalist Foundation Model for Radiology (Various, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> RadFM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> RadFM is a vision-language model for radiology report generation
+/// and visual question answering on medical imaging data. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

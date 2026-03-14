@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// PathVLM (2024) is a histopathology-specific vision-language model that processes whole-slide
+/// images at multiple magnification levels. It uses multi-scale patch processing to capture both
+/// cellular-level details and tissue-level context, enabling pathology report generation,
+/// diagnosis assistance, and visual question answering on histopathology specimens.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PathVLM: A Vision-Language Model for Computational Pathology (Various, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> PathVLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> PathVLM is a vision-language model specialized for computational
+/// pathology and histopathology image analysis. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

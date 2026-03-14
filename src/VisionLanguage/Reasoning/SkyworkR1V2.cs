@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Skywork R1V2 (2025) achieves state-of-the-art multimodal reasoning through hybrid
+/// reinforcement learning combining MPO (Multi-head Policy Optimization) and GRPO (Group
+/// Relative Policy Optimization) objectives. This hybrid RL approach improves both the
+/// quality of reasoning chains and the accuracy of final answers on complex visual tasks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Skywork R1V2: Multimodal Hybrid Reinforcement Learning" (2025)</item></list></para>
-/// <para><b>For Beginners:</b> SkyworkR1V2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Skywork R1V2 is an advanced vision-language model using hybrid
+/// reinforcement learning for state-of-the-art multimodal reasoning. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

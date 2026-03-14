@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Med-Flamingo (2023) adapts the OpenFlamingo architecture for few-shot medical visual question
+/// answering. It uses gated cross-attention layers to interleave medical image features with
+/// text tokens and a perceiver resampler to compress visual information, enabling the model
+/// to learn from just a few medical image-text examples without extensive fine-tuning.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Med-Flamingo: A Multimodal Medical Few-shot Learner (Various, 2023)"</item></list></para>
-/// <para><b>For Beginners:</b> MedFlamingo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Med-Flamingo is a vision-language model for few-shot medical
+/// visual question answering using the Flamingo architecture. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

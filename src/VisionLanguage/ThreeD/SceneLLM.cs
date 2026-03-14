@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Scene-LLM (2024) extends language models for 3D visual understanding and reasoning using
+/// voxel-based scene representations. It discretizes 3D environments into voxel grids with
+/// semantic features, enabling language-guided spatial reasoning about object locations,
+/// room layouts, and navigation instructions in indoor environments.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Scene-LLM: Extending Language Model for 3D Visual Understanding and Reasoning (Various, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> SceneLLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Scene-LLM is a vision-language model for voxel-based 3D scene
+/// understanding with language-guided spatial reasoning. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

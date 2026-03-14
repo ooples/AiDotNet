@@ -17,9 +17,18 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LLaVA-Med (Microsoft, 2023) adapts the LLaVA architecture for biomedical visual question
+/// answering through curriculum learning on PubMed Central figure-caption pairs. It achieves
+/// GPT-4-level visual understanding on biomedical images by first aligning visual and text
+/// features on biomedical figure-caption data, then fine-tuning on biomedical VQA instruction
+/// datasets for clinical and research applications.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-Med: Training a Large Language-and-Vision Assistant for Biomedicine (Microsoft, 2023)"</item></list></para>
-/// <para><b>For Beginners:</b> LLaVAMed is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLaVA-Med is a vision-language model for biomedical image
+/// understanding and visual question answering. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>
