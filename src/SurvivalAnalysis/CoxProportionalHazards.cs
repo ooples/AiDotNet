@@ -45,6 +45,13 @@ namespace AiDotNet.SurvivalAnalysis;
 /// - Cox (1972). "Regression Models and Life-Tables"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var cox = new CoxProportionalHazards&lt;double&gt;(learningRate: 0.01, maxIterations: 1000);
+/// cox.Fit(times, events, features);
+/// double hazardRatio = cox.PredictHazardRatio(newPatientFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.SurvivalModel)]

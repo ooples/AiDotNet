@@ -54,6 +54,13 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// - Aerospace (satellite dynamics)
     /// - Any mechanical system
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var lnn = new LagrangianNeuralNetwork&lt;float&gt;();
+    /// float[] acceleration = lnn.ComputeAcceleration(
+    ///     new float[] { 1.0f, 0.5f }, new float[] { 0.1f, -0.2f });
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -87,6 +87,13 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// in learning solution operators for PDEs, often matching or exceeding traditional
     /// numerical methods in accuracy while being orders of magnitude faster.
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var fno = new FourierNeuralOperator&lt;float&gt;();
+    /// var history = fno.Train(inputFunctions, outputFunctions, epochs: 100);
+    /// Tensor&lt;float&gt; prediction = fno.Forward(newInputFunction);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]

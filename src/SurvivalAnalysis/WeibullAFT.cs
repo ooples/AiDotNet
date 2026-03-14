@@ -36,6 +36,13 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <para><b>Reference:</b> Lawless (2003), Statistical Models and Methods for Lifetime Data</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <example>
+/// <code>
+/// var weibull = new WeibullAFT&lt;double&gt;(maxIterations: 100, tolerance: 1e-6);
+/// weibull.Fit(times, events, features);
+/// double medianSurvival = weibull.PredictMedianSurvivalTime(newPatientFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.SurvivalModel)]

@@ -50,6 +50,13 @@ namespace AiDotNet.CausalInference;
 /// - Bang &amp; Robins (2005). "Doubly Robust Estimation"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var dr = new DoublyRobustEstimator&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);
+/// dr.Fit(features, treatment, outcome);
+/// double ate = dr.EstimateAte();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.CausalModel)]

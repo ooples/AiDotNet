@@ -39,6 +39,13 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// patterns of good programming, just like you learn language by reading books.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new CodeSynthesisArchitecture&lt;float&gt;(
+///     SynthesisType.Neural, ProgramLanguage.CSharp, CodeTask.Completion);
+/// var codeBert = new CodeBERT&lt;float&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]

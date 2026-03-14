@@ -35,6 +35,13 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <para><b>Reference:</b> Ishwaran et al., "Random Survival Forests" (2008)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <example>
+/// <code>
+/// var rsf = new RandomSurvivalForest&lt;double&gt;(numTrees: 100, maxDepth: 10);
+/// rsf.Fit(times, events, features);
+/// double survivalProb = rsf.PredictSurvival(newPatientFeatures, timePoint);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.SurvivalModel)]

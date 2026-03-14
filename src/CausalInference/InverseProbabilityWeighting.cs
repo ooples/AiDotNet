@@ -51,6 +51,13 @@ namespace AiDotNet.CausalInference;
 /// - Robins, Rotnitzky &amp; Zhao (1994). "Estimation of Regression Coefficients"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var ipw = new InverseProbabilityWeighting&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);
+/// ipw.Fit(features, treatment, outcome);
+/// double ate = ipw.EstimateAte();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.CausalModel)]

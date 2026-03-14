@@ -57,6 +57,16 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// Both solve the same PDE, but Deep Ritz uses the variational (energy) formulation,
     /// which can be more natural and stable for certain problems.
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 2, outputSize: 1);
+    /// Func&lt;float[], float[], float[,], float&gt; energy = (u, x, grad) =&gt; 0.5f;
+    /// var deepRitz = new DeepRitzMethod&lt;float&gt;(architecture, energy);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]

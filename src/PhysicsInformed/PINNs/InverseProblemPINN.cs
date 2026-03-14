@@ -51,6 +51,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// 3. Gradually increase data weight
     /// 4. Use separate learning rates for network and parameters
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 2, outputSize: 1);
+    /// var inverseProblem = new HeatConductivityInverseProblem&lt;float&gt;();
+    /// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
+    /// var pinn = new InverseProblemPINN&lt;float&gt;(architecture, inverseProblem, bc);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]

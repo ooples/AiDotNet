@@ -59,6 +59,17 @@ namespace AiDotNet.PhysicsInformed.PINNs;
 ///   multi-fidelity data: Application to function approximation and inverse PDE problems"
 ///   Journal of Computational Physics, 2020.
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 2, outputSize: 1);
+/// var pde = new HeatEquation&lt;float&gt;();
+/// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
+/// var mfPinn = new MultiFidelityPINN&lt;float&gt;(architecture, pde, bc);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Science)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

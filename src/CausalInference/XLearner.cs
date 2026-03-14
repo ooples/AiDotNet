@@ -48,6 +48,13 @@ namespace AiDotNet.CausalInference;
 /// <para><b>Reference:</b> Künzel et al., "Metalearners for Estimating Heterogeneous Treatment Effects" (2019)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <example>
+/// <code>
+/// var xLearner = new XLearner&lt;double&gt;(maxIterations: 100, learningRate: 0.1);
+/// xLearner.Fit(features, treatment, outcome);
+/// Vector&lt;double&gt; cate = xLearner.EstimateCate(newFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.CausalModel)]

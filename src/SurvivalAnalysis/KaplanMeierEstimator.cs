@@ -44,6 +44,13 @@ namespace AiDotNet.SurvivalAnalysis;
 /// - Kaplan &amp; Meier (1958). "Nonparametric Estimation from Incomplete Observations"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var km = new KaplanMeierEstimator&lt;double&gt;();
+/// km.Fit(times, events);
+/// double survivalProb = km.PredictSurvival(timePoint);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.SurvivalModel)]

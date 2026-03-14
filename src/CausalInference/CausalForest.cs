@@ -42,6 +42,13 @@ namespace AiDotNet.CausalInference;
 /// - Wager &amp; Athey (2018). "Estimation and Inference of Heterogeneous Treatment Effects using Random Forests"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var forest = new CausalForest&lt;double&gt;(numTrees: 100, maxDepth: 10);
+/// forest.Fit(features, treatment, outcome);
+/// Vector&lt;double&gt; cate = forest.EstimateCate(newFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.CausalModel)]
