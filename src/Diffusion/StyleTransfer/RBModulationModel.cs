@@ -32,6 +32,14 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// Reference: Rout et al., "RB-Modulation: Training-Free Personalization of Diffusion Models using Stochastic Optimal Control", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new RBModulationModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var personalized = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.StyleTransfer)]

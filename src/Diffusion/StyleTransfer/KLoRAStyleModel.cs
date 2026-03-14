@@ -28,6 +28,14 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// colors with 30% Picasso geometry. This gives you creative control over the final look.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 25 };
+/// var model = new KLoRAStyleModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var blended = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.StyleTransfer)]

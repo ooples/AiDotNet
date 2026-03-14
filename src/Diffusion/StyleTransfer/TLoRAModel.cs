@@ -29,6 +29,14 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// look like it was painted by the same artist throughout.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 25 };
+/// var model = new TLoRAModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var stylized = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.StyleTransfer)]
