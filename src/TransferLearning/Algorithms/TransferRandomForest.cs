@@ -260,6 +260,19 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// features from the target domain to match what the source model expects, then runs
 /// the prediction. This is how transfer learning works with tree-based models.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a mapped random forest that adapts source features to target domain
+/// var baseModel = sourceForest; // Pre-trained random forest from source domain
+/// var mapper = new FeatureMapper&lt;double&gt;(sourceFeatures, targetFeatures);
+/// var mappedModel = new MappedRandomForestModel&lt;double&gt;(baseModel, mapper, targetFeatureCount);
+///
+/// // Predict on target domain data using feature mapping
+/// var targetFeatures = Matrix&lt;double&gt;.Build.Dense(1, 5);
+/// var prediction = mappedModel.Predict(targetFeatures);
+/// Console.WriteLine($"Predicted value: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.DecisionTree)]
