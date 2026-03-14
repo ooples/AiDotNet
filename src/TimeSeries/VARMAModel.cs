@@ -33,6 +33,15 @@ namespace AiDotNet.TimeSeries;
 /// between different variables and learns from its own mistakes.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VARMA model for multivariate time series (e.g., GDP + unemployment)
+/// var options = new VARMAModelOptions&lt;double&gt; { AROrder = 1, MAOrder = 1 };
+/// var varma = new VARMAModel&lt;double&gt;(options);
+/// varma.Train(multivariateMatrix, targetVector);
+/// Vector&lt;double&gt; forecast = varma.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]

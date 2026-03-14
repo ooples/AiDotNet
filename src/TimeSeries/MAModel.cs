@@ -31,6 +31,15 @@ namespace AiDotNet.TimeSeries;
 /// three periods when making a new prediction.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an MA(2) model for forecasting based on past forecast errors
+/// var options = new MAModelOptions&lt;double&gt; { Order = 2 };
+/// var maModel = new MAModel&lt;double&gt;(options);
+/// maModel.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = maModel.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]

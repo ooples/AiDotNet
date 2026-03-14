@@ -32,6 +32,25 @@ namespace AiDotNet.TimeSeries;
 /// important connections (ProbSparse attention), compressing the sequence as it goes through
 /// layers, and predicting all future values at once instead of one at a time.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Informer model for efficient long-sequence time series forecasting
+/// var options = new InformerOptions&lt;double&gt;();
+/// var model = new InformerModel&lt;double&gt;(options);
+///
+/// // Prepare long-horizon time series data
+/// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
+///     115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
+/// var trainingMatrix = Matrix&lt;double&gt;.Build.Dense(history.Count - 1, 1);
+///
+/// // Train using ProbSparse self-attention for O(L log L) efficiency
+/// model.Train(trainingMatrix, history.SubVector(1, history.Count - 1));
+///
+/// // Generate multi-step forecasts in parallel via generative decoder
+/// var forecast = model.Predict(trainingMatrix);
+/// Console.WriteLine($"Next predicted value: {forecast[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]

@@ -41,6 +41,15 @@ namespace AiDotNet.TimeSeries;
 /// what's driving changes in addition to making predictions.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a BSTS model for causal impact analysis with structural components
+/// var options = new BayesianStructuralTimeSeriesOptions&lt;double&gt;();
+/// var bsts = new BayesianStructuralTimeSeriesModel&lt;double&gt;(options);
+/// bsts.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = bsts.Forecast(history, horizon: 30);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Bayesian)]

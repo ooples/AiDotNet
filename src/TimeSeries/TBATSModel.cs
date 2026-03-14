@@ -32,6 +32,15 @@ namespace AiDotNet.TimeSeries;
 /// This makes TBATS particularly useful for complex forecasting problems where simpler methods fail.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TBATS model for complex seasonal patterns (e.g., daily + weekly)
+/// var options = new TBATSModelOptions&lt;double&gt;();
+/// var tbats = new TBATSModel&lt;double&gt;(options);
+/// tbats.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = tbats.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]

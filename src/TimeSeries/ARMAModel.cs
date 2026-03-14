@@ -36,6 +36,15 @@ namespace AiDotNet.TimeSeries;
 /// best with time series data that is already stationary (doesn't have strong trends).
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an ARMA(2,1) model combining AR and MA components
+/// var options = new ARMAOptions&lt;double&gt; { AROrder = 2, MAOrder = 1 };
+/// var arma = new ARMAModel&lt;double&gt;(options);
+/// arma.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = arma.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]

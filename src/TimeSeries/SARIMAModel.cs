@@ -27,6 +27,20 @@ namespace AiDotNet.TimeSeries;
 /// - m: The length of the seasonal cycle (e.g., 12 for monthly data with yearly patterns)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SARIMA model for monthly data with yearly seasonality
+/// var options = new SARIMAOptions&lt;double&gt;
+/// {
+///     AROrder = 1, DifferencingOrder = 1, MAOrder = 1,
+///     SeasonalAROrder = 1, SeasonalDifferencingOrder = 1,
+///     SeasonalMAOrder = 1, SeasonalPeriod = 12
+/// };
+/// var sarima = new SARIMAModel&lt;double&gt;(options);
+/// sarima.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = sarima.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]

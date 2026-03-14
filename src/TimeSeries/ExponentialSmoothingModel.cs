@@ -28,6 +28,18 @@ namespace AiDotNet.TimeSeries;
 /// decreases exponentially as the data gets older.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Holt-Winters exponential smoothing model for seasonal data
+/// var options = new ExponentialSmoothingOptions&lt;double&gt;
+/// {
+///     Alpha = 0.3, Beta = 0.1, Gamma = 0.1, SeasonalPeriod = 12
+/// };
+/// var ets = new ExponentialSmoothingModel&lt;double&gt;(options);
+/// ets.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = ets.Predict(inputMatrix);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]

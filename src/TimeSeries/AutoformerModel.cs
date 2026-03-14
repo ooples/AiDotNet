@@ -55,6 +55,19 @@ namespace AiDotNet.TimeSeries;
 /// - Traffic flow prediction (rush hour patterns)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Autoformer with auto-correlation for long-range forecasting
+/// var options = new AutoformerOptions&lt;double&gt;
+/// {
+///     InputLength = 96, PredictionLength = 24,
+///     EmbeddingDim = 512, NumHeads = 8
+/// };
+/// var autoformer = new AutoformerModel&lt;double&gt;(options);
+/// autoformer.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = autoformer.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]

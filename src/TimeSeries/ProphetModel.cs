@@ -21,6 +21,15 @@ namespace AiDotNet.TimeSeries;
 /// guesses about future values.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Prophet-style model for time series with trend and seasonality
+/// var options = new ProphetOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var prophet = new ProphetModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
+/// prophet.Train(dateFeatures, values);
+/// Vector&lt;double&gt; forecast = prophet.Predict(futureDateFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Bayesian)]

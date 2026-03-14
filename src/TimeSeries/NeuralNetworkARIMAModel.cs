@@ -26,6 +26,15 @@ namespace AiDotNet.TimeSeries;
 /// It's especially useful for data that changes over time, like stock prices, weather patterns, or sales figures.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a hybrid Neural Network + ARIMA model for complex time series
+/// var options = new NeuralNetworkARIMAOptions&lt;double&gt;();
+/// var nnArima = new NeuralNetworkARIMAModel&lt;double&gt;(options);
+/// nnArima.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = nnArima.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]

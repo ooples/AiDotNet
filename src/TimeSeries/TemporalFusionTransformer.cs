@@ -43,6 +43,25 @@ namespace AiDotNet.TimeSeries;
 /// when making predictions, similar to how a human analyst would examine past trends.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Temporal Fusion Transformer for interpretable multi-horizon forecasting
+/// var options = new TemporalFusionTransformerOptions&lt;double&gt;();
+/// var model = new TemporalFusionTransformer&lt;double&gt;(options);
+///
+/// // Prepare multi-variate time series with known and unknown inputs
+/// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
+///     115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
+/// var features = Matrix&lt;double&gt;.Build.Dense(history.Count - 1, 1);
+///
+/// // Train with variable selection and gated residual networks
+/// model.Train(features, history.SubVector(1, history.Count - 1));
+///
+/// // Generate interpretable forecasts with attention-based temporal patterns
+/// var forecast = model.Predict(features);
+/// Console.WriteLine($"Next predicted value: {forecast[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]

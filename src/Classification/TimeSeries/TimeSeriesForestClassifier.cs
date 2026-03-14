@@ -38,6 +38,21 @@ namespace AiDotNet.Classification.TimeSeries;
 ///
 /// <para><b>Reference:</b> Deng et al., "A Time Series Forest for Classification and Feature Extraction" (2013)</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Time Series Forest with ensemble of interval-based decision trees
+/// var options = new TimeSeriesForestOptions&lt;double&gt;();
+/// var classifier = new TimeSeriesForestClassifier&lt;double&gt;(options);
+///
+/// // Prepare time series samples as tensors
+/// var series1 = new Tensor&lt;double&gt;(new double[] { 1.0, 1.2, 1.5, 1.3, 1.1 });
+/// var series2 = new Tensor&lt;double&gt;(new double[] { 2.0, 2.5, 2.3, 2.8, 3.0 });
+///
+/// // Classify using mean, std, and slope features from random intervals
+/// var predictions = classifier.Predict(series1);
+/// Console.WriteLine($"Predicted class: {predictions[0]}");
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.TimeSeries)]

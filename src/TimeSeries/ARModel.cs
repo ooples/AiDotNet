@@ -36,6 +36,15 @@ namespace AiDotNet.TimeSeries;
 /// component and doesn't account for moving average errors or trends that require differencing.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an AR(3) model for univariate time series forecasting
+/// var options = new ARModelOptions&lt;double&gt; { Order = 3 };
+/// var arModel = new ARModel&lt;double&gt;(options);
+/// arModel.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = arModel.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]

@@ -50,6 +50,15 @@ namespace AiDotNet.TimeSeries;
 /// - Provides insights that simpler models might miss
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Decompose time series into unobserved trend, cycle, and seasonal components
+/// var options = new UnobservedComponentsOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var ucm = new UnobservedComponentsModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
+/// ucm.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = ucm.Forecast(horizon: 24);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Bayesian)]

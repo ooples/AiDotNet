@@ -60,6 +60,15 @@ namespace AiDotNet.TimeSeries;
 /// you might not have enough historical data to train a specialized model.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use a pre-trained Chronos foundation model for zero-shot time series forecasting
+/// var options = new ChronosOptions&lt;double&gt;();
+/// var chronos = new ChronosFoundationModel&lt;double&gt;(options);
+/// chronos.Train(historicalData, historicalLabels);
+/// Vector&lt;double&gt; forecast = chronos.Predict(recentContext);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

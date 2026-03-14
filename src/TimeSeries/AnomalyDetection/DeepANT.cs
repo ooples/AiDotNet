@@ -31,6 +31,15 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 /// very different, it notices and flags it as unusual.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeepANT model for unsupervised time series anomaly detection
+/// var options = new DeepANTOptions&lt;double&gt;();
+/// var deepant = new DeepANT&lt;double&gt;(options);
+/// deepant.Train(timeSeriesMatrix, timeSeriesLabels);
+/// Vector&lt;double&gt; anomalyScores = deepant.Predict(testMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelCategory(ModelCategory.AnomalyDetection)]

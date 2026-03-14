@@ -32,6 +32,15 @@ namespace AiDotNet.TimeSeries;
 /// and uses these connections to make better forecasts for all variables simultaneously.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VAR model for jointly forecasting multiple related time series
+/// var options = new VARModelOptions&lt;double&gt; { LagOrder = 2 };
+/// var var = new VectorAutoRegressionModel&lt;double&gt;(options);
+/// var.Train(multivariateMatrix, targetVector);
+/// Vector&lt;double&gt; forecast = var.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]

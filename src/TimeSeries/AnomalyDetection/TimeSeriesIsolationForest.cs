@@ -47,6 +47,15 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 /// Is it unusual for this time of day? Is it unusual given the recent trend?"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a time-series-aware isolation forest for anomaly detection
+/// var options = new TimeSeriesIsolationForestOptions&lt;double&gt;();
+/// var iForest = new TimeSeriesIsolationForest&lt;double&gt;(options);
+/// iForest.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; anomalyScores = iForest.Predict(testMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.AnomalyDetection)]

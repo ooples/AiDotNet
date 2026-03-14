@@ -41,6 +41,15 @@ namespace AiDotNet.TimeSeries;
 /// - Temporal patterns that persist in the data after accounting for these external influences
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a dynamic regression with ARIMA errors for exogenous-variable forecasting
+/// var options = new DynamicRegressionWithARIMAErrorsOptions&lt;double&gt;();
+/// var drModel = new DynamicRegressionWithARIMAErrors&lt;double&gt;(options);
+/// drModel.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = drModel.Forecast(history, horizon: 12, futureExogenous);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]

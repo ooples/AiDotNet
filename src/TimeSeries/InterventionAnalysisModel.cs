@@ -29,6 +29,15 @@ namespace AiDotNet.TimeSeries;
 /// or any significant event that changes the normal pattern of your data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Measure the impact of a policy change at time step 50 on a time series
+/// var options = new InterventionAnalysisOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var model = new InterventionAnalysisModel&lt;double&gt;(options);
+/// model.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; counterfactual = model.Predict(inputMatrix);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
