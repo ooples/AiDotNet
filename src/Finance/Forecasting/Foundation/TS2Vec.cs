@@ -27,6 +27,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// across augmented context views, producing contextual representations at arbitrary granularities.
 /// It uses a dilated CNN encoder with temporal and instance contrastive losses.
 /// </para>
+/// <para><b>For Beginners:</b> TS2Vec creates a universal "fingerprint" for time series data
+/// at any time scale. It works by showing the model two different views of the same data
+/// (like seeing a city from two angles) and training it to recognize they represent the same
+/// thing. The resulting representations can be used for forecasting, classification, or
+/// anomaly detection without task-specific retraining.</para>
 /// <para>
 /// <b>Reference:</b> Yue et al., "TS2Vec: Towards Universal Representation of Time Series", AAAI 2022.
 /// </para>

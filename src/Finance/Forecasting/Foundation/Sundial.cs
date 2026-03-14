@@ -28,6 +28,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// fewer parameters (4.71% average MSE reduction). It uses a GPT-style autoregressive
 /// architecture with patch-based tokenization and quantile forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> Sundial is a time series forecasting model that works like
+/// GPT but for numbers instead of words. It groups data into patches (chunks) and predicts
+/// future patches one at a time. Despite using fewer parameters than competing models, it
+/// achieves better accuracy, making it a practical choice when you need strong forecasting
+/// performance without enormous computational resources.</para>
 /// <para>
 /// <b>Reference:</b> "Sundial: A Family of Highly Capable Time Series Foundation Models", 2025.
 /// https://arxiv.org/abs/2502.00816

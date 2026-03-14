@@ -29,6 +29,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// a pretrained ViT encoder, and reconstructs/forecasts using the decoder. This cross-modal
 /// transfer demonstrates that vision foundation models generalize to time series.
 /// </para>
+/// <para><b>For Beginners:</b> VisionTS takes a surprising approach: it converts time series
+/// data into images and uses a vision model (originally trained on photos) to forecast future
+/// values. The data is arranged in a 2D grid like pixels, and the vision model fills in the
+/// missing parts, effectively predicting future values. This works because patterns in time
+/// series grids resemble visual textures that vision models already understand.</para>
 /// <para>
 /// <b>Reference:</b> "VisionTS: Visual Masked Autoencoders as Zero-Shot Time Series Forecasters",
 /// ICML 2025.

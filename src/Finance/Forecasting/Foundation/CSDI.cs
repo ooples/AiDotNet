@@ -27,6 +27,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// It conditions on observed values using a transformer-based denoiser and generates all missing
 /// values simultaneously.
 /// </para>
+/// <para><b>For Beginners:</b> CSDI fills in missing data points in time series and forecasts
+/// future values using a diffusion process. Think of it like an artist restoring a damaged
+/// painting: it looks at the intact parts and intelligently fills in the gaps. Unlike simpler
+/// methods that fill one gap at a time, CSDI fills all missing values simultaneously, which
+/// produces more consistent and realistic results.</para>
 /// <para>
 /// <b>Reference:</b> Tashiro et al., "CSDI: Conditional Score-based Diffusion Models for Probabilistic Time Series Imputation", NeurIPS 2021.
 /// </para>

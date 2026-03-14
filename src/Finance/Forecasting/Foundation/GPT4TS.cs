@@ -27,6 +27,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// classification, and anomaly detection. It demonstrates that pretrained language models
 /// transfer effectively to time series tasks without fine-tuning the backbone.
 /// </para>
+/// <para><b>For Beginners:</b> GPT4TS takes a language model (GPT-2) that was trained to
+/// predict text and repurposes it for time series forecasting. The core idea is that patterns
+/// in sequences of numbers are similar to patterns in sequences of words. The language model
+/// stays frozen (unchanged) while small task-specific layers are added on top, making this
+/// approach surprisingly effective with minimal training.</para>
 /// <para>
 /// <b>Reference:</b> Zhou et al., "One Fits All: Power General Time Series Analysis by Pretrained LM", 2023.
 /// </para>

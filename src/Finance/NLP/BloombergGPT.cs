@@ -18,6 +18,13 @@ namespace AiDotNet.Finance.NLP;
 /// BloombergGPT neural network model for comprehensive financial language processing.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> BloombergGPT is a 50-billion parameter language model
+/// trained on a mix of general text and Bloomberg's massive financial data archive. Unlike
+/// general-purpose LLMs, it deeply understands financial jargon, SEC filings, earnings
+/// reports, and market commentary. It can analyze financial documents, answer questions
+/// about markets, and generate financial text with domain-specific accuracy.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

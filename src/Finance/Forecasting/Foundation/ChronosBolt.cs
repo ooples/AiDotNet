@@ -29,6 +29,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// The encoder processes the input context and the decoder directly outputs all forecast
 /// quantiles in a single forward pass without iterative generation.
 /// </para>
+/// <para><b>For Beginners:</b> Chronos-Bolt is a faster version of the Chronos time series
+/// forecasting model from Amazon. While the original Chronos generates predictions one step
+/// at a time (like writing a sentence word by word), Chronos-Bolt outputs all predictions at
+/// once (like writing the whole sentence in one go). This makes it much faster while still
+/// providing probabilistic forecasts that tell you the range of likely future values.</para>
 /// <para>
 /// <b>Reference:</b> Part of Amazon Chronos family, Nov 2024.
 /// </para>

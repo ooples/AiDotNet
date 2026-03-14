@@ -25,6 +25,11 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// It introduces patching (dividing time series into segments) and channel independence
 /// to achieve efficient and accurate forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> PatchTST treats a time series like a sentence: it breaks the
+/// data into "patches" (chunks of consecutive values) just as a sentence is split into words.
+/// A transformer then processes these patches to make predictions. This patching trick reduces
+/// computational cost dramatically while capturing long-range patterns. Each variable in a
+/// multivariate series is processed independently, which surprisingly improves accuracy.</para>
 /// <para>
 /// Reference: Nie et al., "A Time Series is Worth 64 Words: Long-term Forecasting
 /// with Transformers", ICLR 2023. https://arxiv.org/abs/2211.14730

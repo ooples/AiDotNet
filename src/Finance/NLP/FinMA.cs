@@ -18,6 +18,13 @@ namespace AiDotNet.Finance.NLP;
 /// FinMA (Financial Multi-Agent) neural network model for collaborative financial task solving.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> FinMA is a financial language model from the PIXIU project
+/// that can handle a wide range of financial tasks including sentiment analysis, named
+/// entity recognition in SEC filings, stock movement prediction, and financial question
+/// answering. It was instruction-tuned on 136K financial task examples, making it a
+/// versatile financial AI assistant.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

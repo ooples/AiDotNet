@@ -28,6 +28,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// across 45 global exchanges. It natively understands OHLCV (Open, High, Low, Close, Volume)
 /// candlestick patterns for financial market forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> Kronos is a foundation model built specifically for financial
+/// markets. It was trained on over 12 billion candlestick records from 45 exchanges worldwide,
+/// so it natively understands the language of stock charts (open, high, low, close, volume).
+/// Think of it as a model that has "read" every trading chart in history and can predict what
+/// comes next based on patterns it has learned.</para>
 /// <para>
 /// <b>Reference:</b> "Kronos: A Foundation Model for the Language of Financial Markets", 2025.
 /// https://arxiv.org/abs/2508.02739

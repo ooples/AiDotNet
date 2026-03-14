@@ -28,6 +28,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// enabling the use of discrete token-based methods (like LLMs) on continuous time series data.
 /// It uses an encoder-decoder architecture with vector quantization bottleneck.
 /// </para>
+/// <para><b>For Beginners:</b> TOTEM converts continuous time series data into discrete tokens
+/// (like words in a vocabulary), making it possible to use language model techniques on
+/// numerical data. Think of it as creating a "dictionary" of common time series patterns:
+/// each chunk of data gets matched to its closest dictionary entry, creating a compact
+/// representation that language-style models can process.</para>
 /// <para>
 /// <b>Reference:</b> Talukder et al., "TOTEM: TOkenized Time Series EMbeddings for General Time Series Analysis", 2024.
 /// </para>

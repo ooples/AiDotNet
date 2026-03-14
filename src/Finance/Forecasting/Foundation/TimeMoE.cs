@@ -28,6 +28,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// It uses a decoder-only transformer where each feed-forward layer is replaced by an
 /// MoE layer with a learned router.
 /// </para>
+/// <para><b>For Beginners:</b> Time-MoE is the first time series model to reach billions of
+/// parameters by using a Mixture of Experts approach. Instead of one giant network processing
+/// every input, it has many specialized "expert" sub-networks and a router that picks the best
+/// 2-3 experts for each data point. This means only a fraction of the parameters are active
+/// at any time, making it efficient despite its massive total size.</para>
 /// <para>
 /// <b>Reference:</b> Shi et al., "Time-MoE: Billion-Scale Time Series Foundation Models
 /// with Mixture of Experts", ICLR 2025. https://openreview.net/forum?id=e1wDDFmlVu

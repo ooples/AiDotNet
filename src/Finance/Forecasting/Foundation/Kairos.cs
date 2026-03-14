@@ -28,6 +28,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// granularities based on local information density. A learned router decides which patch
 /// size is optimal for each segment, making the model parameter-efficient and adaptive.
 /// </para>
+/// <para><b>For Beginners:</b> Kairos is a time series forecasting model that automatically
+/// adjusts how it reads data based on complexity. In simple, steady periods it takes big
+/// chunks at a time (like skimming a boring chapter), but in volatile periods it zooms in
+/// and reads fine details (like carefully studying a plot twist). This adaptive approach
+/// makes it both efficient and accurate across different types of data.</para>
 /// <para>
 /// <b>Reference:</b> "Kairos: Towards Adaptive and Generalizable Time Series Foundation Models", 2025.
 /// https://arxiv.org/abs/2509.25826

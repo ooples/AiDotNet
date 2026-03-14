@@ -17,6 +17,14 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Financial Soft Actor-Critic (SAC) agent for high-performance continuous trading.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> The SAC (Soft Actor-Critic) trading agent is designed for
+/// continuous trading decisions, like choosing exact position sizes (e.g., buy 37% of
+/// portfolio capacity). It encourages exploration by maximizing both returns and the
+/// "entropy" (randomness) of its strategy, which prevents it from getting stuck in a
+/// suboptimal trading pattern. SAC is considered state-of-the-art for continuous action
+/// spaces and adapts well to changing market conditions.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

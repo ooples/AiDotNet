@@ -27,6 +27,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// for zero-shot forecasting by treating the task as next-token prediction on numerical text.
 /// No fine-tuning is required—the LLM backbone is frozen.
 /// </para>
+/// <para><b>For Beginners:</b> LLM-Time takes an unconventional approach: it converts your
+/// numerical data into text (like "3.2, 3.5, 3.8, ...") and asks a large language model to
+/// predict the next numbers, just like predicting the next word in a sentence. Remarkably,
+/// this works without any training on time series data at all. The LLM already understands
+/// number patterns from its language training.</para>
 /// <para>
 /// <b>Reference:</b> Gruver et al., "Large Language Models Are Zero-Shot Time Series Forecasters", NeurIPS 2023.
 /// </para>

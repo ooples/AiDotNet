@@ -18,6 +18,13 @@ namespace AiDotNet.Finance.NLP;
 /// FinGPT neural network model for domain-specific financial language generation and analysis.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> FinGPT is an open-source financial language model that can
+/// analyze news, generate financial reports, and perform sentiment analysis. Unlike
+/// proprietary models like BloombergGPT, FinGPT is designed to be accessible and
+/// fine-tunable by anyone. It can be adapted to specific financial tasks like stock
+/// prediction from news headlines or risk assessment from annual reports.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

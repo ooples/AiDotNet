@@ -17,6 +17,13 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Specialized market making agent using reinforcement learning for optimal quoting.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> A market making agent learns to provide liquidity by
+/// continuously placing buy and sell orders (quotes) in the market. It earns money from
+/// the spread between its buy and sell prices while managing the risk of holding inventory.
+/// Using reinforcement learning, it learns when to quote aggressively or conservatively
+/// based on market conditions, volatility, and its current position.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

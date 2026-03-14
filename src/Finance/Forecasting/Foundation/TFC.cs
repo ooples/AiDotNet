@@ -27,6 +27,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// and frequency-domain representations via contrastive learning, capturing both
 /// temporal and spectral patterns. It uses dual CNN encoders with a shared projection head.
 /// </para>
+/// <para><b>For Beginners:</b> TF-C learns to understand time series by looking at the same
+/// data in two ways: as a sequence of values over time, and as a set of frequencies (like
+/// breaking a musical chord into individual notes). By training the model to agree on what
+/// it sees from both perspectives, it learns robust patterns that work well for downstream
+/// tasks like forecasting and classification.</para>
 /// <para>
 /// <b>Reference:</b> Zhang et al., "Self-Supervised Contrastive Pre-Training For Time Series via Time-Frequency Consistency", NeurIPS 2022.
 /// </para>

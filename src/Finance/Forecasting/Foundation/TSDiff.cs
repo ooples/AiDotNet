@@ -27,6 +27,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// TSDiff uses unconditional denoising diffusion as a self-supervised pretraining objective
 /// with self-guided refinement for high-quality probabilistic forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> TSDiff generates probabilistic forecasts using a three-step
+/// process: predict, refine, and synthesize. It first learns general time series patterns
+/// through diffusion (gradually adding and removing noise), then refines predictions using
+/// the model's own internal guidance. This self-guided approach produces high-quality
+/// forecasts with well-calibrated uncertainty estimates.</para>
 /// <para>
 /// <b>Reference:</b> Kollovieh et al., "Predict, Refine, Synthesize: Self-Guiding Diffusion Models for Probabilistic Time Series Forecasting", NeurIPS 2023.
 /// </para>

@@ -18,6 +18,14 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Financial Advantage Actor-Critic (A2C) agent for fast trading policy learning.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> The A2C (Advantage Actor-Critic) trading agent uses two
+/// neural networks working together: an "actor" that decides what trades to make, and a
+/// "critic" that evaluates how good those decisions are. The advantage of A2C is that it
+/// learns quickly because the critic provides immediate feedback to the actor after each
+/// trade, rather than waiting for the end result. It is well-suited for fast-paced trading
+/// environments where quick adaptation is important.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

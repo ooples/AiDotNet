@@ -28,6 +28,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// general-purpose forecasting with a focus on cloud and enterprise workloads.
 /// Pre-trained on large-scale data from Alibaba's data infrastructure.
 /// </para>
+/// <para><b>For Beginners:</b> YingLong is Alibaba's general-purpose time series forecasting
+/// model, pre-trained on massive amounts of data from Alibaba's cloud infrastructure. It is
+/// designed to handle enterprise-scale workloads like demand forecasting, capacity planning,
+/// and resource allocation. Think of it as a forecasting model that has already learned from
+/// one of the largest e-commerce and cloud platforms in the world.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]

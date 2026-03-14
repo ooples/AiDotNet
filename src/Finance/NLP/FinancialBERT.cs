@@ -18,6 +18,13 @@ namespace AiDotNet.Finance.NLP;
 /// FinancialBERT neural network model for domain-specific financial language processing.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> FinancialBERT is a BERT model pre-trained on financial text
+/// from corporate reports, analyst notes, and financial news. It understands financial
+/// terminology and context better than general-purpose language models. Use it for tasks
+/// like classifying financial documents, extracting key information from earnings reports,
+/// or detecting sentiment in market commentary.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

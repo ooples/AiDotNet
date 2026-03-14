@@ -27,6 +27,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// MG-TSD captures temporal patterns at multiple granularities using a coarse-to-fine
 /// guidance mechanism where predictions at coarser levels guide fine-grained diffusion.
 /// </para>
+/// <para><b>For Beginners:</b> MG-TSD forecasts at multiple zoom levels simultaneously.
+/// It first makes a rough forecast (like predicting monthly trends), then uses that to
+/// guide a more detailed forecast (like daily values). This coarse-to-fine approach is
+/// similar to how an artist first sketches the broad outlines before adding fine details,
+/// resulting in more coherent and accurate probabilistic predictions.</para>
 /// <para>
 /// <b>Reference:</b> Fan et al., "MG-TSD: Multi-Granularity Time Series Diffusion Models with Guided Learning Process", ICLR 2024.
 /// </para>

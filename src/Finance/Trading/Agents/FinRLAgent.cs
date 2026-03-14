@@ -16,6 +16,13 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Unified FinRL-style agent that can switch between multiple RL algorithms.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> FinRL is a unified framework for applying reinforcement
+/// learning to stock trading. It can switch between different RL algorithms (DQN, PPO,
+/// A2C, SAC) while providing a consistent trading interface. Think of it as a toolkit
+/// that lets you train an AI trader that learns buy/sell/hold strategies by practicing
+/// on historical market data, similar to how a game AI learns by playing thousands of games.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

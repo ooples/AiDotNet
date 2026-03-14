@@ -27,6 +27,12 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// probabilistic multi-step forecasting. It generates multiple forecast samples to
 /// provide well-calibrated uncertainty estimates.
 /// </para>
+/// <para><b>For Beginners:</b> TimeGrad predicts time series step by step, where at each step
+/// it uses a diffusion process to generate the next value. Think of it as a storyteller who
+/// writes one sentence at a time, but for each sentence uses a careful drafting process to get
+/// it right. By generating many possible futures, TimeGrad provides not just a single forecast
+/// but a range of scenarios with probabilities, helping you understand how confident the
+/// prediction is.</para>
 /// <para>
 /// <b>Reference:</b> Rasul et al., "Autoregressive Denoising Diffusion Models for Multivariate Probabilistic Time Series Forecasting", ICML 2021.
 /// </para>

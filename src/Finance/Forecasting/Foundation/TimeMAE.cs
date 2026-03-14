@@ -28,6 +28,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// and training a transformer to reconstruct the missing patches, learning rich temporal representations.
 /// It uses an asymmetric encoder-decoder architecture where the encoder processes visible patches only.
 /// </para>
+/// <para><b>For Beginners:</b> TimeMAE learns about time series by hiding random chunks of
+/// data and training a model to fill them back in, similar to how a student learns vocabulary
+/// by doing fill-in-the-blank exercises. The model only processes the visible chunks with a
+/// large encoder and uses a smaller decoder to reconstruct the hidden ones, making training
+/// very efficient. The learned representations transfer well to forecasting tasks.</para>
 /// <para>
 /// <b>Reference:</b> Cheng et al., "TimeMAE: Self-Supervised Representations of Time Series with Decoupled Masked Autoencoders", 2023.
 /// </para>

@@ -28,6 +28,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// and generalizes to unseen timescales. It uses structured state spaces for linear-time
 /// processing of long sequences.
 /// </para>
+/// <para><b>For Beginners:</b> FlowState is a compact forecasting model from IBM that punches
+/// well above its weight. With only 9.1 million parameters (tiny by modern standards), it
+/// outperforms models 20 times its size. It uses state-space models, which process data
+/// like a conveyor belt rather than looking at everything at once, making it very efficient
+/// with long sequences of data like years of daily stock prices.</para>
 /// <para>
 /// <b>Reference:</b> IBM Research, "SSM Time Series Model", 2025.
 /// </para>

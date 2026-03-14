@@ -28,6 +28,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// infrastructure monitoring, and observability. Pre-trained on 1 trillion data points from
 /// the Datadog observability platform, it excels at SRE metrics and anomaly detection.
 /// </para>
+/// <para><b>For Beginners:</b> TOTO is a specialized model from Datadog, trained on 1 trillion
+/// data points from real-world server monitoring. It excels at predicting system metrics
+/// like CPU usage, memory consumption, and request latency. If you monitor infrastructure
+/// and need to forecast capacity or detect anomalies before they cause outages, TOTO is
+/// purpose-built for that domain.</para>
 /// <para>
 /// <b>Reference:</b> Datadog, "Introducing Toto: A state-of-the-art time series foundation model", 2025.
 /// </para>

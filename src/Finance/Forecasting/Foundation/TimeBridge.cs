@@ -27,6 +27,12 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// It introduces a bridge mechanism that preserves and restores non-stationary information
 /// (trends, level shifts) that is typically lost during standard normalization.
 /// </para>
+/// <para><b>For Beginners:</b> Most forecasting models normalize data (remove trends and
+/// scale to a standard range) before processing, which can lose important information about
+/// long-term trends and sudden shifts. TimeBridge solves this by "bridging" the gap: it
+/// saves the non-stationary information that normalization removes and adds it back to the
+/// predictions, giving you forecasts that correctly capture upward trends, seasonal shifts,
+/// and level changes.</para>
 /// <para>
 /// <b>Reference:</b> "TimeBridge: Non-Stationarity Matters for Long-term Time Series Forecasting", 2024.
 /// </para>

@@ -27,6 +27,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// operating in continuous space with a score-matching objective for high-quality
 /// probabilistic forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> CCDM generates future time series values using a diffusion
+/// process, similar to how image generators create pictures by gradually refining random
+/// noise. Instead of predicting a single future value, it produces a range of probable
+/// outcomes, giving you confidence intervals for your forecasts. This is especially
+/// useful in finance where understanding uncertainty is as important as the prediction itself.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]

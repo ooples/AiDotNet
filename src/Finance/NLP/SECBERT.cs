@@ -22,6 +22,11 @@ namespace AiDotNet.Finance.NLP;
 /// <para>
 /// SEC-BERT is a BERT-based model specifically pretrained on SEC filings (10-K, 10-Q, etc.).
 /// </para>
+/// <para><b>For Beginners:</b> SEC-BERT is a language model trained exclusively on SEC
+/// filings (10-K annual reports, 10-Q quarterly reports, 8-K current reports). It understands
+/// the unique language and structure of regulatory documents, making it ideal for extracting
+/// information from corporate disclosures, identifying risk factors, and classifying
+/// financial statements.</para>
 /// <para>
 /// Reference: Loukas et al., "SEC-BERT: A Pre-trained Financial Language Model", 2022.
 /// </para>

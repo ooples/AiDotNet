@@ -17,6 +17,14 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Financial Deep Q-Network (DQN) agent for discrete action trading.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> The DQN (Deep Q-Network) trading agent learns to make
+/// discrete trading decisions (buy, sell, or hold) by estimating the long-term value of
+/// each action. It maintains a "memory" of past experiences and learns from random
+/// samples of those memories. A separate target network prevents the learning from
+/// becoming unstable. DQN is best suited for trading scenarios with a fixed set of
+/// possible actions.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

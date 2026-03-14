@@ -26,6 +26,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// TimeDiff extends DDPM with future-mixup training augmentation and autoregressive initialization
 /// at inference for high-quality non-autoregressive time series forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> TimeDiff improves diffusion-based forecasting with two clever
+/// tricks. During training, it mixes future values into the input (future-mixup) to help the
+/// model learn what comes next. During prediction, it uses an initial rough forecast to guide
+/// the diffusion process, producing all future values at once rather than one at a time, which
+/// is both faster and more consistent.</para>
 /// <para>
 /// <b>Reference:</b> Shen &amp; Kwok, "Non-autoregressive Conditional Diffusion Models for Time Series Prediction", ICML 2023.
 /// </para>

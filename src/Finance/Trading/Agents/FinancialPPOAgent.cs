@@ -17,6 +17,14 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Financial Proximal Policy Optimization (PPO) agent for robust trading.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> The PPO (Proximal Policy Optimization) trading agent is one
+/// of the most reliable RL algorithms for trading. It prevents the agent from making too
+/// large a policy change in any single update, which keeps learning stable. Think of it
+/// as a cautious trader who adjusts their strategy gradually rather than making radical
+/// shifts. PPO balances exploration (trying new strategies) with exploitation (sticking
+/// with what works), making it robust for financial applications.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
