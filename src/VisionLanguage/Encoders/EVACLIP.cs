@@ -27,8 +27,29 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <item>Paper: "EVA-CLIP: Improved Training Techniques for CLIP at Scale" (Sun et al., 2023)</item>
 /// </list>
 /// </para>
-/// <para><b>For Beginners:</b> EVACLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> EVA-CLIP improves CLIP by first pre-training the vision encoder
+/// with masked image modeling (learning to reconstruct hidden image patches), then applying
+/// contrastive image-text training. The largest variant has 4.4 billion parameters and achieves
+/// 82.0% zero-shot ImageNet accuracy. It also adds rotary position embeddings (RoPE) and SwiGLU
+/// activations for stronger feature learning. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an EVA-CLIP model with MIM-pretrained ViT backbone
+/// // combining masked image modeling with contrastive training
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new EVACLIP&lt;double&gt;(architecture, "evaclip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new EVACLIP&lt;double&gt;(architecture, new EVACLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

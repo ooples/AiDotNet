@@ -22,8 +22,29 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale" (Dosovitskiy et al., ICLR 2021)</item></list></para>
-/// <para><b>For Beginners:</b> ViT is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> ViT (Vision Transformer) applies the Transformer architecture
+/// — originally designed for text — directly to images. It splits an image into a grid of
+/// fixed-size patches (e.g., 16x16 pixels), treats each patch like a "word", and processes
+/// the sequence of patches through standard Transformer encoder layers. A special [CLS]
+/// token collects information from all patches for classification. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ViT model for image classification via patch-based Transformer
+/// // splitting images into 16x16 patches processed by Transformer layers
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ViT&lt;double&gt;(architecture, "vit.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ViT&lt;double&gt;(architecture, new ViTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Classification)]

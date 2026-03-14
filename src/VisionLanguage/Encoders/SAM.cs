@@ -21,8 +21,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Segment Anything" (Kirillov et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> SAM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> SAM (Segment Anything Model) from Meta is a promptable
+/// segmentation model — you give it an image and a prompt (a point click, a bounding box,
+/// or a rough mask) and it segments the object you indicated. Trained on over 1 billion masks,
+/// its ViT encoder uses windowed attention with occasional global attention for efficient
+/// high-resolution processing. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SAM model for promptable image segmentation
+/// // using ViT encoder with windowed attention for high-resolution images
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 256);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SAM&lt;double&gt;(architecture, "sam.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SAM&lt;double&gt;(architecture, new SAMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

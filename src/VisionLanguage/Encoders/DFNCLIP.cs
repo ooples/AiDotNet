@@ -23,8 +23,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Data Filtering Networks" (Fang et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> DFNCLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DFN-CLIP improves CLIP by using a small trained CLIP model to
+/// score and filter image-text pairs from a massive noisy dataset, keeping only high-quality
+/// pairs. The larger model trained on this filtered data achieves 83.0% zero-shot ImageNet
+/// accuracy with ViT-H/14, demonstrating that data quality matters more than quantity.
+/// Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DFN-CLIP model trained on filtered high-quality data
+/// // using data filtering networks for improved CLIP training
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DFNCLIP&lt;double&gt;(architecture, "dfnclip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DFNCLIP&lt;double&gt;(architecture, new DFNCLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

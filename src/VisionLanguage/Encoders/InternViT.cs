@@ -21,8 +21,29 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "InternVL: Scaling up Vision Foundation Models and Aligning for Generic Visual-Linguistic Tasks" (Chen et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> InternViT is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> InternViT is a 6 billion parameter Vision Transformer designed
+/// as the vision backbone for the InternVL series of multimodal models. It handles high-
+/// resolution images by dynamically tiling them and using pixel shuffle to reduce the number
+/// of visual tokens while preserving spatial detail. It is progressively aligned with large
+/// language models for visual-linguistic tasks. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an InternViT model for large-scale visual feature extraction
+/// // with dynamic resolution and pixel shuffle for LLM alignment
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new InternViT&lt;double&gt;(architecture, "internvit.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new InternViT&lt;double&gt;(architecture, new InternViTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

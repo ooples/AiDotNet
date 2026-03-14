@@ -21,8 +21,29 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DINOv3: Self-Supervised Vision at Scale" (Meta, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> DINOv3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DINOv3 from Meta scales self-supervised vision training to
+/// 7 billion parameters on 1.7 billion images, outperforming even contrastive models like
+/// SigLIP 2 on most vision benchmarks. It uses improved training recipes with SwiGLU feed-
+/// forward networks and enhanced data augmentation, producing the strongest open-source
+/// self-supervised vision encoder available. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DINOv3 model for 7B-scale self-supervised visual features
+/// // outperforming SigLIP 2 on most vision benchmarks
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DINOv3&lt;double&gt;(architecture, "dinov3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DINOv3&lt;double&gt;(architecture, new DINOv3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

@@ -23,8 +23,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RegionCLIP: Region-based Language-Image Pretraining" (Zhong et al., CVPR 2022)</item></list></para>
-/// <para><b>For Beginners:</b> RegionCLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> RegionCLIP extends CLIP from whole-image understanding to
+/// individual object regions within images. While CLIP matches an entire image to text,
+/// RegionCLIP learns to match specific regions (bounding boxes) to text descriptions,
+/// enabling zero-shot object detection — finding objects in images by describing them in
+/// natural language. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RegionCLIP model for region-level image-text alignment
+/// // enabling zero-shot and open-vocabulary object detection
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new RegionCLIP&lt;double&gt;(architecture, "regionclip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new RegionCLIP&lt;double&gt;(architecture, new RegionCLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

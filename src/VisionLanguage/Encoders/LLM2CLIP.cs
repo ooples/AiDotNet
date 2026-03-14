@@ -22,8 +22,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLM2CLIP: Powerful Language Model Unlock Richer Visual Representation" (Huang et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> LLM2CLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLM2CLIP supercharges CLIP by replacing its simple text encoder
+/// with a powerful large language model (like LLaMA or Mistral). This gives the model much
+/// richer text understanding — it can handle complex descriptions, long captions, and nuanced
+/// queries that the original CLIP text encoder would struggle with. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an LLM2CLIP model with LLM-enhanced text encoding
+/// // replacing CLIP's text encoder with a fine-tuned LLM
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LLM2CLIP&lt;double&gt;(architecture, "llm2clip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LLM2CLIP&lt;double&gt;(architecture, new LLM2CLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

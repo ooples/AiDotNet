@@ -22,8 +22,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Florence-2: Advancing a Unified Representation for a Variety of Vision Tasks" (Xiao et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Florence2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Florence-2 from Microsoft is a lightweight vision model
+/// (0.23B-0.77B parameters) that handles many tasks through text prompts — captioning,
+/// object detection, grounding, OCR, and segmentation — all in a single unified model.
+/// It uses DaViT (Dual Attention ViT) as its vision encoder and generates structured
+/// text output for each task. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Florence-2 model for unified multi-task vision understanding
+/// // handling captioning, detection, grounding, OCR, and segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Florence2&lt;double&gt;(architecture, "florence2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Florence2&lt;double&gt;(architecture, new Florence2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

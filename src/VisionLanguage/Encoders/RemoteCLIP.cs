@@ -23,8 +23,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RemoteCLIP: A Vision Language Foundation Model for Remote Sensing" (Liu et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> RemoteCLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> RemoteCLIP adapts CLIP for satellite and aerial imagery by
+/// fine-tuning on curated remote sensing image-text datasets. It enables zero-shot scene
+/// classification of satellite images (e.g., "airport", "farmland"), image-text retrieval,
+/// and object counting in aerial views without task-specific training. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RemoteCLIP model for remote sensing image understanding
+/// // fine-tuned for satellite and aerial imagery tasks
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new RemoteCLIP&lt;double&gt;(architecture, "remoteclip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new RemoteCLIP&lt;double&gt;(architecture, new RemoteCLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Science)]

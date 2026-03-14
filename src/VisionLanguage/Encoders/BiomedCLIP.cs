@@ -22,8 +22,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "BiomedCLIP: A Multimodal Biomedical Foundation Model" (Zhang et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> BiomedCLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> BiomedCLIP adapts CLIP for the biomedical domain by fine-tuning
+/// on 15 million image-text pairs from PubMed Central articles. It uses ViT-B/16 for images
+/// and PubMedBERT for text, achieving state-of-the-art zero-shot biomedical image classification
+/// for tasks like pathology slide classification and radiology report matching. Default values
+/// follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a BiomedCLIP model for biomedical image-text alignment
+/// // fine-tuned on 15M PubMed Central image-text pairs
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new BiomedCLIP&lt;double&gt;(architecture, "biomedclip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new BiomedCLIP&lt;double&gt;(architecture, new BiomedCLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Healthcare)]

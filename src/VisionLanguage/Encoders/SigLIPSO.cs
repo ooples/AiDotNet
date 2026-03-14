@@ -21,8 +21,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Sigmoid Loss for Language Image Pre-Training" (Zhai et al., ICCV 2023)</item></list></para>
-/// <para><b>For Beginners:</b> SigLIPSO is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> SigLIP-SO is a shape-optimized version of SigLIP that carefully
+/// tunes the width and depth of the Vision Transformer for the 400M parameter budget. The
+/// resulting SO-400M/14 model has become one of the most popular vision backbones, used by
+/// LLaVA, PaliGemma, and many other multimodal models as their vision encoder. Default
+/// values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SigLIP-SO model for shape-optimized visual features
+/// // widely adopted as a VLM backbone by LLaVA, PaliGemma, etc.
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SigLIPSO&lt;double&gt;(architecture, "siglipso.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SigLIPSO&lt;double&gt;(architecture, new SigLIPSOOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.FeatureExtraction)]

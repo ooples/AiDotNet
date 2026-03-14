@@ -22,8 +22,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Perception Encoder: The best satisfies all" (Meta, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> PerceptionEncoder is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Meta's Perception Encoder is a vision backbone that produces
+/// both global features (a single vector summarizing the whole image) and dense spatial
+/// features (one vector per image region). This makes it versatile — the global features
+/// work for classification and retrieval, while the spatial features enable detection and
+/// segmentation. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Perception Encoder for global and dense visual features
+/// // combining contrastive and dense prediction objectives
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PerceptionEncoder&lt;double&gt;(architecture, "perception_encoder.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PerceptionEncoder&lt;double&gt;(architecture, new PerceptionEncoderOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

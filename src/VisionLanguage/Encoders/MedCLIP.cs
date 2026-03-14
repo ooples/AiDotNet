@@ -23,8 +23,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MedCLIP: Contrastive Learning from Unpaired Medical Images and Text" (Wang et al., EMNLP 2022)</item></list></para>
-/// <para><b>For Beginners:</b> MedCLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> MedCLIP adapts CLIP for medical imaging by solving a key
+/// problem: medical datasets are small and images are not always paired with matching text.
+/// It uses decoupled semantic matching — any medical image can be paired with any text that
+/// shares the same medical concepts (like "pneumonia" or "chest X-ray"), allowing it to learn
+/// from unpaired data. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MedCLIP model for medical image-text alignment
+/// // using decoupled semantic matching for unpaired medical data
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MedCLIP&lt;double&gt;(architecture, "medclip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MedCLIP&lt;double&gt;(architecture, new MedCLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Healthcare)]

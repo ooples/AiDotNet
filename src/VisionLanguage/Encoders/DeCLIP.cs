@@ -22,8 +22,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Supervision Exists Everywhere: A Data-Efficient Contrastive Language-Image Pre-training Paradigm" (Li et al., ICLR 2022)</item></list></para>
-/// <para><b>For Beginners:</b> DeCLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DeCLIP achieves CLIP-level performance with much less training
+/// data by extracting extra supervision from the data itself. It combines contrastive image-text
+/// matching with image self-supervision (SimSiam), text masked language modeling, and nearest-
+/// neighbor supervision — squeezing more learning from each image-text pair. Default values
+/// follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeCLIP model for data-efficient contrastive learning
+/// // combining multiple self-supervised objectives for less data
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DeCLIP&lt;double&gt;(architecture, "declip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DeCLIP&lt;double&gt;(architecture, new DeCLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

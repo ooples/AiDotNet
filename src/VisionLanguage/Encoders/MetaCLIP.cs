@@ -23,8 +23,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Demystifying CLIP Data" (Xu et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> MetaCLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> MetaCLIP improves CLIP by carefully selecting training data
+/// using metadata from WordNet and Wikipedia to ensure balanced coverage of different concepts.
+/// Rather than just throwing more data at the model, it curates a balanced dataset that covers
+/// many concepts equally, surpassing CLIP's original results with the same amount of data.
+/// Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MetaCLIP model with metadata-curated balanced training
+/// // using WordNet/Wikipedia metadata for concept-balanced data
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MetaCLIP&lt;double&gt;(architecture, "metaclip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MetaCLIP&lt;double&gt;(architecture, new MetaCLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

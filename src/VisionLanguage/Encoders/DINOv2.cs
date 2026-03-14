@@ -21,8 +21,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DINOv2: Learning Robust Visual Features without Supervision" (Oquab et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> DINOv2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DINOv2 from Meta learns powerful visual features without any
+/// labeled data using self-supervised training on 142 million curated images. Its features
+/// are so general that a simple linear classifier on top achieves strong results for image
+/// classification, segmentation, and depth estimation — making it a universal vision backbone.
+/// Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DINOv2 model for self-supervised visual feature extraction
+/// // producing universal features for classification, segmentation, and depth
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DINOv2&lt;double&gt;(architecture, "dinov2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DINOv2&lt;double&gt;(architecture, new DINOv2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.FeatureExtraction)]
