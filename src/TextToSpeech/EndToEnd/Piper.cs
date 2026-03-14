@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// <summary>Piper: lightweight local TTS system based on VITS optimized for edge/embedded deployment with fast inference.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Piper: A fast, local neural text to speech system" (Rhasspy, 2023)</item></list></para><para><b>For Beginners:</b> Piper: lightweight local TTS system based on VITS optimized for edge/embedded deployment with fast inference.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Piper model for lightweight edge-optimized TTS
+/// // based on VITS architecture with fast CPU inference
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Piper&lt;double&gt;(architecture, "piper.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Piper&lt;double&gt;(architecture, new PiperOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

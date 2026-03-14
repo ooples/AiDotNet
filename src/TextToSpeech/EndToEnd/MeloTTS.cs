@@ -27,6 +27,22 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// languages mid-utterance, and
 /// (4) Multi-speaker conditioning for generating different voices.
 /// This makes it particularly useful for applications needing natural speech across multiple languages.</para>
+/// <example>
+/// <code>
+/// // Create a MeloTTS model for high-quality multilingual end-to-end TTS
+/// // with VITS backbone, language-specific G2P, and mixed-language support
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MeloTTS&lt;double&gt;(architecture, "melotts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MeloTTS&lt;double&gt;(architecture, new MeloTTSOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -28,6 +28,22 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// During training, it uses Monotonic Alignment Search (MAS) to learn text-to-speech alignment
 /// without external alignment tools. At inference, it generates high-quality speech in parallel
 /// (all at once), making it fast while maintaining natural prosody.</para>
+/// <example>
+/// <code>
+/// // Create a VITS model for end-to-end TTS with conditional VAE,
+/// // normalizing flows, and adversarial training for parallel synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VITS&lt;double&gt;(architecture, "vits.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VITS&lt;double&gt;(architecture, new VITSOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]

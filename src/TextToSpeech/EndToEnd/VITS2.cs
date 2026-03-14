@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// <summary>VITS2: improved VITS with duration discriminator, transformed prior, and speaker-conditional normalizing flow.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VITS2: Improving Quality and Efficiency of Single-Stage Text-to-Speech with Adversarial Learning and Architecture Design" (Kong et al., 2023)</item></list></para><para><b>For Beginners:</b> VITS2: improved VITS with duration discriminator, transformed prior, and speaker-conditional normalizing flow.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a VITS2 model for improved end-to-end TTS
+/// // with duration discriminator and speaker-conditional normalizing flow
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VITS2&lt;double&gt;(architecture, "vits2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VITS2&lt;double&gt;(architecture, new VITS2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

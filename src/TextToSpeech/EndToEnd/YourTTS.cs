@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// <summary>YourTTS: multilingual zero-shot multi-speaker TTS built on VITS with speaker and language conditioning.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "YourTTS: Towards Zero-Shot Multi-Speaker TTS and Zero-Shot Voice Conversion for Everyone" (Casanova et al., 2022)</item></list></para><para><b>For Beginners:</b> YourTTS: multilingual zero-shot multi-speaker TTS built on VITS with speaker and language conditioning.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a YourTTS model for multilingual zero-shot multi-speaker TTS
+/// // with VITS backbone and speaker/language conditioning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new YourTTS&lt;double&gt;(architecture, "yourtts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new YourTTS&lt;double&gt;(architecture, new YourTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
