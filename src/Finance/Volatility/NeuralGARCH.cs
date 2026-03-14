@@ -29,6 +29,19 @@ namespace AiDotNet.Finance.Volatility;
 /// It looks at recent returns and predicts how bouncy prices will be next.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Neural GARCH model for volatility forecasting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 1, inputDepth: 1, outputSize: 1);
+/// var model = new NeuralGARCH&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for volatility prediction
+/// var onnxModel = new NeuralGARCH&lt;double&gt;(architecture, "neuralgarch.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]

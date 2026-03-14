@@ -66,6 +66,19 @@ namespace AiDotNet.Finance.Probabilistic;
 /// https://arxiv.org/abs/2107.03502
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CSDI model for probabilistic time series imputation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 100, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new CSDI&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for diffusion-based imputation
+/// var onnxModel = new CSDI&lt;double&gt;(architecture, "csdi.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Diffusion)]

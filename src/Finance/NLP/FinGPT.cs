@@ -25,6 +25,21 @@ namespace AiDotNet.Finance.NLP;
 /// fine-tunable by anyone. It can be adapted to specific financial tasks like stock
 /// prediction from news headlines or risk assessment from annual reports.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for open-source financial language generation (2048 tokens)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 2048, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+///
+/// // Training mode: fine-tunable decoder for financial text generation and analysis
+/// var model = new FinGPT&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained FinGPT model
+/// var onnxModel = new FinGPT&lt;double&gt;(architecture, "fingpt.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

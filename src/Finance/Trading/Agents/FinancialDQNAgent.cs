@@ -25,6 +25,22 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// becoming unstable. DQN is best suited for trading scenarios with a fixed set of
 /// possible actions.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define Q-network architecture for discrete trading (10 state features, 3 actions: buy/hold/sell)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 10, outputSize: 3);
+///
+/// // Create DQN agent for discrete action stock trading
+/// var options = new TradingAgentOptions&lt;double&gt;();
+/// var model = new FinancialDQNAgent&lt;double&gt;(architecture, options);
+///
+/// // Parameterless constructor with default 10-feature, 3-action architecture
+/// var defaultModel = new FinancialDQNAgent&lt;double&gt;();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

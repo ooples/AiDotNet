@@ -24,6 +24,22 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Using reinforcement learning, it learns when to quote aggressively or conservatively
 /// based on market conditions, volatility, and its current position.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for market making policy (10 state features, bid/ask offset output)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 10, outputSize: 2);
+///
+/// // Create market making agent that learns optimal bid/ask quoting
+/// var options = new MarketMakingOptions&lt;double&gt;();
+/// var model = new MarketMakingAgent&lt;double&gt;(architecture, options);
+///
+/// // Parameterless constructor with default architecture
+/// var defaultModel = new MarketMakingAgent&lt;double&gt;();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

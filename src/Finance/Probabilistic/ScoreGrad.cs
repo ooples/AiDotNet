@@ -65,6 +65,19 @@ namespace AiDotNet.Finance.Probabilistic;
 /// https://arxiv.org/abs/2106.10121
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ScoreGrad model for energy-based time series forecasting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 100, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new ScoreGrad&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for score-based forecasting
+/// var onnxModel = new ScoreGrad&lt;double&gt;(architecture, "scoregrad.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Diffusion)]

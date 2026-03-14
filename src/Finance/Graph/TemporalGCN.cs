@@ -65,6 +65,21 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/1811.05320
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for temporal graph-based traffic prediction (156 sensors, 12-step horizon)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 12, inputWidth: 156, inputDepth: 1, outputSize: 12);
+///
+/// // Training mode: combines GCN spatial aggregation with GRU temporal modeling
+/// var model = new TemporalGCN&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained T-GCN model
+/// var onnxModel = new TemporalGCN&lt;double&gt;(architecture, "tgcn_traffic.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.GraphNetwork)]

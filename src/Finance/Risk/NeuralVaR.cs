@@ -33,6 +33,21 @@ namespace AiDotNet.Finance.Risk;
 /// Reference: Riskfuel, "Neural Value at Risk", 2021.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for Value-at-Risk estimation (10 market risk factors)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 10, outputSize: 1);
+///
+/// // Training mode: neural network learns non-linear VaR from historical data
+/// var model = new NeuralVaR&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained VaR model
+/// var onnxModel = new NeuralVaR&lt;double&gt;(architecture, "neural_var.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

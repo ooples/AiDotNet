@@ -60,6 +60,19 @@ namespace AiDotNet.Finance.Probabilistic;
 /// https://arxiv.org/abs/2403.01742
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Diffusion-TS model for interpretable time series generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 100, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new DiffusionTS&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for diffusion time series generation
+/// var onnxModel = new DiffusionTS&lt;double&gt;(architecture, "diffusionts.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Diffusion)]

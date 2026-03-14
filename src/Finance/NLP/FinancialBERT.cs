@@ -25,6 +25,21 @@ namespace AiDotNet.Finance.NLP;
 /// like classifying financial documents, extracting key information from earnings reports,
 /// or detecting sentiment in market commentary.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for financial document classification (512 tokens, 5 document types)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 5);
+///
+/// // Training mode: BERT pre-trained on corporate reports and financial news
+/// var model = new FinancialBERT&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained FinancialBERT model
+/// var onnxModel = new FinancialBERT&lt;double&gt;(architecture, "financial_bert.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -31,6 +31,21 @@ namespace AiDotNet.Finance.NLP;
 /// Reference: Loukas et al., "SEC-BERT: A Pre-trained Financial Language Model", 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for SEC filing classification (512 tokens, 10 filing categories)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 10);
+///
+/// // Training mode: BERT pre-trained on SEC 10-K, 10-Q, and 8-K filings
+/// var model = new SECBERT&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained SEC-BERT model
+/// var onnxModel = new SECBERT&lt;double&gt;(architecture, "secbert.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

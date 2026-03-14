@@ -25,6 +25,23 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// shifts. PPO balances exploration (trying new strategies) with exploitation (sticking
 /// with what works), making it robust for financial applications.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define actor and critic architectures for PPO trading (30 state features, 5 continuous actions)
+/// var actorArch = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 30, outputSize: 5);
+/// var criticArch = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 30, outputSize: 1);
+///
+/// // Create PPO agent for stable, robust trading policy optimization
+/// var options = new TradingAgentOptions&lt;double&gt;();
+/// var model = new FinancialPPOAgent&lt;double&gt;(actorArch, criticArch, options);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

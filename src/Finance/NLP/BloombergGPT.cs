@@ -25,6 +25,21 @@ namespace AiDotNet.Finance.NLP;
 /// reports, and market commentary. It can analyze financial documents, answer questions
 /// about markets, and generate financial text with domain-specific accuracy.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for financial language generation (2048 max tokens, 50B-parameter vocab)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 2048, inputWidth: 1, inputDepth: 1, outputSize: 131072);
+///
+/// // Training mode: decoder-only transformer trained on Bloomberg financial data
+/// var model = new BloombergGPT&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained BloombergGPT model
+/// var onnxModel = new BloombergGPT&lt;double&gt;(architecture, "bloomberggpt.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

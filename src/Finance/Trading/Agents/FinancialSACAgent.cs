@@ -25,6 +25,23 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// suboptimal trading pattern. SAC is considered state-of-the-art for continuous action
 /// spaces and adapts well to changing market conditions.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define actor and critic architectures for SAC continuous trading (30 features, 5 position sizes)
+/// var actorArch = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 30, outputSize: 5);
+/// var criticArch = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 30, outputSize: 1);
+///
+/// // Create SAC agent for entropy-regularized continuous portfolio allocation
+/// var options = new TradingAgentOptions&lt;double&gt;();
+/// var model = new FinancialSACAgent&lt;double&gt;(actorArch, criticArch, options);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

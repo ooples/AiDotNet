@@ -23,6 +23,19 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// that lets you train an AI trader that learns buy/sell/hold strategies by practicing
 /// on historical market data, similar to how a game AI learns by playing thousands of games.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define actor architecture for FinRL multi-algorithm trading (30 state features, 3 actions)
+/// var actorArch = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 30, outputSize: 3);
+///
+/// // Create FinRL agent with PPO algorithm for stock trading
+/// var options = new TradingAgentOptions&lt;double&gt;();
+/// var model = new FinRLAgent&lt;double&gt;(actorArch, options, FinRLAlgorithm.PPO);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

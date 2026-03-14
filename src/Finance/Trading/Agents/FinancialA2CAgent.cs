@@ -26,6 +26,23 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// trade, rather than waiting for the end result. It is well-suited for fast-paced trading
 /// environments where quick adaptation is important.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define actor and critic architectures for A2C trading (30 state features, 3 actions)
+/// var actorArch = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 30, outputSize: 3);
+/// var criticArch = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 30, outputSize: 1);
+///
+/// // Create A2C agent for fast-adapting trading policy
+/// var options = new TradingAgentOptions&lt;double&gt;();
+/// var model = new FinancialA2CAgent&lt;double&gt;(actorArch, criticArch, options);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
