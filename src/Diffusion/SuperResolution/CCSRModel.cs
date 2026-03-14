@@ -41,12 +41,6 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// Reference: Sun et al., "Improving the Stability of Diffusion Models for Content Consistent Super-Resolution", 2024
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
-[ModelCategory(ModelCategory.Diffusion)]
-[ModelTask(ModelTask.Enhancement)]
-[ModelTask(ModelTask.SuperResolution)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 /// <example>
 /// <code>
 /// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 15 };
@@ -55,6 +49,12 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// var highRes = model.Predict(lowRes);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Enhancement)]
+[ModelTask(ModelTask.SuperResolution)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Improving the Stability and Efficiency of Diffusion Models for Content Consistent Super-Resolution", "https://arxiv.org/abs/2401.00877", Year = 2024, Authors = "Sun et al.")]
 public class CCSRModel<T> : LatentDiffusionModelBase<T>
 {

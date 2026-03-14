@@ -38,6 +38,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// - Resolution: 1024x1024 native
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 4 };
+/// var model = new TurboFillModel&lt;float&gt;(options);
+/// var maskedInput = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var filled = model.Predict(maskedInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.GAN)]

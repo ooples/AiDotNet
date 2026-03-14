@@ -57,7 +57,6 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// with Fine-Grained Chinese Understanding", 2024
 /// </para>
 /// </remarks>
-[ModelDomain(ModelDomain.Vision)]
 /// <example>
 /// <code>
 /// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 30 };
@@ -66,6 +65,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]

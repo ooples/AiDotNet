@@ -37,6 +37,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// - Mask-aware attention for boundary coherence
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new FreeInpaintModel&lt;float&gt;(options);
+/// var maskedInput = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var inpainted = model.Predict(maskedInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Inpainting)]

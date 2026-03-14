@@ -39,6 +39,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: ByteDance, "SEED-Edit", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 28 };
+/// var model = new SeedEdit3Model&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]

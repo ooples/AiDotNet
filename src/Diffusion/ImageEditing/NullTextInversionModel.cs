@@ -50,6 +50,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Mokady et al., "Null-text Inversion for Editing Real Images using Guided Diffusion Models", CVPR 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 50 };
+/// var model = new NullTextInversionModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Editing)]
