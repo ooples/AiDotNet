@@ -30,6 +30,24 @@ namespace AiDotNet.Regression;
 /// estimate someone's weight if you only know their height.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create simple linear regression (y = mx + b)
+/// var model = new SimpleRegression&lt;double&gt;();
+///
+/// // Prepare single-feature data
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 1, new double[] { 1, 2, 3, 4, 5 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
+///
+/// // Train to find best-fit line
+/// model.Train(features, targets);
+///
+/// // Predict for new input
+/// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 6 });
+/// var prediction = model.Predict(newFeatures);
+/// Console.WriteLine($"Predicted value: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]

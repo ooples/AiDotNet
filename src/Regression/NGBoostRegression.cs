@@ -35,6 +35,25 @@ namespace AiDotNet.Regression;
 /// Prediction" (2019). https://arxiv.org/abs/1910.03225
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an NGBoost model for probabilistic regression
+/// var options = new NGBoostRegressionOptions&lt;double&gt;();
+/// var model = new NGBoostRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train to predict full probability distributions
+/// model.Train(features, targets);
+///
+/// // Predict distribution parameters (mean and uncertainty)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]

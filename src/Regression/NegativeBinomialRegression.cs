@@ -24,6 +24,25 @@ namespace AiDotNet.Regression;
 /// that some days might have 5 calls while others have 40, which is more extreme variation than simpler models would expect.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a negative binomial regression for overdispersed count data
+/// var options = new NegativeBinomialRegressionOptions&lt;double&gt;();
+/// var model = new NegativeBinomialRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features, count targets
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2, 5, 12, 28, 45 });
+///
+/// // Train with log link and dispersion parameter estimation
+/// model.Train(features, targets);
+///
+/// // Predict count for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]

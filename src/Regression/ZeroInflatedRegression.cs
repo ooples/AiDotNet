@@ -38,6 +38,25 @@ namespace AiDotNet.Regression;
 /// to Defects in Manufacturing". Technometrics, 34(1), 1-14.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Zero-Inflated regression for count data with excess zeros
+/// var options = new ZeroInflatedRegressionOptions&lt;double&gt;();
+/// var model = new ZeroInflatedRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features, count targets with excess zeros
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 0, 0, 3, 0, 7, 12 });
+///
+/// // Train with mixture model (zero process + count process)
+/// model.Train(features, targets);
+///
+/// // Predict count for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]

@@ -26,6 +26,25 @@ namespace AiDotNet.Regression;
 /// predicting house prices based on size or features.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a robust regression resistant to outliers
+/// var options = new RobustRegressionOptions&lt;double&gt;();
+/// var model = new RobustRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features (may contain outliers)
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 50.0 });
+///
+/// // Train with iteratively reweighted least squares
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (outliers have reduced influence)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]

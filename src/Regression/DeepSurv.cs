@@ -40,6 +40,26 @@ namespace AiDotNet.Regression;
 /// System Using A Cox Proportional Hazards Deep Neural Network". BMC Medical Research Methodology.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeepSurv model for Cox proportional hazards survival analysis
+/// var options = new DeepSurvOptions&lt;double&gt;();
+/// var model = new DeepSurv&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 3 clinical features
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 3, new double[] {
+///     55, 1, 2.1,  60, 0, 3.5,  45, 1, 1.8,
+///     70, 0, 4.2,  50, 1, 2.9,  65, 0, 3.1 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 12, 24, 36, 6, 18, 30 });
+///
+/// // Train the neural network for Cox regression
+/// model.Train(features, targets);
+///
+/// // Predict risk scores for a new patient
+/// var newPatient = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 58, 1, 2.5 });
+/// var prediction = model.Predict(newPatient);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]

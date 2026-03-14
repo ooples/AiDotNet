@@ -53,6 +53,25 @@ namespace AiDotNet.Regression;
 /// </code>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a histogram-based gradient boosting regression for fast large-scale training
+/// var options = new HistGradientBoostingOptions&lt;double&gt;();
+/// var model = new HistGradientBoostingRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with histogram binning for O(bins*features) split finding
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.DecisionTree)]

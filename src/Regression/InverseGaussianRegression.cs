@@ -37,6 +37,25 @@ namespace AiDotNet.Regression;
 /// proportional to μ³, meaning it handles even heavier tails where large values are much more variable.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Inverse Gaussian regression for heavy right-tailed positive data
+/// var options = new InverseGaussianRegressionOptions&lt;double&gt;();
+/// var model = new InverseGaussianRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features, positive targets
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 0.8, 2.3, 5.1, 12.4, 28.7 });
+///
+/// // Train with IRLS for maximum likelihood estimation
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.Linear)]

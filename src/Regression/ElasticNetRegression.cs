@@ -42,6 +42,17 @@ namespace AiDotNet.Regression;
 /// ```
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ElasticNetRegressionOptions&lt;double&gt;();
+/// var model = new ElasticNetRegression&lt;double&gt;(options);
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
+/// model.Train(features, targets);
+/// var prediction = model.Predict(Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 }));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelCategory(ModelCategory.Regularization)]

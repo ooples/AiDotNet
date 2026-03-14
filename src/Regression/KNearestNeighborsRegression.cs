@@ -32,6 +32,25 @@ namespace AiDotNet.Regression;
 /// remembers all examples and does the real work at prediction time by finding similar examples.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a KNN regression model with K=3 nearest neighbors
+/// var options = new KNearestNeighborsRegressionOptions&lt;double&gt;();
+/// var model = new KNearestNeighborsRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Store all training examples (lazy learner)
+/// model.Train(features, targets);
+///
+/// // Predict by averaging the K nearest neighbors' values
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 6, 7 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.InstanceBased)]

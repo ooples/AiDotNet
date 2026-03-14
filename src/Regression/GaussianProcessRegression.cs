@@ -33,6 +33,25 @@ namespace AiDotNet.Regression;
 /// and I'm pretty confident it's between 40 and 44."
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Gaussian Process regression with uncertainty estimates
+/// var options = new GaussianProcessRegressionOptions&lt;double&gt;();
+/// var model = new GaussianProcessRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train with kernel-based covariance estimation
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (includes uncertainty bounds)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Kernel)]

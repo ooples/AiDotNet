@@ -26,6 +26,25 @@ namespace AiDotNet.Regression;
 /// features (words) are most helpful for distinguishing between the different categories.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a multinomial logistic regression for multi-class classification
+/// var options = new MultinomialLogisticRegressionOptions&lt;double&gt;();
+/// var model = new MultinomialLogisticRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 9 samples with 2 features, 3 classes (0, 1, 2)
+/// var features = Matrix&lt;double&gt;.Build.Dense(9, 2, new double[] {
+///     1, 1,  1, 2,  2, 1,  4, 4,  5, 4,  4, 5,  8, 8,  9, 8,  8, 9 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1, 2, 2, 2 });
+///
+/// // Train the multi-class model with softmax
+/// model.Train(features, labels);
+///
+/// // Predict class probabilities for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 5, 5 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]

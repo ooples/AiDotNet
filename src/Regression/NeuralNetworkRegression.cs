@@ -26,6 +26,25 @@ namespace AiDotNet.Regression;
 /// the model's accuracy. This process is similar to how we learn from experience.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a feedforward neural network regression model
+/// var options = new NeuralNetworkRegressionOptions&lt;double&gt;();
+/// var model = new NeuralNetworkRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with gradient-based weight optimization
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Regression)]

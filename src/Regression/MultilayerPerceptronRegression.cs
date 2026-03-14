@@ -29,6 +29,25 @@ namespace AiDotNet.Regression;
 /// to reduce the difference between them.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a multilayer perceptron neural network for regression
+/// var options = new MultilayerPerceptronRegressionOptions&lt;double&gt;();
+/// var model = new MultilayerPerceptronRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with backpropagation through hidden layers
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
