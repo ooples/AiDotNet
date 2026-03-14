@@ -82,7 +82,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
 
                 var parameters = await SuggestNextTrialAsync();
 
-                if (!parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not Type modelType)
+                if (!parameters.TryGetValue(ModelTypeKey, out var modelTypeObj) || modelTypeObj is not Type modelType)
                 {
                     throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
                 }
@@ -135,7 +135,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
             }
 
             successfulForType = _trialHistory
-                .Where(t => t.Success && t.Parameters.TryGetValue("ModelType", out var mt) && mt is Type m && m == modelType)
+                .Where(t => t.Success && t.Parameters.TryGetValue(ModelTypeKey, out var mt) && mt is Type m && m == modelType)
                 .Select(t => t.Clone())
                 .ToList();
         }
@@ -144,7 +144,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
             ? AutoMLParameterSampler.Sample(Random, merged)
             : SuggestByKernelSurrogate(merged, successfulForType);
 
-        sampled["ModelType"] = modelType;
+        sampled[ModelTypeKey] = modelType;
         return Task.FromResult(sampled);
     }
 
@@ -177,7 +177,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
                     continue;
                 }
 
-                if (!trial.Parameters.TryGetValue("ModelType", out var mt) || mt is not Type modelType)
+                if (!trial.Parameters.TryGetValue(ModelTypeKey, out var mt) || mt is not Type modelType)
                 {
                     continue;
                 }

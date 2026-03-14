@@ -401,7 +401,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
             lock (_lock)
             {
                 candidates = _trialHistory
-                    .Where(t => t.Success && t.Parameters.ContainsKey("ModelType"))
+                    .Where(t => t.Success && t.Parameters.ContainsKey(ModelTypeKey))
                     .Select(t => t.Clone())
                     .ToList();
             }
@@ -440,7 +440,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
                     break;
                 }
 
-                if (!trial.Parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not Type modelType)
+                if (!trial.Parameters.TryGetValue(ModelTypeKey, out var modelTypeObj) || modelTypeObj is not Type modelType)
                 {
                     continue;
                 }

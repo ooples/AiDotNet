@@ -91,20 +91,35 @@ namespace AiDotNet.AutoML.NAS
         }
 
         /// <summary>
-        /// Suggests the next trial parameters.
+        /// NAS does not use traditional trial suggestion; architecture search is handled by
+        /// <see cref="SearchArchitecture"/>. Returns empty parameters.
         /// </summary>
         public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
         {
             return Task.FromResult(new Dictionary<string, object>());
         }
 
+        /// <summary>
+        /// NAS creates models via <see cref="SearchArchitecture"/> and <see cref="ApplyArchitectureToModel"/>.
+        /// This override constructs a SuperNet from the NAS search space, ignoring
+        /// <paramref name="modelType"/> and <paramref name="parameters"/> since architecture
+        /// decisions are encoded in the search space, not in traditional hyperparameters.
+        /// </summary>
         protected override Task<IFullModel<T, Tensor<T>, Tensor<T>>> CreateModelAsync(Type modelType, Dictionary<string, object> parameters)
         {
+            _ = modelType;
+            _ = parameters;
             return Task.FromResult((IFullModel<T, Tensor<T>, Tensor<T>>)new SuperNet<T>(NasSearchSpace, numNodes: NasNumNodes));
         }
 
+        /// <summary>
+        /// NAS uses an architecture search space (<see cref="NasSearchSpace"/>) instead of
+        /// traditional hyperparameter ranges. Returns empty to signal that callers should
+        /// use <see cref="SearchAsync"/> rather than parameter-based trial loops.
+        /// </summary>
         protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(Type modelType)
         {
+            _ = modelType;
             return new Dictionary<string, ParameterRange>();
         }
 

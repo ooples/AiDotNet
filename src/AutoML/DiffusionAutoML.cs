@@ -435,6 +435,7 @@ namespace AiDotNet.AutoML
         /// </summary>
         protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(Type modelType)
         {
+            _ = modelType; // Diffusion models use a fixed search space independent of model type
             return GetDefaultDiffusionSearchSpace();
         }
 
@@ -772,7 +773,7 @@ namespace AiDotNet.AutoML
     [ModelTask(ModelTask.Denoising)]
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    public class DiffusionAutoMLModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+    internal class DiffusionAutoMLModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         private static IEngine Engine => AiDotNetEngine.Current;
         private readonly UNetNoisePredictor<T> _noisePredictor;
@@ -947,6 +948,10 @@ namespace AiDotNet.AutoML
                 _seed);
         }
 
+        /// <summary>
+        /// Returns empty because diffusion models operate on latent space noise, not
+        /// named tabular features, so per-feature importance is not meaningful.
+        /// </summary>
         public override Dictionary<string, T> GetFeatureImportance()
         {
             return new Dictionary<string, T>();
@@ -962,9 +967,13 @@ namespace AiDotNet.AutoML
             return featureIndex >= 0 && featureIndex < _config.LatentDim;
         }
 
+        /// <summary>
+        /// Feature selection is not applicable to diffusion models. All latent dimensions
+        /// are required for coherent generation. This method intentionally does nothing.
+        /// </summary>
         public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
         {
-            // Not applicable for diffusion models
+            _ = featureIndices;
         }
 
         public override ModelMetadata<T> GetModelMetadata()
@@ -1075,9 +1084,42 @@ namespace AiDotNet.AutoML
 
         public override Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
         {
-            // Simplified gradient computation
+            var loss = lossFunction ?? DefaultLossFunction;
             var parameters = GetParameters();
-            return new Vector<T>(new T[parameters.Length]);
+            var gradients = new T[parameters.Length];
+            T epsilon = NumOps.FromDouble(1e-5);
+            T twoEps = NumOps.FromDouble(2e-5);
+
+            // Compute loss at current parameters
+            var prediction = Predict(input);
+            T baseLoss = loss.ComputeLoss(prediction, target);
+
+            // Finite-difference gradient for each parameter
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                T original = parameters[i];
+
+                // Forward perturbation
+                parameters[i] = NumOps.Add(original, epsilon);
+                SetParameters(parameters);
+                var predPlus = Predict(input);
+                T lossPlus = loss.ComputeLoss(predPlus, target);
+
+                // Backward perturbation
+                parameters[i] = NumOps.Subtract(original, epsilon);
+                SetParameters(parameters);
+                var predMinus = Predict(input);
+                T lossMinus = loss.ComputeLoss(predMinus, target);
+
+                // Central difference
+                gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), twoEps);
+
+                // Restore original
+                parameters[i] = original;
+            }
+
+            SetParameters(parameters);
+            return new Vector<T>(gradients);
         }
 
         public override void ApplyGradients(Vector<T> gradients, T learningRate)

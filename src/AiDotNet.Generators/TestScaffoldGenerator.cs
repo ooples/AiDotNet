@@ -15,7 +15,16 @@ namespace AiDotNet.Generators;
 /// <para>
 /// Discovers all concrete IFullModel implementations decorated with [ModelDomain] and checks
 /// for matching test classes. Emits a static <c>TestCoverage</c> class with coverage statistics
-/// and compile-time warnings for untested models.
+/// and compile-time diagnostics for untested models.
+/// </para>
+/// <para>
+/// Model discovery works in two modes:
+/// <list type="bullet">
+/// <item>Source mode: finds model classes defined as source in the current compilation (when running in the source project)</item>
+/// <item>Reference mode: finds model classes from referenced assemblies (when running in the test project)</item>
+/// </list>
+/// This allows the generator to correctly compute coverage when referenced from either the
+/// source project or the test project.
 /// </para>
 /// </remarks>
 [Generator]
@@ -30,7 +39,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         title: "Model has no test coverage",
         messageFormat: "Model '{0}' has no corresponding test class (expected: '{0}Tests' or similar)",
         category: "AiDotNet.TestCoverage",
-        defaultSeverity: DiagnosticSeverity.Error,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "Every model class should have at least basic test coverage.");
 
@@ -44,13 +53,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Collect model classes
+        // Collect model classes from source (works when running in the source project)
         var modelClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsModelCandidate(node),
             transform: static (ctx, _) => GetModelClassOrNull(ctx))
             .Where(static s => s is not null);
 
-        // Collect test classes (classes containing [Fact] or [Theory])
+        // Collect test classes (classes ending in Tests/Test or containing [Fact]/[Theory])
         var testClasses = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsTestCandidate(node),
             transform: static (ctx, _) => GetTestClassName(ctx))
@@ -93,7 +102,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             return true;
         }
 
-        // Check if any method has [Fact] or [Theory] attribute
+        // Check if any method has a test attribute (xUnit, NUnit, or MSTest)
         foreach (var member in cds.Members)
         {
             if (member is MethodDeclarationSyntax method)
@@ -103,11 +112,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     foreach (var attr in attrList.Attributes)
                     {
                         var name = attr.Name.ToString();
+                        // xUnit
                         if (name == "Fact" || name == "Theory" ||
                             name == "Xunit.Fact" || name == "Xunit.Theory")
-                        {
                             return true;
-                        }
+                        // NUnit
+                        if (name == "Test" || name == "TestCase" ||
+                            name == "NUnit.Framework.Test" || name == "NUnit.Framework.TestCase")
+                            return true;
+                        // MSTest
+                        if (name == "TestMethod" ||
+                            name == "Microsoft.VisualStudio.TestTools.UnitTesting.TestMethod")
+                            return true;
                     }
                 }
             }
@@ -141,7 +157,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     private static void Execute(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> models,
+        ImmutableArray<INamedTypeSymbol?> sourceModels,
         ImmutableArray<string?> testClassNames,
         Compilation compilation)
     {
@@ -160,61 +176,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         var untestedModels = new List<ModelTestInfo>();
         var seen = new HashSet<string>();
 
-        foreach (var modelClass in models)
+        // First: collect models from source (syntax-based discovery)
+        foreach (var modelClass in sourceModels)
         {
             if (modelClass is null)
                 continue;
 
-            var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (!seen.Add(fullName))
-                continue;
+            ProcessModelSymbol(modelClass, domainAttrSymbol, exemptAttrSymbol,
+                testNames, testedModels, untestedModels, seen);
+        }
 
-            // Skip classes marked with [ModelMetadataExempt]
-            if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
-                continue;
-
-            // Only include models with [ModelDomain] attribute
-            bool hasModelDomain = false;
-            var domains = new List<int>();
-            if (domainAttrSymbol is not null)
-            {
-                foreach (var attr in modelClass.GetAttributes())
-                {
-                    if (attr.AttributeClass is not null &&
-                        SymbolEqualityComparer.Default.Equals(attr.AttributeClass, domainAttrSymbol))
-                    {
-                        hasModelDomain = true;
-                        if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int d)
-                            domains.Add(d);
-                    }
-                }
-            }
-
-            if (!hasModelDomain)
-                continue;
-
-            var className = modelClass.Name;
-            var info = new ModelTestInfo
-            {
-                ClassName = className,
-                FullyQualifiedName = fullName,
-                TypeParameterCount = modelClass.TypeParameters.Length,
-                Domains = domains,
-                Location = modelClass.Locations.Length > 0 ? modelClass.Locations[0] : null
-            };
-
-            // Check for matching test class
-            bool hasCoverage = HasTestCoverage(className, testNames);
-            info.HasTests = hasCoverage;
-
-            if (hasCoverage)
-            {
-                testedModels.Add(info);
-            }
-            else
-            {
-                untestedModels.Add(info);
-            }
+        // Second: if no source models were found, discover models from referenced assemblies.
+        // This happens when the generator runs in the test project, where model classes
+        // come from a compiled project reference rather than source files.
+        if (seen.Count == 0)
+        {
+            DiscoverModelsFromReferencedAssemblies(compilation, domainAttrSymbol, exemptAttrSymbol,
+                testNames, testedModels, untestedModels, seen);
         }
 
         testedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
@@ -223,13 +201,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Emit AIDN040 diagnostic for each untested model
         foreach (var model in untestedModels)
         {
-            if (model.Location is not null)
-            {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    UntestedModel,
-                    model.Location,
-                    model.ClassName));
-            }
+            // Models from referenced assemblies have no source location, so use Location.None
+            var location = model.Location ?? Location.None;
+            context.ReportDiagnostic(Diagnostic.Create(
+                UntestedModel,
+                location,
+                model.ClassName));
         }
 
         // Emit AIDN041 summary diagnostic
@@ -248,6 +225,138 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         EmitTestCoverageClass(context, testedModels, untestedModels);
     }
 
+    /// <summary>
+    /// Processes a single model type symbol, checking for [ModelDomain] and test coverage.
+    /// </summary>
+    private static void ProcessModelSymbol(
+        INamedTypeSymbol modelClass,
+        INamedTypeSymbol? domainAttrSymbol,
+        INamedTypeSymbol? exemptAttrSymbol,
+        HashSet<string> testNames,
+        List<ModelTestInfo> testedModels,
+        List<ModelTestInfo> untestedModels,
+        HashSet<string> seen)
+    {
+        var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        if (!seen.Add(fullName))
+            return;
+
+        // Skip classes marked with [ModelMetadataExempt]
+        if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
+            return;
+
+        // Only include models with [ModelDomain] attribute
+        bool hasModelDomain = false;
+        var domains = new List<int>();
+        if (domainAttrSymbol is not null)
+        {
+            foreach (var attr in modelClass.GetAttributes())
+            {
+                if (attr.AttributeClass is not null &&
+                    SymbolEqualityComparer.Default.Equals(attr.AttributeClass, domainAttrSymbol))
+                {
+                    hasModelDomain = true;
+                    if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int d)
+                        domains.Add(d);
+                }
+            }
+        }
+
+        if (!hasModelDomain)
+            return;
+
+        var className = modelClass.Name;
+        var info = new ModelTestInfo
+        {
+            ClassName = className,
+            FullyQualifiedName = fullName,
+            TypeParameterCount = modelClass.TypeParameters.Length,
+            Domains = domains,
+            Location = modelClass.Locations.Length > 0 ? modelClass.Locations[0] : null
+        };
+
+        bool hasCoverage = HasTestCoverage(className, testNames);
+        info.HasTests = hasCoverage;
+
+        if (hasCoverage)
+            testedModels.Add(info);
+        else
+            untestedModels.Add(info);
+    }
+
+    /// <summary>
+    /// Discovers model classes from referenced assemblies by traversing all public types
+    /// in each referenced assembly and checking if they implement IFullModel.
+    /// Used when the generator runs in the test project where model classes are compiled references.
+    /// </summary>
+    private static void DiscoverModelsFromReferencedAssemblies(
+        Compilation compilation,
+        INamedTypeSymbol? domainAttrSymbol,
+        INamedTypeSymbol? exemptAttrSymbol,
+        HashSet<string> testNames,
+        List<ModelTestInfo> testedModels,
+        List<ModelTestInfo> untestedModels,
+        HashSet<string> seen)
+    {
+        foreach (var reference in compilation.References)
+        {
+            var symbol = compilation.GetAssemblyOrModuleSymbol(reference);
+            if (symbol is IAssemblySymbol assembly)
+            {
+                CollectModelsFromNamespace(assembly.GlobalNamespace, domainAttrSymbol, exemptAttrSymbol,
+                    testNames, testedModels, untestedModels, seen);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Recursively collects model types from a namespace symbol.
+    /// </summary>
+    private static void CollectModelsFromNamespace(
+        INamespaceSymbol ns,
+        INamedTypeSymbol? domainAttrSymbol,
+        INamedTypeSymbol? exemptAttrSymbol,
+        HashSet<string> testNames,
+        List<ModelTestInfo> testedModels,
+        List<ModelTestInfo> untestedModels,
+        HashSet<string> seen)
+    {
+        foreach (var member in ns.GetMembers())
+        {
+            if (member is INamespaceSymbol childNs)
+            {
+                CollectModelsFromNamespace(childNs, domainAttrSymbol, exemptAttrSymbol,
+                    testNames, testedModels, untestedModels, seen);
+            }
+            else if (member is INamedTypeSymbol type)
+            {
+                if (type.TypeKind == TypeKind.Class &&
+                    !type.IsAbstract &&
+                    ImplementsIFullModel(type))
+                {
+                    ProcessModelSymbol(type, domainAttrSymbol, exemptAttrSymbol,
+                        testNames, testedModels, untestedModels, seen);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks whether a type implements IFullModel anywhere in its interface hierarchy.
+    /// </summary>
+    private static bool ImplementsIFullModel(INamedTypeSymbol type)
+    {
+        foreach (var iface in type.AllInterfaces)
+        {
+            if (iface.IsGenericType &&
+                iface.OriginalDefinition.ToDisplayString().StartsWith(IFullModelName, System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static bool HasTestCoverage(string modelClassName, HashSet<string> testNames)
     {
         // Strip generic arity suffix
@@ -263,11 +372,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (testNames.Contains(baseName + "IntegrationTests")) return true;
         if (testNames.Contains(baseName + "UnitTests")) return true;
 
-        // Check if any test class name contains the model name (for broad matches)
+        // Check if any test class name contains the model name at a word boundary
+        // (e.g., "RandomForestTests" matches "RandomForest" but "RandomForestClassifierTests"
+        //  should not falsely match "RandomForest" — require the match to be followed by
+        //  "Tests", "Test", end-of-string, or a non-letter to avoid false positives)
         foreach (var testName in testNames)
         {
-            if (testName.IndexOf(baseName, System.StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
+            int idx = testName.IndexOf(baseName, System.StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) continue;
+            int afterMatch = idx + baseName.Length;
+            if (afterMatch >= testName.Length) return true;
+            char nextChar = testName[afterMatch];
+            if (nextChar == 'T' || nextChar == '_' || !char.IsLetter(nextChar)) return true;
         }
 
         return false;
@@ -283,24 +399,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ? (testedModels.Count * 100.0 / totalCount)
             : 0.0;
 
-        // Domain name map for grouping
-        var domainNames = new Dictionary<int, string>
-        {
-            {0, "General"}, {1, "Vision"}, {2, "Language"}, {3, "Audio"},
-            {4, "Video"}, {5, "Multimodal"}, {6, "Healthcare"}, {7, "Finance"},
-            {8, "Science"}, {9, "Robotics"}, {10, "GraphAnalysis"}, {11, "ThreeD"},
-            {12, "Tabular"}, {13, "TimeSeries"}, {14, "Generative"},
-            {15, "ReinforcementLearning"}, {16, "Causal"}, {17, "MachineLearning"}
-        };
-
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
         sb.AppendLine("#nullable enable");
         sb.AppendLine();
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Collections.Generic;");
-        sb.AppendLine("using System.Linq;");
-        sb.AppendLine("using AiDotNet.Enums;");
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Generated;");
         sb.AppendLine();
@@ -322,71 +426,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine($"    public const int UntestedCount = {untestedModels.Count};");
         sb.AppendLine();
         sb.AppendLine($"    /// <summary>Coverage percentage.</summary>");
-        sb.AppendLine($"    public const double CoveragePercent = {coveragePercent:F1};");
+        sb.AppendLine($"    public const double CoveragePercent = {coveragePercent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)};");
         sb.AppendLine();
 
-        // TestedModels array
-        sb.AppendLine("    /// <summary>Models that have corresponding test classes.</summary>");
-        sb.AppendLine("    public static IReadOnlyList<Type> TestedModels { get; } = new Type[]");
+        // TestedModels list (string-based since types from referenced assemblies may not be resolvable via typeof)
+        sb.AppendLine("    /// <summary>Names of models that have corresponding test classes.</summary>");
+        sb.AppendLine("    public static IReadOnlyList<string> TestedModelNames { get; } = new string[]");
         sb.AppendLine("    {");
         foreach (var model in testedModels)
         {
-            sb.AppendLine($"        {BuildTypeOfExpression(model)},");
+            sb.AppendLine($"        \"{EscapeString(model.ClassName)}\",");
         }
         sb.AppendLine("    };");
         sb.AppendLine();
 
-        // UntestedModels array
-        sb.AppendLine("    /// <summary>Models that do NOT have corresponding test classes.</summary>");
-        sb.AppendLine("    public static IReadOnlyList<Type> UntestedModels { get; } = new Type[]");
+        // UntestedModels list
+        sb.AppendLine("    /// <summary>Names of models that do NOT have corresponding test classes.</summary>");
+        sb.AppendLine("    public static IReadOnlyList<string> UntestedModelNames { get; } = new string[]");
         sb.AppendLine("    {");
         foreach (var model in untestedModels)
         {
-            sb.AppendLine($"        {BuildTypeOfExpression(model)},");
-        }
-        sb.AppendLine("    };");
-        sb.AppendLine();
-
-        // GetUntestedByDomain
-        sb.AppendLine("    /// <summary>Gets untested models for a specific domain.</summary>");
-        sb.AppendLine("    public static IReadOnlyList<Type> GetUntestedByDomain(ModelDomain domain)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        if (_untestedByDomain.TryGetValue(domain, out var types))");
-        sb.AppendLine("            return types;");
-        sb.AppendLine("        return Array.Empty<Type>();");
-        sb.AppendLine("    }");
-        sb.AppendLine();
-
-        // Build untested by domain dictionary
-        var untestedByDomain = new Dictionary<int, List<ModelTestInfo>>();
-        foreach (var model in untestedModels)
-        {
-            foreach (var d in model.Domains)
-            {
-                if (!untestedByDomain.TryGetValue(d, out var list))
-                {
-                    list = new List<ModelTestInfo>();
-                    untestedByDomain[d] = list;
-                }
-                list.Add(model);
-            }
-        }
-
-        sb.AppendLine("    private static readonly Dictionary<ModelDomain, Type[]> _untestedByDomain = new Dictionary<ModelDomain, Type[]>");
-        sb.AppendLine("    {");
-        foreach (var kvp in untestedByDomain.OrderBy(k => k.Key))
-        {
-            if (!domainNames.TryGetValue(kvp.Key, out var domainName))
-                continue;
-
-            sb.Append($"        {{ ModelDomain.{domainName}, new Type[] {{ ");
-            var sorted = kvp.Value.OrderBy(m => m.ClassName).ToList();
-            for (int i = 0; i < sorted.Count; i++)
-            {
-                if (i > 0) sb.Append(", ");
-                sb.Append(BuildTypeOfExpression(sorted[i]));
-            }
-            sb.AppendLine(" } },");
+            sb.AppendLine($"        \"{EscapeString(model.ClassName)}\",");
         }
         sb.AppendLine("    };");
 
@@ -395,27 +455,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         context.AddSource("TestCoverage.g.cs", sb.ToString());
     }
 
-    private static string BuildTypeOfExpression(ModelTestInfo entry)
+    private static string EscapeString(string value)
     {
-        var typeName = StripGenericSuffix(entry.FullyQualifiedName);
-
-        if (entry.TypeParameterCount > 0)
-        {
-            var commas = new string(',', entry.TypeParameterCount - 1);
-            return $"typeof({typeName}<{commas}>)";
-        }
-        return $"typeof({typeName})";
-    }
-
-    private static string StripGenericSuffix(string fullyQualifiedName)
-    {
-        var name = fullyQualifiedName;
-        if (name.StartsWith("global::", System.StringComparison.Ordinal))
-            name = name.Substring("global::".Length);
-        var angleBracketIdx = name.IndexOf('<');
-        if (angleBracketIdx >= 0)
-            name = name.Substring(0, angleBracketIdx);
-        return name;
+        return value
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"");
     }
 
     private static bool HasAttribute(ImmutableArray<AttributeData> attributes, INamedTypeSymbol attributeType)

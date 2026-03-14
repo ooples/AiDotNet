@@ -78,7 +78,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
 
                 var parameters = await SuggestNextTrialAsync();
 
-                if (!parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not Type modelType)
+                if (!parameters.TryGetValue(ModelTypeKey, out var modelTypeObj) || modelTypeObj is not Type modelType)
                 {
                     throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
                 }
@@ -146,7 +146,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
         }
 
         var sampled = AutoMLParameterSampler.Sample(Random, merged);
-        sampled["ModelType"] = modelType;
+        sampled[ModelTypeKey] = modelType;
         return Task.FromResult(sampled);
     }
 

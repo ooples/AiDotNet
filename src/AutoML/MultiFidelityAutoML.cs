@@ -254,7 +254,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
         int[] shuffledTrainingRowIndices,
         CancellationToken cancellationToken)
     {
-        if (!config.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not Type modelType)
+        if (!config.TryGetValue(ModelTypeKey, out var modelTypeObj) || modelTypeObj is not Type modelType)
         {
             throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
         }
@@ -396,7 +396,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
         }
 
         var sampled = AutoMLParameterSampler.Sample(Random, merged);
-        sampled["ModelType"] = modelType;
+        sampled[ModelTypeKey] = modelType;
         return Task.FromResult(sampled);
     }
 
@@ -596,7 +596,17 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
 
     private static bool IsTimeSeriesModel(Type modelType)
     {
-        var typeName = modelType.IsGenericType ? modelType.GetGenericTypeDefinition().Name : modelType.Name;
+        // Check for ModelCategory.TimeSeriesModel attribute (preferred)
+        var checkType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
+        var categoryAttrs = checkType.GetCustomAttributes(typeof(ModelCategoryAttribute), inherit: true);
+        foreach (var attr in categoryAttrs)
+        {
+            if (attr is ModelCategoryAttribute cat && cat.Category == ModelCategory.TimeSeriesModel)
+                return true;
+        }
+
+        // Fallback for unannotated models
+        var typeName = checkType.Name;
         return typeName.StartsWith("TimeSeriesRegression", StringComparison.Ordinal)
             || typeName.StartsWith("BayesianStructuralTimeSeriesModel", StringComparison.Ordinal);
     }

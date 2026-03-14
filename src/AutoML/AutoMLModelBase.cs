@@ -21,6 +21,12 @@ namespace AiDotNet.AutoML
     public abstract class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>, IModelShape
     {
         /// <summary>
+        /// Standard key used in trial parameter dictionaries to store the model <see cref="Type"/>.
+        /// Using this constant avoids typo-related runtime failures across all AutoML strategies.
+        /// </summary>
+        internal const string ModelTypeKey = "ModelType";
+
+        /// <summary>
         /// Hardware-accelerated engine for vector/tensor operations.
         /// </summary>
         protected static IEngine Engine => AiDotNetEngine.Current;
@@ -965,7 +971,7 @@ namespace AiDotNet.AutoML
 
         private static Type? TryExtractCandidateModelType(IReadOnlyDictionary<string, object> parameters)
         {
-            if (parameters is null || !parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is null)
+            if (parameters is null || !parameters.TryGetValue(ModelTypeKey, out var modelTypeObj) || modelTypeObj is null)
             {
                 return null;
             }

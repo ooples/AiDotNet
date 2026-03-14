@@ -26,6 +26,27 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     private const string ModelTaskAttr = "AiDotNet.Attributes.ModelTaskAttribute";
     private const string ModelMetadataExemptAttr = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
+    // Named constants for ModelCategory enum values (must match AiDotNet.Enums.ModelCategory)
+    private const int CatNeuralNetwork = 0;
+    private const int CatRegression = 1;
+    private const int CatClassifier = 2;
+    private const int CatGAN = 4;
+    private const int CatDiffusion = 5;
+    private const int CatTransformer = 6;
+    private const int CatEnsemble = 9;
+    private const int CatSurvivalModel = 11;
+    private const int CatTimeSeriesModel = 13;
+    private const int CatAutoencoder = 14;
+    private const int CatRecurrentNetwork = 15;
+    private const int CatConvolutionalNetwork = 16;
+    private const int CatGraphNetwork = 17;
+    private const int CatSyntheticDataGenerator = 22;
+    private const int CatSVM = 27;
+    private const int CatKernel = 28;
+    private const int CatInstanceBased = 29;
+    private const int CatLinear = 30;
+    private const int CatDecisionTree = 31;
+
     // Diagnostic for suspicious model/optimizer combinations
     private static readonly DiagnosticDescriptor SuspiciousOptimizer = new(
         id: "AIDN030",
@@ -88,6 +109,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     {
         var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
         var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
+        var categoryEnumType = compilation.GetTypeByMetadataName("AiDotNet.Enums.ModelCategory");
 
         if (categoryAttrSymbol is null || candidates.IsDefaultOrEmpty)
         {
@@ -149,7 +171,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                         SuspiciousOptimizer,
                         entry.Location,
                         entry.ClassName,
-                        string.Join(", ", entry.Categories)));
+                        string.Join(", ", entry.Categories.Select(c => GetCategoryName(c, categoryEnumType)))));
                 }
             }
         }
@@ -346,7 +368,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         {
             switch (cat)
             {
-                case 2: // Classifier
+                case CatClassifier:
                     lossFunctions.Add("CrossEntropy");
                     lossFunctions.Add("BinaryCrossEntropy");
                     lossFunctions.Add("Hinge");
@@ -356,8 +378,8 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("OneHotEncoder");
                     break;
 
-                case 1: // Regression
-                case 30: // Linear
+                case CatRegression:
+                case CatLinear:
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("MAE");
                     lossFunctions.Add("Huber");
@@ -367,7 +389,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("MinMaxScaler");
                     break;
 
-                case 4: // GAN
+                case CatGAN:
                     lossFunctions.Add("Adversarial");
                     lossFunctions.Add("Wasserstein");
                     lossFunctions.Add("HingeLoss");
@@ -378,7 +400,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("MinMaxScaler");
                     break;
 
-                case 5: // Diffusion
+                case CatDiffusion:
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("L1");
                     lossFunctions.Add("VLB");
@@ -387,7 +409,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("StandardScaler");
                     break;
 
-                case 6: // Transformer
+                case CatTransformer:
                     lossFunctions.Add("CrossEntropy");
                     lossFunctions.Add("MSE");
                     optimizers.Add("Adam");
@@ -397,7 +419,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("StandardScaler");
                     break;
 
-                case 14: // Autoencoder
+                case CatAutoencoder:
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("BCE");
                     lossFunctions.Add("KLDivergence");
@@ -405,7 +427,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("MinMaxScaler");
                     break;
 
-                case 11: // SurvivalModel
+                case CatSurvivalModel:
                     lossFunctions.Add("CoxPartialLikelihood");
                     lossFunctions.Add("LogRankLoss");
                     optimizers.Add("Adam");
@@ -413,7 +435,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("StandardScaler");
                     break;
 
-                case 13: // TimeSeriesModel
+                case CatTimeSeriesModel:
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("MAE");
                     lossFunctions.Add("QuantileLoss");
@@ -424,9 +446,9 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("StandardScaler");
                     break;
 
-                case 0: // NeuralNetwork (general)
-                case 15: // RecurrentNetwork
-                case 16: // ConvolutionalNetwork
+                case CatNeuralNetwork:
+                case CatRecurrentNetwork:
+                case CatConvolutionalNetwork:
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("CrossEntropy");
                     lossFunctions.Add("MAE");
@@ -434,7 +456,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("StandardScaler");
                     break;
 
-                case 17: // GraphNetwork
+                case CatGraphNetwork:
                     lossFunctions.Add("CrossEntropy");
                     lossFunctions.Add("MSE");
                     optimizers.Add("Adam");
@@ -443,15 +465,15 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("StandardScaler");
                     break;
 
-                case 22: // SyntheticDataGenerator
+                case CatSyntheticDataGenerator:
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("KLDivergence");
                     optimizers.Add("Adam");
                     preprocessors.Add("MinMaxScaler");
                     break;
 
-                case 9: // Ensemble
-                case 31: // DecisionTree
+                case CatEnsemble:
+                case CatDecisionTree:
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("MAE");
                     lossFunctions.Add("CrossEntropy");
@@ -460,8 +482,8 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("StandardScaler");
                     break;
 
-                case 27: // SVM
-                case 28: // Kernel
+                case CatSVM:
+                case CatKernel:
                     lossFunctions.Add("Hinge");
                     lossFunctions.Add("MSE");
                     optimizers.Add("SMO");
@@ -469,7 +491,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("StandardScaler");
                     break;
 
-                case 29: // InstanceBased
+                case CatInstanceBased:
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("MAE");
                     optimizers.Add("BuiltIn");
@@ -504,37 +526,13 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     }
 
     private static string BuildTypeOfExpression(CompatEntry entry)
-    {
-        var typeName = StripGenericSuffix(entry.FullyQualifiedName);
-
-        if (entry.TypeParameterCount > 0)
-        {
-            var commas = new string(',', entry.TypeParameterCount - 1);
-            return $"typeof({typeName}<{commas}>)";
-        }
-        return $"typeof({typeName})";
-    }
-
-    private static string StripGenericSuffix(string fullyQualifiedName)
-    {
-        var name = fullyQualifiedName;
-        if (name.StartsWith("global::", System.StringComparison.Ordinal))
-            name = name.Substring("global::".Length);
-        // Remove <T>, <T, U>, etc. from the end
-        var angleBracketIdx = name.IndexOf('<');
-        if (angleBracketIdx >= 0)
-            name = name.Substring(0, angleBracketIdx);
-        return name;
-    }
+        => GeneratorHelpers.BuildTypeOfExpression(entry.FullyQualifiedName, entry.TypeParameterCount);
 
     private static string FormatStringArray(IEnumerable<string> values)
-    {
-        var items = values.ToList();
-        if (items.Count == 0)
-            return string.Empty;
+        => GeneratorHelpers.FormatStringArray(values);
 
-        return string.Join(", ", items.Select(v => $"\"{v}\""));
-    }
+    private static string GetCategoryName(int categoryValue, INamedTypeSymbol? categoryEnumType)
+        => GeneratorHelpers.GetEnumName(categoryValue, GeneratorHelpers.CategoryNames, categoryEnumType);
 
     private static bool HasAttribute(ImmutableArray<AttributeData> attributes, INamedTypeSymbol attributeType)
     {

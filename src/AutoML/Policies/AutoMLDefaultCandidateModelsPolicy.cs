@@ -1,4 +1,7 @@
 using System;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Classification.Neighbors;
+using AiDotNet.Classification.Trees;
 using AiDotNet.Regression;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.PointCloud.Models;
@@ -36,29 +39,29 @@ internal static class AutoMLDefaultCandidateModelsPolicy
                     AutoMLBudgetPreset.CI => new Type[]
                     {
                         typeof(LogisticRegression<>),
-                        typeof(RandomForestRegression<>)
+                        typeof(RandomForestClassifier<>)
                     },
                     AutoMLBudgetPreset.Fast => new Type[]
                     {
                         typeof(LogisticRegression<>),
-                        typeof(RandomForestRegression<>),
-                        typeof(GradientBoostingRegression<>)
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>)
                     },
                     AutoMLBudgetPreset.Thorough => new Type[]
                     {
                         typeof(LogisticRegression<>),
-                        typeof(RandomForestRegression<>),
-                        typeof(GradientBoostingRegression<>),
-                        typeof(DecisionTreeRegression<>),
-                        typeof(ExtremelyRandomizedTreesRegression<>),
-                        typeof(KNearestNeighborsRegression<>)
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>),
+                        typeof(DecisionTreeClassifier<>),
+                        typeof(ExtraTreesClassifier<>),
+                        typeof(KNeighborsClassifier<>)
                     },
                     _ => new Type[]
                     {
                         typeof(LogisticRegression<>),
-                        typeof(RandomForestRegression<>),
-                        typeof(GradientBoostingRegression<>),
-                        typeof(KNearestNeighborsRegression<>)
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>),
+                        typeof(KNeighborsClassifier<>)
                     }
                 };
 
@@ -68,27 +71,27 @@ internal static class AutoMLDefaultCandidateModelsPolicy
                     AutoMLBudgetPreset.CI => new Type[]
                     {
                         typeof(MultinomialLogisticRegression<>),
-                        typeof(RandomForestRegression<>)
+                        typeof(RandomForestClassifier<>)
                     },
                     AutoMLBudgetPreset.Fast => new Type[]
                     {
                         typeof(MultinomialLogisticRegression<>),
-                        typeof(RandomForestRegression<>),
-                        typeof(GradientBoostingRegression<>)
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>)
                     },
                     AutoMLBudgetPreset.Thorough => new Type[]
                     {
                         typeof(MultinomialLogisticRegression<>),
-                        typeof(RandomForestRegression<>),
-                        typeof(GradientBoostingRegression<>),
-                        typeof(KNearestNeighborsRegression<>)
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>),
+                        typeof(KNeighborsClassifier<>)
                     },
                     _ => new Type[]
                     {
                         typeof(MultinomialLogisticRegression<>),
-                        typeof(RandomForestRegression<>),
-                        typeof(GradientBoostingRegression<>),
-                        typeof(KNearestNeighborsRegression<>)
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>),
+                        typeof(KNeighborsClassifier<>)
                     }
                 };
 

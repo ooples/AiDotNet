@@ -5,6 +5,8 @@ namespace AiDotNet.AutoML;
 
 internal static class AutoMLHyperparameterApplicator
 {
+    internal const string ModelTypeKey = "ModelType";
+
     public static void ApplyToOptions(object options, IReadOnlyDictionary<string, object> parameters)
     {
         if (options is null)
@@ -21,7 +23,7 @@ internal static class AutoMLHyperparameterApplicator
 
         foreach (var (key, value) in parameters)
         {
-            if (string.Equals(key, "ModelType", StringComparison.Ordinal))
+            if (string.Equals(key, ModelTypeKey, StringComparison.Ordinal))
             {
                 continue;
             }

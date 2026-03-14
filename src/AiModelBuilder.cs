@@ -5629,15 +5629,24 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             reasoningTrace.AppendLine("STEP 2: Selecting optimal model type...\n");
 
-            // Use the deterministic ModelSelectionTool directly for type-safe model recommendation
-            const string problemType = "regression";
+            // Derive problem type from builder configuration instead of hardcoding
+            var problemType = _autoMLOptions?.TaskFamilyOverride switch
+            {
+                AutoMLTaskFamily.BinaryClassification => "classification",
+                AutoMLTaskFamily.MultiClassClassification => "classification",
+                AutoMLTaskFamily.TimeSeriesForecasting => "time_series",
+                AutoMLTaskFamily.TimeSeriesAnomalyDetection => "anomaly_detection",
+                AutoMLTaskFamily.Ranking => "ranking",
+                _ => "regression"
+            };
+
             recommendation.SuggestedModelType = ModelSelectionTool.RecommendModelType(
                 problemType: problemType,
                 nSamples: nSamples,
                 nFeatures: nFeatures,
-                isLinear: false,
+                isLinear: nFeatures <= 5,
                 hasOutliers: false,
-                computationalConstraints: "moderate",
+                computationalConstraints: nSamples > 100000 ? "high" : "moderate",
                 requiresInterpretability: false);
 
             // Also run the tool via the agent for detailed reasoning text
@@ -5646,11 +5655,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 ["problem_type"] = problemType,
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
-                ["is_linear"] = false,
+                ["is_linear"] = nFeatures <= 5,
                 ["has_outliers"] = false,
                 ["has_missing_values"] = false,
                 ["requires_interpretability"] = false,
-                ["computational_constraints"] = "moderate"
+                ["computational_constraints"] = nSamples > 100000 ? "high" : "moderate"
             }.ToString(Formatting.None);
 
             var modelSelectionResult = await agent.RunAsync(
@@ -6140,7 +6149,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             var registry = new HyperparameterRegistry();
             var applicator = new AgentHyperparameterApplicator<T>(registry);
-            var modelType = recommendation.SuggestedModelType ?? DeriveModelType(_model);
+            var modelType = DeriveModelType(_model) ?? recommendation.SuggestedModelType;
+            if (modelType is null) return;
 
             var applicationResult = applicator.Apply(configurableModel, modelType, recommendation.SuggestedHyperparameters);
             recommendation.HyperparameterApplicationResult = applicationResult;
