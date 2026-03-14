@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Ferret-v2 (Zhang et al., 2024) improves upon Ferret with multi-granularity visual encoding
+/// that processes images at multiple resolutions, enhanced spatial understanding through DINOv2
+/// features, and a flexible any-resolution scaling approach for handling diverse aspect ratios
+/// and input sizes. The multi-granularity design captures both fine-grained details and global context.
+/// </para>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Ferret-v2: An Improved Baseline for Referring and Grounding" (Apple, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> FerretV2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <list type="bullet"><item>Paper: "Ferret-v2: An Improved Baseline for Referring and Grounding with Multi-Granularity Visual Encoding" (Apple, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Ferret-v2 is an improved vision-language model for referring and grounding
+/// that handles images at multiple resolutions for better spatial understanding. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Ferret-v2 model for improved referring and grounding
+/// // with multi-granularity visual encoding and enhanced spatial understanding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new FerretV2&lt;double&gt;(architecture, "ferretv2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new FerretV2&lt;double&gt;(architecture, new FerretV2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

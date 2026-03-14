@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Ferret (You et al., 2023) introduces a spatial-aware visual sampler that can refer to and
+/// ground anything at any granularity. It uses a hybrid region representation combining discrete
+/// coordinates with continuous visual features and a spatial-aware visual sampler to handle
+/// free-form referring regions of any shape including points, boxes, and scribbles.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Ferret: Refer and Ground Anything Anywhere at Any Granularity" (Apple, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> Ferret is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Ferret is a vision-language model that can locate objects in images
+/// based on natural language descriptions and refer to regions of any shape. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Ferret model for region referring and grounding
+/// // with spatial-aware visual sampler at any granularity
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Ferret&lt;double&gt;(architecture, "ferret.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Ferret&lt;double&gt;(architecture, new FerretOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

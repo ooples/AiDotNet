@@ -17,10 +17,35 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// DINO-X (Ren et al., 2024) extends Grounding DINO with a universal object prompt module
+/// that supports text, visual exemplars, and custom prompts. Trained on Grounding-100M
+/// (100M+ images with long-tailed open-world categories), it uses a foundation encoder
+/// with prompt-guided deformable cross-attention for open-world object detection and
+/// understanding across diverse domains.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DINO-X: A Unified Vision Model for Open-World Object Detection and Understanding" (IDEA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> DINOX is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DINOX is a vision-language model that can detect and understand
+/// objects using text descriptions, visual examples, or custom prompts. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DINO-X model for open-world object detection
+/// // the strongest unified open-world perception model
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DINOX&lt;double&gt;(architecture, "dinox.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DINOX&lt;double&gt;(architecture, new DINOXOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

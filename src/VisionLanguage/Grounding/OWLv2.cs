@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// OWLv2 (Minderer et al., 2023) scales open-vocabulary object detection through self-training
+/// on web-scale image-text data. Building on OWL-ViT, it uses a stronger ViT-L/14 backbone
+/// with 960px input resolution, pseudo-label self-training from an OWL-ViT teacher model, and
+/// objectness-calibrated scoring for better separation of true objects from background patches.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Scaling Open-Vocabulary Object Detection" (Google, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> OWLv2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> OWLv2 is an improved version of OWL-ViT that achieves better
+/// open-vocabulary detection through self-training at web scale. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an OWLv2 model for scaled open-vocabulary detection
+/// // with self-training and objectness-calibrated scoring
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new OWLv2&lt;double&gt;(architecture, "owlv2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new OWLv2&lt;double&gt;(architecture, new OWLv2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -17,10 +17,35 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Shikra (Chen et al., 2023) is a referential dialogue model that treats spatial coordinates
+/// as plain-text numbers in the LLM output vocabulary. Instead of using special tokens or
+/// external detection heads, it generates normalized bounding box coordinates as decimal text
+/// tokens via CLIP ViT visual encoding interleaved with instruction tokens, enabling natural
+/// language grounding through straightforward autoregressive generation.
+/// </para>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Shikra: Unleashing Multimodal LLM Referential Dialogue" (SenseTime, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> Shikra is a vision-language model. Default values follow the original paper settings.</para>
+/// <list type="bullet"><item>Paper: "Shikra: Unleashing Multimodal LLM's Referential Dialogue Magic" (SenseTime, 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Shikra is a vision-language model that grounds objects by generating
+/// their coordinates as plain text numbers in natural dialogue. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Shikra model for referential dialogue with coordinate grounding
+/// // generating bounding box coordinates as plain-text numbers
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Shikra&lt;double&gt;(architecture, "shikra.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Shikra&lt;double&gt;(architecture, new ShikraOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
