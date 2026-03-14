@@ -48,6 +48,27 @@ namespace AiDotNet.Classification.Online;
 ///
 /// <para><b>Reference:</b> Gomes et al., "Adaptive Random Forests for Evolving Data Stream Classification" (2017)</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create adaptive random forest for streaming data with concept drift
+/// var options = new AdaptiveRandomForestOptions&lt;double&gt;();
+/// var classifier = new AdaptiveRandomForestClassifier&lt;double&gt;(options);
+///
+/// // Prepare initial training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train with per-tree drift detection for local adaptation
+/// classifier.Train(features, labels);
+///
+/// // Predict with weighted voting across adapted trees
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]

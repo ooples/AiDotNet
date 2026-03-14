@@ -52,6 +52,27 @@ namespace AiDotNet.Classification.Ordinal;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create ordinal ridge regression with L2 regularization
+/// var options = new OrdinalRidgeRegressionOptions&lt;double&gt;();
+/// var classifier = new OrdinalRidgeRegression&lt;double&gt;(options);
+///
+/// // Prepare training data with features and ordinal labels
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.5,  2.0, 2.5,  3.0, 3.5,
+///     0.5, 1.0,  1.5, 2.0,  2.5, 3.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1, 2, 2 });
+///
+/// // Train with closed-form ridge solution and immediate-threshold method
+/// classifier.Train(features, labels);
+///
+/// // Predict ordinal class using learned thresholds
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 2.2, 1.8 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted ordinal class: {prediction[0]}");
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]

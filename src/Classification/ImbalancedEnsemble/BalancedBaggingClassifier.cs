@@ -54,6 +54,27 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create balanced bagging classifier for imbalanced binary classification
+/// var options = new BalancedBaggingOptions&lt;double&gt;();
+/// var classifier = new BalancedBaggingClassifier&lt;double&gt;(options);
+///
+/// // Prepare imbalanced training data (majority class 0, minority class 1)
+/// var features = Matrix&lt;double&gt;.Build.Dense(8, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,  1.3, 0.7,  // Class 0 (majority)
+///     5.0, 5.1,  5.2, 4.9,  0.0, 0.0,  0.0, 0.0 }); // Class 1 (minority)
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 0, 1, 1, 1, 1 });
+///
+/// // Train with balanced bootstrap sampling for each base classifier
+/// classifier.Train(features, labels);
+///
+/// // Predict using majority vote across balanced sub-classifiers
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 5.1, 5.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]

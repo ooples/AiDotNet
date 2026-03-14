@@ -48,6 +48,27 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Easy Ensemble for extremely imbalanced datasets
+/// var options = new EasyEnsembleOptions&lt;double&gt;();
+/// var classifier = new EasyEnsembleClassifier&lt;double&gt;(options);
+///
+/// // Prepare extremely imbalanced data
+/// var features = Matrix&lt;double&gt;.Build.Dense(8, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,  1.3, 0.7,
+///     5.0, 5.1,  5.2, 4.9,  0.0, 0.0,  0.0, 0.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 0, 1, 1, 1, 1 });
+///
+/// // Train multiple AdaBoost classifiers on balanced subsets
+/// classifier.Train(features, labels);
+///
+/// // Predict using combined AdaBoost ensemble
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 5.1, 5.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]

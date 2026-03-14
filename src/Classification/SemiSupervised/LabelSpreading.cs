@@ -36,6 +36,26 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// have unequal sizes.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create label spreading with symmetric normalization
+/// var options = new LabelSpreadingOptions&lt;double&gt;();
+/// var classifier = new LabelSpreading&lt;double&gt;(options);
+///
+/// // Prepare data: -1 indicates unlabeled samples
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, -1, -1, 1, -1, -1 });
+///
+/// // Spread labels with alpha clamping to preserve original labels
+/// classifier.Train(features, labels);
+///
+/// // Predict labels for all samples
+/// var prediction = classifier.Predict(features);
+/// Console.WriteLine($"Spread label: {prediction[1]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.Kernel)]

@@ -30,6 +30,27 @@ namespace AiDotNet.Classification.Trees;
 /// Each question splits the data based on a feature value, and leaves contain the final decisions.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a decision tree classifier
+/// var options = new DecisionTreeClassifierOptions&lt;double&gt;();
+/// var classifier = new DecisionTreeClassifier&lt;double&gt;(options);
+///
+/// // Prepare training data (features and labels)
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train the tree to learn decision rules from data
+/// classifier.Train(features, labels);
+///
+/// // Classify a new sample by traversing learned rules
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Classification)]

@@ -43,6 +43,25 @@ namespace AiDotNet.Classification.MultiLabel;
 /// For problems where labels are correlated, consider using Classifier Chains or Label Powerset instead.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Binary Relevance for multi-label classification
+/// var classifier = new BinaryRelevance&lt;double&gt;();
+///
+/// // Prepare features and multi-label targets (each row is a label set)
+/// var features = Matrix&lt;double&gt;.Build.Dense(4, 2, new double[] {
+///     1.0, 2.0,  3.0, 4.0,  5.0, 6.0,  7.0, 8.0 });
+/// var labels = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
+///     1, 0, 1,  1, 1, 0,  0, 1, 1,  0, 0, 1 });
+///
+/// // Train independent binary classifiers for each label
+/// classifier.Train(features, labels);
+///
+/// // Predict label set for new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 2.0, 3.0 });
+/// var prediction = classifier.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]

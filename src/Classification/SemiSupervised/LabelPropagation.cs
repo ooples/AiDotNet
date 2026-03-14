@@ -33,6 +33,26 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// can be captured through a graph structure.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create label propagation for semi-supervised learning
+/// var options = new LabelPropagationOptions&lt;double&gt;();
+/// var classifier = new LabelPropagation&lt;double&gt;(options);
+///
+/// // Prepare data: some labeled (-1 means unlabeled), some not
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, -1, -1, 1, -1, -1 });
+///
+/// // Propagate labels through similarity graph to unlabeled samples
+/// classifier.Train(features, labels);
+///
+/// // Predict labels for all samples including previously unlabeled
+/// var prediction = classifier.Predict(features);
+/// Console.WriteLine($"Propagated label: {prediction[1]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.Kernel)]

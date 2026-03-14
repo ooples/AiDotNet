@@ -47,6 +47,25 @@ namespace AiDotNet.Classification.MultiLabel;
 /// training multiple chains with different orders and combining their predictions (Ensemble of Classifier Chains).
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Classifier Chain that captures label dependencies
+/// var classifier = new ClassifierChainClassifier&lt;double&gt;();
+///
+/// // Prepare features and multi-label targets
+/// var features = Matrix&lt;double&gt;.Build.Dense(4, 2, new double[] {
+///     1.0, 2.0,  3.0, 4.0,  5.0, 6.0,  7.0, 8.0 });
+/// var labels = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
+///     1, 0, 1,  1, 1, 0,  0, 1, 1,  0, 0, 1 });
+///
+/// // Train chained classifiers where each uses previous predictions as features
+/// classifier.Train(features, labels);
+///
+/// // Predict label set with label correlation awareness
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 2.0, 3.0 });
+/// var prediction = classifier.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]

@@ -34,6 +34,27 @@ namespace AiDotNet.Classification.Neighbors;
 /// This is why feature scaling is important for KNN!
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a KNN classifier with k=5 neighbors
+/// var options = new KNeighborsOptions&lt;double&gt;();
+/// var classifier = new KNeighborsClassifier&lt;double&gt;(options);
+///
+/// // Prepare training data (features and labels)
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,   // Class 0 cluster
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 }); // Class 1 cluster
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train the classifier (stores all training instances)
+/// classifier.Train(features, labels);
+///
+/// // Predict class for a new sample based on nearest neighbors
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}"); // Output: 0
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.InstanceBased)]
 [ModelTask(ModelTask.Classification)]
