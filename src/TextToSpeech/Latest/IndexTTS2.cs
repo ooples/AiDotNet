@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>IndexTTS2: IndexTTS-2: Duration and Emotion Control for Zero-Shot TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "IndexTTS-2: Duration and Emotion Control for Zero-Shot TTS" (Bilibili Team, 2026)</item></list></para><para><b>For Beginners:</b> IndexTTS2: IndexTTS-2: Duration and Emotion Control for Zero-Shot TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an IndexTTS 2 model for zero-shot TTS with duration and emotion control
+/// // using codec-based generation from Bilibili
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new IndexTTS2&lt;double&gt;(architecture, "indextts2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new IndexTTS2&lt;double&gt;(architecture, new IndexTTS2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>MegaTTS: Mega-TTS: Zero-Shot TTS with Prosody Decomposition.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Mega-TTS: Zero-Shot TTS with Prosody Decomposition" (Jiang et al., 2023)</item></list></para><para><b>For Beginners:</b> MegaTTS: Mega-TTS: Zero-Shot TTS with Prosody Decomposition.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Mega-TTS model for zero-shot TTS with prosody decomposition
+/// // separating timbre, prosody, and content for controllable synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MegaTTS&lt;double&gt;(architecture, "megatts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MegaTTS&lt;double&gt;(architecture, new MegaTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

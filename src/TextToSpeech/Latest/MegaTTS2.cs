@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>MegaTTS2: Mega-TTS 2: Boosting Prompting Mechanisms for Zero-Shot Speech Synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Mega-TTS 2: Boosting Prompting Mechanisms for Zero-Shot Speech Synthesis" (Jiang et al., 2024)</item></list></para><para><b>For Beginners:</b> MegaTTS2: Mega-TTS 2: Boosting Prompting Mechanisms for Zero-Shot Speech Synthesis.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Mega-TTS 2 model for zero-shot TTS with boosted prompting
+/// // using improved prosody modeling and multi-reference speaker encoding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MegaTTS2&lt;double&gt;(architecture, "megatts2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MegaTTS2&lt;double&gt;(architecture, new MegaTTS2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

@@ -12,6 +12,21 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>KaniTTS: Kani-TTS: Efficient Codec-Based TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Kani-TTS: Efficient Codec-Based TTS" (-, 2025)</item></list></para><para><b>For Beginners:</b> KaniTTS: Kani-TTS: Efficient Codec-Based TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Kani-TTS model for efficient codec-based speech synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new KaniTTS&lt;double&gt;(architecture, "kanitts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new KaniTTS&lt;double&gt;(architecture, new KaniTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

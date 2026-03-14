@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>OuteTTS: text-to-speech using pure language modeling on audio tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "OuteTTS: Pure language modeling TTS" (Oute, 2024)</item></list></para><para><b>For Beginners:</b> OuteTTS: text-to-speech using pure language modeling on audio tokens.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an OuteTTS model for pure language model-based TTS
+/// // using autoregressive prediction on audio tokens
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new OuteTTS&lt;double&gt;(architecture, "outetts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new OuteTTS&lt;double&gt;(architecture, new OuteTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

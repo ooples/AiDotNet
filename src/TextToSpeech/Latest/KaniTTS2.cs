@@ -12,6 +12,21 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>KaniTTS2: Kani-TTS-2: Improved Lightweight Codec TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Kani-TTS-2: Improved Lightweight Codec TTS" (-, 2026)</item></list></para><para><b>For Beginners:</b> KaniTTS2: Kani-TTS-2: Improved Lightweight Codec TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Kani-TTS 2 model for improved lightweight codec-based TTS
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new KaniTTS2&lt;double&gt;(architecture, "kanitts2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new KaniTTS2&lt;double&gt;(architecture, new KaniTTS2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
