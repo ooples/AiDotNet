@@ -17,6 +17,14 @@ const { tier, price, interval, description, features, cta, ctaHref, highlighted 
 if (!ctaHref && !stripeTier) {
   console.warn(`[PricingCard] Missing ctaHref for tier "${tier}". The CTA link will be non-functional.`);
 }
+
+// Compute yearly prices for paid tiers
+const yearlyPrices: Record<string, string> = {
+  pro: '$290',
+  enterprise: '$990',
+};
+const yearlyPrice = stripeTier ? yearlyPrices[stripeTier] || price : price;
+const isPaid = stripeTier && stripeTier !== 'community';
 ---
 
 <div class:list={[
@@ -37,8 +45,24 @@ if (!ctaHref && !stripeTier) {
   </div>
 
   <div class="mb-6">
-    <span class="text-4xl font-bold text-slate-900 dark:text-white">{price}</span>
-    {interval && <span class="text-sm text-slate-500 dark:text-slate-400">/{interval}</span>}
+    {isPaid ? (
+      <span
+        class="text-4xl font-bold text-slate-900 dark:text-white"
+        data-monthly-price={price}
+        data-yearly-price={yearlyPrice}
+      >{price}</span>
+    ) : (
+      <span class="text-4xl font-bold text-slate-900 dark:text-white">{price}</span>
+    )}
+    {interval && isPaid ? (
+      <span
+        class="text-sm text-slate-500 dark:text-slate-400"
+        data-monthly-interval={`/${interval}`}
+        data-yearly-interval="/year / seat"
+      >/{interval}</span>
+    ) : interval ? (
+      <span class="text-sm text-slate-500 dark:text-slate-400">/{interval}</span>
+    ) : null}
   </div>
 
   <ul class="flex-1 space-y-3 mb-8">
