@@ -102,7 +102,7 @@ internal static class ModelPersistenceGuard
 
     /// <summary>
     /// Shared enforcement logic: checks for a license key first, then falls back
-    /// to trial operation counting.
+    /// to trial operation counting. Emits anonymous telemetry events if enabled.
     /// </summary>
     private static void EnforceCore()
     {
@@ -110,12 +110,30 @@ internal static class ModelPersistenceGuard
         string? licenseKey = LicenseKeyResolver.Resolve(null);
         if (!string.IsNullOrWhiteSpace(licenseKey))
         {
+            LicensingTelemetryCollector.Instance.RecordLicensedOperation("persistence");
             return;
         }
 
         // No license key — enforce trial limits
         var trialManager = new TrialStateManager();
-        trialManager.RecordOperationOrThrow();
+        try
+        {
+            trialManager.RecordOperationOrThrow();
+
+            // Record successful trial operation telemetry
+            var status = trialManager.GetStatus();
+            LicensingTelemetryCollector.Instance.RecordTrialOperation(
+                status.OperationsUsed, status.OperationsRemaining, status.DaysElapsed);
+        }
+        catch (LicenseRequiredException ex)
+        {
+            // Record trial expiration telemetry
+            LicensingTelemetryCollector.Instance.RecordTrialExpired(
+                ex.ExpirationReason.ToString(),
+                ex.OperationsPerformed ?? 0,
+                ex.TrialDaysElapsed ?? 0);
+            throw;
+        }
     }
 
     /// <summary>
