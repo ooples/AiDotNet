@@ -23,8 +23,27 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "xGen-MM (BLIP-3): A Family of Open Large Multimodal Models" (Salesforce, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> BLIP3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> BLIP-3 (also called xGen-MM) is Salesforce's scaled multimodal model
+/// that can understand images, answer questions about them, and generate both text and images from
+/// interleaved image-text inputs. It builds on BLIP-2's Q-Former design with larger capacity and
+/// training on web-scraped interleaved data. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a BLIP-3/xGen-MM model for scaled multimodal generation
+/// // with interleaved image-text understanding and any-to-any generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new BLIP3&lt;double&gt;(architecture, "blip3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new BLIP3&lt;double&gt;(architecture, new BLIP3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

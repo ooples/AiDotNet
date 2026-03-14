@@ -24,8 +24,29 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PaLI: A Jointly-Scaled Multilingual Language-Image Model" (Chen et al., ICLR 2023)</item></list></para>
-/// <para><b>For Beginners:</b> PaLI is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> PaLI (Pathways Language and Image model) from Google combines
+/// the largest dense ViT encoder (ViT-e with 4 billion parameters) with a multilingual mT5
+/// text encoder-decoder. Visual tokens are linearly projected and prepended to text input,
+/// then the mT5 model processes the combined sequence. Its multilingual training enables
+/// vision-language tasks across 100+ languages. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PaLI model for multilingual vision-language understanding
+/// // using ViT-e encoder + mT5 encoder-decoder across 100+ languages
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PaLI&lt;double&gt;(architecture, "pali.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PaLI&lt;double&gt;(architecture, new PaLIOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

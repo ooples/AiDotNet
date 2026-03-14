@@ -25,8 +25,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "What matters when building vision-language models?" (Laurencon et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> IDEFICS2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> IDEFICS2 is a much more efficient 8 billion parameter successor
+/// to the original 80B IDEFICS. It replaces the OpenCLIP encoder with SigLIP and uses Mistral-7B
+/// as the language backbone, introducing learned perceiver pooling and native resolution image
+/// processing that splits images into sub-images for better document understanding. Default
+/// values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an IDEFICS2 model for efficient 8B multimodal generation
+/// // with SigLIP encoder, perceiver pooling, and Mistral-7B decoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new IDEFICS2&lt;double&gt;(architecture, "idefics2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new IDEFICS2&lt;double&gt;(architecture, new IDEFICS2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

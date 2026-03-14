@@ -25,8 +25,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Emu3: Next-Token Prediction is All You Need" (Wang et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Emu3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Emu3 simplifies multimodal AI by treating everything — text and
+/// images — as sequences of tokens predicted one at a time. Images are converted to discrete
+/// tokens via a VQVAE codebook, then mixed with text tokens in a unified vocabulary. A single
+/// autoregressive transformer handles both understanding and generation without needing separate
+/// diffusion or contrastive modules. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Emu3 model for unified next-token prediction
+/// // treating both text and images as discrete token sequences
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Emu3&lt;double&gt;(architecture, "emu3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Emu3&lt;double&gt;(architecture, new Emu3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Generative)]

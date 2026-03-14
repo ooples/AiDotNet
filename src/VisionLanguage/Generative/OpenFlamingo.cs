@@ -25,8 +25,29 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OpenFlamingo: An Open-Source Framework for Training Large Autoregressive Vision-Language Models" (Awadalla et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> OpenFlamingo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> OpenFlamingo is an open-source reproduction of DeepMind's
+/// proprietary Flamingo model. It uses a perceiver resampler to compress visual features into
+/// a fixed number of latent tokens, then injects them into an LLM decoder (LLaMA or MPT) via
+/// gated cross-attention layers. This architecture excels at few-shot visual tasks — given a
+/// few image-text examples, it can generalize to new queries. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an OpenFlamingo model for few-shot multimodal generation
+/// // with perceiver resampler and gated cross-attention in LLM decoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new OpenFlamingo&lt;double&gt;(architecture, "openflamingo.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new OpenFlamingo&lt;double&gt;(architecture, new OpenFlamingoOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

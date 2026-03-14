@@ -25,8 +25,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Language Is Not All You Need: Aligning Perception with Language Models" (Huang et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> KOSMOS1 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> KOSMOS-1 from Microsoft embeds image features directly into
+/// a causal language model as if they were text tokens. Image patches from a CLIP ViT are
+/// linearly projected into the same embedding space as text, then the combined image-text
+/// sequence is processed by a standard causal transformer for unified multimodal understanding
+/// and generation. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a KOSMOS-1 model for multimodal causal language modeling
+/// // embedding visual tokens directly into the language model sequence
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new KOSMOS1&lt;double&gt;(architecture, "kosmos1.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new KOSMOS1&lt;double&gt;(architecture, new KOSMOS1Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

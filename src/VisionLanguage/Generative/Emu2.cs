@@ -24,8 +24,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Generative Multimodal Models are In-Context Learners" (Sun et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Emu2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Emu2 scales the original Emu architecture to 37 billion parameters,
+/// using a larger EVA-CLIP-E vision encoder and a more powerful LLaMA-based decoder. It excels
+/// at in-context learning for multimodal tasks — given a few examples of image-text pairs, it
+/// can generalize to new tasks without fine-tuning. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Emu2 model for scaled 37B unified understanding and generation
+/// // with strong in-context multimodal learning capabilities
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Emu2&lt;double&gt;(architecture, "emu2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Emu2&lt;double&gt;(architecture, new Emu2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Generative)]

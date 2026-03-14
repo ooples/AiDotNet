@@ -25,8 +25,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OBELICS: An Open Web-Scale Filtered Dataset of Interleaved Image-Text Documents" (Laurencon et al., NeurIPS 2023)</item></list></para>
-/// <para><b>For Beginners:</b> IDEFICS is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> IDEFICS is an 80 billion parameter open-source model that
+/// replicates DeepMind's Flamingo architecture. It processes interleaved sequences of images
+/// and text using gated cross-attention layers inserted into a LLaMA decoder, with a perceiver
+/// resampler compressing visual features. Trained on the OBELICS web-scraped dataset, it
+/// excels at few-shot multimodal tasks. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an IDEFICS model for 80B Flamingo-style interleaved generation
+/// // with perceiver resampler and gated cross-attention in LLaMA decoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new IDEFICS&lt;double&gt;(architecture, "idefics.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new IDEFICS&lt;double&gt;(architecture, new IDEFICSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -24,8 +24,29 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PaLI-3 Vision Language Models: Smaller, Faster, Stronger" (Chen et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> PaLI3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> PaLI-3 achieves strong vision-language performance with a much
+/// smaller model than PaLI-X by replacing the contrastive ViT encoder with a SigLIP ViT that
+/// uses sigmoid-based contrastive loss instead of softmax. This produces better vision
+/// representations while being significantly more efficient, demonstrating that smarter
+/// pretraining can compensate for smaller model size. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PaLI-3 model for efficient vision-language understanding
+/// // with SigLIP ViT encoder for smaller, faster, stronger performance
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PaLI3&lt;double&gt;(architecture, "pali3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PaLI3&lt;double&gt;(architecture, new PaLI3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

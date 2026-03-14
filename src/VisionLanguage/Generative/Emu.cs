@@ -25,8 +25,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Generative Pretraining in Multimodality" (Sun et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> Emu is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Emu unifies visual understanding (answering questions about images,
+/// generating captions) and image generation in a single model. It uses an EVA-CLIP vision encoder
+/// with a LLaMA-based language model, and a visual regression head that can map LLM outputs back
+/// to visual embeddings for image generation via diffusion. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Emu model for unified VQA, captioning, and image generation
+/// // using EVA-CLIP encoder + LLaMA decoder + visual regression head
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Emu&lt;double&gt;(architecture, "emu.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Emu&lt;double&gt;(architecture, new EmuOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Generative)]

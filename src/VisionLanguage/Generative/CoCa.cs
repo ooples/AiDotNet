@@ -24,8 +24,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "CoCa: Contrastive Captioners are Image-Text Foundation Models" (Yu et al., TMLR 2022)</item></list></para>
-/// <para><b>For Beginners:</b> CoCa is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> CoCa combines two training objectives in one model: contrastive
+/// learning (matching images to text descriptions) and captioning (generating text from images).
+/// This dual approach produces strong image-text embeddings that work well for both retrieval
+/// and generation tasks, making it a versatile foundation model. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CoCa model combining contrastive and captioning objectives
+/// // for both image-text retrieval and generative captioning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CoCa&lt;double&gt;(architecture, "coca.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CoCa&lt;double&gt;(architecture, new CoCaOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -24,8 +24,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GIT: A Generative Image-to-text Transformer for Vision and Language" (Wang et al., TMLR 2022)</item></list></para>
-/// <para><b>For Beginners:</b> GIT is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> GIT (Generative Image-to-Text) is a deliberately simple model
+/// that connects a pre-trained image encoder (ViT) to a text decoder through just a linear
+/// projection layer. Despite its simplicity — no Q-Former, perceiver, or cross-attention —
+/// it achieves strong results on captioning and VQA by scaling data and model size. Default
+/// values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GIT model for simple image-to-text generation
+/// // using ViT encoder + linear projection + autoregressive decoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GIT&lt;double&gt;(architecture, "git.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GIT&lt;double&gt;(architecture, new GITOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

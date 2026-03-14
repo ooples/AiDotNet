@@ -24,8 +24,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PaLI-X: On Scaling up a Multilingual Vision and Language Model" (Chen et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> PaLIX is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> PaLI-X scales the PaLI architecture to 55 billion parameters
+/// by pairing the ViT-22B (the largest dense Vision Transformer) with a 32B UL2 language model.
+/// It introduces component-wise fine-tuning that allows separately optimizing the vision and
+/// language components for improved benchmark performance across captioning, VQA, and
+/// document understanding tasks. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PaLI-X model for scaled 55B vision-language understanding
+/// // with ViT-22B encoder + 32B UL2 decoder and component-wise fine-tuning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PaLIX&lt;double&gt;(architecture, "palix.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PaLIX&lt;double&gt;(architecture, new PaLIXOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

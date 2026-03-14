@@ -24,8 +24,29 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning" (Dai et al., NeurIPS 2023)</item></list></para>
-/// <para><b>For Beginners:</b> InstructBLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> InstructBLIP adds instruction-following capability to the
+/// BLIP-2 model by instruction-tuning the Q-Former to extract visual features that are
+/// relevant to the given instruction. The instruction is fed to both the Q-Former (to guide
+/// what visual information to extract) and the LLM (to guide text generation), enabling
+/// zero-shot generalization across diverse vision-language tasks. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an InstructBLIP model for instruction-tuned visual Q&amp;A
+/// // with instruction-aware Q-Former and zero-shot generalization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new InstructBLIP&lt;double&gt;(architecture, "instructblip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new InstructBLIP&lt;double&gt;(architecture, new InstructBLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

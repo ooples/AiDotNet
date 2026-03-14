@@ -25,8 +25,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Building and better understanding vision-language models: insights and future directions" (Laurencon et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> IDEFICS3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> IDEFICS3 builds on IDEFICS2 with improved training data,
+/// including the Docmatix dataset for document understanding, and upgrades the language backbone
+/// to Llama 3.1. It achieves state-of-the-art results on document QA benchmarks while being
+/// trained exclusively on open datasets, making it one of the strongest open-source VLMs at
+/// the 8B parameter scale. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an IDEFICS3 model for state-of-the-art 8B document understanding
+/// // with SigLIP + perceiver + Llama 3.1 trained on Docmatix data
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new IDEFICS3&lt;double&gt;(architecture, "idefics3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new IDEFICS3&lt;double&gt;(architecture, new IDEFICS3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

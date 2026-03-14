@@ -25,8 +25,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Kosmos-2: Grounding Multimodal Large Language Models to the World" (Peng et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> KOSMOS2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> KOSMOS-2 extends KOSMOS-1 with visual grounding — the ability
+/// to link words in generated text to specific bounding box locations in the image. It uses
+/// special location tokens to encode bounding box coordinates, enabling the model to output
+/// phrases like "the dog &lt;box&gt;x1,y1,x2,y2&lt;/box&gt;" that point to objects in the image.
+/// Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a KOSMOS-2 model for grounded multimodal generation
+/// // linking text spans to bounding box locations in images
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new KOSMOS2&lt;double&gt;(architecture, "kosmos2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new KOSMOS2&lt;double&gt;(architecture, new KOSMOS2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
