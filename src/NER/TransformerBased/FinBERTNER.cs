@@ -50,6 +50,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// from financial text: company names, ticker symbols, financial figures, regulatory terms.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 512,
+///     outputSize: 9,
+///     hiddenLayers: new[] { 256, 128 },
+///     networkType: NetworkType.Classification);
+/// var finBERTNER = new FinBERTNER&lt;float&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Finance)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

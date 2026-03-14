@@ -37,6 +37,14 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// Use Ward linkage for most cases - it creates nice, balanced clusters.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new AgglomerativeClusteringOptions&lt;double&gt;();
+/// var agglomerativeClustering = new AgglomerativeClustering&lt;double&gt;(options);
+/// agglomerativeClustering.Fit(dataMatrix);
+/// int[] labels = agglomerativeClustering.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]

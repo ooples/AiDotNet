@@ -38,6 +38,14 @@ namespace AiDotNet.Clustering.Density;
 /// - Better for clusters with varying densities
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new OPTICSOptions&lt;double&gt;();
+/// var oPTICS = new OPTICS&lt;double&gt;(options);
+/// oPTICS.Fit(dataMatrix);
+/// int[] labels = oPTICS.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]

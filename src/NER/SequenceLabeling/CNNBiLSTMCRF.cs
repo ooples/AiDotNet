@@ -95,6 +95,16 @@ namespace AiDotNet.NER.SequenceLabeling;
 /// - You need fast training and inference compared to BERT-based models
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 512,
+///     outputSize: 9,
+///     hiddenLayers: new[] { 256, 128 },
+///     networkType: NetworkType.Classification);
+/// var cNNBiLSTMCRF = new CNNBiLSTMCRF&lt;float&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]

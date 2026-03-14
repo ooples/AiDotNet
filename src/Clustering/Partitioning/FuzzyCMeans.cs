@@ -39,6 +39,14 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - You need confidence/probability information
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new FuzzyCMeansOptions&lt;double&gt;();
+/// var fuzzyCMeans = new FuzzyCMeans&lt;double&gt;(options);
+/// fuzzyCMeans.Fit(dataMatrix);
+/// int[] labels = fuzzyCMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]

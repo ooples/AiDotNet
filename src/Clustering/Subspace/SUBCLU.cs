@@ -39,6 +39,14 @@ namespace AiDotNet.Clustering.Subspace;
 /// This makes SUBCLU much faster than brute-force subspace search.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SUBCLUOptions&lt;double&gt;();
+/// var sUBCLU = new SUBCLU&lt;double&gt;(options);
+/// sUBCLU.Fit(dataMatrix);
+/// int[] labels = sUBCLU.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]

@@ -28,6 +28,12 @@ namespace AiDotNet.Clustering.AutoML;
 /// It evaluates each combination and returns the best one.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var clusteringGridSearch = new ClusteringGridSearch&lt;double&gt;();
+/// var result = clusteringGridSearch.Search(dataMatrix, minK: 2, maxK: 10);
+/// </code>
+/// </example>
 public class ClusteringGridSearch<T>
 {
     private readonly ClusteringEvaluator<T> _evaluator;

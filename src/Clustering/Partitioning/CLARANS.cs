@@ -43,6 +43,14 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - Try swapping whose house, keep improvements
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new CLARANSOptions&lt;double&gt;();
+/// var cLARANS = new CLARANS&lt;double&gt;(options);
+/// cLARANS.Fit(dataMatrix);
+/// int[] labels = cLARANS.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]

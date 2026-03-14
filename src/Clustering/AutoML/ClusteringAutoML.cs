@@ -36,6 +36,14 @@ namespace AiDotNet.Clustering.AutoML;
 /// Just provide your data and AutoML finds the best clustering!
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ClusteringAutoMLOptions&lt;double&gt;();
+/// var clusteringAutoML = new ClusteringAutoML&lt;double&gt;(options);
+/// clusteringAutoML.Fit(dataMatrix);
+/// int[] labels = clusteringAutoML.Labels;
+/// </code>
+/// </example>
 public class ClusteringAutoML<T>
 {
     private readonly ClusteringAutoMLOptions _options;

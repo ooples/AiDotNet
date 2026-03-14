@@ -43,6 +43,14 @@ namespace AiDotNet.Clustering.Ensemble;
 /// - Can combine different algorithms
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ConsensusClusteringOptions&lt;double&gt;();
+/// var consensusClustering = new ConsensusClustering&lt;double&gt;(options);
+/// consensusClustering.Fit(dataMatrix);
+/// int[] labels = consensusClustering.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.Statistical)]

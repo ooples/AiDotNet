@@ -44,6 +44,14 @@ namespace AiDotNet.Clustering.Density;
 /// - Can be slow for large datasets
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MeanShiftOptions&lt;double&gt;();
+/// var meanShift = new MeanShift&lt;double&gt;(options);
+/// meanShift.Fit(dataMatrix);
+/// int[] labels = meanShift.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Kernel)]
 [ModelCategory(ModelCategory.Statistical)]

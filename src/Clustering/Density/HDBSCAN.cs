@@ -44,6 +44,14 @@ namespace AiDotNet.Clustering.Density;
 /// - Provides cluster hierarchy
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new HDBSCANOptions&lt;double&gt;();
+/// var hDBSCAN = new HDBSCAN&lt;double&gt;(options);
+/// hDBSCAN.Fit(dataMatrix);
+/// int[] labels = hDBSCAN.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]

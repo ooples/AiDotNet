@@ -40,6 +40,14 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// - Each split is a small K-Means problem, so it's efficient
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new BisectingKMeansOptions&lt;double&gt;();
+/// var bisectingKMeans = new BisectingKMeans&lt;double&gt;(options);
+/// bisectingKMeans.Fit(dataMatrix);
+/// int[] labels = bisectingKMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]

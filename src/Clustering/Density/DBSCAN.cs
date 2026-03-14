@@ -45,6 +45,14 @@ namespace AiDotNet.Clustering.Density;
 /// - O(n²) complexity without spatial indexing
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new DBSCANOptions&lt;double&gt;();
+/// var dBSCAN = new DBSCAN&lt;double&gt;(options);
+/// dBSCAN.Fit(dataMatrix);
+/// int[] labels = dBSCAN.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]

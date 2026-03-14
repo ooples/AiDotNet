@@ -42,6 +42,14 @@ namespace AiDotNet.Clustering.Partitioning;
 /// difference is very small (a few percent in inertia).
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MiniBatchKMeansOptions&lt;double&gt;();
+/// var miniBatchKMeans = new MiniBatchKMeans&lt;double&gt;(options);
+/// miniBatchKMeans.Fit(dataMatrix);
+/// int[] labels = miniBatchKMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]

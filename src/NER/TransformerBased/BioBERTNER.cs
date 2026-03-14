@@ -40,6 +40,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// drugs, genes, proteins, chemicals). Also consider PubMedBERT for even better biomedical NER.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 512,
+///     outputSize: 9,
+///     hiddenLayers: new[] { 256, 128 },
+///     networkType: NetworkType.Classification);
+/// var bioBERTNER = new BioBERTNER&lt;float&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

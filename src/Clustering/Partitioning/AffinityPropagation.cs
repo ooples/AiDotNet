@@ -39,6 +39,14 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - Works well with any similarity measure
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new AffinityPropagationOptions&lt;double&gt;();
+/// var affinityPropagation = new AffinityPropagation&lt;double&gt;(options);
+/// affinityPropagation.Fit(dataMatrix);
+/// int[] labels = affinityPropagation.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
