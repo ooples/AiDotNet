@@ -31,6 +31,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// noise into an image) combined with advanced prompt understanding to produce images that
 /// closely match what you describe in words.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 30 };
+/// var model = new DallE3Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]

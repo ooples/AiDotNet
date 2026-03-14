@@ -55,6 +55,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// Reference: Balaji et al., "eDiff-I: Text-to-Image Diffusion Models with an Ensemble of Expert Denoisers", 2022
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 256, Width = 256, NumInferenceSteps = 50 };
+/// var model = new EDiffIModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
