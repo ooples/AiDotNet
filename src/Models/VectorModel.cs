@@ -755,6 +755,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </remarks>
     public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         if (filePath == null)
         {
             throw new ArgumentNullException(nameof(filePath));
@@ -805,6 +807,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </remarks>
     public void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (filePath == null)
         {
             throw new ArgumentNullException(nameof(filePath));

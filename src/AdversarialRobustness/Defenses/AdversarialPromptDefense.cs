@@ -289,6 +289,7 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         File.WriteAllBytes(filePath, Serialize());
@@ -297,6 +298,7 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         if (!File.Exists(filePath))

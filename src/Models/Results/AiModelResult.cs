@@ -5002,6 +5002,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         File.WriteAllBytes(filePath, Serialize());
     }
 
@@ -5035,6 +5036,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public void LoadFromFile(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));

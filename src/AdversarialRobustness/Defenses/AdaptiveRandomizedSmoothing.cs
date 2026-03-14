@@ -258,10 +258,18 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     }
 
     /// <inheritdoc/>
-    public void SaveModel(string filePath) => File.WriteAllBytes(filePath, Serialize());
+    public void SaveModel(string filePath)
+    {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        File.WriteAllBytes(filePath, Serialize());
+    }
 
     /// <inheritdoc/>
-    public void LoadModel(string filePath) => Deserialize(File.ReadAllBytes(filePath));
+    public void LoadModel(string filePath)
+    {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+        Deserialize(File.ReadAllBytes(filePath));
+    }
 
     private double EstimateAdaptiveSigma(TInput input, IFullModel<T, TInput, TOutput> model)
     {

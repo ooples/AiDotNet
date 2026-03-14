@@ -179,11 +179,13 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         File.WriteAllBytes(filePath, Serialize());
     }
 
     public void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
         Deserialize(File.ReadAllBytes(filePath));
     }
 

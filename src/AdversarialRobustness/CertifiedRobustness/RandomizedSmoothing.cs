@@ -284,12 +284,14 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         File.WriteAllBytes(filePath, Serialize());
     }
 
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
         Deserialize(File.ReadAllBytes(filePath));
     }
 

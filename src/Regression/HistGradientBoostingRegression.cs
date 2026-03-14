@@ -655,6 +655,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// </remarks>
     public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         byte[] data = Serialize();
         File.WriteAllBytes(filePath, data);
     }
@@ -671,6 +672,7 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// </remarks>
     public void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
         byte[] data = File.ReadAllBytes(filePath);
         Deserialize(data);
     }

@@ -295,6 +295,8 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public virtual void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
 
@@ -313,6 +315,8 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
 
     public virtual void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path must not be null or empty.", nameof(filePath));
 

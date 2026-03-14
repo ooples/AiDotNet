@@ -252,12 +252,14 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         File.WriteAllBytes(filePath, Serialize());
     }
 
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
         Deserialize(File.ReadAllBytes(filePath));
     }
 

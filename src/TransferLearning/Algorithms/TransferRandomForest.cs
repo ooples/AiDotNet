@@ -345,6 +345,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     public virtual void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         // Persist wrapper metadata and base model bytes together
         using var ms = new MemoryStream();
         using (var writer = new BinaryWriter(ms))
@@ -363,6 +365,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     public virtual void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (!File.Exists(filePath))
         {
             throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);

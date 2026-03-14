@@ -277,10 +277,18 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     }
 
     /// <inheritdoc/>
-    public void SaveModel(string filePath) => File.WriteAllBytes(filePath, Serialize());
+    public void SaveModel(string filePath)
+    {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        File.WriteAllBytes(filePath, Serialize());
+    }
 
     /// <inheritdoc/>
-    public void LoadModel(string filePath) => Deserialize(File.ReadAllBytes(filePath));
+    public void LoadModel(string filePath)
+    {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+        Deserialize(File.ReadAllBytes(filePath));
+    }
 
     private Func<Vector<T>, Vector<T>, double> TrainRobustRewardModel(AlignmentFeedbackData<T> feedbackData)
     {

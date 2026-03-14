@@ -194,6 +194,8 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path is required.", nameof(filePath));
@@ -205,6 +207,8 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path is required.", nameof(filePath));

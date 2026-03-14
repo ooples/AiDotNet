@@ -171,6 +171,8 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
     /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
@@ -189,6 +191,8 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
     /// <inheritdoc/>
     public override void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));

@@ -410,6 +410,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         Config.CommunicationBackend.Barrier();
         try
         {
@@ -425,6 +426,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
         Config.CommunicationBackend.Barrier();
         try
         {

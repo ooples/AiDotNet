@@ -277,6 +277,8 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         // Only rank 0 saves to avoid conflicts
         if (Rank == 0)
         {
@@ -293,6 +295,8 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         // All processes read the same file
         var data = File.ReadAllBytes(filePath);
 
