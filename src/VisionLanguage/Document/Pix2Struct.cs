@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Pix2Struct (Google, 2023) uses screenshot parsing as pre-training for visual language
+/// understanding. Pre-trained on web page screenshots with their underlying HTML/DOM structure,
+/// it learns to map visual layouts to structured text representations, excelling at chart
+/// understanding, infographic parsing, and UI interpretation tasks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Pix2Struct: Screenshot Parsing as Pretraining for Visual Language Understanding" (Google, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> Pix2Struct is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Pix2Struct is a document model from Google pre-trained on
+/// screenshots for visual language understanding. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Pix2Struct model for screenshot-based document understanding
+/// // pre-trained on web page screenshots for chart and UI parsing
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Pix2Struct&lt;double&gt;(architecture, "pix2struct.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Pix2Struct&lt;double&gt;(architecture, new Pix2StructOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

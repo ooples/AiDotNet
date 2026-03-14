@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// UReader (2024) is a universal OCR-free model for visually-situated language understanding.
+/// It handles diverse document types including scanned documents, web pages, slides, and natural
+/// scene text through adaptive resolution processing and shape-adaptive cropping, unifying
+/// document understanding across different visual text formats without requiring OCR preprocessing.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "UReader: Universal OCR-free Visually-situated Language Understanding" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> UReader is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> UReader is a universal OCR-free model for understanding text
+/// in documents, web pages, and natural scenes. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UReader model for universal OCR-free document understanding
+/// // handling documents, web pages, slides, and scene text
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new UReader&lt;double&gt;(architecture, "ureader.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new UReader&lt;double&gt;(architecture, new UReaderOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

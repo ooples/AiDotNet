@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Nougat (Meta, 2023) is a neural OCR model for academic documents that converts PDF pages
+/// directly to Markdown text. It uses a Swin Transformer encoder to process document page images
+/// and an autoregressive text decoder to generate structured Markdown output, preserving
+/// mathematical equations, tables, and formatting from scientific papers.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Nougat: Neural Optical Understanding for Academic Documents" (Meta, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> Nougat is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Nougat is a document model from Meta that converts academic
+/// PDFs to Markdown with equations and tables preserved. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Nougat model for academic document OCR
+/// // converting PDF pages directly to Markdown with equations and tables
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Nougat&lt;double&gt;(architecture, "nougat.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Nougat&lt;double&gt;(architecture, new NougatOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

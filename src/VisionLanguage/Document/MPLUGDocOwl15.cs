@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// mPLUG-DocOwl 1.5 (Alibaba, 2024) achieves state-of-the-art on 10 document understanding
+/// benchmarks through unified structure learning. It learns document layout structure alongside
+/// text content in an OCR-free manner, using structure-aware pre-training objectives that teach
+/// the model to understand tables, lists, headers, and hierarchical document organization.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "mPLUG-DocOwl 1.5: Unified Structure Learning for OCR-free Document Understanding" (Alibaba, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> MPLUGDocOwl15 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> mPLUG-DocOwl 1.5 is an improved document understanding model
+/// with unified structure learning for OCR-free processing. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an mPLUG-DocOwl 1.5 model for structure-aware document understanding
+/// // with unified structure learning achieving SOTA on 10 benchmarks
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MPLUGDocOwl15&lt;double&gt;(architecture, "mplugdocowl15.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MPLUGDocOwl15&lt;double&gt;(architecture, new MPLUGDocOwl15Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

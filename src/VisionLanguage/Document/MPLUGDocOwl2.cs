@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// mPLUG-DocOwl 2 (Alibaba, 2024) handles multi-page document understanding with high-resolution
+/// visual token compression. It processes each page at high resolution and compresses the visual
+/// tokens to manageable lengths, enabling the model to handle multi-page PDFs and long documents
+/// while preserving fine text details and layout structure.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "mPLUG-DocOwl 2: High-resolution Compressing for OCR-free Multi-page Document Understanding" (Alibaba, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> MPLUGDocOwl2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> mPLUG-DocOwl 2 is a document understanding model for multi-page
+/// documents with high-resolution visual compression. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an mPLUG-DocOwl 2 model for multi-page document understanding
+/// // with high-resolution visual token compression for long documents
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MPLUGDocOwl2&lt;double&gt;(architecture, "mplugdocowl2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MPLUGDocOwl2&lt;double&gt;(architecture, new MPLUGDocOwl2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Surya (Datalab, 2024) is a multi-language OCR toolkit with integrated layout analysis support.
+/// It combines text detection, text recognition, and document layout analysis in a unified
+/// pipeline, supporting over 90 languages with line-level and word-level OCR alongside
+/// structural layout detection for tables, figures, and headers.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Surya: Multi-language OCR Toolkit" (Datalab, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Surya is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Surya is a multi-language OCR model with layout analysis for
+/// text detection and recognition in 90+ languages. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Surya model for multi-language OCR with layout analysis
+/// // supporting 90+ languages with text detection and recognition
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Surya&lt;double&gt;(architecture, "surya.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Surya&lt;double&gt;(architecture, new SuryaOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

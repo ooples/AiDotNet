@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// mPLUG-DocOwl (Alibaba, 2023) is a modularized multimodal large language model for document
+/// understanding. It uses a visual abstractor module to compress high-resolution document image
+/// features into a compact set of visual tokens, bridging the ViT encoder and LLM decoder
+/// for efficient document VQA, information extraction, and document classification.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "mPLUG-DocOwl: Modularized Multimodal Large Language Model for Document Understanding" (Alibaba, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> MPLUGDocOwl is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> mPLUG-DocOwl is a document understanding model from Alibaba
+/// with a visual abstractor for efficient document processing. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an mPLUG-DocOwl model for document understanding
+/// // with visual abstractor for efficient document feature compression
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MPLUGDocOwl&lt;double&gt;(architecture, "mplugdocowl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MPLUGDocOwl&lt;double&gt;(architecture, new MPLUGDocOwlOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
