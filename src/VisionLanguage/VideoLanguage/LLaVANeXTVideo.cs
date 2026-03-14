@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LLaVA-NeXT-Video (ByteDance, 2024) extends LLaVA-NeXT to video understanding using average
+/// pooling for efficient frame token reduction. It processes video frames through a shared image
+/// encoder and pools temporal tokens to reduce sequence length, enabling zero-shot video
+/// question answering and temporal reasoning without video-specific training.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-NeXT: A Strong Zero-shot Video Understanding Model" (ByteDance, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> LLaVANeXTVideo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLaVA-NeXT-Video is a video understanding model that extends
+/// image LLMs to video through efficient frame token pooling. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

@@ -16,9 +16,16 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LLaVA-Video (ByteDance, 2024) is a video instruction-tuned model trained with synthetic
+/// video-text datasets. It uses GPT-4V-generated video descriptions as training data to build
+/// robust video understanding capabilities, handling video question answering, temporal
+/// reasoning, and video captioning with high-quality instruction following.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Video Instruction Tuning With Synthetic Data" (ByteDance, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> LLaVAVideo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLaVA-Video is a video-language model trained with synthetic
+/// data for video instruction following. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// VideoLLaMA 2 (Alibaba, 2024) advances spatial-temporal modeling for video understanding
+/// using convolution-based video token aggregation. It applies spatial-temporal convolutions
+/// to compress frame-level visual tokens along both spatial and temporal dimensions, with
+/// optional audio branch support for multi-modal video understanding.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VideoLLaMA 2: Advancing Spatial-Temporal Modeling" (Alibaba, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> VideoLLaMA2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> VideoLLaMA 2 is a video-language model with spatial-temporal
+/// convolution for efficient video token processing. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

@@ -17,9 +17,17 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// VideoChat2 (Shanghai AI Lab, 2023) uses progressive video training with diverse multi-modal
+/// data. It trains through multiple stages starting from image-text alignment, then image
+/// instruction tuning, and finally video instruction tuning on diverse video datasets, building
+/// strong video conversation capabilities incrementally.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MVBench: A Comprehensive Multi-modal Video Understanding Benchmark" (Shanghai AI Lab, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> VideoChat2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> VideoChat2 is a video-language model trained progressively on
+/// diverse video-text data for video conversation. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

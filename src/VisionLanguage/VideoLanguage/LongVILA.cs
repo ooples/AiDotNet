@@ -16,9 +16,16 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LongVILA (NVIDIA, 2024) scales long-context visual language models for processing videos
+/// exceeding one hour in duration. It uses multi-modal sequence parallelism to distribute
+/// long video frame sequences across multiple GPUs and extends the context window to handle
+/// thousands of frames for long-form video understanding and temporal reasoning.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LongVILA: Scaling Long-Context Visual Language Models for Long Videos" (NVIDIA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> LongVILA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LongVILA is a video-language model from NVIDIA for understanding
+/// long videos of 1 hour or more. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

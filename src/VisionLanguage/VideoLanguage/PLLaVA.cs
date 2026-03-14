@@ -16,9 +16,16 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// PLLaVA (HKU, 2024) extends image-based LLaVA models to video through parameter-free pooling
+/// operations. Without adding any learnable parameters, it aggregates frame-level visual tokens
+/// using average pooling along the temporal dimension, providing a simple yet effective baseline
+/// for video dense captioning and video question answering.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PLLaVA: Parameter-free LLaVA Extension from Images to Videos" (HKU, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> PLLaVA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> PLLaVA is a video-language model that extends image LLMs to
+/// video using parameter-free pooling. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

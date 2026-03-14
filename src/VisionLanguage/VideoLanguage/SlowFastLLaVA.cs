@@ -16,9 +16,17 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// SlowFast-LLaVA (Meta, 2025) is a training-free video understanding baseline that uses
+/// dual slow/fast pathways for token-efficient long video processing. The slow pathway processes
+/// fewer frames at high spatial resolution, while the fast pathway samples many frames at low
+/// spatial resolution, combining detailed spatial and broad temporal information efficiently.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SlowFast-LLaVA: A Strong Training-Free Baseline for Video Large Language Models" (Meta, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> SlowFastLLaVA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> SlowFast-LLaVA is a training-free video-language model using
+/// dual pathways for efficient long video understanding. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>

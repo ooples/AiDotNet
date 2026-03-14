@@ -16,9 +16,16 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// VideoLLaMA 3 (Alibaba, 2025) is a frontier multimodal foundation model for both image
+/// and video understanding. It builds on the VideoLLaMA series with improved visual encoders,
+/// enhanced temporal modeling, and expanded training on large-scale image-video-text datasets
+/// for state-of-the-art performance on video comprehension benchmarks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VideoLLaMA 3: Frontier Multimodal Foundation Models" (Alibaba, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> VideoLLaMA3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> VideoLLaMA 3 is Alibaba's frontier multimodal model for
+/// advanced image and video understanding. Default values follow the original paper settings.</para>
 /// </remarks>
 /// <example>
 /// <code>
