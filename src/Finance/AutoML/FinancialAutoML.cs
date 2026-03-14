@@ -22,6 +22,17 @@ namespace AiDotNet.Finance.AutoML;
 /// It tries several finance models and chooses the one that scores best on your data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new FinancialAutoMLOptions&lt;float&gt;(architecture);
+/// var automl = new FinancialAutoML&lt;float&gt;(options);
+/// var bestModel = await automl.SearchAsync(
+///     trainInputs, trainTargets,
+///     valInputs, valTargets,
+///     maxTrials: 20,
+///     timeLimit: TimeSpan.FromMinutes(30));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelCategory(ModelCategory.Optimization)]
 [ModelTask(ModelTask.Regression)]

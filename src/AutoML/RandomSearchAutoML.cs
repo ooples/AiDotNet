@@ -26,6 +26,16 @@ namespace AiDotNet.AutoML;
 /// If you are new to AutoML, random search is a good first choice because it is reliable and easy to reason about.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var automl = new RandomSearchAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var bestModel = await automl.SearchAsync(
+///     trainInputs, trainTargets,
+///     valInputs, valTargets,
+///     maxTrials: 30,
+///     timeLimit: TimeSpan.FromMinutes(5));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Optimization)]
 [ModelTask(ModelTask.Regression)]

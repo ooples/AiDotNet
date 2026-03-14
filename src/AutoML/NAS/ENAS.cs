@@ -25,6 +25,13 @@ namespace AiDotNet.AutoML.NAS
     /// good architectures, like a manager who assigns existing workers to different teams
     /// rather than hiring new ones each time.</para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var enas = new ENAS&lt;float&gt;(searchSpace, numNodes: 4);
+    /// Architecture&lt;float&gt; architecture = enas.DeriveArchitecture();
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

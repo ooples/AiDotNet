@@ -32,6 +32,13 @@ namespace AiDotNet.AutoML.NAS
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var gdas = new GDAS&lt;float&gt;(searchSpace, numNodes: 4);
+    /// Architecture&lt;float&gt; architecture = gdas.DeriveArchitecture();
+    /// </code>
+    /// </example>
     public class GDAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

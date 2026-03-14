@@ -25,6 +25,13 @@ namespace AiDotNet.AutoML.NAS
     /// buildings that are both beautiful and structurally efficient for a specific site,
     /// rather than designing in the abstract.</para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var fbnet = new FBNet&lt;float&gt;(searchSpace, numNodes: 4, targetPlatform: HardwarePlatform.Mobile);
+    /// Architecture&lt;float&gt; architecture = fbnet.DeriveArchitecture();
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.ConvolutionalNetwork)]

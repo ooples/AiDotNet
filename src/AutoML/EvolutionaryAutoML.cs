@@ -23,6 +23,16 @@ namespace AiDotNet.AutoML;
 /// to discover even better settings over time.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var automl = new EvolutionaryAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var bestModel = await automl.SearchAsync(
+///     trainInputs, trainTargets,
+///     valInputs, valTargets,
+///     maxTrials: 100,
+///     timeLimit: TimeSpan.FromMinutes(15));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Optimization)]
 [ModelTask(ModelTask.Regression)]

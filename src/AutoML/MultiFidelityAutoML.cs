@@ -35,6 +35,16 @@ namespace AiDotNet.AutoML;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var automl = new MultiFidelityAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var bestModel = await automl.SearchAsync(
+///     trainInputs, trainTargets,
+///     valInputs, valTargets,
+///     maxTrials: 100,
+///     timeLimit: TimeSpan.FromMinutes(20));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Optimization)]
 [ModelTask(ModelTask.Regression)]

@@ -25,6 +25,13 @@ namespace AiDotNet.AutoML.NAS
     /// universal clothing pattern that can be tailored to any size without starting over.
     /// This saves enormous compute compared to training separate models per device.</para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var ofa = new OnceForAll&lt;float&gt;(searchSpace, numNodes: 4);
+    /// var subNet = ofa.SampleSubNetwork(targetDepth: 3, targetWidth: 0.75);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

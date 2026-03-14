@@ -32,6 +32,14 @@ namespace AiDotNet.AutoML.NAS
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var nas = new ProxylessNAS&lt;float&gt;(searchSpace, numNodes: 4, targetPlatform: HardwarePlatform.Mobile);
+    /// Architecture&lt;float&gt; architecture = nas.DeriveArchitecture();
+    /// HardwareCost&lt;float&gt; cost = nas.EstimateArchitectureCost(inputChannels: 32, spatialSize: 224);
+    /// </code>
+    /// </example>
     public class ProxylessNAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

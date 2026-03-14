@@ -25,6 +25,13 @@ namespace AiDotNet.AutoML.NAS
     /// adjustable tool instead of many fixed-size tools - the super-network adapts to
     /// fit phones, tablets, or servers.</para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var bignas = new BigNAS&lt;float&gt;(searchSpace, numNodes: 4);
+    /// var subNet = bignas.SampleSubNetwork(targetFlops: 300_000_000);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

@@ -29,6 +29,14 @@ namespace AiDotNet.NeuralNetworks
     /// is derived by selecting the operations with the highest weights. This is the core
     /// mechanism behind DARTS-style neural architecture search.</para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var superNet = new SuperNet&lt;float&gt;(searchSpace, numNodes: 4, inputSize: 784, outputSize: 10);
+    /// superNet.ForwardPass(inputTensor);
+    /// var architecture = superNet.DeriveArchitecture();
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.General)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelTask(ModelTask.Classification)]

@@ -23,6 +23,19 @@ namespace AiDotNet.AutoML;
 /// This often improves stability and accuracy.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an ensemble from multiple trained models
+/// var models = new List&lt;IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;&gt;
+/// {
+///     trainedModel1,
+///     trainedModel2,
+///     trainedModel3
+/// };
+/// var ensemble = new AutoMLEnsembleModel&lt;double&gt;(models);
+/// Vector&lt;double&gt; predictions = ensemble.Predict(testData);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Regression)]

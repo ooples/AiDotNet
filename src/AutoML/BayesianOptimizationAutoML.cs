@@ -22,6 +22,16 @@ namespace AiDotNet.AutoML;
 /// trials and tries more settings similar to the best ones found so far.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var automl = new BayesianOptimizationAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var bestModel = await automl.SearchAsync(
+///     trainInputs, trainTargets,
+///     valInputs, valTargets,
+///     maxTrials: 50,
+///     timeLimit: TimeSpan.FromMinutes(10));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Optimization)]
 [ModelCategory(ModelCategory.Bayesian)]

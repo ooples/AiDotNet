@@ -193,6 +193,16 @@ namespace AiDotNet.AutoML
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+    /// <example>
+    /// <code>
+    /// var automl = new DiffusionAutoML&lt;float&gt;(imageSize: 256, channels: 3);
+    /// var bestModel = await automl.SearchAsync(
+    ///     trainImages, trainLabels,
+    ///     valImages, valLabels,
+    ///     maxTrials: 10,
+    ///     timeLimit: TimeSpan.FromHours(1));
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Generative)]
     [ModelCategory(ModelCategory.Diffusion)]
     [ModelCategory(ModelCategory.Optimization)]
@@ -749,6 +759,13 @@ namespace AiDotNet.AutoML
     /// best configuration. You typically do not create this directly - use DiffusionAutoML
     /// to search for and build the optimal diffusion model.</para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// // DiffusionAutoMLModel is typically created by DiffusionAutoML.SearchAsync()
+    /// // Use the model for generation after search:
+    /// Tensor&lt;float&gt; generated = model.Predict(noiseTensor);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Generative)]
     [ModelCategory(ModelCategory.Diffusion)]
     [ModelTask(ModelTask.Generation)]

@@ -24,6 +24,13 @@ namespace AiDotNet.AutoML.NAS
     /// it learns to focus on promising designs, like a smart student who concentrates on
     /// the most important study topics rather than studying everything equally.</para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var nas = new AttentiveNAS&lt;float&gt;(searchSpace, numNodes: 4);
+    /// Architecture&lt;float&gt; architecture = nas.DeriveArchitecture();
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]
