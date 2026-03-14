@@ -1451,6 +1451,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <returns>A byte array containing the serialized model.</returns>
     public virtual byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using (MemoryStream ms = new MemoryStream())
         using (BinaryWriter writer = new BinaryWriter(ms))
         {
@@ -1500,6 +1501,7 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <param name="data">The byte array containing the serialized model.</param>
     public virtual void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         using (MemoryStream ms = new MemoryStream(data))
         using (BinaryReader reader = new BinaryReader(ms))
         {

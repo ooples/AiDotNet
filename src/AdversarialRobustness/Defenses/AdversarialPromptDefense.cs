@@ -240,6 +240,7 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     /// <inheritdoc/>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var state = new PromptDefenseState
         {
             Options = _options,
@@ -252,6 +253,7 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null) throw new ArgumentNullException(nameof(data));
         var json = Encoding.UTF8.GetString(data);
         var state = JsonConvert.DeserializeObject<PromptDefenseState>(json);

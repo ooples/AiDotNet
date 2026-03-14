@@ -258,6 +258,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </remarks>
     public virtual byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
 
@@ -301,6 +302,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </remarks>
     public virtual void Deserialize(byte[] modelData)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var ms = new MemoryStream(modelData);
         using var reader = new BinaryReader(ms);
 

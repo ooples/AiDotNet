@@ -3488,43 +3488,50 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             resolvedKey = GenerateTrialEncryptionKey();
         }
 
-        // All models are now encrypted AIMF format
-        if (ModelFileHeader.HasHeader(filePath))
+        // All models must be encrypted AIMF format
+        if (!ModelFileHeader.HasHeader(filePath))
         {
-            byte[] data = File.ReadAllBytes(filePath);
-            var model = ModelLoader.LoadFromBytes<T>(data, resolvedKey, decryptionToken);
-
-            if (model is Interfaces.IFullModel<T, TInput, TOutput> fullModel)
-            {
-                var result = new AiModelResult<T, TInput, TOutput>();
-                result.Model = fullModel;
-
-                // Reattach Graph RAG components if configured
-                if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
-                {
-                    result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
-                }
-
-                // Reattach tokenizer if configured
-                if (_tokenizer != null)
-                {
-                    result.AttachTokenizer(_tokenizer, _tokenizationConfig);
-                }
-
-                return result;
-            }
-
-            // Fallback: serialize through the builder's format for non-IFullModel serializers.
-            byte[] decryptedPayload = model.Serialize();
-            return DeserializeModel(decryptedPayload);
+            throw new InvalidOperationException(
+                "This file is not in the encrypted AIMF format. " +
+                "Only models saved with AiModelBuilder.SaveModel() can be loaded. " +
+                "Re-save your model using AiModelBuilder.SaveModel() to convert it.");
         }
 
-        // Legacy unencrypted files — load but warn user
-        Console.WriteLine(
-            "Warning: Loading unencrypted model file. Future versions of AiDotNet will only support " +
-            "encrypted AIMF format. Re-save this model using AiModelBuilder.SaveModel() to encrypt it.");
-        byte[] modelData = File.ReadAllBytes(filePath);
-        return DeserializeModel(modelData);
+        byte[] data = File.ReadAllBytes(filePath);
+        var model = ModelLoader.LoadFromBytes<T>(data, resolvedKey, decryptionToken);
+
+        if (model is Interfaces.IFullModel<T, TInput, TOutput> fullModel)
+        {
+            var result = new AiModelResult<T, TInput, TOutput>();
+            result.Model = fullModel;
+
+            // Reattach Graph RAG components if configured
+            if (_knowledgeGraph != null || _graphStore != null || _hybridGraphRetriever != null)
+            {
+                result.AttachGraphComponents(_knowledgeGraph, _graphStore, _hybridGraphRetriever);
+            }
+
+            // Reattach tokenizer if configured
+            if (_tokenizer != null)
+            {
+                result.AttachTokenizer(_tokenizer, _tokenizationConfig);
+            }
+
+            return result;
+        }
+
+        // Fallback: serialize through the builder's format for non-IFullModel serializers.
+        // Wrap in InternalOperation to avoid double-counting (LoadModel already enforced above)
+        byte[] decryptedPayload;
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            decryptedPayload = model.Serialize();
+        }
+
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return DeserializeModel(decryptedPayload);
+        }
     }
 
     /// <summary>
@@ -3556,7 +3563,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public byte[] SerializeModel(AiModelResult<T, TInput, TOutput> modelResult)
     {
-        return modelResult.Serialize();
+        ModelPersistenceGuard.EnforceBeforeSave();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return modelResult.Serialize();
+        }
     }
 
     /// <summary>
@@ -3573,8 +3584,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public AiModelResult<T, TInput, TOutput> DeserializeModel(byte[] modelData)
     {
+        ModelPersistenceGuard.EnforceBeforeLoad();
         var result = new AiModelResult<T, TInput, TOutput>();
-        result.Deserialize(modelData);
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            result.Deserialize(modelData);
+        }
 
         // Automatically reattach Graph RAG components if they were configured on this builder
         // Graph RAG components cannot be serialized (file handles, WAL, etc.), so we reattach

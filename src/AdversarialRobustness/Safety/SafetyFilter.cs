@@ -440,6 +440,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// <inheritdoc/>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var json = JsonConvert.SerializeObject(options, Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
@@ -447,6 +448,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
             throw new ArgumentNullException(nameof(data));

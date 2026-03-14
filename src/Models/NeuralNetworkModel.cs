@@ -589,6 +589,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using MemoryStream ms = new MemoryStream();
         using BinaryWriter writer = new BinaryWriter(ms);
 
@@ -646,6 +647,7 @@ public class NeuralNetworkModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </remarks>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null || data.Length == 0)
         {
             throw new ArgumentException("Serialized data cannot be null or empty.", nameof(data));

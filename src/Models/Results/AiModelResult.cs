@@ -4788,13 +4788,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         try
         {
             var modelToSerialize = Model ?? OptimizationResult?.BestSolution;
             if (modelToSerialize != null)
             {
                 // Persist a model-owned snapshot so deserialization can restore state without relying on JSON for model internals.
-                SerializedModelData = modelToSerialize.Serialize();
+                // Wrap in InternalOperation to avoid double-counting (guard already fired above)
+                using (ModelPersistenceGuard.InternalOperation())
+                {
+                    SerializedModelData = modelToSerialize.Serialize();
+                }
 
                 // Refresh metadata for consistency and to keep ModelMetaData aligned with the persisted snapshot.
                 ModelMetaData = modelToSerialize.GetModelMetadata();
@@ -4862,6 +4867,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         try
         {
             // Decompress if needed (CompressionHelper automatically detects compressed data)

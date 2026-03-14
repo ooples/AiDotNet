@@ -279,6 +279,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     /// <inheritdoc/>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var data = new SerializationData
         {
             NoiseSigma = _options.NoiseSigma,
@@ -297,6 +298,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
             throw new ArgumentNullException(nameof(data));

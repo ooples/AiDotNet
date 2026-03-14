@@ -203,7 +203,11 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <returns>A byte array containing the serialized model.</returns>
     public byte[] Serialize()
     {
-        return _innerModel.Serialize();
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return _innerModel.Serialize();
+        }
     }
 
     /// <summary>
@@ -212,7 +216,11 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <param name="data">The byte array containing the serialized model.</param>
     public void Deserialize(byte[] data)
     {
-        _innerModel.Deserialize(data);
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            _innerModel.Deserialize(data);
+        }
     }
 
     public void Train(TInput input, TOutput expectedOutput)

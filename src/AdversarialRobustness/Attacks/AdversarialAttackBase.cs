@@ -99,6 +99,7 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// <inheritdoc/>
     public virtual byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var json = JsonConvert.SerializeObject(Options, Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
@@ -106,6 +107,7 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
             throw new ArgumentNullException(nameof(data));

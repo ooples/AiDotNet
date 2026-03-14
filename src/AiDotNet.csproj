@@ -14,7 +14,7 @@
 		<RepositoryType>git</RepositoryType>
 		<RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
 		<PackageTags>ai; ai.net; aidotnet; regression; machine learning; artificial; intelligence; machine; chatgpt; learning; algorithm; algo; chatgpt-4</PackageTags>
-		<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	    <LangVersion>latest</LangVersion>
 		<PackageIcon>Favicon.jpg</PackageIcon>
@@ -55,6 +55,10 @@
 			<PackagePath>\</PackagePath>
 		</None>
 		<None Include="..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+		<None Include="..\LICENSE">
 			<Pack>True</Pack>
 			<PackagePath>\</PackagePath>
 		</None>
