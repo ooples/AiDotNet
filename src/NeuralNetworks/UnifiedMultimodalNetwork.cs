@@ -21,6 +21,14 @@ namespace AiDotNet.NeuralNetworks;
 /// in a single architecture with cross-modal attention and any-to-any generation.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> This network handles text, images, audio, and video all in
+/// one architecture. Instead of needing separate models for each type of data, it processes
+/// all modalities through shared transformer layers with cross-modal attention. It can both
+/// understand any combination of inputs and generate outputs in any modality, enabling tasks
+/// like describing a video, generating images from text, or answering questions about audio
+/// clips.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Audio)]

@@ -15,6 +15,13 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> An adapted meta-model is the result of a meta-learning
+/// algorithm (like MAML) adapting to a new task. After seeing a few examples of a new task,
+/// the meta-learner produces this adapted model with task-specific parameters. Think of it
+/// like a student who has learned general problem-solving skills and then quickly adapts
+/// to a specific exam topic after seeing just a few practice questions.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelTask(ModelTask.Classification)]

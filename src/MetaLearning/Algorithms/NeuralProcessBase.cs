@@ -307,6 +307,12 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
 }
 
 /// <summary>Adapted model for Neural Process family algorithms.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This is the output of a Neural Process after it has seen
+/// some context examples. It stores the aggregated representation of what the model learned
+/// from those examples and uses it to make predictions at new target points. Unlike
+/// gradient-based approaches, adaptation happens in a single forward pass.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

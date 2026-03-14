@@ -15,6 +15,11 @@ namespace AiDotNet.NeuralNetworks;
 /// Mamba-2 improves upon the original Mamba architecture by replacing the selective scan with a
 /// structured state space duality (SSD) formulation that enables more efficient hardware utilization.
 /// </para>
+/// <para><b>For Beginners:</b> Mamba-2 is a faster version of the Mamba language model that
+/// discovers a mathematical connection between state-space models and transformers. This
+/// insight allows it to use optimized matrix multiplication hardware (like tensor cores on
+/// GPUs) for a 2-8x speedup over the original Mamba, while maintaining the same constant
+/// memory advantage during text generation.</para>
 /// <para><b>Reference:</b> Dao and Gu, "Transformers are SSMs", 2024.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

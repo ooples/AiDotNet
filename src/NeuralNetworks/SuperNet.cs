@@ -21,6 +21,14 @@ namespace AiDotNet.NeuralNetworks
     /// and network weights simultaneously.
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A SuperNet is a "network of all possible networks." It
+    /// contains every candidate architecture within a single large network, with learnable
+    /// weights that determine which operations are most important. During architecture search,
+    /// the SuperNet trains these weights using gradient descent, and the final architecture
+    /// is derived by selecting the operations with the highest weights. This is the core
+    /// mechanism behind DARTS-style neural architecture search.</para>
+    /// </remarks>
     [ModelDomain(ModelDomain.General)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelTask(ModelTask.Classification)]

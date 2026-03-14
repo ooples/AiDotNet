@@ -16,6 +16,11 @@ namespace AiDotNet.MetaLearning.Models;
 /// <remarks>
 /// <para>Computes y = X * w + b where w is a weight vector and b is a bias scalar.
 /// Provides gradient computation via MSE loss for use with gradient-based meta-learners.</para>
+/// <para><b>For Beginners:</b> This is a simple linear model used mainly for testing and
+/// demonstrating meta-learning algorithms. It takes a matrix of inputs and produces predictions
+/// using a straightforward linear formula (y = inputs * weights + bias). Its simplicity makes
+/// it ideal for verifying that meta-learning algorithms like MAML work correctly before
+/// scaling up to more complex models.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]

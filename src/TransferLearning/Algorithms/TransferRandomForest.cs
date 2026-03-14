@@ -244,6 +244,12 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// <summary>
 /// Wrapper model that applies feature mapping before prediction.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This wrapper adapts a Random Forest trained on one set of
+/// features to work with a different set of features. It automatically maps the input
+/// features from the target domain to match what the source model expects, then runs
+/// the prediction. This is how transfer learning works with tree-based models.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.DecisionTree)]

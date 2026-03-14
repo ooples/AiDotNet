@@ -26,6 +26,11 @@ namespace AiDotNet.TimeSeries;
 /// 2. Self-Attention Distilling for sequence compression
 /// 3. Generative-Style Decoder for parallel multi-step forecasting
 /// </para>
+/// <para><b>For Beginners:</b> Informer makes transformers practical for long time series
+/// forecasting. Regular transformers get very slow with long sequences because every time
+/// step looks at every other time step. Informer speeds this up by only looking at the most
+/// important connections (ProbSparse attention), compressing the sequence as it goes through
+/// layers, and predicting all future values at once instead of one at a time.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Transformer)]

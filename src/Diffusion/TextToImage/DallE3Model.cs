@@ -25,6 +25,11 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// This implementation provides DALL-E 3 style capabilities including prompt expansion,
 /// text rendering, style control, and high-quality image generation at multiple sizes.
 /// </para>
+/// <para><b>For Beginners:</b> DALL-E 3 generates high-quality images from text descriptions.
+/// Unlike earlier versions, it deeply understands complex prompts with spatial relationships,
+/// text rendering, and artistic styles. It uses a diffusion process (gradually refining random
+/// noise into an image) combined with advanced prompt understanding to produce images that
+/// closely match what you describe in words.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
