@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// Azure Speech Service provides enterprise-grade speech-to-text through Microsoft's cloud platform. The service uses FastTransformer-based models trained on massive multilingual datasets. Features include custom speech models trained on domain data, real-time and batch transcription, conversation transcription with speaker diarization, and pronunciation assessment. The custom neural voice feature enables domain adaptation with as little as 30 minutes of training data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Azure Speech STT model for enterprise ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new AzureSpeechSTT&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for Azure-style ASR inference
+/// var onnxModel = new AzureSpeechSTT&lt;double&gt;(architecture, "azurespeech.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

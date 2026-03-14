@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// Paraformer uses Continuous Integrate-and-Fire (CIF) to predict token counts and extract acoustic embeddings in a single forward pass, enabling non-autoregressive parallel decoding. The CIF module accumulates encoder hidden states weighted by learned firing probabilities. When cumulative weight exceeds a threshold, an acoustic embedding is emitted. A glancing language model (GLM) decoder then generates all tokens in parallel from these embeddings. This achieves comparable accuracy to autoregressive models with much lower latency.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Paraformer model for non-autoregressive parallel ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new Paraformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for CIF-based parallel decoding
+/// var onnxModel = new Paraformer&lt;double&gt;(architecture, "paraformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

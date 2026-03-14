@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// W2v-BERT combines the contrastive learning objective of wav2vec 2.0 with the masked prediction objective of BERT. The lower Transformer layers solve a contrastive task to produce discrete tokens, while upper layers perform masked language modeling over these tokens. This two-stage approach within a single model produces representations that capture both acoustic and linguistic information, achieving strong ASR performance.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a W2v-BERT model combining contrastive and masked language modeling
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new W2vBERT&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for contrastive speech pre-training
+/// var onnxModel = new W2vBERT&lt;double&gt;(architecture, "w2vbert.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

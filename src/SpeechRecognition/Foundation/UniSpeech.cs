@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// UniSpeech unifies self-supervised and supervised pre-training in a single framework. The model jointly optimizes a contrastive self-supervised loss and a CTC loss when labeled data is available. This multi-task pre-training allows the model to leverage both unlabeled and labeled speech data during pre-training, producing representations that are more aligned with the downstream ASR task than purely self-supervised approaches.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UniSpeech model for unified self-supervised and supervised pre-training
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new UniSpeech&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for multi-task speech recognition
+/// var onnxModel = new UniSpeech&lt;double&gt;(architecture, "unispeech.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

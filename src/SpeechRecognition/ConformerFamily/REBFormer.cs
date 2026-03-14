@@ -25,6 +25,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// The RWKV branch captures global context with O(n) complexity instead of O(n^2).
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a REBFormer model with RWKV-enhanced linear-complexity branches
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new REBFormer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for efficient long-audio ASR
+/// var onnxModel = new REBFormer&lt;double&gt;(architecture, "rebformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

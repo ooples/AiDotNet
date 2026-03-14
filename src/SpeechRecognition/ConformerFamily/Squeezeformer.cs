@@ -26,6 +26,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// These changes reduce compute by ~30% while matching or exceeding Conformer accuracy.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Squeezeformer model with temporal U-Net downsampling
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new Squeezeformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for efficient ASR inference
+/// var onnxModel = new Squeezeformer&lt;double&gt;(architecture, "squeezeformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// E-Branchformer enhances the Branchformer architecture with an improved merging strategy. Instead of simple concatenation and gating, E-Branchformer uses a point-wise feed-forward module with depthwise convolution for branch merging. The enhanced merge module allows richer interaction between the attention and convolution branch outputs. E-Branchformer achieves the best reported results among non-Whisper models on LibriSpeech and is the default encoder in ESPnet.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an E-Branchformer model with enhanced branch merging for CTC ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new EBranchformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for enhanced CTC decoding
+/// var onnxModel = new EBranchformer&lt;double&gt;(architecture, "ebranchformer_ctc.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

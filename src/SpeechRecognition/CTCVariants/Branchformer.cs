@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// Branchformer processes each encoder block through two parallel branches: a self-attention branch for global context and a convolutional branch (cgMLP) for local patterns. The branches operate independently and their outputs are merged via a learned gating mechanism. This parallel design allows the model to capture both local acoustic details and long-range dependencies more effectively than Conformer's sequential attention-convolution design. Branchformer consistently outperforms Conformer on ASR benchmarks.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CTC Branchformer model with parallel attention and convolution branches
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new Branchformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for CTC decoding
+/// var onnxModel = new Branchformer&lt;double&gt;(architecture, "branchformer_ctc.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

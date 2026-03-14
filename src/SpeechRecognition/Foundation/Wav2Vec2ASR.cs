@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// Wav2Vec 2.0 learns speech representations through self-supervised contrastive learning. A CNN feature encoder processes raw audio, then a Transformer encoder learns contextualized representations. During pre-training, latent speech representations are quantized and the model solves a contrastive task over masked positions. For ASR, a CTC head is added and the model is fine-tuned on labeled data, achieving strong results with as little as 10 minutes of labeled speech.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Wav2Vec 2.0 model for self-supervised contrastive speech learning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new Wav2Vec2ASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for fine-tuned CTC ASR
+/// var onnxModel = new Wav2Vec2ASR&lt;double&gt;(architecture, "wav2vec2asr.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

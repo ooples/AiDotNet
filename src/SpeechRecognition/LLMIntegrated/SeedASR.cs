@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// Seed-ASR is ByteDance's large-scale ASR system that uses an LLM decoder to understand diverse speech and contexts. The system processes audio through a Conformer encoder and feeds representations into a large language model via an audio-text adapter. The LLM's broad knowledge enables it to handle proper nouns, code-switching, and domain-specific content. Seed-ASR supports multilingual transcription and achieves state-of-the-art results across Chinese and English benchmarks.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Seed-ASR model for large-scale LLM-based multilingual ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+/// var model = new SeedASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for context-aware ASR
+/// var onnxModel = new SeedASR&lt;double&gt;(architecture, "seedasr.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

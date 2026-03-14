@@ -26,6 +26,19 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// The decoder autoregressively generates text tokens with cross-attention to the encoder.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Whisper Large V3 model for multilingual ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new WhisperLargeV3&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for 1.55B parameter ASR
+/// var onnxModel = new WhisperLargeV3&lt;double&gt;(architecture, "whisperlargev3.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

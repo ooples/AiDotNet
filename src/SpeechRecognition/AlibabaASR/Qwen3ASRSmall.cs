@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// Qwen3-ASR-Small is a compact variant using a smaller encoder (512-dim, 12 layers) paired with Qwen3-0.5B for efficient deployment. Maintains multilingual support and instruction-following capabilities while targeting edge and mobile platforms with reduced compute requirements.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Qwen3-ASR-Small model for lightweight LLM-integrated ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+/// var model = new Qwen3ASRSmall&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for edge deployment
+/// var onnxModel = new Qwen3ASRSmall&lt;double&gt;(architecture, "qwen3asr_small.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

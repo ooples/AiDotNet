@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// configurable compute types (int8, float16, float32) for speed/accuracy tradeoffs.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Faster-Whisper model for CTranslate2-optimized ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new FasterWhisper&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for quantized Whisper inference
+/// var onnxModel = new FasterWhisper&lt;double&gt;(architecture, "fasterwhisper.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

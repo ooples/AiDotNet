@@ -25,6 +25,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// Achieves SOTA on LibriSpeech with ESPnet (WER 2.1%/4.2% clean/other).
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an E-Branchformer model with enhanced branch merging
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new EBranchformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for enhanced Branchformer inference
+/// var onnxModel = new EBranchformer&lt;double&gt;(architecture, "ebranchformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// Sarvam AI provides speech recognition optimized for Indian languages, covering Hindi, Tamil, Telugu, Kannada, Malayalam, Bengali, Marathi, Gujarati, and other major Indian languages. The models are trained on large-scale Indian speech corpora with coverage of regional accents, code-mixing (Hindi-English, Hinglish), and diverse recording conditions. The system uses a Conformer encoder with language-specific vocabulary and LM rescoring. Sarvam achieves significantly better accuracy on Indian languages than general multilingual ASR systems.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Sarvam ASR model for Indian language speech recognition
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new SarvamASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for Indian language ASR
+/// var onnxModel = new SarvamASR&lt;double&gt;(architecture, "sarvamasr.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

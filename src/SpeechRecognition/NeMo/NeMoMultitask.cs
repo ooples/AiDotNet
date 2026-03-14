@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// task-specific decoder prompts.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a NeMo Multitask model for ASR, translation, and language ID
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new NeMoMultitask&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for multi-task speech processing
+/// var onnxModel = new NeMoMultitask&lt;double&gt;(architecture, "nemomultitask.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// Noise-Robust ASR addresses speech recognition in challenging acoustic environments using multi-condition training and noise-aware preprocessing. The model is trained on diverse noisy conditions (babble, traffic, music, reverberation) with data augmentation including SpecAugment, speed perturbation, and room impulse response simulation. A noise estimation front-end preprocesses audio before the Conformer encoder, enabling robust transcription even at low SNR levels.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Noise-Robust ASR model for adverse acoustic conditions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new NoiseRobustASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for noisy environment ASR
+/// var onnxModel = new NoiseRobustASR&lt;double&gt;(architecture, "noiserobust.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

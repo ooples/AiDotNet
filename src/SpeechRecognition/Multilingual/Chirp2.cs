@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// Chirp 2 improves on the original Chirp with enhanced multilingual capabilities, better handling of accented speech, and improved robustness to background noise. The model uses an updated USM encoder with more training data and improved fine-tuning strategies. Supports 120+ languages with particular improvements for low-resource languages.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Chirp 2 model for enhanced multilingual ASR (120+ languages)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new Chirp2&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for enhanced USM-based ASR
+/// var onnxModel = new Chirp2&lt;double&gt;(architecture, "chirp2.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

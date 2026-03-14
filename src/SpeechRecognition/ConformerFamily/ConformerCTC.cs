@@ -24,6 +24,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// CTC decoding is fully non-autoregressive and very fast.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Conformer-CTC model for CTC-only non-autoregressive ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new ConformerCTC&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for fast CTC decoding
+/// var onnxModel = new ConformerCTC&lt;double&gt;(architecture, "conformerctc.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

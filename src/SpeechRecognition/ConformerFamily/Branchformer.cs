@@ -26,6 +26,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// allowing each layer to capture both local and global dependencies simultaneously.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Branchformer model with parallel attention and cgMLP branches
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new Branchformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for parallel-branch ASR inference
+/// var onnxModel = new Branchformer&lt;double&gt;(architecture, "branchformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

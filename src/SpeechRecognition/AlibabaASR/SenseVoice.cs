@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// SenseVoice is a multi-task speech understanding model that handles ASR, language identification, emotion recognition, and audio event detection in a single model. It uses a shared encoder with task-specific output heads. The model processes speech with a Paraformer-style encoder and uses task tokens to select the output modality. SenseVoice Small covers 50+ languages while maintaining fast inference through non-autoregressive decoding.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SenseVoice model for multi-task speech understanding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new SenseVoice&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for ASR, emotion, and language ID
+/// var onnxModel = new SenseVoice&lt;double&gt;(architecture, "sensevoice.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

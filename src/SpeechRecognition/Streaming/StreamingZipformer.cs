@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// Streaming Zipformer adapts the Zipformer architecture for real-time processing. Zipformer uses temporal downsampling and upsampling between encoder blocks, processing at multiple temporal resolutions simultaneously. Lower-resolution blocks capture long-range dependencies cheaply while high-resolution blocks preserve fine-grained acoustic detail. For streaming, chunk-based processing with causal attention enables real-time operation. Zipformer achieves state-of-the-art speed-accuracy tradeoffs for streaming ASR.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Streaming Zipformer for multi-scale streaming ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new StreamingZipformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for multi-resolution streaming ASR
+/// var onnxModel = new StreamingZipformer&lt;double&gt;(architecture, "streamingzipformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

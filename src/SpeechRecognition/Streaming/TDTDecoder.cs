@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// The TDT (Token-and-Duration Transducer) decoder extends standard RNN-T by jointly predicting both the output token and the number of encoder frames to skip. When a non-blank token is emitted, the duration head predicts how many blank frames to skip, reducing the number of joint network forward passes. This achieves up to 2.5x inference speedup over standard RNN-T without accuracy degradation. The approach is orthogonal to encoder optimization and combines well with Fast Conformer.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TDT Decoder model for efficient streaming transduction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new TDTDecoder&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for token-duration transducer ASR
+/// var onnxModel = new TDTDecoder&lt;double&gt;(architecture, "tdtdecoder.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

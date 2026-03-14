@@ -25,6 +25,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// with an RNN-T decoder for streaming ASR. Achieves WER 1.9%/3.9% on LibriSpeech.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ContextNet model with CNN squeeze-and-excitation for ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new ContextNet&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for convolutional ASR inference
+/// var onnxModel = new ContextNet&lt;double&gt;(architecture, "contextnet.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.SpeechRecognition)]

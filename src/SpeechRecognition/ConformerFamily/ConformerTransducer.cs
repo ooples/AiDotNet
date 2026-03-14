@@ -25,6 +25,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// frame by frame. Used in production at Google (Pixel phones) and NVIDIA Riva.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Conformer-Transducer model for streaming RNN-T ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new ConformerTransducer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for streaming transducer inference
+/// var onnxModel = new ConformerTransducer&lt;double&gt;(architecture, "conformertransducer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

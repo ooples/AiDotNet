@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// Gladia provides enterprise audio transcription powered by optimized Whisper models with proprietary enhancements. The service adds real-time streaming, word-level timestamps, speaker diarization, and audio intelligence features on top of Whisper's multilingual capabilities. Gladia's proprietary preprocessing pipeline handles audio normalization, VAD-based segmentation, and noise reduction before feeding audio to the transcription model. The API supports 100+ languages with automatic language detection.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Gladia model for enterprise Whisper-based transcription
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new GladiaASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for enterprise audio transcription
+/// var onnxModel = new GladiaASR&lt;double&gt;(architecture, "gladia.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

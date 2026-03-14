@@ -25,6 +25,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// Achieves similar accuracy to standard Conformer with ~30% fewer FLOPs.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Efficient Conformer model with progressive downsampling
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new EfficientConformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for efficient ASR inference
+/// var onnxModel = new EfficientConformer&lt;double&gt;(architecture, "efficientconformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

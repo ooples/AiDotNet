@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// optional diarization. This achieves 12x faster than real-time with accurate word timestamps.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a WhisperX model for long-form audio with word timestamps
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new WhisperX&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for VAD+alignment pipeline ASR
+/// var onnxModel = new WhisperX&lt;double&gt;(architecture, "whisperx.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

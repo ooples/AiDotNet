@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// Paraformer-Large scales up the Paraformer architecture to 220M parameters with a wider encoder (1024-dim, 16 heads) and deeper stack (50 encoder layers). Trained on 60k hours of Mandarin/English data with data augmentation (SpecAugment, speed perturbation). The model uses a 4x convolutional subsampling front-end and SentencePiece tokenization. Achieves state-of-the-art CER on AISHELL-1 and competitive results on LibriSpeech.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Paraformer-Large model for production-quality ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new ParaformerLarge&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for 220M-parameter inference
+/// var onnxModel = new ParaformerLarge&lt;double&gt;(architecture, "paraformer_large.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

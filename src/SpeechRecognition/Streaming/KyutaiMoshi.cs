@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// Moshi is a full-duplex speech-text foundation model that can simultaneously listen and speak, enabling natural spoken dialogue. For ASR, Moshi uses a Mimi neural audio codec to discretize speech into tokens at multiple temporal resolutions. A Transformer backbone processes both the codec tokens and text tokens in an interleaved fashion. The model can transcribe speech while generating responses, achieving real-time spoken conversation with 200ms turn-taking latency.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kyutai Moshi model for full-duplex spoken dialogue
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+/// var model = new KyutaiMoshi&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for real-time dialogue ASR
+/// var onnxModel = new KyutaiMoshi&lt;double&gt;(architecture, "moshi.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

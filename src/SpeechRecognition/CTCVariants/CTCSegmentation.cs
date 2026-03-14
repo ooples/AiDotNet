@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// CTC Segmentation uses CTC posterior probabilities for forced alignment of speech to text. Given pre-computed CTC posteriors and a text transcript, the algorithm finds the optimal alignment between frames and characters using dynamic programming. This enables precise word and phoneme boundaries without requiring an explicit alignment model. Applications include creating training data from long-form audio, subtitle synchronization, and corpus alignment for TTS training.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CTC Segmentation model for forced alignment of speech to text
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new CTCSegmentation&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for CTC-based alignment
+/// var onnxModel = new CTCSegmentation&lt;double&gt;(architecture, "ctcsegmentation.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// XLS-R scales wav2vec 2.0 pre-training to 128 languages using 436k hours of unlabeled speech. The model (up to 2B parameters) uses the same contrastive pre-training approach but with massively multilingual data. Fine-tuning with CTC on labeled data achieves strong results across many languages, with particularly significant improvements for low-resource languages. The cross-lingual transfer is enabled by shared phonetic structures across languages.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an XLS-R model for cross-lingual speech representation (128 languages)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new XLSR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for cross-lingual ASR
+/// var onnxModel = new XLSR&lt;double&gt;(architecture, "xlsr.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

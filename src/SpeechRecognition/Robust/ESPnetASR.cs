@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// ESPnet provides state-of-the-art end-to-end speech processing models with a focus on reproducibility and benchmarking. ESPnet2 ASR models support Conformer, Branchformer, and E-Branchformer encoders with CTC, attention, and transducer decoders. The toolkit includes joint CTC/attention training, language model shallow fusion, and multi-task learning. ESPnet models consistently achieve top results on standard benchmarks including LibriSpeech, AISHELL, and CommonVoice.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an ESPnet ASR model for end-to-end speech processing
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new ESPnetASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for Conformer/Branchformer ASR
+/// var onnxModel = new ESPnetASR&lt;double&gt;(architecture, "espnetasr.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

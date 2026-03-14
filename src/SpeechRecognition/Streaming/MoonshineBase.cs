@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// Moonshine Base is the smallest variant of the Moonshine family at 27M parameters, optimized for edge deployment on resource-constrained devices. The model uses a 4-layer encoder and 4-layer decoder with 288-dim embeddings. Despite its small size, Moonshine Base achieves usable accuracy for voice commands and short-form transcription, running at 10x real-time on Raspberry Pi 4 and supporting on-device wake word + transcription pipelines.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Moonshine Base model for edge-device ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new MoonshineBase&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for tiny edge-device ASR
+/// var onnxModel = new MoonshineBase&lt;double&gt;(architecture, "moonshinebase.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

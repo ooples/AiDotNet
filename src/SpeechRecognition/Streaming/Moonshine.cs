@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// Moonshine is designed for real-time on-device speech recognition with minimal latency. It uses a compact encoder-decoder architecture with rotary position embeddings (RoPE) instead of absolute positional encodings, enabling efficient processing of variable-length audio. The encoder processes fixed-size audio chunks while the decoder generates text with cross-attention. Moonshine achieves Whisper-level accuracy at 5x faster inference speed, running in real-time on a Raspberry Pi 4.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Moonshine model for efficient real-time streaming ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new Moonshine&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for on-device streaming ASR
+/// var onnxModel = new Moonshine&lt;double&gt;(architecture, "moonshine.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

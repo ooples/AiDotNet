@@ -25,6 +25,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// This enables non-autoregressive decoding (like Paraformer) while maintaining monotonic alignment.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CIF encoder model for soft monotonic alignment ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new CIFEncoder&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for CIF-based encoding
+/// var onnxModel = new CIFEncoder&lt;double&gt;(architecture, "cifencoder.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

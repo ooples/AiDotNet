@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// Rev AI provides human-quality automatic transcription trained on Rev.com's millions of hours of human-transcribed audio. The models benefit from Rev's unique position as both a human transcription service and AI company, using human-generated labels for training. Features include speaker diarization, custom vocabulary, profanity filtering, and real-time streaming. Rev AI supports multiple languages and achieves near-human accuracy on conversational English through continual training on human-corrected transcriptions.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Rev AI model for human-quality transcription
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new RevAI&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for human-trained ASR inference
+/// var onnxModel = new RevAI&lt;double&gt;(architecture, "revai.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// WavLM extends HuBERT with: (1) gated relative position bias in self-attention for better sequence modeling; (2) denoising pre-training using overlapping utterances to learn robust representations in noisy conditions. The model is pre-trained on 94k hours of speech data. WavLM achieves state-of-the-art on the SUPERB benchmark across ASR, speaker verification, separation, and other tasks.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a WavLM ASR model for denoising-augmented speech pre-training
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new WavLMASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for robust speech recognition
+/// var onnxModel = new WavLMASR&lt;double&gt;(architecture, "wavlmasr.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

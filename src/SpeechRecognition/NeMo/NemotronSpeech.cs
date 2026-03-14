@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// prompts, producing text output conditioned on both audio content and task instructions.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Nemotron-Speech model with Nemotron LLM for multi-task ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+/// var model = new NemotronSpeech&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for instruction-following ASR
+/// var onnxModel = new NemotronSpeech&lt;double&gt;(architecture, "nemotronspeech.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

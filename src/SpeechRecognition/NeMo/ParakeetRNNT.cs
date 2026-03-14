@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// per-label logits for the RNN-T loss function.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Parakeet-RNNT model with RNN-Transducer for streaming ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 1024);
+/// var model = new ParakeetRNNT&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for streaming transducer ASR
+/// var onnxModel = new ParakeetRNNT&lt;double&gt;(architecture, "parakeetrnnt.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

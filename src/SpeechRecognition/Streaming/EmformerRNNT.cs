@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// Emformer introduces an efficient memory mechanism for streaming Transformer ASR. The model processes audio segments and maintains a fixed-size memory bank that summarizes past context. Each segment attends to its own frames plus the memory bank, avoiding the quadratic cost of attending to the full history. The memory is updated via a learned summarization operation after each segment. Combined with an RNN-T decoder, Emformer achieves low-latency streaming with competitive accuracy.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Emformer-RNNT model for low-latency streaming ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new EmformerRNNT&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for memory-efficient streaming ASR
+/// var onnxModel = new EmformerRNNT&lt;double&gt;(architecture, "emformerrnnt.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

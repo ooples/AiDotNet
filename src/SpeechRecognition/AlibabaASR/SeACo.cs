@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// SeACo-Paraformer extends Paraformer with Semantic-Aware Contextual (SeACo) biasing for hot-word customization. A context encoder processes a list of bias phrases, and cross-attention between the decoder and context embeddings biases recognition toward specified terms. This enables accurate recognition of domain-specific terminology, proper nouns, and rare words without retraining. The biasing is applied at the semantic level rather than shallow fusion.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SeACo-Paraformer model for hot-word customizable ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new SeACo&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for context-biased recognition
+/// var onnxModel = new SeACo&lt;double&gt;(architecture, "seaco.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// LLM's pre-trained multilingual text capabilities.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Canary-Qwen model with Qwen-2.5 LLM decoder for multilingual ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+/// var model = new CanaryQwen&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for LLM-enhanced multilingual ASR
+/// var onnxModel = new CanaryQwen&lt;double&gt;(architecture, "canaryqwen.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

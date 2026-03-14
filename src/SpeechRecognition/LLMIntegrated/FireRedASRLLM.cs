@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// FireRedASR-LLM extends the base system with Qwen2-7B as the decoder, using the speech encoder's output as prefix tokens for the LLM. This enables the model to leverage the LLM's extensive language knowledge for improved accuracy on complex utterances. The adapter module aligns speech encoder dimensions with the LLM's embedding space. This approach achieves significant WER reductions on hard test sets with proper nouns, code-switching, and domain-specific terminology.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FireRedASR-LLM model with Qwen2 decoder for enhanced ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+/// var model = new FireRedASRLLM&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for LLM-enhanced ASR inference
+/// var onnxModel = new FireRedASRLLM&lt;double&gt;(architecture, "fireredasrllm.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

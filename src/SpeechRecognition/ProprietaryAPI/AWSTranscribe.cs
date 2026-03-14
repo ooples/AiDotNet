@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// AWS Transcribe provides automatic speech recognition optimized for production workloads. The service supports real-time streaming and batch transcription across 100+ languages. Key features include custom vocabulary for domain terms, content redaction for PII, automatic language identification, and toxicity detection. Transcribe Medical is a specialized variant for HIPAA-compliant clinical documentation. The service integrates with the AWS ecosystem (S3, Lambda, Connect) for scalable speech processing pipelines.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an AWS Transcribe model for scalable cloud ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new AWSTranscribe&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for AWS-style ASR inference
+/// var onnxModel = new AWSTranscribe&lt;double&gt;(architecture, "awstranscribe.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// Streaming Conformer adapts the standard Conformer architecture for streaming inference by processing audio in fixed-size chunks with limited right-context lookahead. Causal convolutions replace standard convolutions, and attention is restricted to the current chunk plus a small lookahead window. A chunk-wise cache mechanism stores key-value pairs from previous chunks, enabling the model to maintain long-range context while processing audio in real-time with controllable latency.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Streaming Conformer for chunk-based real-time ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new StreamingConformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for causal streaming ASR
+/// var onnxModel = new StreamingConformer&lt;double&gt;(architecture, "streamingconformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

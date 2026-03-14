@@ -26,6 +26,19 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 /// combining convolution with attention for speech.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ConvTransformer model (convolution-augmented Transformer for ASR)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new ConvTransformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for conv-augmented ASR inference
+/// var onnxModel = new ConvTransformer&lt;double&gt;(architecture, "convtransformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

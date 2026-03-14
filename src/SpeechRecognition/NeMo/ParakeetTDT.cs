@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// many frames to skip forward, avoiding per-frame blank predictions.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Parakeet-TDT model with token-and-duration transducer
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 1024);
+/// var model = new ParakeetTDT&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for low-latency streaming ASR
+/// var onnxModel = new ParakeetTDT&lt;double&gt;(architecture, "parakeettdt.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// MMS (Massively Multilingual Speech) extends wav2vec 2.0 to 1100+ languages using religious text recordings and other multilingual data sources. The model uses a shared Transformer encoder pre-trained on unlabeled speech from 1400+ languages, then fine-tuned with CTC on labeled data. Language-specific adapter layers enable efficient multi-language support without full model duplication. Achieves strong ASR for many low-resource languages previously unsupported.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an MMS model for massively multilingual ASR (1100+ languages)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new MMS&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for low-resource language ASR
+/// var onnxModel = new MMS&lt;double&gt;(architecture, "mms.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

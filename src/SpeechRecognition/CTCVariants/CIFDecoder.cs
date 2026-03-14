@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// CIF (Continuous Integrate-and-Fire) is a mechanism that bridges the length mismatch between encoder frames and output tokens. The CIF module accumulates encoder hidden states weighted by learned firing probabilities. When the cumulative weight reaches a threshold, an acoustic embedding is emitted and the accumulator resets. This produces exactly the right number of acoustic embeddings for the target sequence, enabling non-autoregressive parallel decoding without the conditional independence assumption of CTC.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CIF decoder model for non-autoregressive speech recognition
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new CIFDecoder&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for CIF-based decoding
+/// var onnxModel = new CIFDecoder&lt;double&gt;(architecture, "cifdecoder.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

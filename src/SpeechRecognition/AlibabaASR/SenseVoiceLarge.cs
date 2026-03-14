@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// SenseVoice-Large scales up the SenseVoice architecture with a larger encoder (1024-dim, 50 layers) for improved accuracy across all supported tasks. The model supports 50+ languages and includes enhanced emotion recognition and audio event detection capabilities. Uses Whisper-style 128 mel bins for better frequency resolution.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SenseVoice-Large model for scaled multi-task speech understanding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new SenseVoiceLarge&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for high-accuracy multi-task inference
+/// var onnxModel = new SenseVoiceLarge&lt;double&gt;(architecture, "sensevoice_large.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

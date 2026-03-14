@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// Speaker-Diarized ASR jointly performs speech recognition and speaker diarization, producing timestamped transcriptions attributed to individual speakers. The model uses a shared Conformer encoder with a speaker-aware serialized output (SA-SOT) decoder that emits speaker change tokens alongside text tokens. Speaker embeddings from an auxiliary speaker encoder condition the decoder to distinguish between speakers. The system handles overlapping speech through multi-talker serialized output.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Speaker-Diarized ASR model for who-spoke-what transcription
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new SpeakerDiarizedASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for speaker-attributed ASR
+/// var onnxModel = new SpeakerDiarizedASR&lt;double&gt;(architecture, "speakerdiarized.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

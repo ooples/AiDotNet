@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// the full Whisper large-v3 on Japanese benchmarks while being 6x faster.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kotoba-Whisper model for Japanese-optimized ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new KotobaWhisper&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for Japanese speech recognition
+/// var onnxModel = new KotobaWhisper&lt;double&gt;(architecture, "kotobawhisper.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

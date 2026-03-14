@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// Self-Conditioned CTC feeds CTC alignment predictions from intermediate layers back into subsequent encoder layers as conditioning information. Each encoder block receives both the audio features and the CTC posterior distribution from the previous block's auxiliary CTC head. This self-conditioning enables iterative refinement: lower layers produce rough alignments that upper layers refine. The technique significantly reduces CTC's conditional independence assumption limitation.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Self-Conditioned CTC model for iterative refinement ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new SelfConditionedCTC&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for self-conditioned decoding
+/// var onnxModel = new SelfConditionedCTC&lt;double&gt;(architecture, "selfconditionedctc.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

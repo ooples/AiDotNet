@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// Chirp 3 is Google's latest production ASR model with state-of-the-art accuracy across many languages. It features improved long-form transcription, better punctuation restoration, and enhanced speaker diarization integration. The model uses an updated architecture with flash attention and improved multilingual vocabulary.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Chirp 3 model for latest-generation multilingual ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new Chirp3&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for state-of-the-art multilingual ASR
+/// var onnxModel = new Chirp3&lt;double&gt;(architecture, "chirp3.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

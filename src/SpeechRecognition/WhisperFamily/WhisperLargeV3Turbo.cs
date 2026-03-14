@@ -26,6 +26,19 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// understanding, while a much smaller decoder suffices for autoregressive text generation.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Whisper Large V3 Turbo model for fast distilled ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new WhisperLargeV3Turbo&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for 4-layer decoder Whisper
+/// var onnxModel = new WhisperLargeV3Turbo&lt;double&gt;(architecture, "whisperlargev3turbo.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

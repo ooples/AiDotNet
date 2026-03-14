@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// HuBERT uses an offline clustering step to provide pseudo-labels for masked prediction pre-training. Unlike wav2vec 2.0's contrastive loss, HuBERT predicts discrete cluster assignments of masked speech segments. The model iteratively refines its clusters using learned representations from previous iterations. This approach produces rich speech representations that transfer well to ASR, speaker verification, and speech emotion recognition tasks.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a HuBERT ASR model for self-supervised speech representation learning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new HuBERTASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for masked prediction ASR
+/// var onnxModel = new HuBERTASR&lt;double&gt;(architecture, "hubertasr.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

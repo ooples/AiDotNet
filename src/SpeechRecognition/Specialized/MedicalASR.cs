@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// Medical ASR is specialized for clinical dictation, pathology reports, and medical conversations. The model is fine-tuned on medical speech corpora covering diverse medical specialties, drug names, procedures, and diagnostic terminology. A medical language model provides domain-specific rescoring to handle complex medical vocabulary. The system supports real-time clinical documentation with HIPAA-compliant processing and achieves significantly lower WER on medical speech than general-purpose ASR models.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Medical ASR model for clinical dictation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new MedicalASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for medical speech recognition
+/// var onnxModel = new MedicalASR&lt;double&gt;(architecture, "medicalasr.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

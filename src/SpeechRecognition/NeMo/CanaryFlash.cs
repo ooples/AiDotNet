@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// speech translation with lower latency than Canary-Qwen.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Canary-Flash model for fast multilingual ASR with hybrid CTC/attention
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new CanaryFlash&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for low-latency multilingual ASR
+/// var onnxModel = new CanaryFlash&lt;double&gt;(architecture, "canaryflash.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

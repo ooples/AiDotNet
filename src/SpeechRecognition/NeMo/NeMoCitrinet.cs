@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// tokens achieves competitive WER with much faster inference than attention-based models.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Citrinet model with 1D separable convolutions for CTC ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 1024);
+/// var model = new NeMoCitrinet&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for fast CTC inference
+/// var onnxModel = new NeMoCitrinet&lt;double&gt;(architecture, "citrinet.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.SpeechRecognition)]

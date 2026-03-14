@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// TensorRT/CTranslate2 backends and adaptive chunk sizing based on speech patterns.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a WhisperLive model for real-time streaming transcription
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new WhisperLive&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for VAD-chunked streaming ASR
+/// var onnxModel = new WhisperLive&lt;double&gt;(architecture, "whisperlive.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

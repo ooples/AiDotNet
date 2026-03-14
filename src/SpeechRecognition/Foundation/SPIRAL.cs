@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// SPIRAL learns perturbation-invariant speech representations through self-supervised pre-training. The model uses a teacher-student framework where the student must produce similar representations for different augmented views of the same speech. Data augmentations include speed perturbation, SpecAugment, and noise addition. The invariance objective encourages robust representations that transfer well to downstream ASR tasks.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SPIRAL model for perturbation-invariant speech pre-training
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new SPIRAL&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for robust speech representation
+/// var onnxModel = new SPIRAL&lt;double&gt;(architecture, "spiral.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]

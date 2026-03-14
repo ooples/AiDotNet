@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// FastEmit addresses the emission latency problem in RNN-Transducer models, where the model tends to delay token emissions. It introduces an emission regularization term that encourages the model to emit non-blank tokens as soon as possible without degrading accuracy. This sequence-level regularization modifies the RNN-T loss to penalize late emissions. FastEmit significantly reduces first-token and average emission latency while maintaining or improving word error rates.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FastEmit model for low-latency RNN-Transducer ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new FastEmit&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for emission-regularized ASR
+/// var onnxModel = new FastEmit&lt;double&gt;(architecture, "fastemit.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

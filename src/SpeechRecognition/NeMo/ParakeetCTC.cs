@@ -28,6 +28,19 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// efficient processing.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Parakeet-CTC model for NVIDIA's SOTA English ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 1024);
+/// var model = new ParakeetCTC&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for fast CTC decoding
+/// var onnxModel = new ParakeetCTC&lt;double&gt;(architecture, "parakeetctc.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

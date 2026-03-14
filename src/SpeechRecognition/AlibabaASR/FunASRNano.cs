@@ -19,9 +19,22 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// <list type="bullet"><item>Model: "FunASR-Nano" (Alibaba FunASR, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> FunASR-Nano is an ultra-lightweight ASR model designed for on-device deployment. It uses a compact Conformer encoder (256-dim, 6 layers) with aggressive subsampling and a CTC decoder. Knowledge distillation from Paraformer-Large provides strong pe...</para>
 /// <para>
-/// FunASR-Nano is an ultra-lightweight ASR model designed for on-device deployment. It uses a compact Conformer encoder (256-dim, 6 layers) with aggressive subsampling and a CTC decoder. Knowledge distillation from Paraformer-Large provides strong performance despite the small model size. Optimized for mobile and edge devices with <50MB model size and real-time inference on CPU.
+/// FunASR-Nano is an ultra-lightweight ASR model designed for on-device deployment. It uses a compact Conformer encoder (256-dim, 6 layers) with aggressive subsampling and a CTC decoder. Knowledge distillation from Paraformer-Large provides strong performance despite the small model size. Optimized for mobile and edge devices with under 50MB model size and real-time inference on CPU.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FunASR-Nano model for ultra-lightweight on-device ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new FunASRNano&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var onnxModel = new FunASRNano&lt;double&gt;(architecture, "funasrnano.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

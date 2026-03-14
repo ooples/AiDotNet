@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// VoxtLM uses a single decoder-only Transformer for both ASR and TTS by representing speech and text as interleaved token sequences. Speech is tokenized using a neural codec (EnCodec) into discrete tokens at multiple quantization levels. The model is trained to autoregressively predict the next token whether it's speech or text, unifying recognition and synthesis. For ASR, the model takes speech codec tokens as input and generates text tokens.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VoxtLM model for unified speech-text generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+/// var model = new VoxtLM&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for decoder-only speech-text ASR
+/// var onnxModel = new VoxtLM&lt;double&gt;(architecture, "voxtlm.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

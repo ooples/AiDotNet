@@ -27,6 +27,19 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// original training data, which is unavailable.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Distil-Whisper model for 6x faster Whisper inference
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new DistilWhisper&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for distilled Whisper ASR
+/// var onnxModel = new DistilWhisper&lt;double&gt;(architecture, "distilwhisper.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

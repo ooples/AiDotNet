@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// SpeechBrain provides a comprehensive set of pre-trained ASR models built with the open-source toolkit. The models use various architectures including CRDNN (convolutional-recurrent-DNN), Transformer, and Conformer encoders with CTC or attention-based decoders. SpeechBrain models are trained with extensive data augmentation, dynamic batching, and mixed-precision training. The toolkit supports over 100 speech processing recipes covering ASR, speaker recognition, speech separation, and more.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SpeechBrain model for toolkit-based ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new SpeechBrain&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for SpeechBrain ASR inference
+/// var onnxModel = new SpeechBrain&lt;double&gt;(architecture, "speechbrain.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]

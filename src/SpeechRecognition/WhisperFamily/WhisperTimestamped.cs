@@ -28,6 +28,19 @@ namespace AiDotNet.SpeechRecognition.WhisperFamily;
 /// negligible overhead to inference.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a WhisperTimestamped model for word-level timestamp ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new WhisperTimestamped&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for cross-attention timestamp ASR
+/// var onnxModel = new WhisperTimestamped&lt;double&gt;(architecture, "whispertimestamped.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]
