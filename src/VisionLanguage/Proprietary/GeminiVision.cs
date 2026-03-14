@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// <list type="bullet"><item>Gemini: Google's natively multimodal model family with 1M+ token context (Google, 2024-2026)</item></list></para>
 /// <para><b>For Beginners:</b> GeminiVision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Gemini Vision model for natively multimodal understanding
+/// // with Mixture of Experts architecture and 1M+ token context
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GeminiVision&lt;double&gt;(architecture, "geminivision.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GeminiVision&lt;double&gt;(architecture, new GeminiVisionOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]

@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// <list type="bullet"><item>Paper: "Emu Edit: Precise Image Editing via Recognition and Generation Tasks" (Meta, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> EmuEdit is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Emu Edit model for precise instruction-based image editing
+/// // via recognition and generation tasks with diffusion backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new EmuEdit&lt;double&gt;(architecture, "emuedit.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new EmuEdit&lt;double&gt;(architecture, new EmuEditOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]

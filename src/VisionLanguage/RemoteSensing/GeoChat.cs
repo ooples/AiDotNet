@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// <list type="bullet"><item>Paper: "GeoChat: Grounded Large Vision-Language Model for Remote Sensing (MBZUAI, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> GeoChat is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GeoChat model for grounded satellite imagery understanding
+/// // with remote sensing visual grounding and scene classification
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GeoChat&lt;double&gt;(architecture, "geochat.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GeoChat&lt;double&gt;(architecture, new GeoChatOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Science)]

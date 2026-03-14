@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// <list type="bullet"><item>Grok Vision: real-time data processing with multimodal input (xAI, 2024-2025)</item></list></para>
 /// <para><b>For Beginners:</b> GrokVision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Grok Vision model for real-time multimodal understanding
+/// // with real-time data processing and multimodal input from xAI
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GrokVision&lt;double&gt;(architecture, "grokvision.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GrokVision&lt;double&gt;(architecture, new GrokVisionOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]

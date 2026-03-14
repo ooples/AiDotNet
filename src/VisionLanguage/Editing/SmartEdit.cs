@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// <list type="bullet"><item>Paper: "SmartEdit: Exploring Complex Instruction-based Image Editing with Multimodal LLMs" (2024)</item></list></para>
 /// <para><b>For Beginners:</b> SmartEdit is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SmartEdit model for complex instruction-based image editing
+/// // with enhanced understanding via multimodal LLMs
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SmartEdit&lt;double&gt;(architecture, "smartedit.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SmartEdit&lt;double&gt;(architecture, new SmartEditOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]

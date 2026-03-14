@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// <list type="bullet"><item>Paper: "RSGPT: A Remote Sensing Vision Language Model and Benchmark (Various, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> RSGPT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an RSGPT model for remote sensing vision-language understanding
+/// // based on InstructBLIP architecture for satellite image captioning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new RSGPT&lt;double&gt;(architecture, "rsgpt.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new RSGPT&lt;double&gt;(architecture, new RSGPTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Science)]

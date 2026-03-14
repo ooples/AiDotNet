@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// <list type="bullet"><item>Claude 3/4 Vision: strong document and chart understanding with extended thinking (Anthropic, 2024-2025)</item></list></para>
 /// <para><b>For Beginners:</b> ClaudeVision is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Claude Vision model for multimodal reasoning
+/// // with strong document and chart understanding capabilities
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ClaudeVision&lt;double&gt;(architecture, "claudevision.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ClaudeVision&lt;double&gt;(architecture, new ClaudeVisionOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
