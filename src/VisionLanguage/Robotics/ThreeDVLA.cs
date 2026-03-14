@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <list type="bullet"><item>Paper: "3D-VLA: A 3D Vision-Language-Action Generative World Model (UMass, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> ThreeDVLA is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a 3D-VLA model for 3D vision-language-action reasoning
+/// // connecting VLA to 3D world via a generative world model
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ThreeDVLA&lt;double&gt;(architecture, "threedvla.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ThreeDVLA&lt;double&gt;(architecture, new ThreeDVLAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Robotics)]

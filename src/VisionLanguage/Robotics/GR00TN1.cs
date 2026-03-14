@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <list type="bullet"><item>Paper: "GR00T N1: An Open Foundation Model for Generalist Humanoid Robots (NVIDIA, 2025)"</item></list></para>
 /// <para><b>For Beginners:</b> GR00TN1 is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GR00T N1 model for humanoid robot control
+/// // with NVIDIA's dual-system VLA architecture for generalist manipulation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GR00TN1&lt;double&gt;(architecture, "gr00tn1.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GR00TN1&lt;double&gt;(architecture, new GR00TN1Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Robotics)]
