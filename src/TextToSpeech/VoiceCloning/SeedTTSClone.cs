@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>Seed-TTS: diffusion-based zero-shot voice cloning with speaker factorization for high-fidelity synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Seed-TTS: A Family of High-Quality Versatile Speech Generation Models" (Anastassiou et al., 2024)</item></list></para><para><b>For Beginners:</b> Seed-TTS: diffusion-based zero-shot voice cloning with speaker factorization for high-fidelity synthesis.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Seed-TTS model for diffusion-based zero-shot voice cloning
+/// // with speaker factorization for high-fidelity synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SeedTTSClone&lt;double&gt;(architecture, "seed_tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SeedTTSClone&lt;double&gt;(architecture, new SeedTTSCloneOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

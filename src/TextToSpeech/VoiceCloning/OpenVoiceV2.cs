@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>OpenVoiceV2: OpenVoice V2: Improved Instant Voice Cloning.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "OpenVoice V2: Improved Instant Voice Cloning" (Qin et al., 2024)</item></list></para><para><b>For Beginners:</b> OpenVoiceV2: OpenVoice V2: Improved Instant Voice Cloning.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an OpenVoice V2 model for improved instant voice cloning
+/// // with enhanced tone color conversion and multilingual support
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new OpenVoiceV2&lt;double&gt;(architecture, "openvoicev2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new OpenVoiceV2&lt;double&gt;(architecture, new OpenVoiceV2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

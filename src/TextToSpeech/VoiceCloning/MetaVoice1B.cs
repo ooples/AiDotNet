@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>MetaVoice1B: MetaVoice-1B: 1.2B Parameter Voice Cloning Model.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MetaVoice-1B: 1.2B Parameter Voice Cloning Model" (MetaVoice Team, 2024)</item></list></para><para><b>For Beginners:</b> MetaVoice1B: MetaVoice-1B: 1.2B Parameter Voice Cloning Model.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a MetaVoice-1B model for large-scale voice cloning
+/// // with 1.2B parameters for high-fidelity zero-shot synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MetaVoice1B&lt;double&gt;(architecture, "metavoice1b.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MetaVoice1B&lt;double&gt;(architecture, new MetaVoice1BOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

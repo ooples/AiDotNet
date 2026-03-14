@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>VALL-E X: cross-lingual zero-shot voice cloning with language ID conditioning for multi-language synthesis.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VALL-E X: Speak Foreign Languages with Your Own Voice via Cross-Lingual Neural Codec Language Modeling" (Zhang et al., 2023)</item></list></para><para><b>For Beginners:</b> VALL-E X: cross-lingual zero-shot voice cloning with language ID conditioning for multi-language synthesis.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a VALL-E X model for cross-lingual zero-shot voice cloning
+/// // with language ID conditioning for multi-language synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VALLEXClone&lt;double&gt;(architecture, "vallex.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VALLEXClone&lt;double&gt;(architecture, new VALLEXCloneOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

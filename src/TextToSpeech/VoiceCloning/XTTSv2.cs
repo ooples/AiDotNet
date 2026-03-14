@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>XTTS v2: multilingual zero-shot TTS using GPT-2 backbone to autoregressively predict VQ-VAE audio tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "XTTS: A Massively Multilingual Zero-Shot Text-to-Speech Model" (Coqui AI, 2023)</item></list></para><para><b>For Beginners:</b> XTTS v2: multilingual zero-shot TTS using GPT-2 backbone to autoregressively predict VQ-VAE audio tokens.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create an XTTS v2 model for multilingual zero-shot TTS
+/// // using GPT-2 backbone to autoregressively predict VQ-VAE audio tokens
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new XTTSv2&lt;double&gt;(architecture, "xttsv2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new XTTSv2&lt;double&gt;(architecture, new XTTSv2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

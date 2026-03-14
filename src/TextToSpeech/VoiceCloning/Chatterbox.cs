@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>Chatterbox: emotion-controllable zero-shot TTS with watermarking and exaggeration control.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Chatterbox: Ultra-realistic zero-shot speech model" (Resemble AI, 2025)</item></list></para><para><b>For Beginners:</b> Chatterbox: emotion-controllable zero-shot TTS with watermarking and exaggeration control.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Chatterbox model for emotion-controllable zero-shot TTS
+/// // with watermarking and exaggeration control from Resemble AI
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Chatterbox&lt;double&gt;(architecture, "chatterbox.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Chatterbox&lt;double&gt;(architecture, new ChatterboxOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
