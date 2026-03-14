@@ -21,6 +21,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// are not sure about an action, assume it could be great until proven otherwise. No epsilon
 /// parameter needed; exploration happens automatically.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UCB bandit agent for optimistic exploration
+/// var options = new UCBBanditOptions&lt;double&gt; { NumArms = 10, ExplorationParameter = 2.0 };
+/// var agent = new UCBBanditAgent&lt;double&gt;(options);
+///
+/// // Select an arm using upper confidence bound
+/// var state = new Vector&lt;double&gt;(new double[] { 1.0 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

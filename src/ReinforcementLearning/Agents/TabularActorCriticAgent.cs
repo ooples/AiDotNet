@@ -20,6 +20,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// It combines the benefits of policy-based methods (can learn stochastic policies) with
 /// value-based methods (lower variance updates).</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a tabular Actor-Critic agent with separate policy and value tables
+/// var options = new TabularActorCriticOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, ActorLearningRate = 0.01 };
+/// var agent = new TabularActorCriticAgent&lt;double&gt;(options);
+///
+/// // Select an action using the softmax actor policy
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

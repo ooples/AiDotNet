@@ -21,6 +21,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// pairs are eventually tried, which is required for convergence. The downside is that random
 /// starts may not be possible in all real-world environments.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Monte Carlo Exploring Starts agent
+/// var options = new MonteCarloExploringStartsOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new MonteCarloExploringStartsAgent&lt;double&gt;(options);
+///
+/// // Select an action (random on first step, greedy thereafter)
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

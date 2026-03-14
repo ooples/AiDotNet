@@ -10,6 +10,16 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Gaussian noise exploration for continuous action spaces.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create Gaussian noise exploration for continuous action spaces
+    /// var exploration = new GaussianNoiseExploration&lt;double&gt;(initialStdDev: 0.1, noiseDecay: 0.995);
+    ///
+    /// // Add Gaussian noise to the policy action for exploration
+    /// var policyAction = new Vector&lt;double&gt;(new double[] { 0.5, -0.3 });
+    /// var noisyAction = exploration.GetExplorationAction(state, policyAction, actionSpaceSize: 2, random);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelTask(ModelTask.Regression)]

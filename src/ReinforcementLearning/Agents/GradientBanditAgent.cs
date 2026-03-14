@@ -21,6 +21,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// naturally handles the exploration-exploitation trade-off through the softmax distribution
 /// without needing an explicit epsilon parameter.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a gradient bandit agent using softmax action selection
+/// var options = new GradientBanditOptions&lt;double&gt; { NumArms = 10, StepSize = 0.1 };
+/// var agent = new GradientBanditAgent&lt;double&gt;(options);
+///
+/// // Select an arm based on learned preferences
+/// var state = new Vector&lt;double&gt;(new double[] { 1.0 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

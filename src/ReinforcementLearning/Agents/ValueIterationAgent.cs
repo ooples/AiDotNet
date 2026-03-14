@@ -23,6 +23,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 /// a GPS estimate: each pass gets closer to the true shortest path. Requires a complete
 /// model of the environment.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Value Iteration agent for dynamic programming
+/// var options = new ValueIterationOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new ValueIterationAgent&lt;double&gt;(options);
+///
+/// // Select an action using the converged value function
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

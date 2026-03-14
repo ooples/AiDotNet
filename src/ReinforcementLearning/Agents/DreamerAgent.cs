@@ -41,6 +41,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
 /// Advantages: Sample efficient, works with images, enables planning
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Dreamer agent that learns a world model for planning
+/// var options = new DreamerOptions&lt;double&gt; { StateSize = 64, ActionSize = 4, ImagineHorizon = 15 };
+/// var agent = new DreamerAgent&lt;double&gt;(options);
+///
+/// // Select an action by imagining future trajectories
+/// var state = new Vector&lt;double&gt;(new double[64]);
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

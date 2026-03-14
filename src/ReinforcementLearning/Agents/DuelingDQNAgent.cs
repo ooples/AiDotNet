@@ -43,6 +43,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
 /// Wang et al., "Dueling Network Architectures for Deep RL", 2016.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Dueling DQN agent that separates state value from action advantages
+/// var options = new DuelingDQNOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, LearningRate = 0.001 };
+/// var agent = new DuelingDQNAgent&lt;double&gt;(options);
+///
+/// // Select an action for the current state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

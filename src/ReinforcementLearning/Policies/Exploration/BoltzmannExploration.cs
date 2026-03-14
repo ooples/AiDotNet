@@ -12,6 +12,16 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Action probability: P(a) = exp(Q(a)/τ) / Σ exp(Q(a')/τ)
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create Boltzmann exploration with temperature decay
+    /// var exploration = new BoltzmannExploration&lt;double&gt;(temperatureStart: 1.0, temperatureEnd: 0.01, temperatureDecay: 0.995);
+    ///
+    /// // Get an exploration action weighted by Q-value estimates
+    /// var policyAction = new Vector&lt;double&gt;(new double[] { 1.5, 0.8, 2.3 });
+    /// var action = exploration.GetExplorationAction(state, policyAction, actionSpaceSize: 3, random);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelTask(ModelTask.Classification)]

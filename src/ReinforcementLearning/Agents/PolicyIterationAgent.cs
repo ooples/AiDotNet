@@ -23,6 +23,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 /// complete model of the environment (transition probabilities and rewards) and works best
 /// for small, fully-known environments like grid worlds or simple games.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Policy Iteration agent for environments with known dynamics
+/// var options = new PolicyIterationOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new PolicyIterationAgent&lt;double&gt;(options);
+///
+/// // Select an action using the current policy
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

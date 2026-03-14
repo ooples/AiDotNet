@@ -19,6 +19,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// safer for real-world applications because it accounts for the exploration the agent is doing,
 /// unlike Q-Learning which assumes optimal future behavior.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a linear SARSA agent for on-policy learning with function approximation
+/// var options = new LinearSARSAOptions&lt;double&gt; { FeatureSize = 4, ActionSize = 2, LearningRate = 0.01 };
+/// var agent = new LinearSARSAAgent&lt;double&gt;(options);
+///
+/// // Select an action using linear value function
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

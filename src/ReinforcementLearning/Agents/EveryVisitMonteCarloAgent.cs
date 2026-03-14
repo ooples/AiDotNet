@@ -20,6 +20,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// more data points per episode but with potentially correlated samples. Good for episodic
 /// tasks like board games where you learn from complete games.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Every-Visit Monte Carlo agent for episodic tasks
+/// var options = new MonteCarloOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new EveryVisitMonteCarloAgent&lt;double&gt;(options);
+///
+/// // Select an action using epsilon-greedy over learned Q-values
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

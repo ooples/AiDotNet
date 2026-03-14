@@ -20,6 +20,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 /// topics where you got the most wrong. A priority queue tracks which state-actions need
 /// the most urgent updates, making planning much more efficient.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Prioritized Sweeping agent for efficient planning
+/// var options = new PrioritizedSweepingOptions&lt;double&gt; { PlanningSteps = 10, StateSize = 4, ActionSize = 2 };
+/// var agent = new PrioritizedSweepingAgent&lt;double&gt;(options);
+///
+/// // Select an action and update priorities based on TD error
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

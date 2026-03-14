@@ -38,6 +38,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.TD3;
 /// Used by: Robotic control, autonomous systems, continuous optimization
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TD3 agent for stable continuous control
+/// var options = new TD3Options&lt;double&gt; { StateSize = 4, ActionSize = 2, PolicyDelay = 2 };
+/// var agent = new TD3Agent&lt;double&gt;(options);
+///
+/// // Select a continuous action with target policy smoothing
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

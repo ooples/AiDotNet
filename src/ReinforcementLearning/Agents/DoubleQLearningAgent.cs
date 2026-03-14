@@ -30,6 +30,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
 /// Famous for: Hado van Hasselt 2010, foundation for Double DQN
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a tabular Double Q-Learning agent to reduce overestimation bias
+/// var options = new DoubleQLearningOptions&lt;double&gt; { LearningRate = 0.1, StateSize = 4, ActionSize = 2 };
+/// var agent = new DoubleQLearningAgent&lt;double&gt;(options);
+///
+/// // Select an action for the current state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

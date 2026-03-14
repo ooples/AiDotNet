@@ -37,6 +37,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.A3C;
 /// Famous for: DeepMind's breakthrough (2016), enables CPU-only training
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an asynchronous A3C agent with parallel workers
+/// var options = new A3COptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new A3CAgent&lt;double&gt;(options);
+///
+/// // Select an action given the current environment state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

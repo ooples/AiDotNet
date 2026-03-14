@@ -21,6 +21,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// by beginners, adjusting for their suboptimal moves. The advantage is you can reuse old
 /// data collected under any policy, but importance sampling can introduce high variance.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an off-policy Monte Carlo agent with importance sampling
+/// var options = new OffPolicyMonteCarloOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new OffPolicyMonteCarloAgent&lt;double&gt;(options);
+///
+/// // Select an action using the behavior policy
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

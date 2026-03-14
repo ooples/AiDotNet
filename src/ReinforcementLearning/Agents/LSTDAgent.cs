@@ -21,6 +21,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// and compute per update. Best for problems with linear function approximation and
 /// moderate state spaces.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an LSTD agent that solves value function weights directly
+/// var options = new LSTDOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new LSTDAgent&lt;double&gt;(options);
+///
+/// // Select an action using the computed value function
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Regression)]

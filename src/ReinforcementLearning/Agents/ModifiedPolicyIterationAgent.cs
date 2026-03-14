@@ -41,6 +41,17 @@ public class TransitionData<T>
 /// evaluation sweeps. Think of it like proofreading a draft: you do a few passes (not infinite)
 /// before revising. The number of evaluation sweeps controls the speed-stability trade-off.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Modified Policy Iteration agent balancing speed and stability
+/// var options = new ModifiedPolicyIterationOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, EvaluationSweeps = 5 };
+/// var agent = new ModifiedPolicyIterationAgent&lt;double&gt;(options);
+///
+/// // Select an action using the partially-evaluated policy
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

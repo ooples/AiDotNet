@@ -21,6 +21,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// explored more. This Bayesian approach often outperforms epsilon-greedy and UCB in practice
 /// and is widely used in A/B testing and recommendation systems.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Thompson Sampling agent for Bayesian bandit problems
+/// var options = new ThompsonSamplingOptions&lt;double&gt; { NumArms = 10 };
+/// var agent = new ThompsonSamplingAgent&lt;double&gt;(options);
+///
+/// // Select an arm by sampling from posterior Beta distributions
+/// var state = new Vector&lt;double&gt;(new double[] { 1.0 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.Bayesian)]

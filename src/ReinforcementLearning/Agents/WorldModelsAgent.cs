@@ -38,6 +38,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.WorldModels;
 /// Famous for: Car racing from pixels with limited environment samples
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a World Models agent that learns in its own dreams
+/// var options = new WorldModelsOptions&lt;double&gt; { StateSize = 64, ActionSize = 3, LatentSize = 32 };
+/// var agent = new WorldModelsAgent&lt;double&gt;(options);
+///
+/// // Select an action from the compressed latent representation
+/// var state = new Vector&lt;double&gt;(new double[64]);
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -35,6 +35,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
 /// Famous for: DeepMind's combination achieving human-level Atari performance
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Rainbow DQN agent combining six DQN improvements
+/// var options = new RainbowDQNOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, NSteps = 3 };
+/// var agent = new RainbowDQNAgent&lt;double&gt;(options);
+///
+/// // Select an action using distributional RL with noisy exploration
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

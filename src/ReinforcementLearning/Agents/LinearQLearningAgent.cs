@@ -19,6 +19,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// like using a formula instead of a lookup table. The trade-off is that it can only represent
 /// linear relationships, but it scales to much larger problems than tabular Q-learning.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a linear Q-Learning agent for continuous state spaces
+/// var options = new LinearQLearningOptions&lt;double&gt; { FeatureSize = 4, ActionSize = 2, LearningRate = 0.01 };
+/// var agent = new LinearQLearningAgent&lt;double&gt;(options);
+///
+/// // Select an action using linear function approximation
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

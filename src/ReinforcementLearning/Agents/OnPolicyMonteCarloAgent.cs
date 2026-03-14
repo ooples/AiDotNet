@@ -21,6 +21,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// by actually cooking with your current recipe, then adjusting based on results. Simpler
 /// than off-policy methods but cannot reuse data from previous policies.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an on-policy Monte Carlo agent with epsilon-greedy exploration
+/// var options = new OnPolicyMonteCarloOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new OnPolicyMonteCarloAgent&lt;double&gt;(options);
+///
+/// // Select an action following the epsilon-greedy policy
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

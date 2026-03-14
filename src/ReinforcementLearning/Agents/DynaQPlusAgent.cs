@@ -20,6 +20,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 /// visit, ensuring the agent periodically re-explores to detect environmental changes.
 /// Think of it as a curious learner who checks old paths to see if anything changed.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Dyna-Q+ agent with exploration bonus for changing environments
+/// var options = new DynaQPlusOptions&lt;double&gt; { PlanningSteps = 10, Kappa = 0.001, StateSize = 4, ActionSize = 2 };
+/// var agent = new DynaQPlusAgent&lt;double&gt;(options);
+///
+/// // Select an action with bonus for revisiting under-explored states
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

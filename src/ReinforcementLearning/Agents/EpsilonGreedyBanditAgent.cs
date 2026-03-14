@@ -20,6 +20,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// (epsilon%), you pick a random machine to discover if there is something better (explore).
 /// Common starting epsilon is 0.1 (10% exploration). Used in A/B testing and ad selection.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an epsilon-greedy bandit agent for multi-armed bandit problems
+/// var options = new EpsilonGreedyBanditOptions&lt;double&gt; { NumArms = 10, Epsilon = 0.1 };
+/// var agent = new EpsilonGreedyBanditAgent&lt;double&gt;(options);
+///
+/// // Select an arm to pull
+/// var state = new Vector&lt;double&gt;(new double[] { 1.0 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

@@ -39,6 +39,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 /// Famous for: Berkeley/Meta research simplifying RL to sequence modeling
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Decision Transformer for offline RL via sequence modeling
+/// var options = new DecisionTransformerOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, ContextLength = 20 };
+/// var agent = new DecisionTransformerAgent&lt;double&gt;(options);
+///
+/// // Select an action conditioned on the desired return
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -32,9 +32,20 @@ namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
 /// (Uses actual next action a', not max)
 ///
 /// Perfect for: Environments where safety matters, risky state transitions
-/// Famous for: Rummery & Niranjan 1994, on-policy TD control
+/// Famous for: Rummery &amp; Niranjan 1994, on-policy TD control
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an on-policy SARSA agent for safe exploration
+/// var options = new SARSAOptions&lt;double&gt; { LearningRate = 0.1, StateSize = 4, ActionSize = 2 };
+/// var agent = new SARSAAgent&lt;double&gt;(options);
+///
+/// // Select an action for the current state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

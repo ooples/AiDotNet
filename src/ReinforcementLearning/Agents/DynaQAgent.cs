@@ -20,6 +20,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 /// pure Q-learning because each real experience generates many simulated learning updates.
 /// The planning steps parameter controls how many simulated updates happen per real step.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Dyna-Q agent that combines real and simulated learning
+/// var options = new DynaQOptions&lt;double&gt; { PlanningSteps = 10, StateSize = 4, ActionSize = 2 };
+/// var agent = new DynaQAgent&lt;double&gt;(options);
+///
+/// // Select an action and learn from both real and simulated experiences
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]

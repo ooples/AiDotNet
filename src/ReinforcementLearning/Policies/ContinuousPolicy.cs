@@ -16,6 +16,17 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Policy for continuous action spaces using a neural network to output Gaussian parameters.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create a Gaussian continuous policy for unbounded continuous actions
+    /// var network = new NeuralNetwork&lt;double&gt;();
+    /// var policy = new ContinuousPolicy&lt;double&gt;(network, actionSize: 2, new EpsilonGreedyExploration&lt;double&gt;());
+    ///
+    /// // Sample an action from the Gaussian distribution
+    /// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+    /// var action = policy.SelectAction(state, training: true);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelCategory(ModelCategory.NeuralNetwork)]

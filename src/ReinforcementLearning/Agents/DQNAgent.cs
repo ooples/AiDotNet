@@ -39,6 +39,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.DQN;
 /// Mnih, V., et al. (2015). "Human-level control through deep reinforcement learning." Nature.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Deep Q-Network agent for discrete action spaces
+/// var options = new DQNOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, LearningRate = 0.001 };
+/// var agent = new DQNAgent&lt;double&gt;(options);
+///
+/// // Select an action for the current game state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
