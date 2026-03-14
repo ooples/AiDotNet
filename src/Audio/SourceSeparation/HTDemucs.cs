@@ -166,7 +166,7 @@ public class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "HTDemucs-Native" : "HTDemucs-ONNX", Description = "HTDemucs Hybrid Transformer Demucs (Rouard et al., ICASSP 2023)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "HTDemucs-Native" : "HTDemucs-ONNX", Description = "HTDemucs Hybrid Transformer Demucs (Rouard et al., ICASSP 2023)", FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
         m.AdditionalInfo["NumStems"] = _options.NumStems.ToString(); m.AdditionalInfo["TransformerDim"] = _options.TransformerDim.ToString();
         return m;
     }

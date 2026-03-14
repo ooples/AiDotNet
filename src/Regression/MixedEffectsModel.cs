@@ -38,6 +38,25 @@ namespace AiDotNet.Regression;
 /// - Variance components showing how much groups vary
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a mixed-effects model for hierarchical/clustered data
+/// var options = new MixedEffectsModelOptions&lt;double&gt;();
+/// var model = new MixedEffectsModel&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 fixed-effect features
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with fixed and random effects estimation
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -941,7 +960,6 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.MixedEffectsModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumFeatures", _numFeatures },
@@ -1039,12 +1057,6 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new MixedEffectsModel<T>(_options, Regularization);
-    }
-
-    /// <inheritdoc/>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.MixedEffectsModel;
     }
 
     /// <inheritdoc/>

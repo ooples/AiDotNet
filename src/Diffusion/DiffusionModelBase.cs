@@ -288,7 +288,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = ParameterCount,
             Complexity = ParameterCount,
             Description = $"Diffusion model with {ParameterCount} parameters using {_scheduler.GetType().Name} scheduler."

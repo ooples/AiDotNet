@@ -363,7 +363,6 @@ public class OmniGenModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "OmniGen",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "OmniGen unified multi-task image generation model",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -588,7 +588,6 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         return new ModelMetadata<T>
         {
             Name = "DBNet",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Differentiable Binarization Network for real-time text detection (AAAI 2020)",
             FeatureCount = _innerChannels,
             Complexity = Layers.Count,

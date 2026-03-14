@@ -194,7 +194,6 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            ModelType = Enums.ModelType.NeuralNetwork,
             FeatureCount = ParameterCount,
             Complexity = ParameterCount,
             Description = $"VAE with {ParameterCount} parameters, {InputChannels} input channels, " +

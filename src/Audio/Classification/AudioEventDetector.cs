@@ -638,7 +638,6 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         {
             Name = _useNativeMode ? "AudioEventDetector-Native" : "AudioEventDetector-ONNX",
             Description = "Audio event detection model for identifying sounds (AudioSet-style)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = ClassLabels.Count,
             Complexity = 1
         };

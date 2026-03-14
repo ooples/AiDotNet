@@ -130,6 +130,19 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// by Müller et al., ACM Transactions on Graphics 2022
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Instant-NGP model with custom hash encoding settings
+/// var options = new InstantNGPOptions&lt;float&gt;
+/// {
+///     HashTableSize = 524288,
+///     NumLevels = 16,
+///     FeaturesPerLevel = 2,
+///     MlpHiddenDim = 64
+/// };
+/// var ngp = new InstantNGP&lt;float&gt;(options);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -1757,7 +1770,6 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "HashTableSize", _hashTableSize },

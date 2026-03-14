@@ -37,12 +37,25 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 /// <b>Reference:</b> Wu et al., "MedSegDiff-V2: Diffusion-based Medical Image Segmentation with Transformer", AAAI 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MedSegDiff-V2 model for diffusion-based medical segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
+/// var model = new MedSegDiffV2Segmentation&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model
+/// var onnxModel = new MedSegDiffV2Segmentation&lt;double&gt;(architecture, "medsegdiffv2_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("MedSegDiff-V2: Diffusion-based Medical Image Segmentation with Transformer", "https://arxiv.org/abs/2301.11798", Year = 2024, Authors = "Wu et al.")]
+[ModelPaper("MedSegDiff-V2: Diffusion-based Medical Image Segmentation with Transformer", "https://arxiv.org/abs/2301.11798", Year = 2023, Authors = "Junde Wu, Wei Ji, Huazhu Fu, Min Xu, Yueming Jin, Yanwu Xu")]
 public class MedSegDiffV2Segmentation<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly MedSegDiffV2SegmentationOptions _options;
@@ -292,7 +305,6 @@ public class MedSegDiffV2Segmentation<T> : NeuralNetworkBase<T>, IMedicalSegment
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "MedSegDiffV2Segmentation" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

@@ -431,7 +431,6 @@ namespace AiDotNet.NeuralNetworks
             return new ModelMetadata<T>
             {
                 Name = "FastText",
-                ModelType = ModelType.NeuralNetwork,
                 Description = "FastText embedding model with subword support",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>

@@ -50,6 +50,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// - Output: [batch, channels, frames, height, width] reconstructed video
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new TemporalVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4, numFrames: 14);
+/// var video = Tensor&lt;float&gt;.Random(new[] { 1, 3, 14, 320, 512 });
+/// var latent = vae.Encode(video);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]

@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Med-Flamingo (2023) adapts the OpenFlamingo architecture for few-shot medical visual question
+/// answering. It uses gated cross-attention layers to interleave medical image features with
+/// text tokens and a perceiver resampler to compress visual information, enabling the model
+/// to learn from just a few medical image-text examples without extensive fine-tuning.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Med-Flamingo: A Multimodal Medical Few-shot Learner (Various, 2023)"</item></list></para>
-/// <para><b>For Beginners:</b> MedFlamingo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Med-Flamingo is a vision-language model for few-shot medical
+/// visual question answering using the Flamingo architecture. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Med-Flamingo model for few-shot medical visual question answering
+/// // with gated cross-attention and perceiver resampler from OpenFlamingo
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MedFlamingo&lt;double&gt;(architecture, "medflamingo.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MedFlamingo&lt;double&gt;(architecture, new MedFlamingoOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Healthcare)]
@@ -94,7 +118,7 @@ public class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Med-Flamingo-Native" : "Med-Flamingo-ONNX", Description = "Med-Flamingo: few-shot medical visual question answering via Flamingo architecture.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Med-Flamingo-Native" : "Med-Flamingo-ONNX", Description = "Med-Flamingo: few-shot medical visual question answering via Flamingo architecture.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Med-Flamingo";
         m.AdditionalInfo["MedicalDomain"] = _options.MedicalDomain;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

@@ -47,6 +47,25 @@ namespace AiDotNet.Regression;
 /// - You need to incorporate prior knowledge about the problem
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Bayesian regression model with uncertainty estimation
+/// var options = new BayesianRegressionOptions&lt;double&gt;();
+/// var model = new BayesianRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train the model with Bayesian inference
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (provides posterior distribution)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Regression)]
@@ -574,26 +593,6 @@ public class BayesianRegression<T> : RegressionBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Gets the model type for serialization purposes.
-    /// </summary>
-    /// <returns>The model type identifier.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the type identifier for the Bayesian regression model, which is used
-    /// during serialization and deserialization to correctly reconstruct the model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply identifies the type of model for saving and loading purposes.
-    /// 
-    /// When you save a model to a file or database, the system needs to know what kind of model it is
-    /// in order to load it correctly later. This method provides that identification.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.BayesianRegression;
     }
 
     /// <summary>

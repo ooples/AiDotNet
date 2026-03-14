@@ -289,7 +289,6 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FeedForwardNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "SparseNeuralNetwork" },

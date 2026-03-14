@@ -26,6 +26,25 @@ namespace AiDotNet.Regression;
 /// than any single tree. It's like asking multiple experts for their opinion and taking the average.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a random forest regression with ensemble of decision trees
+/// var options = new RandomForestRegressionOptions&lt;double&gt;();
+/// var model = new RandomForestRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train the ensemble model
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (averages predictions from all trees)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.DecisionTree)]
@@ -232,7 +251,6 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.RandomForest,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _options.NumberOfTrees },

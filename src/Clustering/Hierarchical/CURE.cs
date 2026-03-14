@@ -44,6 +44,14 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// even if their centers are close together!
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new CUREOptions&lt;double&gt;();
+/// var cURE = new CURE&lt;double&gt;(options);
+/// cURE.Fit(dataMatrix);
+/// int[] labels = cURE.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -77,7 +85,6 @@ public class CURE<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

@@ -831,7 +831,6 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NetworkType"] = "GraphAttentionNetwork",

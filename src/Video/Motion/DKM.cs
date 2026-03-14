@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// DKM uses dense kernelized matching to establish pixel-level correspondences between images for accurate geometry estimation.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DKM model for dense feature matching and geometry estimation
+/// var dkm = new DKM&lt;double&gt;();
+///
+/// // Or configure with custom feature dimensions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new DKM&lt;double&gt;(architecture, numFeatures: 64, numLayers: 8);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -215,7 +228,6 @@ public class DKM<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "DKM" },

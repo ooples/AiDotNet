@@ -1,5 +1,11 @@
 using System;
-using AiDotNet.Enums;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Classification.Neighbors;
+using AiDotNet.Classification.Trees;
+using AiDotNet.Regression;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.PointCloud.Models;
+using AiDotNet.NeuralRadianceFields.Models;
 
 namespace AiDotNet.AutoML.Policies;
 
@@ -18,99 +24,93 @@ namespace AiDotNet.AutoML.Policies;
 /// </remarks>
 internal static class AutoMLDefaultCandidateModelsPolicy
 {
-    public static IReadOnlyList<ModelType> GetDefaultCandidates(AutoMLTaskFamily taskFamily, int featureCount)
+    public static IReadOnlyList<Type> GetDefaultCandidates(AutoMLTaskFamily taskFamily, int featureCount)
     {
         return GetDefaultCandidates(taskFamily, featureCount, AutoMLBudgetPreset.Standard);
     }
 
-    public static IReadOnlyList<ModelType> GetDefaultCandidates(AutoMLTaskFamily taskFamily, int featureCount, AutoMLBudgetPreset preset)
+    public static IReadOnlyList<Type> GetDefaultCandidates(AutoMLTaskFamily taskFamily, int featureCount, AutoMLBudgetPreset preset)
     {
         switch (taskFamily)
         {
             case AutoMLTaskFamily.BinaryClassification:
                 return preset switch
                 {
-                    AutoMLBudgetPreset.CI => new[]
+                    AutoMLBudgetPreset.CI => new Type[]
                     {
-                        ModelType.LogisticRegression,
-                        ModelType.RandomForest
+                        typeof(LogisticRegression<>),
+                        typeof(RandomForestClassifier<>)
                     },
-                    AutoMLBudgetPreset.Fast => new[]
+                    AutoMLBudgetPreset.Fast => new Type[]
                     {
-                        ModelType.LogisticRegression,
-                        ModelType.RandomForest,
-                        ModelType.GradientBoosting
+                        typeof(LogisticRegression<>),
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>)
                     },
-                    AutoMLBudgetPreset.Thorough => new[]
+                    AutoMLBudgetPreset.Thorough => new Type[]
                     {
-                        ModelType.LogisticRegression,
-                        ModelType.RandomForest,
-                        ModelType.GradientBoosting,
-                        ModelType.DecisionTree,
-                        ModelType.ExtremelyRandomizedTrees,
-                        ModelType.KNearestNeighbors
+                        typeof(LogisticRegression<>),
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>),
+                        typeof(DecisionTreeClassifier<>),
+                        typeof(ExtraTreesClassifier<>),
+                        typeof(KNeighborsClassifier<>)
                     },
-                    _ => new[]
+                    _ => new Type[]
                     {
-                        ModelType.LogisticRegression,
-                        ModelType.RandomForest,
-                        ModelType.GradientBoosting,
-                        ModelType.KNearestNeighbors
+                        typeof(LogisticRegression<>),
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>),
+                        typeof(KNeighborsClassifier<>)
                     }
                 };
 
             case AutoMLTaskFamily.MultiClassClassification:
                 return preset switch
                 {
-                    AutoMLBudgetPreset.CI => new[]
+                    AutoMLBudgetPreset.CI => new Type[]
                     {
-                        ModelType.MultinomialLogisticRegression,
-                        ModelType.RandomForest
+                        typeof(MultinomialLogisticRegression<>),
+                        typeof(RandomForestClassifier<>)
                     },
-                    AutoMLBudgetPreset.Fast => new[]
+                    AutoMLBudgetPreset.Fast => new Type[]
                     {
-                        ModelType.MultinomialLogisticRegression,
-                        ModelType.RandomForest,
-                        ModelType.GradientBoosting
+                        typeof(MultinomialLogisticRegression<>),
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>)
                     },
-                    AutoMLBudgetPreset.Thorough => new[]
+                    AutoMLBudgetPreset.Thorough => new Type[]
                     {
-                        ModelType.MultinomialLogisticRegression,
-                        ModelType.RandomForest,
-                        ModelType.GradientBoosting,
-                        ModelType.KNearestNeighbors
+                        typeof(MultinomialLogisticRegression<>),
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>),
+                        typeof(KNeighborsClassifier<>)
                     },
-                    _ => new[]
+                    _ => new Type[]
                     {
-                        ModelType.MultinomialLogisticRegression,
-                        ModelType.RandomForest,
-                        ModelType.GradientBoosting,
-                        ModelType.KNearestNeighbors
+                        typeof(MultinomialLogisticRegression<>),
+                        typeof(RandomForestClassifier<>),
+                        typeof(GradientBoostingClassifier<>),
+                        typeof(KNeighborsClassifier<>)
                     }
                 };
 
             case AutoMLTaskFamily.TimeSeriesAnomalyDetection:
-                // Default to the same conservative candidate set as binary classification.
-                // Many anomaly detection setups are supervised binary problems (anomaly vs normal),
-                // and we keep defaults focused on models supported by the current evaluator pipeline.
                 return GetDefaultCandidates(AutoMLTaskFamily.BinaryClassification, featureCount, preset);
 
             case AutoMLTaskFamily.TimeSeriesForecasting:
-                return new[]
+                return new Type[]
                 {
-                    ModelType.TimeSeriesRegression
+                    typeof(TimeSeriesRegression<>)
                 };
 
             case AutoMLTaskFamily.Ranking:
             case AutoMLTaskFamily.Recommendation:
-                // Ranking/recommendation are often framed as learning-to-rank with scalar relevance targets.
-                // The built-in defaults treat this as a supervised regression-style objective and rely on
-                // ranking metrics (NDCG/MAP/MRR) for scoring.
                 return GetRegressionCandidates(featureCount, preset);
 
             case AutoMLTaskFamily.Regression:
                 return GetRegressionCandidates(featureCount, preset);
-            // 3D Point Cloud Tasks
+
             case AutoMLTaskFamily.PointCloudClassification:
                 return Get3DPointCloudClassificationCandidates(preset);
 
@@ -120,398 +120,244 @@ internal static class AutoMLDefaultCandidateModelsPolicy
             case AutoMLTaskFamily.PointCloudCompletion:
                 return Get3DPointCloudCompletionCandidates(preset);
 
-            // 3D Volumetric Tasks
             case AutoMLTaskFamily.VolumetricClassification:
                 return Get3DVolumetricClassificationCandidates(preset);
 
             case AutoMLTaskFamily.VolumetricSegmentation:
                 return Get3DVolumetricSegmentationCandidates(preset);
 
-            // 3D Mesh Tasks
             case AutoMLTaskFamily.MeshClassification:
                 return Get3DMeshClassificationCandidates(preset);
 
             case AutoMLTaskFamily.MeshSegmentation:
                 return Get3DMeshSegmentationCandidates(preset);
 
-            // Neural Radiance Fields
             case AutoMLTaskFamily.RadianceFieldReconstruction:
                 return GetRadianceFieldCandidates(preset);
 
-            // 3D Detection and Depth
             case AutoMLTaskFamily.ThreeDObjectDetection:
                 return Get3DObjectDetectionCandidates(preset);
 
             case AutoMLTaskFamily.DepthEstimation:
                 return GetDepthEstimationCandidates(preset);
 
-
             default:
-                return Array.Empty<ModelType>();
+                return Array.Empty<Type>();
         }
     }
 
-    private static IReadOnlyList<ModelType> GetRegressionCandidates(int featureCount, AutoMLBudgetPreset preset)
+    private static IReadOnlyList<Type> GetRegressionCandidates(int featureCount, AutoMLBudgetPreset preset)
     {
         if (preset == AutoMLBudgetPreset.CI)
         {
             return featureCount == 1
-                ? new[] { ModelType.SimpleRegression, ModelType.RandomForest }
-                : new[] { ModelType.MultipleRegression, ModelType.RandomForest };
+                ? new Type[] { typeof(SimpleRegression<>), typeof(RandomForestRegression<>) }
+                : new Type[] { typeof(MultipleRegression<>), typeof(RandomForestRegression<>) };
         }
 
         if (preset == AutoMLBudgetPreset.Fast)
         {
             return featureCount == 1
-                ? new[]
+                ? new Type[]
                 {
-                    ModelType.SimpleRegression,
-                    ModelType.MultipleRegression,
-                    ModelType.PolynomialRegression,
-                    ModelType.RandomForest,
-                    ModelType.GradientBoosting,
-                    ModelType.KNearestNeighbors,
-                    ModelType.SupportVectorRegression
+                    typeof(SimpleRegression<>),
+                    typeof(MultipleRegression<>),
+                    typeof(PolynomialRegression<>),
+                    typeof(RandomForestRegression<>),
+                    typeof(GradientBoostingRegression<>),
+                    typeof(KNearestNeighborsRegression<>),
+                    typeof(SupportVectorRegression<>)
                 }
-                : new[]
+                : new Type[]
                 {
-                    ModelType.MultipleRegression,
-                    ModelType.PolynomialRegression,
-                    ModelType.RandomForest,
-                    ModelType.GradientBoosting,
-                    ModelType.KNearestNeighbors,
-                    ModelType.SupportVectorRegression
+                    typeof(MultipleRegression<>),
+                    typeof(PolynomialRegression<>),
+                    typeof(RandomForestRegression<>),
+                    typeof(GradientBoostingRegression<>),
+                    typeof(KNearestNeighborsRegression<>),
+                    typeof(SupportVectorRegression<>)
                 };
         }
 
         if (preset == AutoMLBudgetPreset.Thorough)
         {
             return featureCount == 1
-                ? new[]
+                ? new Type[]
                 {
-                    ModelType.SimpleRegression,
-                    ModelType.MultipleRegression,
-                    ModelType.PolynomialRegression,
-                    ModelType.BayesianRegression,
-                    ModelType.GaussianProcessRegression,
-                    ModelType.KernelRidgeRegression,
-                    ModelType.RandomForest,
-                    ModelType.ExtremelyRandomizedTrees,
-                    ModelType.DecisionTree,
-                    ModelType.ConditionalInferenceTree,
-                    ModelType.M5ModelTree,
-                    ModelType.AdaBoostR2,
-                    ModelType.QuantileRegressionForests,
-                    ModelType.GradientBoosting,
-                    ModelType.KNearestNeighbors,
-                    ModelType.SupportVectorRegression,
-                    ModelType.RadialBasisFunctionRegression,
-                    ModelType.GeneralizedAdditiveModelRegression,
-                    ModelType.MultilayerPerceptronRegression,
-                    ModelType.QuantileRegression,
-                    ModelType.RobustRegression,
-                    ModelType.NeuralNetworkRegression
+                    typeof(SimpleRegression<>),
+                    typeof(MultipleRegression<>),
+                    typeof(PolynomialRegression<>),
+                    typeof(BayesianRegression<>),
+                    typeof(GaussianProcessRegression<>),
+                    typeof(KernelRidgeRegression<>),
+                    typeof(RandomForestRegression<>),
+                    typeof(ExtremelyRandomizedTreesRegression<>),
+                    typeof(DecisionTreeRegression<>),
+                    typeof(ConditionalInferenceTreeRegression<>),
+                    typeof(M5ModelTree<>),
+                    typeof(AdaBoostR2Regression<>),
+                    typeof(QuantileRegressionForests<>),
+                    typeof(GradientBoostingRegression<>),
+                    typeof(KNearestNeighborsRegression<>),
+                    typeof(SupportVectorRegression<>),
+                    typeof(RadialBasisFunctionRegression<>),
+                    typeof(GeneralizedAdditiveModel<>),
+                    typeof(MultilayerPerceptronRegression<>),
+                    typeof(QuantileRegression<>),
+                    typeof(RobustRegression<>),
+                    typeof(NeuralNetworkRegression<>)
                 }
-                : new[]
+                : new Type[]
                 {
-                    ModelType.MultipleRegression,
-                    ModelType.PolynomialRegression,
-                    ModelType.BayesianRegression,
-                    ModelType.GaussianProcessRegression,
-                    ModelType.KernelRidgeRegression,
-                    ModelType.RandomForest,
-                    ModelType.ExtremelyRandomizedTrees,
-                    ModelType.DecisionTree,
-                    ModelType.ConditionalInferenceTree,
-                    ModelType.M5ModelTree,
-                    ModelType.AdaBoostR2,
-                    ModelType.QuantileRegressionForests,
-                    ModelType.GradientBoosting,
-                    ModelType.KNearestNeighbors,
-                    ModelType.SupportVectorRegression,
-                    ModelType.RadialBasisFunctionRegression,
-                    ModelType.GeneralizedAdditiveModelRegression,
-                    ModelType.MultilayerPerceptronRegression,
-                    ModelType.QuantileRegression,
-                    ModelType.RobustRegression,
-                    ModelType.NeuralNetworkRegression
+                    typeof(MultipleRegression<>),
+                    typeof(PolynomialRegression<>),
+                    typeof(BayesianRegression<>),
+                    typeof(GaussianProcessRegression<>),
+                    typeof(KernelRidgeRegression<>),
+                    typeof(RandomForestRegression<>),
+                    typeof(ExtremelyRandomizedTreesRegression<>),
+                    typeof(DecisionTreeRegression<>),
+                    typeof(ConditionalInferenceTreeRegression<>),
+                    typeof(M5ModelTree<>),
+                    typeof(AdaBoostR2Regression<>),
+                    typeof(QuantileRegressionForests<>),
+                    typeof(GradientBoostingRegression<>),
+                    typeof(KNearestNeighborsRegression<>),
+                    typeof(SupportVectorRegression<>),
+                    typeof(RadialBasisFunctionRegression<>),
+                    typeof(GeneralizedAdditiveModel<>),
+                    typeof(MultilayerPerceptronRegression<>),
+                    typeof(QuantileRegression<>),
+                    typeof(RobustRegression<>),
+                    typeof(NeuralNetworkRegression<>)
                 };
         }
 
         return featureCount == 1
-            ? new[]
+            ? new Type[]
             {
-                ModelType.SimpleRegression,
-                ModelType.MultipleRegression,
-                ModelType.PolynomialRegression,
-                ModelType.RandomForest,
-                ModelType.GradientBoosting,
-                ModelType.KNearestNeighbors,
-                ModelType.SupportVectorRegression,
-                ModelType.BayesianRegression,
-                ModelType.KernelRidgeRegression,
-                ModelType.NeuralNetworkRegression
+                typeof(SimpleRegression<>),
+                typeof(MultipleRegression<>),
+                typeof(PolynomialRegression<>),
+                typeof(RandomForestRegression<>),
+                typeof(GradientBoostingRegression<>),
+                typeof(KNearestNeighborsRegression<>),
+                typeof(SupportVectorRegression<>),
+                typeof(BayesianRegression<>),
+                typeof(KernelRidgeRegression<>),
+                typeof(NeuralNetworkRegression<>)
             }
-            : new[]
+            : new Type[]
             {
-                ModelType.MultipleRegression,
-                ModelType.PolynomialRegression,
-                ModelType.RandomForest,
-                ModelType.GradientBoosting,
-                ModelType.KNearestNeighbors,
-                ModelType.SupportVectorRegression,
-                ModelType.BayesianRegression,
-                ModelType.KernelRidgeRegression,
-                ModelType.NeuralNetworkRegression
+                typeof(MultipleRegression<>),
+                typeof(PolynomialRegression<>),
+                typeof(RandomForestRegression<>),
+                typeof(GradientBoostingRegression<>),
+                typeof(KNearestNeighborsRegression<>),
+                typeof(SupportVectorRegression<>),
+                typeof(BayesianRegression<>),
+                typeof(KernelRidgeRegression<>),
+                typeof(NeuralNetworkRegression<>)
             };
     }
-    /// <summary>
-    /// Gets candidate models for 3D point cloud classification tasks.
-    /// </summary>
-    private static IReadOnlyList<ModelType> Get3DPointCloudClassificationCandidates(AutoMLBudgetPreset preset)
+
+    private static IReadOnlyList<Type> Get3DPointCloudClassificationCandidates(AutoMLBudgetPreset preset)
     {
         return preset switch
         {
-            AutoMLBudgetPreset.CI => new[]
-            {
-                ModelType.PointNet
-            },
-            AutoMLBudgetPreset.Fast => new[]
-            {
-                ModelType.PointNet,
-                ModelType.DGCNN
-            },
-            AutoMLBudgetPreset.Thorough => new[]
-            {
-                ModelType.PointNet,
-                ModelType.PointNetPlusPlus,
-                ModelType.DGCNN
-            },
-            _ => new[]
-            {
-                ModelType.PointNet,
-                ModelType.PointNetPlusPlus,
-                ModelType.DGCNN
-            }
+            AutoMLBudgetPreset.CI => new Type[] { typeof(PointNet<>) },
+            AutoMLBudgetPreset.Fast => new Type[] { typeof(PointNet<>), typeof(DGCNN<>) },
+            AutoMLBudgetPreset.Thorough => new Type[] { typeof(PointNet<>), typeof(PointNetPlusPlus<>), typeof(DGCNN<>) },
+            _ => new Type[] { typeof(PointNet<>), typeof(PointNetPlusPlus<>), typeof(DGCNN<>) }
         };
     }
 
-    /// <summary>
-    /// Gets candidate models for 3D point cloud segmentation tasks.
-    /// </summary>
-    private static IReadOnlyList<ModelType> Get3DPointCloudSegmentationCandidates(AutoMLBudgetPreset preset)
+    private static IReadOnlyList<Type> Get3DPointCloudSegmentationCandidates(AutoMLBudgetPreset preset)
     {
         return preset switch
         {
-            AutoMLBudgetPreset.CI => new[]
-            {
-                ModelType.PointNet
-            },
-            AutoMLBudgetPreset.Fast => new[]
-            {
-                ModelType.PointNet,
-                ModelType.PointNetPlusPlus
-            },
-            AutoMLBudgetPreset.Thorough => new[]
-            {
-                ModelType.PointNet,
-                ModelType.PointNetPlusPlus,
-                ModelType.DGCNN
-            },
-            _ => new[]
-            {
-                ModelType.PointNetPlusPlus,
-                ModelType.DGCNN
-            }
+            AutoMLBudgetPreset.CI => new Type[] { typeof(PointNet<>) },
+            AutoMLBudgetPreset.Fast => new Type[] { typeof(PointNet<>), typeof(PointNetPlusPlus<>) },
+            AutoMLBudgetPreset.Thorough => new Type[] { typeof(PointNet<>), typeof(PointNetPlusPlus<>), typeof(DGCNN<>) },
+            _ => new Type[] { typeof(PointNetPlusPlus<>), typeof(DGCNN<>) }
         };
     }
 
-    /// <summary>
-    /// Gets candidate models for 3D point cloud completion tasks.
-    /// </summary>
-    private static IReadOnlyList<ModelType> Get3DPointCloudCompletionCandidates(AutoMLBudgetPreset preset)
+    private static IReadOnlyList<Type> Get3DPointCloudCompletionCandidates(AutoMLBudgetPreset preset)
     {
-        // Point cloud completion typically uses encoder-decoder architectures
-        // PointNet++ with feature propagation is well-suited for this
         return preset switch
         {
-            AutoMLBudgetPreset.CI => new[]
-            {
-                ModelType.PointNet
-            },
-            _ => new[]
-            {
-                ModelType.PointNetPlusPlus,
-                ModelType.DGCNN
-            }
+            AutoMLBudgetPreset.CI => new Type[] { typeof(PointNet<>) },
+            _ => new Type[] { typeof(PointNetPlusPlus<>), typeof(DGCNN<>) }
         };
     }
 
-    /// <summary>
-    /// Gets candidate models for 3D volumetric classification tasks.
-    /// </summary>
-    private static IReadOnlyList<ModelType> Get3DVolumetricClassificationCandidates(AutoMLBudgetPreset preset)
+    private static IReadOnlyList<Type> Get3DVolumetricClassificationCandidates(AutoMLBudgetPreset preset)
     {
         return preset switch
         {
-            AutoMLBudgetPreset.CI => new[]
-            {
-                ModelType.VoxelCNN
-            },
-            AutoMLBudgetPreset.Fast => new[]
-            {
-                ModelType.VoxelCNN
-            },
-            AutoMLBudgetPreset.Thorough => new[]
-            {
-                ModelType.VoxelCNN,
-                ModelType.UNet3D
-            },
-            _ => new[]
-            {
-                ModelType.VoxelCNN
-            }
+            AutoMLBudgetPreset.CI => new Type[] { typeof(VoxelCNN<>) },
+            AutoMLBudgetPreset.Fast => new Type[] { typeof(VoxelCNN<>) },
+            AutoMLBudgetPreset.Thorough => new Type[] { typeof(VoxelCNN<>), typeof(UNet3D<>) },
+            _ => new Type[] { typeof(VoxelCNN<>) }
         };
     }
 
-    /// <summary>
-    /// Gets candidate models for 3D volumetric segmentation tasks.
-    /// </summary>
-    private static IReadOnlyList<ModelType> Get3DVolumetricSegmentationCandidates(AutoMLBudgetPreset preset)
+    private static IReadOnlyList<Type> Get3DVolumetricSegmentationCandidates(AutoMLBudgetPreset preset)
     {
         return preset switch
         {
-            AutoMLBudgetPreset.CI => new[]
-            {
-                ModelType.UNet3D
-            },
-            _ => new[]
-            {
-                ModelType.UNet3D,
-                ModelType.VoxelCNN
-            }
+            AutoMLBudgetPreset.CI => new Type[] { typeof(UNet3D<>) },
+            _ => new Type[] { typeof(UNet3D<>), typeof(VoxelCNN<>) }
         };
     }
 
-    /// <summary>
-    /// Gets candidate models for 3D mesh classification tasks.
-    /// </summary>
-    private static IReadOnlyList<ModelType> Get3DMeshClassificationCandidates(AutoMLBudgetPreset preset)
+    private static IReadOnlyList<Type> Get3DMeshClassificationCandidates(AutoMLBudgetPreset preset)
     {
         return preset switch
         {
-            AutoMLBudgetPreset.CI => new[]
-            {
-                ModelType.MeshCNN
-            },
-            AutoMLBudgetPreset.Fast => new[]
-            {
-                ModelType.MeshCNN,
-                ModelType.SpiralNetPlusPlus
-            },
-            AutoMLBudgetPreset.Thorough => new[]
-            {
-                ModelType.MeshCNN,
-                ModelType.SpiralNetPlusPlus,
-                ModelType.DiffusionNet
-            },
-            _ => new[]
-            {
-                ModelType.MeshCNN,
-                ModelType.DiffusionNet
-            }
+            AutoMLBudgetPreset.CI => new Type[] { typeof(MeshCNN<>) },
+            AutoMLBudgetPreset.Fast => new Type[] { typeof(MeshCNN<>), typeof(SpiralNet<>) },
+            AutoMLBudgetPreset.Thorough => new Type[] { typeof(MeshCNN<>), typeof(SpiralNet<>) },
+            _ => new Type[] { typeof(MeshCNN<>), typeof(SpiralNet<>) }
         };
     }
 
-    /// <summary>
-    /// Gets candidate models for 3D mesh segmentation tasks.
-    /// </summary>
-    private static IReadOnlyList<ModelType> Get3DMeshSegmentationCandidates(AutoMLBudgetPreset preset)
+    private static IReadOnlyList<Type> Get3DMeshSegmentationCandidates(AutoMLBudgetPreset preset)
     {
         return preset switch
         {
-            AutoMLBudgetPreset.CI => new[]
-            {
-                ModelType.MeshCNN
-            },
-            _ => new[]
-            {
-                ModelType.MeshCNN,
-                ModelType.DiffusionNet
-            }
+            AutoMLBudgetPreset.CI => new Type[] { typeof(MeshCNN<>) },
+            _ => new Type[] { typeof(MeshCNN<>), typeof(SpiralNet<>) }
         };
     }
 
-    /// <summary>
-    /// Gets candidate models for neural radiance field reconstruction tasks.
-    /// </summary>
-    private static IReadOnlyList<ModelType> GetRadianceFieldCandidates(AutoMLBudgetPreset preset)
+    private static IReadOnlyList<Type> GetRadianceFieldCandidates(AutoMLBudgetPreset preset)
     {
         return preset switch
         {
-            AutoMLBudgetPreset.CI => new[]
-            {
-                ModelType.InstantNGP  // Fastest for CI
-            },
-            AutoMLBudgetPreset.Fast => new[]
-            {
-                ModelType.InstantNGP,
-                ModelType.GaussianSplatting
-            },
-            AutoMLBudgetPreset.Thorough => new[]
-            {
-                ModelType.NeRF,
-                ModelType.InstantNGP,
-                ModelType.GaussianSplatting
-            },
-            _ => new[]
-            {
-                ModelType.InstantNGP,
-                ModelType.GaussianSplatting
-            }
+            AutoMLBudgetPreset.CI => new Type[] { typeof(InstantNGP<>) },
+            AutoMLBudgetPreset.Fast => new Type[] { typeof(InstantNGP<>), typeof(GaussianSplatting<>) },
+            AutoMLBudgetPreset.Thorough => new Type[] { typeof(NeRF<>), typeof(InstantNGP<>), typeof(GaussianSplatting<>) },
+            _ => new Type[] { typeof(InstantNGP<>), typeof(GaussianSplatting<>) }
         };
     }
 
-    /// <summary>
-    /// Gets candidate models for 3D object detection tasks.
-    /// </summary>
-    private static IReadOnlyList<ModelType> Get3DObjectDetectionCandidates(AutoMLBudgetPreset preset)
+    private static IReadOnlyList<Type> Get3DObjectDetectionCandidates(AutoMLBudgetPreset preset)
     {
-        // 3D object detection often uses point cloud backbones with detection heads
         return preset switch
         {
-            AutoMLBudgetPreset.CI => new[]
-            {
-                ModelType.PointNet
-            },
-            _ => new[]
-            {
-                ModelType.PointNetPlusPlus,
-                ModelType.DGCNN,
-                ModelType.VoxelCNN
-            }
+            AutoMLBudgetPreset.CI => new Type[] { typeof(PointNet<>) },
+            _ => new Type[] { typeof(PointNetPlusPlus<>), typeof(DGCNN<>), typeof(VoxelCNN<>) }
         };
     }
 
-    /// <summary>
-    /// Gets candidate models for depth estimation tasks.
-    /// </summary>
-    private static IReadOnlyList<ModelType> GetDepthEstimationCandidates(AutoMLBudgetPreset preset)
+    private static IReadOnlyList<Type> GetDepthEstimationCandidates(AutoMLBudgetPreset preset)
     {
-        // Depth estimation typically uses encoder-decoder CNNs
-        // For now, map to general neural network types
         return preset switch
         {
-            AutoMLBudgetPreset.CI => new[]
-            {
-                ModelType.NeuralNetworkRegression
-            },
-            _ => new[]
-            {
-                ModelType.NeuralNetworkRegression,
-                ModelType.UNet3D
-            }
+            AutoMLBudgetPreset.CI => new Type[] { typeof(NeuralNetworkRegression<>) },
+            _ => new Type[] { typeof(NeuralNetworkRegression<>), typeof(UNet3D<>) }
         };
     }
 }
-

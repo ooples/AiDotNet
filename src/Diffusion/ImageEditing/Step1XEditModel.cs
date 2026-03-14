@@ -39,6 +39,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: StepFun, "Step1X-Edit", 2025
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 28 };
+/// var model = new Step1XEditModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -130,7 +138,7 @@ public class Step1XEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Step1X-Edit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Step1X-Edit", Version = "1.0",
             Description = "Single-step image editing via consistency distillation from rectified flow teacher",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

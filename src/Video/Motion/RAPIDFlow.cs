@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// RAPIDFlow combines recurrent adaptable pyramids with efficient NeXt1D convolutions for fast and accurate optical flow estimation.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RAPIDFlow model for fast optical flow estimation
+/// var rapidFlow = new RAPIDFlow&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new RAPIDFlow&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -215,7 +228,6 @@ public class RAPIDFlow<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "RAPIDFlow" },

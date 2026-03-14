@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -34,6 +36,20 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Based on MMDiT architecture with parameter-efficient design
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new EMMDiTPredictor&lt;float&gt;(inputChannels: 4, contextDim: 768);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class EMMDiTPredictor<T> : NoisePredictorBase<T>
 {
     private const int EMMDIT_HIDDEN_SIZE = 1024;

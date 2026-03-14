@@ -31,6 +31,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// Reference: Improved upon CogVideoX VAE architecture with motion-aware encoding, 2024-2025
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new ImprovedVideoVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4, numFrames: 16);
+/// var video = Tensor&lt;float&gt;.Random(new[] { 1, 3, 16, 256, 256 });
+/// var latent = vae.Encode(video);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]

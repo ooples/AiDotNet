@@ -682,7 +682,6 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Prepare Siamese-specific information
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.SiameseNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "EmbeddingSize", Architecture.GetOutputShape()[0] },

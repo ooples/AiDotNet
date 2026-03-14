@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 480, Width = 848, NumInferenceSteps = 50 };
+/// var model = new LoongModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 480, 60, 106 });
+/// var longVideo = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -180,7 +188,6 @@ public class LoongModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Loong",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Loong autoregressive LLM-based minute-long video generator.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

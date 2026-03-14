@@ -13,6 +13,25 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// Upper Confidence Bound (UCB) Multi-Armed Bandit agent.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> UCB balances exploration and exploitation mathematically.
+/// For each action, it calculates an optimistic estimate: average reward + confidence bonus.
+/// The confidence bonus is larger for actions tried fewer times, ensuring under-explored
+/// actions get a fair chance. Think of it as "optimism in the face of uncertainty" - if you
+/// are not sure about an action, assume it could be great until proven otherwise. No epsilon
+/// parameter needed; exploration happens automatically.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a UCB bandit agent for optimistic exploration
+/// var options = new UCBBanditOptions&lt;double&gt; { NumArms = 10, ExplorationParameter = 2.0 };
+/// var agent = new UCBBanditAgent&lt;double&gt;(options);
+///
+/// // Select an arm using upper confidence bound
+/// var state = new Vector&lt;double&gt;(new double[] { 1.0 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
@@ -137,7 +156,7 @@ public class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.NumArms;
     public override int FeatureCount => 1;
     public override byte[] Serialize()

@@ -214,7 +214,6 @@ public class MatchaTTS<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             Name = _useNativeMode ? "MatchaTTS-Native" : "MatchaTTS-ONNX",
             Description = $"Matcha-TTS {_options.Variant} flow-matching TTS (Mehta et al., 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumTextEncoderLayers + _options.NumDecoderLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

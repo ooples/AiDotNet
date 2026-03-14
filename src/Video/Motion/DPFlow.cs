@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// DPFlow combines the advantages of image pyramids (capturing large motions) and feature pyramids (rich semantics) in a unified dual-pyramid framework.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DPFlow model for dual-pyramid optical flow estimation
+/// var dpFlow = new DPFlow&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new DPFlow&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -229,7 +242,6 @@ public class DPFlow<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "DPFlow" },

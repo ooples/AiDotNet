@@ -53,6 +53,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Yang et al., "Paint by Example: Exemplar-based Image Editing with Diffusion Models", CVPR 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new PaintByExampleModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var result = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Inpainting)]
@@ -358,7 +366,6 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Paint-by-Example",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Paint-by-Example fills masked regions using exemplar images as visual references",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

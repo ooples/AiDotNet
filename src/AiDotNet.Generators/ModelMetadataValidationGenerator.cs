@@ -30,7 +30,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         title: "Missing required model metadata attribute",
         messageFormat: "Model class '{0}' is missing required attribute '[{1}]'",
         category: "AiDotNet.ModelMetadata",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Every concrete model class must have all required metadata attributes: ModelDomain, ModelCategory, ModelTask, ModelComplexity, and ModelInput.");
 
@@ -39,7 +39,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         title: "Missing XML doc summary",
         messageFormat: "Model class '{0}' is missing XML doc summary",
         category: "AiDotNet.ModelMetadata",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor MissingBeginnerRemarks = new(
@@ -47,7 +47,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         title: "Missing beginner-friendly remarks",
         messageFormat: "Model class '{0}' is missing beginner-friendly remarks (XML remarks with 'For Beginners' content)",
         category: "AiDotNet.ModelMetadata",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor MissingExample = new(
@@ -55,7 +55,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         title: "Missing usage example",
         messageFormat: "Model class '{0}' is missing XML doc example block",
         category: "AiDotNet.ModelMetadata",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor InvalidPaperUrl = new(
@@ -63,7 +63,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         title: "Invalid ModelPaper URL",
         messageFormat: "ModelPaper URL '{0}' on '{1}' is not well-formed (must start with https://)",
         category: "AiDotNet.ModelMetadata",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     // Fully-qualified attribute names (without "Attribute" suffix for matching)
@@ -73,6 +73,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
     private const string ModelComplexityAttributeName = "AiDotNet.Attributes.ModelComplexityAttribute";
     private const string ModelInputAttributeName = "AiDotNet.Attributes.ModelInputAttribute";
     private const string ModelPaperAttributeName = "AiDotNet.Attributes.ModelPaperAttribute";
+    private const string ModelMetadataExemptAttributeName = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
     // Interface/base type names to detect model classes
     private const string IFullModelName = "AiDotNet.Interfaces.IFullModel";
@@ -165,6 +166,8 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         var inputAttr = compilation.GetTypeByMetadataName(ModelInputAttributeName);
         var paperAttr = compilation.GetTypeByMetadataName(ModelPaperAttributeName);
 
+        var exemptAttr = compilation.GetTypeByMetadataName(ModelMetadataExemptAttributeName);
+
         // If attributes don't exist in the compilation yet, skip validation
         if (domainAttr is null || categoryAttr is null || taskAttr is null ||
             complexityAttr is null || inputAttr is null)
@@ -179,6 +182,10 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
                 continue;
 
             if (!seen.Add(modelClass))
+                continue;
+
+            // Skip classes marked with [ModelMetadataExempt]
+            if (exemptAttr is not null && HasAttribute(modelClass.GetAttributes(), exemptAttr))
                 continue;
 
             ValidateRequiredAttributes(context, modelClass, domainAttr, categoryAttr, taskAttr, complexityAttr, inputAttr);

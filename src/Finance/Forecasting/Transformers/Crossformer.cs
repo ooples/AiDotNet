@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
@@ -44,6 +44,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// https://openreview.net/forum?id=vSVLM2j9eie
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Crossformer for multivariate forecasting with cross-dimension attention
+/// // Captures both temporal and cross-variable dependencies simultaneously
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with two-stage attention (cross-time + cross-dimension)
+/// var model = new Crossformer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new Crossformer&lt;double&gt;(architecture, "crossformer_weather.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -452,7 +468,6 @@ public class Crossformer<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Crossformer" },

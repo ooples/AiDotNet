@@ -249,8 +249,12 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     T pij = P[i, j];
                     T absCorr2 = NumOps.Abs(corr[i, j]);
                     T dataGrad2 = NumOps.Subtract(pij, absCorr2);
+                    // Include acyclicity gradient so NOTEARS constraint reaches Q/K weights
+                    T acycGrad2 = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
+                        NumOps.FromDouble(2));
+                    T totalGrad2 = NumOps.Add(dataGrad2, acycGrad2);
                     T sigDeriv2 = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
-                    T dLogit2 = NumOps.Multiply(dataGrad2, sigDeriv2);
+                    T dLogit2 = NumOps.Multiply(totalGrad2, sigDeriv2);
 
                     // dLogit/dAttended * dAttended/dAttnWeights * dAttnWeights/dScores * dScores/dQ,K
                     for (int ki = 0; ki < d; ki++)
@@ -265,15 +269,18 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                         // softmax jacobian (simplified): attn * (1-attn) for diagonal term
                         T dScore = NumOps.Multiply(dAttnW, NumOps.Multiply(aw, NumOps.Subtract(NumOps.One, aw)));
                         dScore = NumOps.Multiply(dScore, headScale);
-                        // dScore/dQ = K, dScore/dK = Q
-                        for (int f = 0; f < featDim; f++)
+                        // dScore/dQ[h] = K[h], dScore/dK[h] = Q[h]
+                        for (int h = 0; h < headDim; h++)
                         {
-                            gWq[f, 0] = NumOps.Add(gWq[f, 0],
-                                NumOps.Multiply(dScore,
-                                    NumOps.Multiply(features[idx, f], K[kIdx2, 0])));
-                            gWk[f, 0] = NumOps.Add(gWk[f, 0],
-                                NumOps.Multiply(dScore,
-                                    NumOps.Multiply(features[kIdx2, f], Q[idx, 0])));
+                            for (int f = 0; f < featDim; f++)
+                            {
+                                gWq[f, h] = NumOps.Add(gWq[f, h],
+                                    NumOps.Multiply(dScore,
+                                        NumOps.Multiply(features[idx, f], K[kIdx2, h])));
+                                gWk[f, h] = NumOps.Add(gWk[f, h],
+                                    NumOps.Multiply(dScore,
+                                        NumOps.Multiply(features[kIdx2, f], Q[idx, h])));
+                            }
                         }
                     }
                 }
@@ -301,7 +308,11 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
             if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
-                rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+            {
+                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+                T rhoMax = NumOps.FromDouble(1e+16);
+                rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
+            }
         }
 
         // Final inference using trained parameters

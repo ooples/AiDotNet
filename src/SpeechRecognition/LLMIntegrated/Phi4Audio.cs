@@ -22,6 +22,22 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// Phi-4 Audio extends the Phi-4 language model with speech understanding through a Mixture-of-LoRA adapter approach. A lightweight speech encoder processes audio and produces features that are injected into the Phi-4 model via specialized LoRA adapters. The mixture approach routes different speech feature types (prosody, phonetic, semantic) to specialized adapter experts. This enables efficient speech understanding without full model fine-tuning while maintaining Phi-4's strong language capabilities.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Phi-4 Audio for efficient speech recognition
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputSize: 80,
+///     outputSize: 51200);
+///
+/// var model = new Phi4Audio&lt;float&gt;(architecture, "phi4_audio.onnx");
+///
+/// // Transcribe speech to text
+/// var result = model.Transcribe(audioTensor);
+/// Console.WriteLine(result.Text);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -86,7 +102,7 @@ public class Phi4Audio<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Phi4Audio-Native" : "Phi4Audio-ONNX", Description = "Phi-4 Audio: Mixture-of-LoRA speech adapter (Microsoft, 2025)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "Phi4Audio-Native" : "Phi4Audio-ONNX", Description = "Phi-4 Audio: Mixture-of-LoRA speech adapter (Microsoft, 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Phi4Audio<T>(Architecture, mp, _options); return new Phi4Audio<T>(Architecture, _options); }

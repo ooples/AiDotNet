@@ -431,7 +431,6 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         return new ModelMetadata<T>
         {
             Name = "DocGCN",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DocGCN for graph-based document understanding",
             FeatureCount = _nodeDim,
             Complexity = _gcnLayers,

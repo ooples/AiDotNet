@@ -17,6 +17,7 @@ using AiDotNet.Deployment.Mobile.TensorFlowLite;
 using AiDotNet.Deployment.Runtime;
 using AiDotNet.Deployment.TensorRT;
 using AiDotNet.Diagnostics;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.ExperimentTracking;
 using AiDotNet.Helpers;
@@ -80,6 +81,7 @@ namespace AiDotNet.Models.Results;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [Serializable]
+[ModelMetadataExempt]
 public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>

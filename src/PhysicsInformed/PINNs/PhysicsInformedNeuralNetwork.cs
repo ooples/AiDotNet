@@ -69,6 +69,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// They've revolutionized scientific machine learning by showing that deep learning
     /// can be guided by physics rather than just data.
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 2, outputSize: 1);
+    /// var pde = new HeatEquation&lt;float&gt;();
+    /// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
+    /// var pinn = new PhysicsInformedNeuralNetwork&lt;float&gt;(architecture, pde, bc);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -880,7 +891,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "PDE", _pdeSpecification.Name },

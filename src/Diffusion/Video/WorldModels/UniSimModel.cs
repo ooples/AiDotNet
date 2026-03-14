@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 256, Width = 256, NumInferenceSteps = 20 };
+/// var model = new UniSimModel&lt;float&gt;(options);
+/// var actionInput = Tensor&lt;float&gt;.Random(new[] { 1, 16, 30, 32, 32 });
+/// var simulated = model.Predict(actionInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -180,7 +188,6 @@ public class UniSimModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "UniSim",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "UniSim universal simulator from video and action pairs.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

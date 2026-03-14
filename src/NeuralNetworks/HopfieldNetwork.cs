@@ -549,7 +549,6 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.HopfieldNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Size", _size },

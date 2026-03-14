@@ -26,6 +26,17 @@ namespace AiDotNet.Regression;
 /// might decrease it. Logistic regression finds the right balance of these factors to make accurate predictions.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var model = new LogisticRegression&lt;double&gt;();
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+/// model.Train(features, targets);
+/// var prediction = model.Predict(Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 3.0, 3.0 }));
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
@@ -278,30 +289,6 @@ public class LogisticRegression<T> : RegressionBase<T>
         T maxGradient = gradient.Max(NumOps.Abs) ?? NumOps.Zero;
         T scaledMaxGradient = NumOps.Divide(maxGradient, NumOps.FromDouble(n));
         return NumOps.LessThan(scaledMaxGradient, NumOps.FromDouble(_options.Tolerance));
-    }
-
-    /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type, in this case, LogisticRegression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an enumeration value indicating that this is a logistic regression model. This is used
-    /// for type identification when working with different regression models in a unified manner.
-    /// </para>
-    /// <para><b>For Beginners:</b> This simply tells other parts of the program what kind of model this is.
-    /// 
-    /// When you have different types of models in your program:
-    /// - Each model needs to identify itself
-    /// - This method returns a label (LogisticRegression) that identifies this specific type
-    /// - Other code can use this label to handle the model appropriately
-    /// 
-    /// It's like having different types of vehicles (cars, trucks, motorcycles) that each need to be serviced differently.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LogisticRegression;
     }
 
     /// <summary>

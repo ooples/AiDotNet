@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// NeuFlow v2 achieves high-efficiency optical flow estimation suitable for edge devices through a lightweight backbone and optimized inference.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a NeuFlow V2 model for efficient edge-device optical flow
+/// var neuFlow = new NeuFlowV2&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new NeuFlowV2&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -217,7 +230,6 @@ public class NeuFlowV2<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "NeuFlowV2" },

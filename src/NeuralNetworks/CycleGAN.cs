@@ -808,7 +808,6 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.CycleGAN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorAtoB_Parameters", GeneratorAtoB.GetParameterCount() },

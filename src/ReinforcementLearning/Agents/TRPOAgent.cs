@@ -39,6 +39,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
 /// Famous for: OpenAI robotics, predecessor to PPO (which simplified TRPO)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TRPO agent with monotonic improvement guarantees
+/// var options = new TRPOOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, MaxKLDivergence = 0.01 };
+/// var agent = new TRPOAgent&lt;double&gt;(options);
+///
+/// // Select an action within the trust region
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -653,7 +664,6 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.TRPOAgent,
         };
     }
 

@@ -175,7 +175,6 @@ public class NeuralNetworkBaseIntegrationTests
             {
                 Name = "TestNetwork",
                 Version = "1.0",
-                ModelType = ModelType.NeuralNetwork,
                 FeatureCount = Architecture.InputSize,
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>

@@ -578,7 +578,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "IP-Adapter", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "IP-Adapter", Version = "1.0",
             Description = "Image prompt adapter for reference image-guided diffusion generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

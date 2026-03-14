@@ -15,7 +15,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.StateSpace;
 
@@ -63,6 +63,16 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 /// https://arxiv.org/abs/2403.09898
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 7, inputDepth: 1, outputSize: 96);
+/// var model = new TimeMachine&lt;double&gt;(architecture);
+/// var onnxModel = new TimeMachine&lt;double&gt;(architecture, "timemachine.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -480,7 +490,6 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimeMachine" },

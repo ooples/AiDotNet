@@ -252,7 +252,6 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = _useNativeMode ? "SpikingFullSubNet-Native" : "SpikingFullSubNet-ONNX",
             Description = "Spiking-FullSubNet speech enhancement with spiking neural networks (2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins,
             Complexity = _options.NumFullBandLayers + _options.NumSubBandLayers
         };
         m.AdditionalInfo["SpikingThreshold"] = _options.SpikingThreshold.ToString();

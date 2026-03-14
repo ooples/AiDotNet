@@ -60,6 +60,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Thread Safety:</b> This class is NOT thread-safe. Create separate instances for concurrent usage.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MOMENT multi-task time series foundation model
+/// // Supports forecasting, anomaly detection, classification, imputation, and embedding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with T5-based encoder and task-specific heads
+/// var model = new MOMENT&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new MOMENT&lt;double&gt;(architecture, "moment_base.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -434,7 +450,6 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "MOMENT" },

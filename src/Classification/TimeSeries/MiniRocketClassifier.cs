@@ -40,6 +40,21 @@ namespace AiDotNet.Classification.TimeSeries;
 /// <para><b>Reference:</b> Dempster et al., "MiniRocket: A Very Fast (Almost) Deterministic Transform
 /// for Time Series Classification" (2021)</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create MiniRocket classifier with deterministic kernels for fast time series classification
+/// var options = new MiniRocketOptions&lt;double&gt;();
+/// var classifier = new MiniRocketClassifier&lt;double&gt;(options);
+///
+/// // Prepare time series samples as tensors (each row is a time series)
+/// var series1 = new Tensor&lt;double&gt;(new double[] { 1.0, 1.2, 1.5, 1.3, 1.1 });
+/// var series2 = new Tensor&lt;double&gt;(new double[] { 2.0, 2.5, 2.3, 2.8, 3.0 });
+///
+/// // Extract PPV features using fixed {-1, 2} kernels and classify
+/// var predictions = classifier.Predict(series1);
+/// Console.WriteLine($"Predicted class: {predictions[0]}");
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -96,7 +111,6 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.TimeSeriesClassifier;
 
     /// <summary>
     /// Trains the MiniRocket classifier on time series sequences.

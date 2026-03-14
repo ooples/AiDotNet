@@ -32,6 +32,15 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 /// pages perfectly but produces poor copies of unusual documents, making them easy to identify.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an LSTM-VAE model for detecting anomalies via reconstruction error
+/// var options = new LSTMVAEOptions&lt;double&gt;();
+/// var lstmVae = new LSTMVAE&lt;double&gt;(options);
+/// lstmVae.Train(normalTrainingData, normalLabels);
+/// Vector&lt;double&gt; reconstructionErrors = lstmVae.Predict(testData);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]
 [ModelCategory(ModelCategory.Autoencoder)]
@@ -297,7 +306,6 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "LSTM-VAE",
-            ModelType = AiDotNet.Enums.ModelType.TimeSeriesRegression,
             Description = "LSTM Variational Autoencoder for time series anomaly detection",
             Complexity = ParameterCount,
             FeatureCount = _options.WindowSize,

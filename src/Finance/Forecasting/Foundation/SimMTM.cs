@@ -27,10 +27,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// recovering masked series by aggregating from similar unmasked series in the batch.
 /// It uses a patch-based transformer with a similarity-weighted reconstruction objective.
 /// </para>
+/// <para><b>For Beginners:</b> SimMTM learns about time series by playing a fill-in-the-blank
+/// game. Parts of the data are hidden (masked), and the model must reconstruct them. What makes
+/// it special is that it looks at similar series in the training batch for clues, like asking
+/// a friend who has seen similar patterns. This pre-training approach helps the model learn
+/// robust representations that transfer well to forecasting tasks.</para>
 /// <para>
 /// <b>Reference:</b> Dong et al., "SimMTM: A Simple Pre-Training Framework for Masked Time-Series Modeling", NeurIPS 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SimMTM model for masked time series pre-training with similarity learning
+/// // Reconstructs masked series using similar unmasked series from the training batch
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with similarity-weighted masked reconstruction
+/// var model = new SimMTM&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new SimMTM&lt;double&gt;(architecture, "simmtm.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -259,7 +280,6 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "SimMTM" },

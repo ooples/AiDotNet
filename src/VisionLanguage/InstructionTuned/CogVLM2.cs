@@ -25,8 +25,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "CogVLM2: Visual Language Models for Image and Video Understanding" (Hong et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> CogVLM2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> CogVLM2 is the successor to CogVLM that upgrades the language
+/// backbone from Vicuna to GLM-4 (or LLaMA-3) and adds video understanding. It keeps the
+/// same "visual expert" approach — dedicated visual expert modules in every decoder layer with
+/// separate attention weights for image tokens versus text tokens. The key additions are temporal
+/// attention for processing video frame sequences and improved training that gives it stronger
+/// performance on both image and video tasks. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CogVLM2 model for image and video understanding
+/// // using visual expert modules with GLM-4 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CogVLM2&lt;double&gt;(architecture, "cogvlm2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CogVLM2&lt;double&gt;(architecture, new CogVLM2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -122,7 +144,7 @@ public class CogVLM2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "CogVLM2-Native" : "CogVLM2-ONNX", Description = "CogVLM2: Visual Language Models for Image and Video Understanding (Hong et al., 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "CogVLM2"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["VisualExpertDim"] = _options.VisualExpertDim.ToString(); m.AdditionalInfo["VideoEnabled"] = _options.EnableVideo.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "CogVLM2-Native" : "CogVLM2-ONNX", Description = "CogVLM2: Visual Language Models for Image and Video Understanding (Hong et al., 2024)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "CogVLM2"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["VisualExpertDim"] = _options.VisualExpertDim.ToString(); m.AdditionalInfo["VideoEnabled"] = _options.EnableVideo.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.VisualExpertDim); writer.Write(_options.NumVisualExpertHeads); writer.Write(_options.EnableVideo); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.VisualExpertDim = reader.ReadInt32(); _options.NumVisualExpertHeads = reader.ReadInt32(); _options.EnableVideo = reader.ReadBoolean(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new CogVLM2<T>(Architecture, mp, _options); return new CogVLM2<T>(Architecture, _options); }

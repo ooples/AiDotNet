@@ -17,10 +17,35 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// OWL-ViT (Minderer et al., 2022) repurposes a CLIP ViT image encoder for open-vocabulary
+/// detection by treating each patch token as a candidate object. Per-patch MLP heads predict
+/// bounding boxes, while class scores come from cosine similarity between patch tokens and
+/// CLIP text embeddings of category names. This is a query-free approach where every ViT
+/// patch serves as a candidate detection, eliminating the need for learned object queries.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Simple Open-Vocabulary Object Detection with Vision Transformers" (Google, 2022)</item></list></para>
-/// <para><b>For Beginners:</b> OWLViT is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> OWL-ViT is a vision-language model that detects objects using
+/// text descriptions by leveraging CLIP's vision-language alignment at the patch level. Default
+/// values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an OWL-ViT model for open-vocabulary object detection
+/// // using CLIP-aligned patch-level detection without learned queries
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new OWLViT&lt;double&gt;(architecture, "owlvit.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new OWLViT&lt;double&gt;(architecture, new OWLViTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -209,7 +234,7 @@ public class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "OWL-ViT-Native" : "OWL-ViT-ONNX", Description = "OWL-ViT: open-vocabulary object detection via ViT + CLIP alignment.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "OWL-ViT-Native" : "OWL-ViT-ONNX", Description = "OWL-ViT: open-vocabulary object detection via ViT + CLIP alignment.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "OWL-ViT";
         m.AdditionalInfo["NumClassEmbeddings"] = _options.NumClassEmbeddings.ToString();
         return m;

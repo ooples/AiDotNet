@@ -41,6 +41,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// CVPR 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UNINEXT model for unified instance perception (detection + segmentation + tracking)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 80);
+/// var model = new UNINEXT&lt;double&gt;(architecture, numClasses: 80);
+///
+/// // Or load a pre-trained ONNX model for multi-task instance perception
+/// var onnxModel = new UNINEXT&lt;double&gt;(architecture, "uninext.onnx", numClasses: 80);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
@@ -387,7 +400,6 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "UNINEXT" }, { "InputHeight", _height }, { "InputWidth", _width },

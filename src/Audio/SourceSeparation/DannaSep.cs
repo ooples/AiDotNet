@@ -238,7 +238,6 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         {
             Name = _useNativeMode ? "DannaSep-Native" : "DannaSep-ONNX",
             Description = "Danna-Sep dual-path attention music source separation (2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins,
             Complexity = _options.NumDualPathBlocks
         };
         m.AdditionalInfo["NumSources"] = _options.NumSources.ToString();

@@ -322,7 +322,6 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GRUNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputSize", Architecture.InputSize },

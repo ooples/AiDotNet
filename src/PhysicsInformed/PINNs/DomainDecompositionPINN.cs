@@ -61,6 +61,18 @@ namespace AiDotNet.PhysicsInformed.PINNs;
 ///   (XPINNs): A Generalized Space-Time Domain Decomposition Based Deep Learning Framework"
 ///   Communications in Computational Physics, 2020.
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 2, outputSize: 1);
+/// var pde = new HeatEquation&lt;float&gt;();
+/// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
+/// var subdomains = new List&lt;SubdomainDefinition&lt;float&gt;&gt; { left, right };
+/// var ddPinn = new DomainDecompositionPINN&lt;float&gt;(architecture, pde, bc, subdomains);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Science)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

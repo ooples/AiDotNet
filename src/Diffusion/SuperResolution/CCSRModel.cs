@@ -41,6 +41,14 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// Reference: Sun et al., "Improving the Stability of Diffusion Models for Content Consistent Super-Resolution", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 15 };
+/// var model = new CCSRModel&lt;float&gt;(options);
+/// var lowRes = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var highRes = model.Predict(lowRes);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Enhancement)]
@@ -148,7 +156,7 @@ public class CCSRModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "CCSR", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "CCSR", Version = "1.0",
             Description = "Content-consistent diffusion SR with hallucination prevention and VAE refinement",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

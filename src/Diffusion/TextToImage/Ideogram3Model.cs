@@ -339,7 +339,6 @@ public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "Ideogram 3",
             Version = "3.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "SiT with text layout prediction and OCR-in-the-loop training for superior text rendering",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

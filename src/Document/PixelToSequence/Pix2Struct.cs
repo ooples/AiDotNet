@@ -466,7 +466,6 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return new ModelMetadata<T>
         {
             Name = "Pix2Struct",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Pix2Struct for screenshot parsing (ICML 2023)",
             FeatureCount = _hiddenDim,
             Complexity = _numEncoderLayers + _numDecoderLayers,

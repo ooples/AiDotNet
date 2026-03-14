@@ -205,7 +205,6 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         {
             Name = _useNativeMode ? "WavLM-Native" : "WavLM-ONNX",
             Description = $"WavLM {_options.Variant} self-supervised speech model (Chen et al., 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = 1, Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["HiddenDim"] = _options.HiddenDim.ToString();

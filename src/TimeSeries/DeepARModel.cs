@@ -49,6 +49,19 @@ namespace AiDotNet.TimeSeries;
 /// - Handle new products or stores with limited data
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeepAR probabilistic forecasting model for multiple related time series
+/// var options = new DeepAROptions&lt;double&gt;
+/// {
+///     InputLength = 60, PredictionLength = 30,
+///     HiddenSize = 40, NumLayers = 2
+/// };
+/// var deepar = new DeepARModel&lt;double&gt;(options);
+/// deepar.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = deepar.Predict(contextWindow);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]
@@ -550,7 +563,6 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "DeepAR",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Probabilistic forecasting with autoregressive recurrent networks (Production-Ready)",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,

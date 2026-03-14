@@ -493,7 +493,6 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
         return new ModelMetadata<T>
         {
             Name = "DiT",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DiT for document image understanding (ACM MM 2022)",
             FeatureCount = _hiddenDim,
             Complexity = _numLayers,

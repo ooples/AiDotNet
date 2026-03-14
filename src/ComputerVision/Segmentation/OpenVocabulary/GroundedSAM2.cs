@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <b>Reference:</b> Ren et al., "Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks", arXiv 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Grounded SAM 2 model for text-grounded video segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
+/// var model = new GroundedSAM2&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for open-world object tracking
+/// var onnxModel = new GroundedSAM2&lt;double&gt;(architecture, "groundedsam2.onnx", numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -271,7 +284,6 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "GroundedSAM2" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

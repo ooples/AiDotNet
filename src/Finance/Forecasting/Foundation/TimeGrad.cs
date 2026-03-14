@@ -27,10 +27,32 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// probabilistic multi-step forecasting. It generates multiple forecast samples to
 /// provide well-calibrated uncertainty estimates.
 /// </para>
+/// <para><b>For Beginners:</b> TimeGrad predicts time series step by step, where at each step
+/// it uses a diffusion process to generate the next value. Think of it as a storyteller who
+/// writes one sentence at a time, but for each sentence uses a careful drafting process to get
+/// it right. By generating many possible futures, TimeGrad provides not just a single forecast
+/// but a range of scenarios with probabilities, helping you understand how confident the
+/// prediction is.</para>
 /// <para>
 /// <b>Reference:</b> Rasul et al., "Autoregressive Denoising Diffusion Models for Multivariate Probabilistic Time Series Forecasting", ICML 2021.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimeGrad autoregressive diffusion model for probabilistic forecasting
+/// // Combines RNN with conditional diffusion for step-by-step forecast generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with RNN encoder and denoising diffusion decoder
+/// var model = new TimeGrad&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimeGrad&lt;double&gt;(architecture, "timegrad.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -322,7 +344,6 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimeGrad" },

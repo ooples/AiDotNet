@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 /// <b>Reference:</b> Wang et al., "SegGPT: Segmenting Everything In Context", ICCV 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SegGPT model for in-context few-shot segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 448, inputWidth: 448, inputDepth: 3, outputSize: 1);
+/// var model = new SegGPT&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for example-guided segmentation
+/// var onnxModel = new SegGPT&lt;double&gt;(architecture, "seggpt.onnx", numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
@@ -274,7 +287,6 @@ public class SegGPT<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "SegGPT" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

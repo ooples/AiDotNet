@@ -33,6 +33,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Lin et al., "SDXL-Lightning: Progressive Adversarial Diffusion Distillation", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 4 };
+/// var model = new SDXLLightningModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.GAN)]
@@ -143,7 +151,7 @@ public class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SDXL Lightning", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SDXL Lightning", Version = "1.0",
             Description = "Progressive adversarial distillation for 2-8 step SDXL-quality generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

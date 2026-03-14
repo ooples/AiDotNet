@@ -573,7 +573,6 @@ public class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         return new ModelMetadata<T>
         {
             Name = "LayoutLMv2",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LayoutLMv2 with text, layout, and visual features (ACL 2021)",
             FeatureCount = _hiddenDim,
             Complexity = _numLayers,

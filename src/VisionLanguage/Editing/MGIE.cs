@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// MGIE (Apple, 2024) guides instruction-based image editing through a multimodal LLM (LLaVA)
+/// that interprets and expands ambiguous editing instructions into detailed, expressive guidance.
+/// The LLM-derived guidance conditions a diffusion model for semantically faithful edits that
+/// align with user intent, bridging the gap between vague instructions and precise image modifications.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Guiding Instruction-Based Image Editing via Multimodal Large Language Models" (Apple, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> MGIE is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> MGIE is a vision-language model that uses an LLM to understand
+/// editing instructions and guide a diffusion model for precise image edits. Default values
+/// follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an MGIE model for MLLM-guided image editing
+/// // with LLaVA-based instruction understanding and diffusion generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MGIE&lt;double&gt;(architecture, "mgie.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MGIE&lt;double&gt;(architecture, new MGIEOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -130,7 +154,7 @@ public class MGIE<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "MGIE-Native" : "MGIE-ONNX", Description = "MGIE: MLLM-guided image editing with LLaVA-based instruction understanding.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "MGIE-Native" : "MGIE-ONNX", Description = "MGIE: MLLM-guided image editing with LLaVA-based instruction understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "MGIE";
         m.AdditionalInfo["ExpressiveInstructions"] = _options.EnableExpressiveInstructions.ToString();
         return m;

@@ -709,7 +709,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "ControlNet", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNet", Version = "1.0",
             Description = "Spatial conditioning for diffusion models via trainable encoder copy",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

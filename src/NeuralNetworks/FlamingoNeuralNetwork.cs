@@ -29,6 +29,11 @@ namespace AiDotNet.NeuralNetworks;
 /// Resampler to compress visual features and gated cross-attention layers to integrate
 /// visual information into a frozen language model.
 /// </para>
+/// <para><b>For Beginners:</b> Flamingo is a visual AI that can answer questions about images
+/// with just a few examples. Show it 2-3 examples of image-answer pairs, and it can handle
+/// similar questions about new images. It works by feeding image features into a language
+/// model through special cross-attention layers, letting the language model "see" the image
+/// while generating text responses.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
@@ -1157,7 +1162,6 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.Flamingo,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ImageSize", _imageSize },

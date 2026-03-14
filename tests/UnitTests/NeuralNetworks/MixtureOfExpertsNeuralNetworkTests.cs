@@ -235,7 +235,7 @@ public class MixtureOfExpertsNeuralNetworkTests
 
         // Assert
         Assert.NotNull(metadata);
-        Assert.Equal(ModelType.MixtureOfExperts, metadata.ModelType);
+
         Assert.True(metadata.AdditionalInfo.TryGetValue("NumExperts", out var numExperts));
         Assert.Equal(8, numExperts);
         Assert.True(metadata.AdditionalInfo.TryGetValue("TopK", out var topK));

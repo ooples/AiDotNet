@@ -396,7 +396,6 @@ public class ModelScopeT2VModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "ModelScope-T2V",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "ModelScope Text-to-Video with temporal U-Net for short clip generation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -521,7 +521,6 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.LiquidStateMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ReservoirSize", _reservoirSize },

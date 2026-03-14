@@ -529,7 +529,6 @@ public class DiffBIRModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "DiffBIR",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DiffBIR blind image restoration with generative diffusion prior",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -952,7 +952,6 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VariationalAutoencoder,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputDimension", Layers[0].GetInputShape()[0] },

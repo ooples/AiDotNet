@@ -180,7 +180,6 @@ public class BasicVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "BasicVSR-Native" : "BasicVSR-ONNX",
             Description = $"BasicVSR {_options.Variant} bidirectional recurrent VSR (Chan et al., CVPR 2021)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

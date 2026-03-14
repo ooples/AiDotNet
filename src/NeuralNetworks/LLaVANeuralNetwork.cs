@@ -1367,7 +1367,6 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.LLaVA,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ImageSize", _imageSize },

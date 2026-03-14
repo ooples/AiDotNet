@@ -1099,7 +1099,6 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.RestrictedBoltzmannMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "VisibleSize", VisibleSize },

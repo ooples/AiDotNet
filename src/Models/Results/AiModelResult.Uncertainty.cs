@@ -1096,11 +1096,6 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private static List<MCDropoutLayer<T>> GetMonteCarloDropoutLayers(IFullModel<T, TInput, TOutput> model)
     {
-        if (model is Models.NeuralNetworkModel<T> nn)
-        {
-            return nn.Network.LayersReadOnly.OfType<MCDropoutLayer<T>>().ToList();
-        }
-
         if (model is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> baseNetwork)
         {
             return baseNetwork.LayersReadOnly.OfType<MCDropoutLayer<T>>().ToList();

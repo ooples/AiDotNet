@@ -347,7 +347,6 @@ public class MiDaS<T> : NeuralNetworkBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.DepthEstimation,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "MiDaS" },

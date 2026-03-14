@@ -15,8 +15,9 @@ using AiDotNet.Validation;
 namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 
 /// <summary>
-/// Multi-Agent Deep Deterministic Policy Gradient (MADDPG) agent.
-
+/// Multi-Agent Deep Deterministic Policy Gradient (MADDPG) agent for cooperative
+/// and competitive multi-agent reinforcement learning with continuous action spaces.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
@@ -40,6 +41,18 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 /// Examples: Robot swarms, traffic control, multi-player games
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a multi-agent DDPG system with 3 cooperative agents
+/// var options = new MADDPGOptions&lt;double&gt; { NumAgents = 3, ActorLearningRate = 0.001 };
+/// var arch = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 2);
+/// var agent = new MADDPGAgent&lt;double&gt;(arch, options);
+///
+/// // Each agent selects a continuous action from its observation
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2, 0.8, -0.1, 0.4, 0.6 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -608,7 +621,6 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.ReinforcementLearning,
         };
     }
 

@@ -29,6 +29,23 @@ namespace AiDotNet.Diffusion.Control;
 /// so this specialized version ensures control signals work correctly with FLUX.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ControlNet for FLUX.1 architecture
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 16,
+///     Height = 1024,
+///     Width = 1024,
+///     NumInferenceSteps = 28
+/// };
+/// var model = new ControlNetFluxModel&lt;float&gt;(options, ControlType.Canny);
+///
+/// // Generate with edge-guided control
+/// var edgeCondition = Tensor&lt;float&gt;.Random(new[] { 1, 1, 1024, 1024 });
+/// var result = model.Predict(edgeCondition);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -154,7 +171,6 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet-FLUX",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "ControlNet adapted for FLUX.1 flow-matching architecture",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

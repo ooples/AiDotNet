@@ -37,6 +37,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Butoi et al., "UniverSeg: Universal Medical Image Segmentation", ICCV 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UniverSeg model for few-shot medical segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 128, inputWidth: 128, inputDepth: 1, outputSize: 1);
+/// var model = new UniverSeg&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for cross-domain medical segmentation
+/// var onnxModel = new UniverSeg&lt;double&gt;(architecture, "universeg.onnx", numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
@@ -268,7 +281,6 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "UniverSeg" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

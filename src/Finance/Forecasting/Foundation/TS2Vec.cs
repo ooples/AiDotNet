@@ -27,10 +27,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// across augmented context views, producing contextual representations at arbitrary granularities.
 /// It uses a dilated CNN encoder with temporal and instance contrastive losses.
 /// </para>
+/// <para><b>For Beginners:</b> TS2Vec creates a universal "fingerprint" for time series data
+/// at any time scale. It works by showing the model two different views of the same data
+/// (like seeing a city from two angles) and training it to recognize they represent the same
+/// thing. The resulting representations can be used for forecasting, classification, or
+/// anomaly detection without task-specific retraining.</para>
 /// <para>
 /// <b>Reference:</b> Yue et al., "TS2Vec: Towards Universal Representation of Time Series", AAAI 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TS2Vec model for universal time series representation learning
+/// // Hierarchical contrastive learning produces contextual representations at any granularity
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with dilated CNN encoder and contrastive objectives
+/// var model = new TS2Vec&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TS2Vec&lt;double&gt;(architecture, "ts2vec.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -261,7 +282,6 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TS2Vec" },

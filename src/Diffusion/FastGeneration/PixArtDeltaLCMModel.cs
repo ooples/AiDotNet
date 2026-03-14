@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Chen et al., "PixArt-delta: Fast and Controllable Image Generation with Latent Consistency Models", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 4 };
+/// var model = new PixArtDeltaLCMModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -140,7 +148,7 @@ public class PixArtDeltaLCMModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "PixArt-Delta LCM", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "PixArt-Delta LCM", Version = "1.0",
             Description = "Latent Consistency Model distillation of PixArt-Delta for 2-8 step generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

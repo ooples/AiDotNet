@@ -180,7 +180,6 @@ public class RVRT<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "RVRT-Native" : "RVRT-ONNX",
             Description = $"RVRT {_options.Variant} recurrent video restoration transformer (Liang et al., NeurIPS 2022)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

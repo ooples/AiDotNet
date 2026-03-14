@@ -847,7 +847,6 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.StyleGAN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MappingNetworkParameters", MappingNetwork.GetParameterCount() },

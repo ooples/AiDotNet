@@ -764,7 +764,6 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.CalibratedClassifier;
 
     /// <inheritdoc/>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

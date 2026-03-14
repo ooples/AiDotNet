@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// SkyEyeGPT (Zhan et al., 2024) unifies remote sensing vision-language tasks via instruction
+/// tuning with a large language model. Trained on 968K instruction samples covering captioning,
+/// visual question answering, grounding, and scene classification, it adapts a general-purpose
+/// VLM to the remote sensing domain with satellite and aerial imagery understanding.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SkyEyeGPT: Unifying Remote Sensing Vision-Language Tasks via Instruction Tuning with Large Language Model (Zhan et al., 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> SkyEyeGPT is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> SkyEyeGPT is a vision-language model specialized for satellite
+/// and aerial imagery understanding tasks. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SkyEyeGPT model for unified remote sensing vision-language tasks
+/// // with 968K instruction samples for captioning, VQA, and grounding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SkyEyeGPT&lt;double&gt;(architecture, "skyeyegpt.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SkyEyeGPT&lt;double&gt;(architecture, new SkyEyeGPTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Science)]
@@ -94,7 +117,7 @@ public class SkyEyeGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SkyEyeGPT-Native" : "SkyEyeGPT-ONNX", Description = "SkyEyeGPT: unified remote sensing vision-language tasks with 968K instruction samples.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SkyEyeGPT-Native" : "SkyEyeGPT-ONNX", Description = "SkyEyeGPT: unified remote sensing vision-language tasks with 968K instruction samples.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "SkyEyeGPT";
         m.AdditionalInfo["SupportedBands"] = _options.SupportedBands;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

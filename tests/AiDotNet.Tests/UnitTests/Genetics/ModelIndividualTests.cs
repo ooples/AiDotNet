@@ -53,7 +53,6 @@ namespace AiDotNet.Tests.UnitTests.Genetics
                 var metadata = new ModelMetadata<double>
                 {
                     Name = "MockModel",
-                    ModelType = Enums.ModelType.None,
                     FeatureCount = 3,
                     Complexity = 1
                 };
@@ -294,7 +293,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             // Assert
             Assert.NotNull(metadata);
             Assert.Equal("MockModel", metadata.Name);
-            Assert.Equal(ModelType.None, metadata.ModelType);
+
             Assert.Equal(3, metadata.FeatureCount);
             Assert.Equal(1, metadata.Complexity);
         }

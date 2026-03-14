@@ -38,6 +38,19 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// ECCV 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FILM model for frame interpolation with large motion handling
+/// var film = new FILM&lt;double&gt;();
+///
+/// // Or configure with custom multi-scale feature pyramid settings
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 6, outputSize: 3);
+/// var model = new FILM&lt;double&gt;(architecture, numScales: 7, numFeatures: 64);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -1282,7 +1295,6 @@ public class FILM<T> : FrameInterpolationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FILM" },

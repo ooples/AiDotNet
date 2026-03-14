@@ -46,6 +46,14 @@ namespace AiDotNet.Clustering.Neural;
 /// - Understanding data topology
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SelfOrganizingMapOptions&lt;double&gt;();
+/// var selfOrganizingMap = new SelfOrganizingMap&lt;double&gt;(options);
+/// selfOrganizingMap.Fit(dataMatrix);
+/// int[] labels = selfOrganizingMap.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Clustering)]
@@ -83,7 +91,6 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     public int[]? NeuronLabels => _neuronLabels;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

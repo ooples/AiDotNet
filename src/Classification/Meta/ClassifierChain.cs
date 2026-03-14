@@ -36,6 +36,27 @@ namespace AiDotNet.Classification.Meta;
 /// - Error propagation (early mistakes affect later predictions)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create classifier chain for multi-label classification with dependencies
+/// var options = new ClassifierChainOptions&lt;double&gt;();
+/// var classifier = new ClassifierChain&lt;double&gt;(options);
+///
+/// // Prepare training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train chained classifiers where each uses previous outputs as features
+/// classifier.Train(features, labels);
+///
+/// // Predict using chained label dependencies
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Classifier)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -95,7 +116,6 @@ public class ClassifierChain<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.ClassifierChain;
 
     /// <summary>
     /// Trains the Classifier Chain on multi-label data.

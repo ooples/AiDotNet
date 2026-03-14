@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Probabilistic;
 
@@ -66,6 +66,19 @@ namespace AiDotNet.Finance.Probabilistic;
 /// https://arxiv.org/abs/2307.11494
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TSDiff model for self-guiding diffusion forecasting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 100, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new TSDiff&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for self-guided time series diffusion
+/// var onnxModel = new TSDiff&lt;double&gt;(architecture, "tsdiff.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -558,7 +571,6 @@ public class TSDiff<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TSDiff" },

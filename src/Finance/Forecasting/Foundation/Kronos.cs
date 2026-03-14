@@ -28,11 +28,32 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// across 45 global exchanges. It natively understands OHLCV (Open, High, Low, Close, Volume)
 /// candlestick patterns for financial market forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> Kronos is a foundation model built specifically for financial
+/// markets. It was trained on over 12 billion candlestick records from 45 exchanges worldwide,
+/// so it natively understands the language of stock charts (open, high, low, close, volume).
+/// Think of it as a model that has "read" every trading chart in history and can predict what
+/// comes next based on patterns it has learned.</para>
 /// <para>
 /// <b>Reference:</b> "Kronos: A Foundation Model for the Language of Financial Markets", 2025.
 /// https://arxiv.org/abs/2508.02739
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kronos foundation model for financial market forecasting
+/// // Pre-trained on 12B+ candlestick records across 45 global exchanges
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 5, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with OHLCV-native decoder-only architecture
+/// var model = new Kronos&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new Kronos&lt;double&gt;(architecture, "kronos.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -264,7 +285,6 @@ public class Kronos<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Kronos" },

@@ -267,7 +267,6 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         {
             Name = _useNativeMode ? "DAC-Native" : "DAC-ONNX",
             Description = $"Descript Audio Codec {_options.Variant} at {_options.SampleRate / 1000} kHz (Kumar et al., 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = 1,
             Complexity = _options.EncoderChannels.Length
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

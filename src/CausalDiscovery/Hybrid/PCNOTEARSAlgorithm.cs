@@ -229,10 +229,13 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
         // Iteratively remove weakest edge participating in a cycle until acyclic
         while (true)
         {
-            // Check for cycles via DFS
+            // Find a cycle via DFS and trace the exact cycle path
             var visited = new int[d]; // 0=unvisited, 1=in-stack, 2=done
-            int weakI = -1, weakJ = -1;
-            double weakVal = double.MaxValue;
+            var parent = new int[d];
+            var parentEdgeChild = new int[d]; // which child edge led to this node
+            for (int i = 0; i < d; i++) { parent[i] = -1; parentEdgeChild[i] = -1; }
+
+            int cycleStart = -1, cycleEnd = -1;
             bool hasCycle = false;
 
             for (int start = 0; start < d && !hasCycle; start++)
@@ -251,21 +254,15 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
                         if (Math.Abs(W[node, child]) < 1e-12) continue;
                         if (visited[child] == 1)
                         {
+                            // Back-edge found: cycle goes from child -> ... -> node -> child
+                            cycleStart = child;
+                            cycleEnd = node;
                             hasCycle = true;
-                            // Find weakest edge in the cycle path
-                            foreach (var (n, _) in stack)
-                            {
-                                for (int c = 0; c < d; c++)
-                                    if (Math.Abs(W[n, c]) > 1e-12 && visited[c] == 1)
-                                        if (Math.Abs(W[n, c]) < weakVal)
-                                        { weakVal = Math.Abs(W[n, c]); weakI = n; weakJ = c; }
-                            }
-                            if (Math.Abs(W[node, child]) < weakVal)
-                            { weakVal = Math.Abs(W[node, child]); weakI = node; weakJ = child; }
                             break;
                         }
                         if (visited[child] == 0)
                         {
+                            parent[child] = node;
                             stack.Push((node, child + 1));
                             stack.Push((child, 0));
                             visited[child] = 1;
@@ -278,7 +275,28 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
                 }
             }
 
-            if (!hasCycle || weakI < 0) break;
+            if (!hasCycle) break;
+
+            // Trace the cycle path: cycleStart -> ... -> cycleEnd -> cycleStart
+            // Collect edges on this exact cycle
+            int weakI = cycleEnd, weakJ = cycleStart;
+            double weakVal = Math.Abs(W[cycleEnd, cycleStart]);
+
+            int cur = cycleEnd;
+            while (cur != cycleStart)
+            {
+                int prev = parent[cur];
+                if (prev < 0) break; // safety
+                double edgeVal = Math.Abs(W[prev, cur]);
+                if (edgeVal < weakVal)
+                {
+                    weakVal = edgeVal;
+                    weakI = prev;
+                    weakJ = cur;
+                }
+                cur = prev;
+            }
+
             W[weakI, weakJ] = 0;
         }
     }
@@ -303,7 +321,7 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
             partialCorr = ComputePartialCorrelation(data, i, j, condSet, n);
         }
 
-        int dof = n - condSet.Count - 2;
+        int dof = n - condSet.Count - 3;
         if (dof <= 0) return true;
 
         double clamped = Math.Max(-0.999999, Math.Min(partialCorr, 0.999999));

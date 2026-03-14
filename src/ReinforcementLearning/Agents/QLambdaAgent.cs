@@ -9,6 +9,43 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
 
+/// <summary>
+/// Q(lambda) agent that combines Q-learning with eligibility traces for faster credit assignment
+/// in tabular reinforcement learning environments.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Q(lambda) extends Q-learning by maintaining eligibility traces that assign credit
+/// to recently visited state-action pairs. When a reward is received, all eligible
+/// state-action pairs are updated proportionally to their trace value, enabling
+/// faster learning in long-horizon tasks.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// In basic Q-learning, only the most recent state-action pair gets updated when
+/// a reward arrives. Q(lambda) remembers which states you recently visited and
+/// updates all of them, like leaving breadcrumbs that fade over time.
+///
+/// The lambda parameter controls how far back credit is assigned:
+/// - lambda = 0: Same as regular Q-learning (only update last step)
+/// - lambda = 1: Update all visited states equally (Monte Carlo-like)
+/// - lambda = 0.9: Good default, updates recent states more than older ones
+///
+/// This helps the agent learn much faster because rewards propagate backwards
+/// through the trajectory in a single episode instead of requiring many episodes.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Q(lambda) agent with eligibility traces for faster learning
+/// var options = new QLambdaOptions&lt;double&gt; { Lambda = 0.9, LearningRate = 0.1, StateSize = 4, ActionSize = 2 };
+/// var agent = new QLambdaAgent&lt;double&gt;(options);
+///
+/// // Select an action for the current state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
@@ -187,7 +224,7 @@ public class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()

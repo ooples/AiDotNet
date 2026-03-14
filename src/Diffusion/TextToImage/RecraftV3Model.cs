@@ -339,7 +339,6 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "Recraft V3",
             Version = "3.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Professional-grade MMDiT-X with style presets, color palette control, and text rendering",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

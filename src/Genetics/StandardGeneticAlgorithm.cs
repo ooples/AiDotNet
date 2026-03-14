@@ -397,7 +397,6 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GeneticAlgorithmRegression,
             Description = "Model evolved using a standard genetic algorithm",
             AdditionalInfo = new Dictionary<string, object>
             {

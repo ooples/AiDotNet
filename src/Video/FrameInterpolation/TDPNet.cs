@@ -164,7 +164,6 @@ public class TDPNet<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "TDPNet-Native" : "TDPNet-ONNX",
             Description = $"TDPNet {_options.Variant} temporal difference prediction interpolation (2024)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumDiffBlocks * _options.NumScales
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

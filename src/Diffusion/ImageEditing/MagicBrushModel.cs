@@ -50,6 +50,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Zhang et al., "MagicBrush: A Manually Annotated Dataset for Instruction-Guided Image Editing", NeurIPS 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new MagicBrushModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Editing)]
@@ -345,7 +353,6 @@ public class MagicBrushModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "MagicBrush",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "MagicBrush enables instruction-based image editing with visual brush stroke guidance",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

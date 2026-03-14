@@ -42,6 +42,14 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// - Radius = sqrt((SS/N) - (LS/N)²)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new BIRCHOptions&lt;double&gt;();
+/// var bIRCH = new BIRCH&lt;double&gt;(options);
+/// bIRCH.Fit(dataMatrix);
+/// int[] labels = bIRCH.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -73,7 +81,6 @@ public class BIRCH<T> : ClusteringBase<T>
     public IReadOnlyList<CFEntry>? LeafEntries => _leafEntries?.AsReadOnly();
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

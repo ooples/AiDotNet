@@ -19,9 +19,22 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// <list type="bullet"><item>Model: "FunASR-Nano" (Alibaba FunASR, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> FunASR-Nano is an ultra-lightweight ASR model designed for on-device deployment. It uses a compact Conformer encoder (256-dim, 6 layers) with aggressive subsampling and a CTC decoder. Knowledge distillation from Paraformer-Large provides strong pe...</para>
 /// <para>
-/// FunASR-Nano is an ultra-lightweight ASR model designed for on-device deployment. It uses a compact Conformer encoder (256-dim, 6 layers) with aggressive subsampling and a CTC decoder. Knowledge distillation from Paraformer-Large provides strong performance despite the small model size. Optimized for mobile and edge devices with <50MB model size and real-time inference on CPU.
+/// FunASR-Nano is an ultra-lightweight ASR model designed for on-device deployment. It uses a compact Conformer encoder (256-dim, 6 layers) with aggressive subsampling and a CTC decoder. Knowledge distillation from Paraformer-Large provides strong performance despite the small model size. Optimized for mobile and edge devices with under 50MB model size and real-time inference on CPU.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FunASR-Nano model for ultra-lightweight on-device ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new FunASRNano&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var onnxModel = new FunASRNano&lt;double&gt;(architecture, "funasrnano.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]
@@ -85,7 +98,7 @@ public class FunASRNano<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "FunASRNano-Native" : "FunASRNano-ONNX", Description = "FunASR-Nano: ultra-lightweight on-device ASR (Alibaba, 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "FunASRNano-Native" : "FunASRNano-ONNX", Description = "FunASR-Nano: ultra-lightweight on-device ASR (Alibaba, 2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new FunASRNano<T>(Architecture, mp, _options); return new FunASRNano<T>(Architecture, _options); }

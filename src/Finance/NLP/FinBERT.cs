@@ -70,6 +70,21 @@ namespace AiDotNet.Finance.NLP;
 /// https://arxiv.org/abs/1908.10063
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for financial sentiment classification (512 tokens, 3 classes: pos/neg/neutral)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 3);
+///
+/// // Training mode: fine-tune BERT on financial text for sentiment analysis
+/// var model = new FinBERT&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained FinBERT model
+/// var onnxModel = new FinBERT&lt;double&gt;(architecture, "finbert.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -479,7 +494,6 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "FinBERT" },

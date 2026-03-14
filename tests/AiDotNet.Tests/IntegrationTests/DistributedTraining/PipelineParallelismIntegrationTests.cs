@@ -1331,7 +1331,6 @@ public class PipelineParallelismIntegrationTests
             return new ModelMetadata<double>
             {
                 Name = "PipelineTestModel",
-                ModelType = ModelType.NeuralNetwork,
                 TrainingDate = DateTimeOffset.UtcNow,
                 FeatureCount = _parameterCount
             };
@@ -1499,7 +1498,6 @@ public class PipelineParallelismIntegrationTests
             return new ModelMetadata<double>
             {
                 Name = "DecomposablePipelineTestModel",
-                ModelType = ModelType.NeuralNetwork,
                 TrainingDate = DateTimeOffset.UtcNow,
                 FeatureCount = _parameterCount
             };

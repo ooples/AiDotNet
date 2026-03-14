@@ -33,6 +33,15 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Yin et al., "Improved Distribution Matching Distillation for Fast Image Synthesis", NeurIPS 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DMD2 model for single-step high-fidelity generation
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 1 };
+/// var model = new DMD2Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -142,7 +151,7 @@ public class DMD2Model<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "DMD2", Version = "2.0", ModelType = ModelType.NeuralNetwork,
+            Name = "DMD2", Version = "2.0",
             Description = "Distribution Matching Distillation v2 for single-step generation without GAN discriminator",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -31,6 +31,25 @@ namespace AiDotNet.Regression;
 /// features are most important for accurate predictions and discard the rest.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a stepwise regression with automatic feature selection
+/// var options = new StepwiseRegressionOptions&lt;double&gt;();
+/// var model = new StepwiseRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 3 features (some may be irrelevant)
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 3, new double[] {
+///     1, 0, 2,  3, 0, 4,  5, 0, 6,  7, 0, 8,  9, 0, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0 });
+///
+/// // Train with forward selection or backward elimination
+/// model.Train(features, targets);
+///
+/// // Predict using only the selected features
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 11, 0, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
@@ -479,33 +498,6 @@ public class StepwiseRegression<T> : RegressionBase<T>
             TestSet = dataSetStats,
             ModelStats = modelStats
         };
-    }
-
-    /// <summary>
-    /// Returns the type identifier for this regression model.
-    /// </summary>
-    /// <returns>
-    /// The model type identifier for stepwise regression.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the enum value that identifies this model as a stepwise regression model. This is used 
-    /// for model identification in serialization/deserialization and for logging purposes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply tells the system what kind of model this is.
-    /// 
-    /// It's like a name tag for the model that says "I am a stepwise regression model."
-    /// This is useful when:
-    /// - Saving the model to a file
-    /// - Loading a model from a file
-    /// - Logging information about the model
-    /// 
-    /// You generally won't need to call this method directly in your code.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.StepwiseRegression;
     }
 
     /// <summary>

@@ -42,6 +42,14 @@ namespace AiDotNet.Clustering.AutoK;
 /// This works well when true clusters are roughly Gaussian.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GMeansOptions&lt;double&gt;();
+/// var gMeans = new GMeans&lt;double&gt;(options);
+/// gMeans.Fit(dataMatrix);
+/// int[] labels = gMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -66,7 +74,6 @@ public class GMeans<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

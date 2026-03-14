@@ -185,7 +185,6 @@ public class MoMo<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "MoMo-Native" : "MoMo-ONNX",
             Description = $"MoMo {_options.Variant} momentum diffusion bi-directional flow interpolation (2024)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumDiffusionSteps * _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

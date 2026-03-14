@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// RT-2 (Google DeepMind, 2023) is a vision-language-action model that transfers web-scale
+/// knowledge to robotic control. It fine-tunes a large vision-language model (PaLI-X or PaLM-E)
+/// on robot demonstration data, encoding robot actions as text tokens so that web knowledge
+/// about objects, scenes, and spatial relationships directly improves robotic manipulation.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control (Google DeepMind, 2023)"</item></list></para>
-/// <para><b>For Beginners:</b> RT2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> RT-2 is a vision-language-action model from Google DeepMind
+/// that uses web knowledge for improved robot control. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an RT-2 model for transferring web knowledge to robotic control
+/// // vision-language-action model from Google DeepMind
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new RT2&lt;double&gt;(architecture, "rt2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new RT2&lt;double&gt;(architecture, new RT2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Robotics)]
@@ -186,7 +210,7 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "RT-2-Native" : "RT-2-ONNX", Description = "RT-2: vision-language-action model that transfers web knowledge to robotic control.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "RT-2-Native" : "RT-2-ONNX", Description = "RT-2: vision-language-action model that transfers web knowledge to robotic control.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "RT-2";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

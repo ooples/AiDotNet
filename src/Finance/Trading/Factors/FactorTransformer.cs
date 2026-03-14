@@ -38,6 +38,21 @@ namespace AiDotNet.Finance.Trading.Factors;
 /// Reference: Duan et al. (2022). "FactorFormer: A Transformer-based Framework for Factor Investing"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for attention-based factor extraction (50 assets, 10 features, 5 factors)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 10, inputDepth: 1, outputSize: 5);
+///
+/// // Training mode: transformer discovers cross-sectional and temporal factor signals
+/// var model = new FactorTransformer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained FactorTransformer model
+/// var onnxModel = new FactorTransformer&lt;double&gt;(architecture, "factor_transformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -393,7 +408,6 @@ public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NumFactors"] = _numFactors,

@@ -272,7 +272,6 @@ public class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         {
             Name = _useNativeMode ? "emotion2vec-Native" : "emotion2vec-ONNX",
             Description = "emotion2vec Universal Speech Emotion Representation (Ma et al., 2023)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumTransformerLayers
         };
         m.AdditionalInfo["NumClasses"] = _options.NumClasses.ToString();

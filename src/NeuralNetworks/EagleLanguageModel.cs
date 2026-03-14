@@ -15,6 +15,11 @@ namespace AiDotNet.NeuralNetworks;
 /// This assembles the complete RWKV-5 "Eagle" architecture. Eagle introduces matrix-valued states
 /// with multi-head attention, significantly improving upon RWKV-4's single-head scalar state design.
 /// </para>
+/// <para><b>For Beginners:</b> Eagle (RWKV-5) is a language model that processes text like a
+/// recurrent network (one token at a time) but can also be trained like a transformer (all tokens
+/// in parallel). This gives it transformer-quality text generation with much lower memory usage
+/// during inference, since it only needs to store a fixed-size state instead of the entire
+/// conversation history.</para>
 /// <para>
 /// <b>Reference:</b> Peng et al., "Eagle and Finch: RWKV with Matrix-Valued States and Dynamic Recurrence", 2024.
 /// https://arxiv.org/abs/2404.05892
@@ -140,7 +145,6 @@ public class EagleLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "RWKV-5-Eagle" },

@@ -32,6 +32,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Causal)]
+[ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.CausalModel)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelTask(ModelTask.CausalInference)]

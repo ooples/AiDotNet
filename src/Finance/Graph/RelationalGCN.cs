@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Graph;
 
@@ -66,6 +66,21 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/1703.06103
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for multi-relational knowledge graph node classification (50 entities, 5 classes)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 50, inputWidth: 16, inputDepth: 1, outputSize: 5);
+///
+/// // Training mode: learns relation-specific transformations with basis decomposition
+/// var model = new RelationalGCN&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained Relational GCN model
+/// var onnxModel = new RelationalGCN&lt;double&gt;(architecture, "rgcn_knowledge_graph.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.GraphNetwork)]
@@ -662,7 +677,6 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "RelationalGCN" },

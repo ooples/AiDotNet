@@ -27,10 +27,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// and frequency-domain representations via contrastive learning, capturing both
 /// temporal and spectral patterns. It uses dual CNN encoders with a shared projection head.
 /// </para>
+/// <para><b>For Beginners:</b> TF-C learns to understand time series by looking at the same
+/// data in two ways: as a sequence of values over time, and as a set of frequencies (like
+/// breaking a musical chord into individual notes). By training the model to agree on what
+/// it sees from both perspectives, it learns robust patterns that work well for downstream
+/// tasks like forecasting and classification.</para>
 /// <para>
 /// <b>Reference:</b> Zhang et al., "Self-Supervised Contrastive Pre-Training For Time Series via Time-Frequency Consistency", NeurIPS 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TF-C model for self-supervised time series representation learning
+/// // Enforces consistency between time-domain and frequency-domain representations
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with dual CNN encoders and contrastive learning
+/// var model = new TFC&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TFC&lt;double&gt;(architecture, "tfc.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -332,7 +353,6 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TFC" },

@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Isensee et al., "nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation", Nature Methods 2021.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an nnU-Net model for self-configuring medical segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 1, outputSize: 14);
+/// var model = new NnUNet&lt;double&gt;(architecture, numClasses: 14);
+///
+/// // Or load a pre-trained ONNX model for organ segmentation
+/// var onnxModel = new NnUNet&lt;double&gt;(architecture, "nnunet.onnx", numClasses: 14);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
@@ -276,7 +289,6 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "NnUNet" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

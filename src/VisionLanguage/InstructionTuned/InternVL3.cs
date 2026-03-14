@@ -24,8 +24,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models" (2025)</item></list></para>
-/// <para><b>For Beginners:</b> InternVL3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> InternVL3 is the largest and most capable model in the InternVL
+/// series, with 78 billion total parameters. It uses InternViT-6B as the vision encoder and
+/// InternLM3 as the language backbone with 8192 hidden dimensions and 80 decoder layers.
+/// It achieves state-of-the-art performance among open-source models on challenging benchmarks
+/// like MMMU (72.2 score). The model uses advanced training recipes and test-time strategies
+/// (like chain-of-thought prompting) to push open-source multimodal models to new performance
+/// levels. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an InternVL3 model for state-of-the-art multimodal understanding
+/// // using InternViT-6B with InternLM3 78B backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new InternVL3&lt;double&gt;(architecture, "internvl3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new InternVL3&lt;double&gt;(architecture, new InternVL3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -116,7 +138,7 @@ public class InternVL3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "InternVL3-Native" : "InternVL3-ONNX", Description = "InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models (2025)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "InternVL3"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["DynamicResolution"] = _options.EnableDynamicResolution.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "InternVL3-Native" : "InternVL3-ONNX", Description = "InternVL3: Exploring Advanced Training and Test-Time Recipes for Open-Source Multimodal Models (2025)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "InternVL3"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["DynamicResolution"] = _options.EnableDynamicResolution.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.ProjectionDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.PixelShuffleFactor); writer.Write(_options.EnableDynamicResolution); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.PixelShuffleFactor = reader.ReadInt32(); _options.EnableDynamicResolution = reader.ReadBoolean(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new InternVL3<T>(Architecture, mp, _options); return new InternVL3<T>(Architecture, _options); }

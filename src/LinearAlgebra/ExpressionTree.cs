@@ -1,4 +1,8 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+using AiDotNet.Models;
+
 namespace AiDotNet.LinearAlgebra;
 
 /// <summary>
@@ -10,7 +14,26 @@ namespace AiDotNet.LinearAlgebra;
 /// Each node in the tree is either a number, a variable, or an operation (like addition or multiplication).
 /// This allows the AI to create and evolve mathematical formulas that can model your data.
 /// </remarks>
-public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
+/// <example>
+/// <code>
+/// // Create a symbolic expression tree: (x0 * 2.5) + x1
+/// var tree = ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateOperation(
+///     ExpressionNodeType.Add,
+///     ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateOperation(
+///         ExpressionNodeType.Multiply,
+///         ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateVariable(0),
+///         ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateConstant(2.5)),
+///     ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateVariable(1));
+/// double result = tree.Evaluate(new double[] { 3.0, 1.0 }); // (3.0 * 2.5) + 1.0 = 8.5
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Interpretable)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+public class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets the type of this node (constant, variable, or operation).
@@ -120,11 +143,6 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Helper object for performing numeric operations on type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Shared random number generator for all mutation and crossover operations.
     /// </summary>
     /// <remarks>
@@ -151,9 +169,8 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     public ExpressionTree(ExpressionNodeType type, T? value = default, ExpressionTree<T, TInput, TOutput>? left = null, ExpressionTree<T, TInput, TOutput>? right = null, ILossFunction<T>? lossFunction = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         Type = type;
-        Value = value ?? _numOps.Zero;
+        Value = value ?? NumOps.Zero;
         Left = left;
         Right = right;
         _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -183,7 +200,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// which is the standard loss function for regression problems.
     /// </para>
     /// </remarks>
-    public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
+    public override ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
     /// Gets the number of features (variables) used in this expression tree.
@@ -240,7 +257,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> This checks if your formula uses a specific input variable.
     /// For example, if featureIndex is 2, it checks if x[2] appears anywhere in your formula.
     /// </remarks>
-    public bool IsFeatureUsed(int featureIndex)
+    public override bool IsFeatureUsed(int featureIndex)
     {
         return IsFeatureUsedRecursive(this, featureIndex);
     }
@@ -288,7 +305,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         if (node.Type == ExpressionNodeType.Variable)
         {
-            int featureIndex = _numOps.ToInt32(node.Value);
+            int featureIndex = NumOps.ToInt32(node.Value);
             if (featureIndex > maxIndex)
             {
                 maxIndex = featureIndex;
@@ -317,7 +334,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
         if (node.Type == ExpressionNodeType.Variable)
         {
-            uniqueFeatures.Add(_numOps.ToInt32(node.Value));
+            uniqueFeatures.Add(NumOps.ToInt32(node.Value));
         }
 
         if (node.Left != null)
@@ -339,7 +356,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <returns>True if the feature is used, false otherwise.</returns>
     private bool IsFeatureUsedRecursive(ExpressionTree<T, TInput, TOutput> node, int featureIndex)
     {
-        if (node.Type == ExpressionNodeType.Variable && _numOps.ToInt32(node.Value) == featureIndex)
+        if (node.Type == ExpressionNodeType.Variable && NumOps.ToInt32(node.Value) == featureIndex)
         {
             return true;
         }
@@ -362,17 +379,17 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     public T Evaluate(Vector<T> input)
     {
         if (Type == ExpressionNodeType.Constant) return Value;
-        if (Type == ExpressionNodeType.Variable) return input[_numOps.ToInt32(Value)];
+        if (Type == ExpressionNodeType.Variable) return input[NumOps.ToInt32(Value)];
 
         var left = Left ?? throw new InvalidOperationException("Left has not been initialized.");
         var right = Right ?? throw new InvalidOperationException("Right has not been initialized.");
 
         return Type switch
         {
-            ExpressionNodeType.Add => _numOps.Add(left.Evaluate(input), right.Evaluate(input)),
-            ExpressionNodeType.Subtract => _numOps.Subtract(left.Evaluate(input), right.Evaluate(input)),
-            ExpressionNodeType.Multiply => _numOps.Multiply(left.Evaluate(input), right.Evaluate(input)),
-            ExpressionNodeType.Divide => _numOps.Divide(left.Evaluate(input), right.Evaluate(input)),
+            ExpressionNodeType.Add => NumOps.Add(left.Evaluate(input), right.Evaluate(input)),
+            ExpressionNodeType.Subtract => NumOps.Subtract(left.Evaluate(input), right.Evaluate(input)),
+            ExpressionNodeType.Multiply => NumOps.Multiply(left.Evaluate(input), right.Evaluate(input)),
+            ExpressionNodeType.Divide => NumOps.Divide(left.Evaluate(input), right.Evaluate(input)),
             _ => throw new ArgumentException($"Unknown expression node type '{Type}'."),
         };
     }
@@ -406,7 +423,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     public ExpressionTree<T, TInput, TOutput> Deserialize(BinaryReader reader)
     {
         ExpressionNodeType type = (ExpressionNodeType)reader.ReadInt32();
-        T value = _numOps.FromDouble(reader.ReadDouble());
+        T value = NumOps.FromDouble(reader.ReadDouble());
         bool hasLeft = reader.ReadBoolean();
         ExpressionTree<T, TInput, TOutput>? left = hasLeft ? Deserialize(reader) : null;
         bool hasRight = reader.ReadBoolean();
@@ -439,11 +456,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
                 case 1: // Change value (for Constant or Variable nodes)
                     if (mutatedTree.Type == ExpressionNodeType.Constant)
                     {
-                        mutatedTree.Value = _numOps.FromDouble(Rng.NextDouble() * 10 - 5); // Random value between -5 and 5
+                        mutatedTree.Value = NumOps.FromDouble(Rng.NextDouble() * 10 - 5); // Random value between -5 and 5
                     }
                     else if (mutatedTree.Type == ExpressionNodeType.Variable)
                     {
-                        mutatedTree.Value = _numOps.FromDouble(Rng.Next(10)); // Assume max 10 variables
+                        mutatedTree.Value = NumOps.FromDouble(Rng.Next(10)); // Assume max 10 variables
                     }
                     break;
                 case 2: // Regenerate subtree
@@ -532,11 +549,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             if (Rng.NextDouble() < 0.5)
             {
-                return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Constant, _numOps.FromDouble(Rng.NextDouble() * 10 - 5));
+                return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Constant, NumOps.FromDouble(Rng.NextDouble() * 10 - 5));
             }
             else
             {
-                return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Variable, _numOps.FromDouble(Rng.Next(10)));
+                return new ExpressionTree<T, TInput, TOutput>(ExpressionNodeType.Variable, NumOps.FromDouble(Rng.Next(10)));
             }
         }
         else
@@ -688,11 +705,10 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> This provides useful information about your formula, like how complex it is
     /// and how many input variables it needs. Think of it as a summary sheet about your mathematical model.
     /// </remarks>
-    public ModelMetadata<T> GetModelMetadata()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ExpressionTree,
             FeatureCount = FeatureCount,
             Complexity = Complexity,
             Description = ToString(),
@@ -713,7 +729,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> This converts your mathematical formula into a compact format that can be
     /// saved to a file or sent over the internet. It's like zipping up your formula for storage.
     /// </remarks>
-    public byte[] Serialize()
+    public override byte[] Serialize()
     {
         using MemoryStream ms = new();
         using BinaryWriter writer = new(ms);
@@ -730,7 +746,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> This loads a previously saved formula from a compact format and
     /// replaces the current formula with it. It's like opening a saved file and loading its contents.
     /// </remarks>
-    public void Deserialize(byte[] data)
+    public override void Deserialize(byte[] data)
     {
         using MemoryStream ms = new(data);
         using BinaryReader reader = new(ms);
@@ -855,24 +871,9 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// a specific ExpressionTree. This is useful when you need to make changes to a
     /// copy without affecting the original formula.
     /// </remarks>
-    public IFullModel<T, TInput, TOutput> DeepCopy()
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
     {
         // Reuse existing Copy method which already creates a deep copy
-        return Copy();
-    }
-
-    /// <summary>
-    /// Creates a clone of this expression tree.
-    /// </summary>
-    /// <returns>A new expression tree with the same structure and values.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This creates an exact duplicate of your formula.
-    /// It's essentially the same as DeepCopy and Copy - it makes a complete
-    /// duplicate that you can modify without changing the original.
-    /// </remarks>
-    public IFullModel<T, TInput, TOutput> Clone()
-    {
-        // Reuse existing Copy method
         return Copy();
     }
 
@@ -885,7 +886,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// For example, if your formula is "2x + 3y + 5", this would give you [2, 3, 5].
     /// These numbers are the adjustable parameters that can be tuned to improve predictions.
     /// </remarks>
-    public Vector<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         // Return the coefficients which are the model's parameters
         return Coefficients;
@@ -901,7 +902,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// with new values. For example, changing "2x + 3" to "4x + 1" by providing [4, 1]
     /// as the new parameters. The structure of the formula stays the same.
     /// </remarks>
-    public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         // This is equivalent to UpdateCoefficients
         return UpdateCoefficients(parameters);
@@ -916,7 +917,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// For example, if your formula only uses x[0] and x[2], this returns [0, 2], showing that
     /// the formula uses the first and third variables but not the second one.
     /// </remarks>
-    public IEnumerable<int> GetActiveFeatureIndices()
+    public override IEnumerable<int> GetActiveFeatureIndices()
     {
         HashSet<int> activeIndices = new();
 
@@ -924,7 +925,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         {
             if (node.Type == ExpressionNodeType.Variable)
             {
-                activeIndices.Add(_numOps.ToInt32(node.Value));
+                activeIndices.Add(NumOps.ToInt32(node.Value));
             }
 
             if (node.Left != null)
@@ -951,7 +952,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// For expression trees, importance is calculated by counting how many times each variable appears in the formula.
     /// Variables that appear more frequently are considered more important.
     /// </remarks>
-    public virtual Dictionary<string, T> GetFeatureImportance()
+    public override Dictionary<string, T> GetFeatureImportance()
     {
         // Count occurrences of each feature in the tree
         Dictionary<int, int> featureCounts = new();
@@ -962,7 +963,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
             if (node.Type == ExpressionNodeType.Variable)
             {
-                int featureIndex = _numOps.ToInt32(node.Value);
+                int featureIndex = NumOps.ToInt32(node.Value);
                 if (featureCounts.ContainsKey(featureIndex))
                 {
                     featureCounts[featureIndex]++;
@@ -1000,7 +1001,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             {
                 string featureName = $"x[{kvp.Key}]";
                 double normalizedImportance = (double)kvp.Value / totalCount;
-                importance[featureName] = _numOps.FromDouble(normalizedImportance);
+                importance[featureName] = NumOps.FromDouble(normalizedImportance);
             }
         }
 
@@ -1016,7 +1017,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// Any variables in the tree that are not in the active set will be replaced with constant zero values.
     /// This is useful for feature selection and understanding which variables are most important.
     /// </remarks>
-    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         if (featureIndices == null)
         {
@@ -1032,11 +1033,11 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             // If this is a variable node and it's not in the active set, replace it with zero
             if (node.Type == ExpressionNodeType.Variable)
             {
-                int featureIndex = _numOps.ToInt32(node.Value);
+                int featureIndex = NumOps.ToInt32(node.Value);
                 if (!activeSet.Contains(featureIndex))
                 {
                     node.SetType(ExpressionNodeType.Constant);
-                    node.SetValue(_numOps.Zero);
+                    node.SetValue(NumOps.Zero);
                 }
             }
 
@@ -1068,7 +1069,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> For expression trees, training doesn't actually change the formula.
     /// This method validates that the formula can process your input data correctly.
     /// </remarks>
-    public void Train(TInput input, TOutput expectedOutput)
+    public override void Train(TInput input, TOutput expectedOutput)
     {
         // For expression trees, we primarily validate input compatibility
         if (input is Matrix<T> matrix)
@@ -1109,7 +1110,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// we slightly change each constant and see how much the error changes.
     /// </para>
     /// </remarks>
-    public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    public override Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input));
@@ -1121,7 +1122,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         var gradients = new Vector<T>(parameters.Length);
 
         // Small epsilon for finite differences
-        T epsilon = _numOps.FromDouble(1e-7);
+        T epsilon = NumOps.FromDouble(1e-7);
 
         // Compute loss at current parameters
         var currentPrediction = Predict(input);
@@ -1136,14 +1137,14 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
             T originalValue = parameters[i];
 
             // Perturb parameter forward
-            parameters[i] = _numOps.Add(originalValue, epsilon);
+            parameters[i] = NumOps.Add(originalValue, epsilon);
             SetParameters(parameters);  // ✅ CRITICAL: Use SetParameters, NOT UpdateCoefficients
             var forwardPrediction = Predict(input);
             Vector<T> forwardPredVec = ConvertOutputToVector(forwardPrediction);
             T forwardLoss = loss.CalculateLoss(forwardPredVec, targetVec);
 
             // Compute gradient: (f(x+ε) - f(x)) / ε
-            T gradient = _numOps.Divide(_numOps.Subtract(forwardLoss, currentLoss), epsilon);
+            T gradient = NumOps.Divide(NumOps.Subtract(forwardLoss, currentLoss), epsilon);
             gradients[i] = gradient;
 
             // Restore original value
@@ -1170,7 +1171,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// this method actually adjusts them. The learning rate controls how big of an adjustment to make.
     /// </para>
     /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (gradients == null)
             throw new ArgumentNullException(nameof(gradients));
@@ -1187,8 +1188,8 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
         // Apply gradient descent: params = params - learningRate * gradients
         for (int i = 0; i < parameters.Length; i++)
         {
-            T update = _numOps.Multiply(learningRate, gradients[i]);
-            parameters[i] = _numOps.Subtract(parameters[i], update);
+            T update = NumOps.Multiply(learningRate, gradients[i]);
+            parameters[i] = NumOps.Subtract(parameters[i], update);
         }
 
         SetParameters(parameters);
@@ -1219,7 +1220,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> This method applies your mathematical formula to the input data
     /// to calculate a prediction. It handles different types of inputs (vectors, matrices, or tensors).
     /// </remarks>
-    public TOutput Predict(TInput input)
+    public override TOutput Predict(TInput input)
     {
         if (input is Matrix<T> matrix)
         {
@@ -1398,7 +1399,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// if the parameter count is wrong, the tree remains unchanged.
     /// </para>
     /// </remarks>
-    public virtual void SetParameters(Vector<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         // Count the number of constant nodes in the tree
         int constantNodeCount = 0;
@@ -1467,7 +1468,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// For example, if your formula is "2x + 3y + 5", there are 3 parameters: 2, 3, and 5.
     /// This value is obtained from the Coefficients property, which returns a vector of all constant values.
     /// </remarks>
-    public virtual int ParameterCount
+    public override int ParameterCount
     {
         get
         {
@@ -1491,7 +1492,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> This saves your mathematical formula to a file so you can load it later
     /// without having to recreate it. The file contains the tree structure, all node types, and values.
     /// </remarks>
-    public virtual void SaveModel(string filePath)
+    public override void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();
         File.WriteAllBytes(filePath, serializedData);
@@ -1505,7 +1506,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <b>For Beginners:</b> This loads a previously saved formula from a file, allowing you to
     /// reuse it without recreating it. The loaded formula can immediately be used for predictions.
     /// </remarks>
-    public virtual void LoadModel(string filePath)
+    public override void LoadModel(string filePath)
     {
         byte[] serializedData = File.ReadAllBytes(filePath);
         Deserialize(serializedData);
@@ -1539,7 +1540,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
     /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
-    public virtual void SaveState(Stream stream)
+    public override void SaveState(Stream stream)
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
@@ -1595,7 +1596,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
     /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
-    public virtual void LoadState(Stream stream)
+    public override void LoadState(Stream stream)
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
@@ -1653,7 +1654,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// This provides 2-5x speedup for complex symbolic expressions.
     /// </para>
     /// </remarks>
-    public bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Exports the expression tree as a computation graph for JIT compilation.
@@ -1682,7 +1683,7 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));
@@ -1722,12 +1723,12 @@ public class ExpressionTree<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 
             case ExpressionNodeType.Variable:
                 // Get or create variable node
-                int varIndex = _numOps.ToInt32(node.Value);
+                int varIndex = NumOps.ToInt32(node.Value);
                 if (!variableNodes.ContainsKey(varIndex))
                 {
                     // Create placeholder for this variable
                     var varTensor = new Tensor<T>(new[] { 1 });
-                    varTensor[0] = _numOps.Zero;  // Placeholder value
+                    varTensor[0] = NumOps.Zero;  // Placeholder value
                     variableNodes[varIndex] = new ComputationNode<T>(varTensor);
                 }
                 return variableNodes[varIndex];

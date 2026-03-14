@@ -1071,7 +1071,6 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
         {
             Name = _useNativeMode ? "SpeakerDiarizer-Native" : "SpeakerDiarizer-ONNX",
             Description = "Speaker diarization model for identifying who spoke when",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = EmbeddingDimension,
             Complexity = 1
         };

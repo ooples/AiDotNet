@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// TextMonkey (HUST, 2024) is an OCR-free large multimodal model for document understanding
+/// that uses shifted window attention to efficiently process high-resolution document images.
+/// The shifted window mechanism reduces computational cost while maintaining fine-grained
+/// text recognition ability, enabling direct document comprehension without separate OCR stages.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "TextMonkey: An OCR-Free Large Multimodal Model for Understanding Document" (HUST, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> TextMonkey is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> TextMonkey is an OCR-free document understanding model with
+/// shifted window attention for efficient text processing. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TextMonkey model for OCR-free document understanding
+/// // with shifted window attention for efficient high-resolution processing
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new TextMonkey&lt;double&gt;(architecture, "textmonkey.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new TextMonkey&lt;double&gt;(architecture, new TextMonkeyOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -94,7 +118,7 @@ public class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingM
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "TextMonkey-Native" : "TextMonkey-ONNX", Description = "TextMonkey: OCR-free text understanding with shifted window attention.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "TextMonkey-Native" : "TextMonkey-ONNX", Description = "TextMonkey: OCR-free text understanding with shifted window attention.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "TextMonkey";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["ShiftedWindowAttention"] = _options.EnableShiftedWindowAttention.ToString();

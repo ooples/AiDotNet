@@ -27,10 +27,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// MG-TSD captures temporal patterns at multiple granularities using a coarse-to-fine
 /// guidance mechanism where predictions at coarser levels guide fine-grained diffusion.
 /// </para>
+/// <para><b>For Beginners:</b> MG-TSD forecasts at multiple zoom levels simultaneously.
+/// It first makes a rough forecast (like predicting monthly trends), then uses that to
+/// guide a more detailed forecast (like daily values). This coarse-to-fine approach is
+/// similar to how an artist first sketches the broad outlines before adding fine details,
+/// resulting in more coherent and accurate probabilistic predictions.</para>
 /// <para>
 /// <b>Reference:</b> Fan et al., "MG-TSD: Multi-Granularity Time Series Diffusion Models with Guided Learning Process", ICLR 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an MG-TSD multi-granularity time series diffusion model
+/// // Coarse-to-fine guidance: rough forecasts at monthly level guide daily predictions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with multi-granularity guided diffusion
+/// var model = new MGTSD&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new MGTSD&lt;double&gt;(architecture, "mgtsd.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -281,7 +302,6 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.NeuralNetwork,
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "MGTSD" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "NumGranularities", _numGranularities }, { "GuidanceWeight", _guidanceWeight }, { "UseNativeMode", _useNativeMode } },
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };

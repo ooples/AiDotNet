@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Evolving Neural Networks through Augmenting Topologies", "http://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf", Year = 2002, Authors = "Kenneth O. Stanley, Risto Miikkulainen")]
+[ModelPaper("Evolving Neural Networks through Augmenting Topologies", "https://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf", Year = 2002, Authors = "Kenneth O. Stanley, Risto Miikkulainen")]
 public class NEAT<T> : NeuralNetworkBase<T>
 {
     private readonly NEATOptions _options;
@@ -1182,7 +1182,6 @@ public class NEAT<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NEAT,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "PopulationSize", _populationSize },

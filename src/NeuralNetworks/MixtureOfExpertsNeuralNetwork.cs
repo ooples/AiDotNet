@@ -473,7 +473,6 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.MixtureOfExperts,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputShape", Architecture.GetInputShape() },

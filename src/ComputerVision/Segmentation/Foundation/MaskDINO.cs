@@ -41,6 +41,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// for Object Detection and Segmentation", CVPR 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MaskDINO model for joint detection and segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 80);
+/// var model = new MaskDINO&lt;double&gt;(architecture, numClasses: 80);
+///
+/// // Or load a pre-trained ONNX model for unified detection-segmentation
+/// var onnxModel = new MaskDINO&lt;double&gt;(architecture, "maskdino.onnx", numClasses: 80);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
@@ -404,7 +417,6 @@ public class MaskDINO<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "MaskDINO" }, { "InputHeight", _height }, { "InputWidth", _width },

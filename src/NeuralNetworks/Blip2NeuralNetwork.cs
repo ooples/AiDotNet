@@ -2409,7 +2409,6 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.Blip2,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ImageSize", _imageSize },

@@ -14,7 +14,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
@@ -46,6 +46,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// in Time Series Forecasting", NeurIPS 2022. https://arxiv.org/abs/2205.14415
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Non-stationary Transformer for data with changing statistical properties
+/// // Preserves non-stationary characteristics while using attention for pattern recognition
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with de-stationary attention mechanism
+/// var model = new NonStationaryTransformer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new NonStationaryTransformer&lt;double&gt;(architecture, "ns_transformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -639,7 +655,6 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["SequenceLength"] = _sequenceLength,

@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 12, Height = 480, Width = 848, NumInferenceSteps = 64 };
+/// var model = new Mochi1PreviewModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 12, 163, 60, 106 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -180,7 +188,6 @@ public class Mochi1PreviewModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Mochi-1-Preview",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Mochi 1 Preview with Asymmetric Diffusion Transformer (AsymmDiT).",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

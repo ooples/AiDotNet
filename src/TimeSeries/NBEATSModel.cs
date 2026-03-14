@@ -42,6 +42,15 @@ namespace AiDotNet.TimeSeries;
 /// This allows the model to decompose complex time series into simpler components.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an N-BEATS model with interpretable trend and seasonality stacks
+/// var options = new NBEATSModelOptions&lt;double&gt;();
+/// var nbeats = new NBEATSModel&lt;double&gt;(options);
+/// nbeats.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = nbeats.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
@@ -506,7 +515,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "N-BEATS",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Neural Basis Expansion Analysis for Interpretable Time Series Forecasting",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,

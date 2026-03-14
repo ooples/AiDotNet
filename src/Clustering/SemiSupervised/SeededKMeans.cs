@@ -44,6 +44,14 @@ namespace AiDotNet.Clustering.SemiSupervised;
 /// - Helps when random init gives poor results
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SeededKMeansOptions&lt;double&gt;();
+/// var seededKMeans = new SeededKMeans&lt;double&gt;(options);
+/// seededKMeans.Fit(dataMatrix);
+/// int[] labels = seededKMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -68,7 +76,6 @@ public class SeededKMeans<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

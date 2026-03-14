@@ -262,7 +262,7 @@ public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Meshy", Version = "4.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Meshy", Version = "4.0",
             Description = "Meshy production-grade 3D generation with PBR texturing",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -36,6 +36,26 @@ namespace AiDotNet.Regression;
 /// with Competing Risks". AAAI Conference on Artificial Intelligence.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeepHit model for survival analysis with competing risks
+/// var options = new DeepHitOptions&lt;double&gt;();
+/// var model = new DeepHit&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 3 features (clinical covariates)
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 3, new double[] {
+///     55, 1, 2.1,  60, 0, 3.5,  45, 1, 1.8,
+///     70, 0, 4.2,  50, 1, 2.9,  65, 0, 3.1 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 12, 24, 36, 6, 18, 30 });
+///
+/// // Train the survival model
+/// model.Train(features, targets);
+///
+/// // Predict survival probabilities for a new patient
+/// var newPatient = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 58, 1, 2.5 });
+/// var prediction = model.Predict(newPatient);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
@@ -1211,7 +1231,6 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DeepHit,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumSharedLayers", _options.NumSharedLayers },

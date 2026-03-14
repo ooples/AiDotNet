@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// VideoFlow exploits temporal cues from multiple frames simultaneously to improve optical flow estimation accuracy and temporal consistency.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VideoFlow model for multi-frame temporal optical flow
+/// var videoFlow = new VideoFlow&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new VideoFlow&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -222,7 +235,6 @@ public class VideoFlow<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "VideoFlow" },

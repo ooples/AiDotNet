@@ -642,7 +642,6 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         return new ModelMetadata<T>
         {
             Name = "MATCHA",
-            ModelType = ModelType.NeuralNetwork,
             Description = "MATCHA for chart understanding with math reasoning (ACL 2023)",
             FeatureCount = _encoderDim,
             Complexity = _encoderLayers + _decoderLayers,

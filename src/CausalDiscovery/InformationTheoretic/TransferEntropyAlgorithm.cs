@@ -75,10 +75,8 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         int d = data.Columns;
         int effectiveN = n - _maxLag;
 
-        if (d < 2)
-            throw new ArgumentException($"TransferEntropy requires at least 2 variables, got {d}.");
-        if (effectiveN < 2 * _maxLag + 3)
-            throw new ArgumentException($"TransferEntropy requires at least {2 * _maxLag + 3 + _maxLag} samples for lag={_maxLag}, got {n}.");
+        if (d < 2 || effectiveN < 2 * _maxLag + 3)
+            return new Matrix<T>(d, d);
 
         var result = new Matrix<T>(d, d);
 

@@ -21,7 +21,8 @@ namespace AiDotNet.Tests.UnitTests.AutoML
 
             // Assert
             Assert.NotNull(supernet);
-            Assert.Equal(ModelType.NeuralNetwork, supernet.Type);
+            Assert.True(supernet.GetType().IsGenericType);
+            Assert.Equal(typeof(SuperNet<double>), supernet.GetType());
             Assert.True(supernet.ParameterCount > 0);
         }
 

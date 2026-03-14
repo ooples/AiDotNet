@@ -23,6 +23,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// conditioned on text, duration, pitch, and speaker information, enabling zero-shot voice
 /// cloning and even singing synthesis.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a NaturalSpeech 2 model for zero-shot speech synthesis
+/// // with latent diffusion on continuous codec vectors
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new NaturalSpeech2&lt;double&gt;(architecture, "naturalspeech2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new NaturalSpeech2&lt;double&gt;(architecture, new NaturalSpeech2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -205,7 +221,6 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             Name = _useNativeMode ? "NaturalSpeech2-Native" : "NaturalSpeech2-ONNX",
             Description = "NaturalSpeech 2: Latent Diffusion TTS (Shen et al., 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim
         };
     }

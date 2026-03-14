@@ -391,7 +391,6 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
         {
             Name = "DiffWaveModel",
             Version = "1.0.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DiffWave model for audio waveform synthesis using diffusion",
             FeatureCount = SampleRate,
             Complexity = ParameterCount

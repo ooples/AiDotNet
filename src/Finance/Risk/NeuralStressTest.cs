@@ -23,6 +23,21 @@ namespace AiDotNet.Finance.Risk;
 /// to test portfolio resilience against events that haven't happened yet.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for stress test scenario generation (10 market factors)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 10, outputSize: 1);
+///
+/// // Training mode: learns to generate plausible extreme market scenarios
+/// var model = new NeuralStressTest&lt;double&gt;(architecture);
+///
+/// // Parameterless constructor with default architecture
+/// var defaultModel = new NeuralStressTest&lt;double&gt;();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

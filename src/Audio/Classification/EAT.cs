@@ -238,7 +238,7 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "EAT-Native" : "EAT-ONNX", Description = "EAT: Efficient Audio Transformer (Chen et al., 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = ClassLabels.Count, Complexity = _options.NumEncoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "EAT-Native" : "EAT-ONNX", Description = "EAT: Efficient Audio Transformer (Chen et al., 2024)", FeatureCount = ClassLabels.Count, Complexity = _options.NumEncoderLayers };
         m.AdditionalInfo["Architecture"] = "EAT"; m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();
         m.AdditionalInfo["NumEncoderLayers"] = _options.NumEncoderLayers.ToString(); m.AdditionalInfo["NumClasses"] = ClassLabels.Count.ToString();
         return m;

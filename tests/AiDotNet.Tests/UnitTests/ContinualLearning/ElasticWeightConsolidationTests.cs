@@ -91,7 +91,6 @@ public class ElasticWeightConsolidationTests
             return new ModelMetadata<double>
             {
                 Name = "MockModel",
-                ModelType = ModelType.None,
                 FeatureCount = 0,
                 Complexity = 1
             };

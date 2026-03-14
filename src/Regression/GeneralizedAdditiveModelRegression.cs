@@ -34,6 +34,25 @@ namespace AiDotNet.Regression;
 /// like neural networks.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GAM with smooth spline functions per feature
+/// var options = new GeneralizedAdditiveModelOptions&lt;double&gt;();
+/// var model = new GeneralizedAdditiveModel&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with smooth nonlinear functions for each feature
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (sum of smooth feature functions)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -314,7 +333,6 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Coefficients", _coefficients },
@@ -329,7 +347,6 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// Gets the model type of the Generalized Additive Model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType() => ModelType.GeneralizedAdditiveModelRegression;
 
     /// <summary>
     /// Calculates the importance of each feature in the model based on the magnitude of its coefficients.

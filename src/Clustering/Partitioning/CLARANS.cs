@@ -43,6 +43,14 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - Try swapping whose house, keep improvements
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new CLARANSOptions&lt;double&gt;();
+/// var cLARANS = new CLARANS&lt;double&gt;(options);
+/// cLARANS.Fit(dataMatrix);
+/// int[] labels = cLARANS.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -80,7 +88,6 @@ public class CLARANS<T> : ClusteringBase<T>
     public T BestCost => _bestCost;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

@@ -287,7 +287,6 @@ public class FishSpeech<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = _useNativeMode ? "FishSpeech-Native" : "FishSpeech-ONNX",
             Description = "Fish Speech multilingual TTS with zero-shot voice cloning (Fish Audio, 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.SemanticDim,
             Complexity = _options.NumSemanticLayers + _options.NumVocoderLayers
         };
         m.AdditionalInfo["CodebookSize"] = _options.CodebookSize.ToString();

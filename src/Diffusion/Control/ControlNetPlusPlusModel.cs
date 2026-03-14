@@ -31,6 +31,23 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Li et al., "ControlNet++: Improving Conditional Controls with Efficient Consistency Feedback", ECCV 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ControlNet++ model with reward-guided training
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 512,
+///     Width = 512,
+///     NumInferenceSteps = 30
+/// };
+/// var model = new ControlNetPlusPlusModel&lt;float&gt;(options, ControlType.Canny);
+///
+/// // Generate image with improved control adherence
+/// var edgeMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 512, 512 });
+/// var result = model.Predict(edgeMap);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -169,7 +186,6 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet++",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Improved ControlNet with reward-guided training for better control adherence",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

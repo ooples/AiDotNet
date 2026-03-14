@@ -27,10 +27,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// classification, and anomaly detection. It demonstrates that pretrained language models
 /// transfer effectively to time series tasks without fine-tuning the backbone.
 /// </para>
+/// <para><b>For Beginners:</b> GPT4TS takes a language model (GPT-2) that was trained to
+/// predict text and repurposes it for time series forecasting. The core idea is that patterns
+/// in sequences of numbers are similar to patterns in sequences of words. The language model
+/// stays frozen (unchanged) while small task-specific layers are added on top, making this
+/// approach surprisingly effective with minimal training.</para>
 /// <para>
 /// <b>Reference:</b> Zhou et al., "One Fits All: Power General Time Series Analysis by Pretrained LM", 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GPT4TS model using a frozen GPT-2 backbone for time series analysis
+/// // Demonstrates that pretrained LLMs transfer effectively to time series tasks
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with frozen GPT-2 backbone and task-specific heads
+/// var model = new GPT4TS&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new GPT4TS&lt;double&gt;(architecture, "gpt4ts.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -287,7 +308,6 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "GPT4TS" },

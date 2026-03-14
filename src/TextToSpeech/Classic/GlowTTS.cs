@@ -20,6 +20,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Glow-TTS: A Generative Flow for Text-to-Speech via Monotonic Alignment Search" (Kim et al., 2020)</item></list></para>
 /// <para><b>For Beginners:</b> Glow-TTS is a flow-based text-to-speech model that converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create a Glow-TTS model for flow-based non-autoregressive speech synthesis
+/// // with monotonic alignment search (MAS) for text-audio alignment
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GlowTTS&lt;double&gt;(architecture, "glowtts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GlowTTS&lt;double&gt;(architecture, new GlowTTSOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -230,7 +246,6 @@ public class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "GlowTTS-Native" : "GlowTTS-ONNX",
             Description = "Glow-TTS: Generative Flow for TTS via Monotonic Alignment Search (Kim et al., 2020)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumFlowLayers
         };

@@ -20,6 +20,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "AdaSpeech: Adaptive Text to Speech for Custom Voice" (Chen et al., 2021)</item></list></para>
 /// <para><b>For Beginners:</b> AdaSpeech is an adaptive text-to-speech model that converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create an AdaSpeech model for adaptive custom voice synthesis
+/// // with acoustic condition modeling and conditional layer normalization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new AdaSpeech&lt;double&gt;(architecture, "adaspeech.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new AdaSpeech&lt;double&gt;(architecture, new AdaSpeechOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -226,7 +242,6 @@ public class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "AdaSpeech-Native" : "AdaSpeech-ONNX",
             Description = "AdaSpeech: Adaptive TTS for Custom Voice (Chen et al., 2021)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };

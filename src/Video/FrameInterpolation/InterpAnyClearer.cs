@@ -172,7 +172,6 @@ public class InterpAnyClearer<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "InterpAnyClearer-Native" : "InterpAnyClearer-ONNX",
             Description = $"InterpAnyClearer {_options.Variant} velocity-aware plug-in interpolation (Zheng et al., ECCV 2024 Oral)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumVelocityBlocks * _options.NumPyramidLevels
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

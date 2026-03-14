@@ -42,6 +42,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// science domains. For purely biomedical NER, BioBERT or PubMedBERT may perform slightly better.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 512,
+///     outputSize: 9,
+///     hiddenLayers: new[] { 256, 128 },
+///     networkType: NetworkType.Classification);
+/// var sciBERTNER = new SciBERTNER&lt;float&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Science)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -455,7 +455,6 @@ namespace AiDotNet.NeuralNetworks
             return new ModelMetadata<T>
             {
                 Name = "GloVe",
-                ModelType = ModelType.NeuralNetwork,
                 Description = "GloVe (Global Vectors) embedding model",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>

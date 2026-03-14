@@ -471,7 +471,6 @@ public class SUPIRModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "SUPIR",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "SUPIR SDXL-based photo-realistic image restoration with GPT-guided conditioning",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

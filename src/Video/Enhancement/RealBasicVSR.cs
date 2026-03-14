@@ -179,7 +179,6 @@ public class RealBasicVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "RealBasicVSR-Native" : "RealBasicVSR-ONNX",
             Description = $"RealBasicVSR {_options.Variant} real-world VSR (Chan et al., CVPR 2022)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks + _options.CleaningModuleBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

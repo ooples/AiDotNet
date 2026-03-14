@@ -44,6 +44,14 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// It's like having an AI programmer that can code based on your requirements!
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new CodeSynthesisArchitecture&lt;float&gt;(
+///     SynthesisType.Neural, ProgramLanguage.CSharp, CodeTask.Generation);
+/// var codeModel = new CodeBERT&lt;float&gt;(architecture);
+/// var synthesizer = new NeuralProgramSynthesizer&lt;float&gt;(architecture, codeModel);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -682,7 +690,6 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Transformer,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "NeuralProgramSynthesizer" },

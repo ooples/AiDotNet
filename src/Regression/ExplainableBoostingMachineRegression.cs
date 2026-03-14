@@ -39,6 +39,25 @@ namespace AiDotNet.Regression;
 /// Pneumonia Risk and Hospital 30-day Readmission" (2012).
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Explainable Boosting Machine for interpretable regression
+/// var options = new ExplainableBoostingMachineRegressionOptions&lt;double&gt;();
+/// var model = new ExplainableBoostingMachineRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with per-feature shape functions for interpretability
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (sum of per-feature contributions)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -673,7 +692,6 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ExplainableBoostingMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfFeatures", _numFeatures },

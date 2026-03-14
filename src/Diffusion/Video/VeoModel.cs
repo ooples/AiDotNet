@@ -447,7 +447,6 @@ public class VeoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = _isVeo2 ? "Veo-2" : "Veo",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = $"Google {(_isVeo2 ? "Veo 2" : "Veo")} cascaded video generation with temporal super-resolution",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

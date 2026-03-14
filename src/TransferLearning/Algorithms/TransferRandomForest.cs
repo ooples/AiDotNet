@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using AiDotNet.Regularization;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Models;
 using AiDotNet.TransferLearning.FeatureMapping;
 
 namespace AiDotNet.TransferLearning.Algorithms;
@@ -21,6 +24,16 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// class can adapt them when the source and target domains have different feature spaces.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Transfer a Random Forest from source domain to target domain
+/// var options = new RandomForestRegressionOptions { NumberOfTrees = 100, MaxDepth = 10 };
+/// var transferRF = new TransferRandomForest&lt;double&gt;(options);
+/// IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt; adaptedModel =
+///     transferRF.Transfer(sourceModel, targetData, targetLabels);
+/// Vector&lt;double&gt; predictions = adaptedModel.Predict(newData);
+/// </code>
+/// </example>
 public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector<T>>
 {
     private readonly RandomForestRegressionOptions _options;
@@ -241,115 +254,103 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// <summary>
 /// Wrapper model that applies feature mapping before prediction.
 /// </summary>
-internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
+/// <remarks>
+/// <para><b>For Beginners:</b> This wrapper adapts a Random Forest trained on one set of
+/// features to work with a different set of features. It automatically maps the input
+/// features from the target domain to match what the source model expects, then runs
+/// the prediction. This is how transfer learning works with tree-based models.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a mapped random forest that adapts source features to target domain
+/// var baseModel = sourceForest; // Pre-trained random forest from source domain
+/// var mapper = new FeatureMapper&lt;double&gt;(sourceFeatures, targetFeatures);
+/// var mappedModel = new MappedRandomForestModel&lt;double&gt;(baseModel, mapper, targetFeatureCount);
+///
+/// // Predict on target domain data using feature mapping
+/// var targetFeatures = Matrix&lt;double&gt;.Build.Dense(1, 5);
+/// var prediction = mappedModel.Predict(targetFeatures);
+/// Console.WriteLine($"Predicted value: {prediction[0]}");
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelCategory(ModelCategory.DecisionTree)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<T>>
 {
     private const int WrapperMagic = 0x4D52464D; // 'MRFM'
-    private readonly IFullModel<T, Matrix<T>, Vector<T>> _baseModel;
     private readonly IFeatureMapper<T> _mapper;
     private readonly int _targetFeatures;
-    private readonly INumericOperations<T> _numOps;
     private static System.Reflection.MethodInfo? _inverseMapMethod;
 
     public MappedRandomForestModel(
         IFullModel<T, Matrix<T>, Vector<T>> baseModel,
         IFeatureMapper<T> mapper,
         int targetFeatures)
+        : base(baseModel)
     {
-        _baseModel = baseModel;
         _mapper = mapper;
         _targetFeatures = targetFeatures;
-        _numOps = MathHelper.GetNumericOperations<T>();
         // Initialize inverse-map reflection method once per process if available
         _inverseMapMethod ??= _mapper.GetType().GetMethod("InverseMapFeatureName", new[] { typeof(string) });
     }
 
-    public void Train(Matrix<T> input, Vector<T> expectedOutput)
+    /// <inheritdoc/>
+    public override Vector<T> Predict(Matrix<T> input)
     {
-        _baseModel.Train(input, expectedOutput);
+        return BaseModel.Predict(input);
     }
 
-    public Vector<T> Predict(Matrix<T> input)
-    {
-        // Input might need to be mapped if it's from a different feature space
-        return _baseModel.Predict(input);
-    }
-
-    public ModelMetadata<T> GetModelMetadata()
-    {
-        return _baseModel.GetModelMetadata();
-    }
-
-    public byte[] Serialize()
+    /// <inheritdoc/>
+    public override byte[] Serialize()
     {
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
-        var baseBytes = _baseModel.Serialize();
+        var baseBytes = BaseModel.Serialize();
         WriteWrapper(writer, baseBytes);
         return ms.ToArray();
     }
 
-    public void Deserialize(byte[] data)
+    /// <inheritdoc/>
+    public override void Deserialize(byte[] data)
     {
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
         if (TryReadWrapper(reader, out var baseBytes))
         {
-            _baseModel.Deserialize(baseBytes);
+            BaseModel.Deserialize(baseBytes);
             return;
         }
-        _baseModel.Deserialize(data);
+        BaseModel.Deserialize(data);
     }
 
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        return _baseModel.WithParameters(parameters);
+        return BaseModel.WithParameters(parameters);
     }
 
-    public Vector<T> GetParameters()
-    {
-        return _baseModel.GetParameters();
-    }
-
-    public IEnumerable<int> GetActiveFeatureIndices()
-    {
-        return _baseModel.GetActiveFeatureIndices();
-    }
-
-    public bool IsFeatureUsed(int featureIndex)
-    {
-        return _baseModel.IsFeatureUsed(featureIndex);
-    }
-
-    public IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         return new MappedRandomForestModel<T>(
-            _baseModel.DeepCopy(),
+            BaseModel.DeepCopy(),
             _mapper,
             _targetFeatures);
     }
 
-    public IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        return DeepCopy();
-    }
-
-    public virtual void SetParameters(Vector<T> parameters)
-    {
-        _baseModel.SetParameters(parameters);
-    }
-
-    public virtual int ParameterCount
-    {
-        get { return _baseModel.ParameterCount; }
-    }
-
-    public virtual void SaveModel(string filePath)
+    /// <inheritdoc/>
+    public override void SaveModel(string filePath)
     {
         // Persist wrapper metadata and base model bytes together
         using var ms = new MemoryStream();
         using (var writer = new BinaryWriter(ms))
         {
-            var baseBytes = _baseModel.Serialize();
+            var baseBytes = BaseModel.Serialize();
             WriteWrapper(writer, baseBytes);
         }
         var data = ms.ToArray();
@@ -361,7 +362,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         File.WriteAllBytes(filePath, data);
     }
 
-    public virtual void LoadModel(string filePath)
+    /// <inheritdoc/>
+    public override void LoadModel(string filePath)
     {
         if (!File.Exists(filePath))
         {
@@ -376,12 +378,13 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
         // Intentionally overwrites _baseModel with deserialized state.
         // The wrapper metadata (_mapper, _targetFeatures) is immutable and set at construction.
-        _baseModel.Deserialize(baseBytes);
+        BaseModel.Deserialize(baseBytes);
     }
 
-    public virtual Dictionary<string, T> GetFeatureImportance()
+    /// <inheritdoc/>
+    public override Dictionary<string, T> GetFeatureImportance()
     {
-        var baseImportance = _baseModel.GetFeatureImportance();
+        var baseImportance = BaseModel.GetFeatureImportance();
         var mappedImportance = new Dictionary<string, T>(baseImportance.Count);
         var mapMethod = _inverseMapMethod;
         foreach (var kvp in baseImportance)
@@ -413,7 +416,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         writer.Write(_targetFeatures);
         try
         {
-            writer.Write(Convert.ToDouble(_mapper.GetMappingConfidence()));
+            writer.Write(System.Convert.ToDouble(_mapper.GetMappingConfidence()));
         }
         catch
         {
@@ -453,63 +456,6 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
     }
 
-    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
-    {
-        _baseModel.SetActiveFeatureIndices(featureIndices);
-    }
-
-    /// <summary>
-    /// Gets the default loss function used by this model for gradient computation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Delegates to the underlying base model's default loss function.
-    /// </para>
-    /// </remarks>
-    public ILossFunction<T> DefaultLossFunction => _baseModel.DefaultLossFunction;
-
-    /// <summary>
-    /// Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.
-    /// </summary>
-    /// <param name="input">The input data.</param>
-    /// <param name="target">The target/expected output.</param>
-    /// <param name="lossFunction">The loss function to use. If null, uses the model's default loss function.</param>
-    /// <returns>A vector containing gradients with respect to all model parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method delegates to the underlying base model's ComputeGradients implementation.
-    /// The feature mapping is NOT applied during gradient computation, as the base model
-    /// operates in the target feature space.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This calculates which direction to adjust the model's parameters to reduce error.
-    /// It delegates to the wrapped Random Forest model.
-    /// </para>
-    /// </remarks>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
-    {
-        return _baseModel.ComputeGradients(input, target, lossFunction);
-    }
-
-    /// <summary>
-    /// Applies pre-computed gradients to update the model parameters.
-    /// </summary>
-    /// <param name="gradients">The gradient vector to apply.</param>
-    /// <param name="learningRate">The learning rate for the update.</param>
-    /// <remarks>
-    /// <para>
-    /// This method delegates to the underlying base model's ApplyGradients implementation.
-    /// Updates parameters using: θ = θ - learningRate * gradients
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// After computing gradients, this method actually updates the model's parameters.
-    /// It delegates to the wrapped Random Forest model.
-    /// </para>
-    /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        _baseModel.ApplyGradients(gradients, learningRate);
-    }
 
     /// <summary>
     /// Saves the mapped Random Forest model's current state to a stream.
@@ -538,7 +484,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
     /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
-    public void SaveState(Stream stream)
+    public override void SaveState(Stream stream)
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
@@ -592,7 +538,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
     /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
-    public void LoadState(Stream stream)
+    public override void LoadState(Stream stream)
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
@@ -657,8 +603,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// </code>
     /// </para>
     /// </remarks>
-    public bool SupportsJitCompilation =>
-        _baseModel is IJitCompilable<T> jitModel && jitModel.SupportsJitCompilation;
+    public override bool SupportsJitCompilation =>
+        BaseModel is IJitCompilable<T> jitModel && jitModel.SupportsJitCompilation;
 
     /// <summary>
     /// Exports the model's computation graph for JIT compilation.
@@ -680,9 +626,9 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// averaged to produce the final prediction.
     /// </para>
     /// </remarks>
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        if (_baseModel is IJitCompilable<T> jitModel && jitModel.SupportsJitCompilation)
+        if (BaseModel is IJitCompilable<T> jitModel && jitModel.SupportsJitCompilation)
         {
             return jitModel.ExportComputationGraph(inputNodes);
         }

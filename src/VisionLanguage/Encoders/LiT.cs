@@ -29,8 +29,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <item>Paper: "LiT: Zero-Shot Transfer with Locked-image text Tuning" (Zhai et al., CVPR 2022)</item>
 /// </list>
 /// </para>
-/// <para><b>For Beginners:</b> LiT is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LiT makes CLIP training much cheaper by freezing a pre-trained
+/// image encoder and only training the text encoder to align with it. Instead of training
+/// both vision and language components from scratch, it reuses an existing strong vision model
+/// and teaches a text model to "read" its image features, achieving 85.2% zero-shot ImageNet
+/// accuracy with much less compute. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LiT model for efficient locked-image text tuning
+/// // freezing the vision encoder and only training the text side
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LiT&lt;double&gt;(architecture, "lit.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LiT&lt;double&gt;(architecture, new LiTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -144,7 +164,7 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "LiT-Native" : "LiT-ONNX", Description = "LiT: Zero-Shot Transfer with Locked-image text Tuning (Zhai et al., CVPR 2022)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
+        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "LiT-Native" : "LiT-ONNX", Description = "LiT: Zero-Shot Transfer with Locked-image text Tuning (Zhai et al., CVPR 2022)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
         meta.AdditionalInfo["Architecture"] = "LiT";
         meta.AdditionalInfo["FreezeVisionEncoder"] = _options.FreezeVisionEncoder.ToString();
         meta.AdditionalInfo["ProjectionDim"] = _options.ProjectionDim.ToString();

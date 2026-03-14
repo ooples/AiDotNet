@@ -462,7 +462,6 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         return new ModelMetadata<T>
         {
             Name = "LayoutGraph",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LayoutGraph for hierarchical document layout analysis",
             FeatureCount = _nodeDim,
             Complexity = _graphLayers,

@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Graph;
 
@@ -66,6 +66,21 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/1709.04875
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for spatio-temporal traffic forecasting (325 sensors, 12-step horizon)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 12, inputWidth: 325, inputDepth: 1, outputSize: 12);
+///
+/// // Training mode: sandwich temporal-spatial-temporal convolutional blocks
+/// var model = new STGNN&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained ST-GCN model
+/// var onnxModel = new STGNN&lt;double&gt;(architecture, "stgnn_traffic.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.GraphNetwork)]
@@ -502,7 +517,6 @@ public class STGNN<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "STGNN" },

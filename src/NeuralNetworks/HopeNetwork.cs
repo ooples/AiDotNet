@@ -16,6 +16,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Core innovation of Google's Nested Learning paradigm.
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> HopeNetwork is a self-modifying neural network inspired by
+/// Google's Nested Learning paradigm. Unlike standard networks with fixed architectures, it
+/// can modify its own behavior during inference through a continuum memory system. This allows
+/// it to perform unbounded levels of in-context learning, meaning it can keep adapting to new
+/// patterns without being retrained. Think of it as a network that can "learn to learn" in
+/// real time.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
@@ -527,7 +535,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "HopeNetwork",
-            ModelType = Enums.ModelType.RecurrentNeuralNetwork, // Hope is a recurrent architecture variant
+// Hope is a recurrent architecture variant
             Version = "1.0",
             Description = "Self-modifying recurrent network with Continuum Memory System for continual learning based on Google's Nested Learning paradigm",
             FeatureCount = _hiddenDim,

@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Show-o2 (NUS, 2025) improves upon Show-o with enhanced native unified multimodal capabilities.
+/// It refines the discrete diffusion approach for image generation with improved visual token
+/// quality and strengthens the multimodal understanding pathway through better cross-modal
+/// attention and scaled training on larger multimodal datasets.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Show-o2: Improved Unified Multimodal Understanding and Generation" (NUS, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> ShowO2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Show-o2 is an improved version of Show-o with enhanced
+/// understanding and generation quality. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Show-o2 model for improved unified multimodal processing
+/// // with enhanced native understanding and generation capabilities
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ShowO2&lt;double&gt;(architecture, "showo2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ShowO2&lt;double&gt;(architecture, new ShowO2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -236,7 +259,7 @@ public class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Show-o2-Native" : "Show-o2-ONNX", Description = "Show-o2: improved native unified multimodal model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Show-o2-Native" : "Show-o2-ONNX", Description = "Show-o2: improved native unified multimodal model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Show-o2";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         return m;

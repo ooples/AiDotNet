@@ -169,7 +169,6 @@ public class SwinVFI<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "SwinVFI-Native" : "SwinVFI-ONNX",
             Description = $"SwinVFI {_options.Variant} Swin Transformer interpolation (2022)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumSwinBlocks * _options.NumStages
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

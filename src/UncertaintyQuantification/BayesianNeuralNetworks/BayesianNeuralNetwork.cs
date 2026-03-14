@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Results;
@@ -25,6 +26,26 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 /// (sampled from learned probability distributions) and analyzing how much these predictions vary.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Bayesian Neural Network with uncertainty estimation
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 10, outputSize: 1,
+///     hiddenLayers: new[] { 64, 32 },
+///     networkType: NetworkType.Regression);
+/// var bnn = new BayesianNeuralNetwork&lt;float&gt;(architecture, numSamples: 30);
+/// // Get prediction with uncertainty via multiple weight-sampled forward passes
+/// var result = bnn.PredictWithUncertainty(inputTensor);
+/// // result.Mean, result.Variance provide prediction and uncertainty
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<T>
 {
     private readonly int _numSamples;

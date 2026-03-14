@@ -15,7 +15,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.StateSpace;
 
@@ -64,6 +64,16 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 /// https://arxiv.org/abs/2008.07669
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new Hippo&lt;double&gt;(architecture);
+/// var onnxModel = new Hippo&lt;double&gt;(architecture, "hippo.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -466,7 +476,6 @@ public class Hippo<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "HiPPO" },

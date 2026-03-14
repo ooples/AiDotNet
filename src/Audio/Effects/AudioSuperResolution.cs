@@ -201,7 +201,6 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         {
             Name = _useNativeMode ? "AudioSuperResolution-Native" : "AudioSuperResolution-ONNX",
             Description = $"Audio Super-Resolution {_options.Variant} ({_options.InputSampleRate / 1000}kHz -> {_options.OutputSampleRate / 1000}kHz)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = 1, Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["UpsampleFactor"] = _options.UpsampleFactor.ToString();

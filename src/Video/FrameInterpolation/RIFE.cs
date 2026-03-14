@@ -38,6 +38,19 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// ECCV 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RIFE model for real-time video frame interpolation
+/// var rife = new RIFE&lt;double&gt;();
+///
+/// // Or configure with custom flow estimation parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 6, outputSize: 3);
+/// var model = new RIFE&lt;double&gt;(architecture, numFeatures: 64, numFlowBlocks: 8);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -1084,7 +1097,6 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

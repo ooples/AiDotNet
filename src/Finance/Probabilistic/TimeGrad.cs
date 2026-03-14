@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Probabilistic;
 
@@ -63,6 +63,19 @@ namespace AiDotNet.Finance.Probabilistic;
 /// https://arxiv.org/abs/2101.12072
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimeGrad model for autoregressive diffusion forecasting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 100, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new TimeGrad&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for RNN-diffusion forecasting
+/// var onnxModel = new TimeGrad&lt;double&gt;(architecture, "timegrad.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -530,7 +543,6 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimeGrad" },

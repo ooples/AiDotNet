@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 256, Width = 256, NumInferenceSteps = 50 };
+/// var model = new Show1Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 29, 32, 32 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.VideoGeneration)]
@@ -179,7 +187,6 @@ public class Show1Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Show1",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Show-1 marrying pixel and latent diffusion for text-to-video.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

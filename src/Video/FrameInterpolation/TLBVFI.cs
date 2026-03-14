@@ -168,7 +168,6 @@ public class TLBVFI<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "TLBVFI-Native" : "TLBVFI-ONNX",
             Description = $"TLBVFI {_options.Variant} token-level bidirectional interpolation (2024)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumMatchingBlocks * _options.NumSynthesisBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

@@ -17,10 +17,35 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// GLaMM (Rasheed et al., 2024) is a pixel-level grounded large multimodal model that generates
+/// natural language responses interleaved with segmentation masks. It uses a grounding image
+/// encoder for multi-scale visual features, a pixel decoder for mask generation, and special
+/// [SEG] tokens in the LLM output that trigger mask prediction through dot-product with
+/// pixel-level feature embeddings, enabling fine-grained region-text alignment.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GLaMM: Pixel Grounding Large Multimodal Model" (MBZUAI, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> GLaMM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> GLaMM is a vision-language model that can generate both text
+/// descriptions and precise pixel-level segmentation masks for referred objects. Default values
+/// follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GLaMM model for pixel-level grounded understanding
+/// // with text-interleaved segmentation mask generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GLaMM&lt;double&gt;(architecture, "glamm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GLaMM&lt;double&gt;(architecture, new GLaMMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -231,7 +256,7 @@ public class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GLaMM-Native" : "GLaMM-ONNX", Description = "GLaMM: pixel-level grounded LMM generating text and segmentation masks.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GLaMM-Native" : "GLaMM-ONNX", Description = "GLaMM: pixel-level grounded LMM generating text and segmentation masks.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GLaMM";
         m.AdditionalInfo["PixelGrounding"] = _options.EnablePixelGrounding.ToString();
         return m;

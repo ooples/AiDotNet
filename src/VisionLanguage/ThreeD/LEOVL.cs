@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LEO-VL (2025) provides efficient 3D scene understanding from multi-view RGB-D inputs.
+/// It constructs 3D scene representations from multiple depth-camera views without requiring
+/// explicit 3D reconstruction, using a view aggregation module to fuse multi-view features
+/// into a coherent spatial representation for language-guided scene understanding and navigation.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LEO-VL: Efficient 3D Scene Understanding via Multi-View RGB-D (Various, 2025)"</item></list></para>
-/// <para><b>For Beginners:</b> LEOVL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LEO-VL is a vision-language model for 3D scene understanding
+/// using multi-view RGB-D camera inputs. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LEO-VL model for 3D scene understanding
+/// // with efficient multi-view RGB-D representation learning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LEOVL&lt;double&gt;(architecture, "leovl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LEOVL&lt;double&gt;(architecture, new LEOVLOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.ThreeD)]
@@ -224,7 +247,7 @@ public class LEOVL<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LEO-VL-Native" : "LEO-VL-ONNX", Description = "LEO-VL: efficient 3D scene representation from multi-view RGB-D.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LEO-VL-Native" : "LEO-VL-ONNX", Description = "LEO-VL: efficient 3D scene representation from multi-view RGB-D.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "LEO-VL";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

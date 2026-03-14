@@ -326,7 +326,6 @@ public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Make-A-Video",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Make-A-Video text-to-video generation without paired text-video data by Meta",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

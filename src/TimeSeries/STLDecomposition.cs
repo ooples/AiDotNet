@@ -28,6 +28,16 @@ namespace AiDotNet.TimeSeries;
 /// The model offers different algorithms (standard, robust, and fast) to handle various types of data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Decompose a time series into trend, seasonal, and residual components
+/// var options = new STLDecompositionOptions&lt;double&gt; { SeasonalPeriod = 12 };
+/// var stl = new STLDecomposition&lt;double&gt;(options);
+/// stl.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; trend = stl.GetTrend();
+/// Vector&lt;double&gt; seasonal = stl.GetSeasonal();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -1020,7 +1030,6 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.STLDecomposition,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include configuration options

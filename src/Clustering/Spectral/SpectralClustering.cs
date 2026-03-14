@@ -35,6 +35,14 @@ namespace AiDotNet.Clustering.Spectral;
 /// - You care about connectivity, not just distance
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SpectralOptions&lt;double&gt;();
+/// var spectralClustering = new SpectralClustering&lt;double&gt;(options);
+/// spectralClustering.Fit(dataMatrix);
+/// int[] labels = spectralClustering.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -72,7 +80,6 @@ public class SpectralClustering<T> : ClusteringBase<T>
     public T[,]? AffinityMatrix => _affinityMatrix;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

@@ -280,7 +280,6 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
         {
             Name = _useNativeMode ? "AudioLDMClassifier-Native" : "AudioLDMClassifier-ONNX",
             Description = "AudioLDM Classifier - diffusion features for audio classification (Liu et al., 2023)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumClassifierLayers
         };
         m.AdditionalInfo["LatentDim"] = _options.LatentDim.ToString();

@@ -781,7 +781,6 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ResidualNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfLayers", Layers.Count },

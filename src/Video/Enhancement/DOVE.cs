@@ -180,7 +180,6 @@ public class DOVE<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "DOVE-Native" : "DOVE-ONNX",
             Description = $"DOVE {_options.Variant} video diffusion prior restoration (Chen et al., 2025)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

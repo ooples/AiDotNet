@@ -24,6 +24,27 @@ namespace AiDotNet.Regression;
 /// energy consumption, or sales figures.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create time series regression with autoregressive and seasonal components
+/// var options = new TimeSeriesRegressionOptions&lt;double&gt;();
+/// var regularization = new L2Regularization&lt;double&gt;();
+/// var model = new TimeSeriesRegression&lt;double&gt;(options, regularization);
+///
+/// // Prepare historical data with temporal features
+/// var features = Matrix&lt;double&gt;.Build.Dense(24, 3); // 24 observations, 3 features
+/// var targets = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135,
+///     148, 148, 136, 119, 104, 118, 115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
+///
+/// // Train the model to capture trends, seasonality, and autoregressive patterns
+/// model.Train(features, targets);
+///
+/// // Predict future values
+/// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 3);
+/// var forecast = model.Predict(newFeatures);
+/// Console.WriteLine($"Next predicted value: {forecast[0]}");
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -594,7 +615,6 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// loading models, or when deciding how to process them.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.TimeSeriesRegression;
 
     /// <summary>
     /// Converts the model into a byte array that can be stored or transmitted.

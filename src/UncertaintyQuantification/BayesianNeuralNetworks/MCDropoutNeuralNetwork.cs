@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Results;
@@ -26,6 +27,26 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 /// It's like getting a second (and third, and fourth...) opinion from slightly different versions of your model.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an MC Dropout network for uncertainty-aware predictions
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 10, outputSize: 1,
+///     hiddenLayers: new[] { 128, 64 },
+///     networkType: NetworkType.Regression);
+/// // Add MCDropoutLayer instances to the architecture for stochastic inference
+/// var mcDropout = new MCDropoutNeuralNetwork&lt;float&gt;(architecture, numSamples: 50);
+/// var result = mcDropout.PredictWithUncertainty(inputTensor);
+/// // result.Mean = average prediction, result.Variance = epistemic uncertainty
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<T>
 {
     private readonly int _numSamples;

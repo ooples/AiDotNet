@@ -257,7 +257,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Udio-Suno", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Udio-Suno", Version = "1.0",
             Description = "Udio/Suno-class full-song music generation with structural awareness",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -467,7 +467,6 @@ public class SDUpscalerModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "SD-Upscaler-x4",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Stable Diffusion x4 Upscaler for text-guided latent super-resolution",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

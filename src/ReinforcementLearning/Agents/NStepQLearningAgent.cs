@@ -12,13 +12,31 @@ namespace AiDotNet.ReinforcementLearning.Agents.NStepQLearning;
 /// N-step Q-Learning agent using multi-step off-policy returns.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> N-step Q-Learning extends regular Q-Learning by looking ahead
+/// n steps before bootstrapping. Regular Q-Learning updates based on the very next reward,
+/// while n-step looks at n future rewards. This propagates information faster (like seeing
+/// further down a road before deciding which way to turn). The trade-off: higher n means
+/// faster learning but more variance. Common values are n=3 to n=10.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create an n-step Q-Learning agent for faster reward propagation
+/// var options = new NStepQLearningOptions&lt;double&gt; { NSteps = 5, StateSize = 4, ActionSize = 2 };
+/// var agent = new NStepQLearningAgent&lt;double&gt;(options);
+///
+/// // Select an action using epsilon-greedy over Q-values
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
@@ -192,7 +210,7 @@ public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+        return new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     }
 
     public override int ParameterCount => _qTable.Count * _options.ActionSize;

@@ -37,6 +37,14 @@ namespace AiDotNet.Clustering.Subspace;
 /// CLIQUE automatically discovers these hidden subspaces!
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new CLIQUEOptions&lt;double&gt;();
+/// var cLIQUE = new CLIQUE&lt;double&gt;(options);
+/// cLIQUE.Fit(dataMatrix);
+/// int[] labels = cLIQUE.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -88,7 +96,6 @@ public class CLIQUE<T> : ClusteringBase<T>
         }).ToList().AsReadOnly();
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

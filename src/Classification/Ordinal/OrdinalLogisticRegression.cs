@@ -161,7 +161,6 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> Returns an identifier for this model type,
     /// used internally for serialization and model management.</para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.OrdinalLogisticRegression;
 
     /// <summary>
     /// Trains the ordinal logistic regression model.

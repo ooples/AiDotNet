@@ -50,6 +50,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// Flow-Aware Generative Transformers", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 28 };
+/// var model = new LuminaImage2Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -217,7 +225,7 @@ public class LuminaImage2Model<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Lumina Image 2.0", Version = "2.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Lumina Image 2.0", Version = "2.0",
             Description = "Flag-DiT with flow matching, Gemma text encoder, and multi-resolution support",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

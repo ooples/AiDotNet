@@ -37,6 +37,19 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 /// <b>Reference:</b> Tian et al., "YOLOv12: Attention-Centric Real-Time Object Detectors", arXiv 2025.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a YOLOv12-Seg model with attention-centric instance segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 640, inputWidth: 640, inputDepth: 3, outputSize: 80);
+/// var model = new YOLOv12Seg&lt;double&gt;(architecture, numClasses: 80);
+///
+/// // Or load a pre-trained ONNX model for autonomous vehicle perception
+/// var onnxModel = new YOLOv12Seg&lt;double&gt;(architecture, "yolov12n-seg.onnx", numClasses: 80);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Segmentation)]
@@ -304,7 +317,6 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.InstanceSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "YOLOv12Seg" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

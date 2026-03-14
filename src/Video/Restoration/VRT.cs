@@ -503,7 +503,6 @@ public class VRT<T> : VideoSuperResolutionBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoSuperResolution,
             AdditionalInfo = additionalInfo,
             ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };

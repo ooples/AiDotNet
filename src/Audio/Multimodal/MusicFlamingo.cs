@@ -204,7 +204,6 @@ public class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T
         {
             Name = _useNativeMode ? "MusicFlamingo-Native" : "MusicFlamingo-ONNX",
             Description = "Music Flamingo multimodal music-language model (2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.MusicEncoderDim,
             Complexity = _options.NumPerceiverLayers
         };
         m.AdditionalInfo["LLMHiddenDim"] = _options.LLMHiddenDim.ToString();

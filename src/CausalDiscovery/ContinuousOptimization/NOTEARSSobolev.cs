@@ -95,11 +95,21 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     {
         ApplyOptions(options);
         if (options?.MaxPenalty is { } maxPenalty)
+        {
+            if (maxPenalty <= 0)
+                throw new ArgumentException("MaxPenalty must be positive.");
             _rhoMax = maxPenalty;
+        }
         if (options?.HiddenUnits is { } hiddenUnits)
+        {
+            if (hiddenUnits < 1)
+                throw new ArgumentException("HiddenUnits must be at least 1.");
             _hiddenSize = hiddenUnits;
+        }
         _seed = options?.Seed;
         _sobolevWeight = options?.SobolevWeight ?? DEFAULT_SOBOLEV_WEIGHT;
+        if (_sobolevWeight < 0)
+            throw new ArgumentException("SobolevWeight must be non-negative.");
     }
 
     /// <inheritdoc/>

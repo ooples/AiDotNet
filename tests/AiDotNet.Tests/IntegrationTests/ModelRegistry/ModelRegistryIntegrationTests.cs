@@ -749,14 +749,12 @@ public class ModelRegistryIntegrationTests : IDisposable
         {
             FeatureCount = 10,
             Complexity = 3,
-            ModelType = ModelType.SimpleRegression
         };
 
         var metadata2 = new ModelMetadata<double>
         {
             FeatureCount = 20,
             Complexity = 8,
-            ModelType = ModelType.LogisticRegression
         };
 
         registry.RegisterModel("compare_model", model, metadata1);
@@ -1001,7 +999,6 @@ public class ModelRegistryIntegrationTests : IDisposable
         {
             FeatureCount = 10,
             Complexity = 5, // 1-10 scale
-            ModelType = ModelType.SimpleRegression
         };
     }
 

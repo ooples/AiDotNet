@@ -40,6 +40,28 @@ namespace AiDotNet.Classification.Meta;
 /// - Slower training for many classes
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create One-vs-One classifier with pairwise binary classifiers
+/// var options = new OneVsOneClassifierOptions&lt;double&gt;();
+/// var classifier = new OneVsOneClassifier&lt;double&gt;(options);
+///
+/// // Prepare multi-class training data (3 classes)
+/// var features = Matrix&lt;double&gt;.Build.Dense(9, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     3.0, 3.1,  3.2, 2.9,  2.8, 3.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1, 2, 2, 2 });
+///
+/// // Train K*(K-1)/2 binary classifiers for each class pair
+/// classifier.Train(features, labels);
+///
+/// // Predict using pairwise voting
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 3.1, 3.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
@@ -82,7 +104,6 @@ public class OneVsOneClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.OneVsOneClassifier;
 
     /// <summary>
     /// Trains the One-vs-One classifier on the provided data.

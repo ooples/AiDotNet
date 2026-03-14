@@ -25,6 +25,24 @@ namespace AiDotNet.Regression;
 /// to all points when measuring distance perpendicular to the line, rather than just vertically.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an orthogonal (total least squares) regression model
+/// var model = new OrthogonalRegression&lt;double&gt;();
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train minimizing perpendicular distance to the hyperplane
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
@@ -181,7 +199,6 @@ public class OrthogonalRegression<T> : RegressionBase<T>
     /// It's used internally by the library to keep track of different types of models.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.OrthogonalRegression;
 
     /// <summary>
     /// Serializes the model to a byte array.

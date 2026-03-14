@@ -32,9 +32,9 @@ namespace AiDotNet.Classification;
 ///
 /// - Star ratings (1-5 stars): You know 5 > 4 > 3 > 2 > 1, but the difference between 1 and 2
 ///   stars might not equal the difference between 4 and 5 stars
-/// - Survey responses: Strongly Disagree < Disagree < Neutral < Agree < Strongly Agree
-/// - Education levels: High School < Bachelor's < Master's < PhD
-/// - Pain levels: None < Mild < Moderate < Severe
+/// - Survey responses: Strongly Disagree &lt; Disagree &lt; Neutral &lt; Agree &lt; Strongly Agree
+/// - Education levels: High School &lt; Bachelor's &lt; Master's &lt; PhD
+/// - Pain levels: None &lt; Mild &lt; Moderate &lt; Severe
 ///
 /// The model learns:
 /// 1. Feature coefficients (β): How each feature pushes predictions up or down the ordinal scale
@@ -44,6 +44,27 @@ namespace AiDotNet.Classification;
 /// regression (which assumes equal distances between categories).
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create ordinal regression for ordered categorical prediction (e.g., star ratings 1-5)
+/// var options = new OrdinalRegressionOptions&lt;double&gt;();
+/// var classifier = new OrdinalRegression&lt;double&gt;(options);
+///
+/// // Prepare training data with features and ordinal labels (0, 1, 2 for Low, Medium, High)
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.5,  2.0, 2.5,  3.0, 3.5,
+///     0.5, 1.0,  1.5, 2.0,  2.5, 3.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1, 2, 2 });
+///
+/// // Train with proportional odds model
+/// classifier.Train(features, labels);
+///
+/// // Predict ordinal class for new data
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 2.2, 1.8 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted ordinal class: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -612,24 +633,6 @@ public class OrdinalRegression<T> : ClassifierBase<T>
         }
 
         return probs;
-    }
-
-    /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for ordinal regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Returns an identifier indicating this is an ordinal regression model.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.OrdinalRegression;
     }
 
     /// <summary>

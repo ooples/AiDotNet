@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 720, Width = 1280, NumInferenceSteps = 30 };
+/// var model = new OpenSora2Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 93, 90, 160 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -192,7 +200,6 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "OpenSora2",
             Version = "2.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Open-Sora 2.0 commercial-level video generation model.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

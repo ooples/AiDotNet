@@ -18,6 +18,28 @@ namespace AiDotNet.Finance.NLP;
 /// InvestLM neural network model specialized for investment professionals and research.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> InvestLM is a language model fine-tuned specifically for
+/// investment professionals. It can analyze investment opportunities, summarize financial
+/// reports, provide market commentary, and answer questions about portfolio strategies.
+/// Think of it as an AI research analyst that understands investment terminology, valuation
+/// methods, and market dynamics.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for investment-focused language generation (2048 tokens)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 2048, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+///
+/// // Training mode: instruction-tuned LLM for investment analysis and portfolio commentary
+/// var model = new InvestLM&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained InvestLM model
+/// var onnxModel = new InvestLM&lt;double&gt;(architecture, "investlm.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -1106,7 +1106,6 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GenerativeAdversarialNetwork,
             AdditionalInfo = additionalInfo,
             ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };

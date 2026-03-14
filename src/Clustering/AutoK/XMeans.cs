@@ -41,6 +41,14 @@ namespace AiDotNet.Clustering.AutoK;
 /// - Only split if the fit improvement outweighs the penalty
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new XMeansOptions&lt;double&gt;();
+/// var xMeans = new XMeans&lt;double&gt;(options);
+/// xMeans.Fit(dataMatrix);
+/// int[] labels = xMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -71,7 +79,6 @@ public class XMeans<T> : ClusteringBase<T>
     public double BIC => _bic;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

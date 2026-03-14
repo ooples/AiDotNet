@@ -72,7 +72,6 @@ public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
     public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
-        metadata.ModelType = ModelType.GeneticAlgorithmRegression;
         metadata.Description = "Model evolved using a steady-state genetic algorithm";
         metadata.AdditionalInfo["ReplacementRate"] = _replacementRate.ToString();
 

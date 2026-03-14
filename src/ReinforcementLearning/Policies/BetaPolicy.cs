@@ -18,6 +18,17 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Actions are naturally bounded to [0, 1] and can be scaled to any [min, max] range.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create a Beta policy for bounded continuous actions in [0, 1]
+    /// var network = new NeuralNetwork&lt;double&gt;();
+    /// var policy = new BetaPolicy&lt;double&gt;(network, actionSize: 2, new EpsilonGreedyExploration&lt;double&gt;());
+    ///
+    /// // Sample an action bounded between 0 and 1
+    /// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+    /// var action = policy.SelectAction(state, training: true);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -44,6 +44,23 @@ namespace AiDotNet.Diffusion;
 /// <b>Reference:</b> "Denoising Diffusion Probabilistic Models" by Ho et al., 2020
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DDPM model for image generation
+/// var options = new DiffusionModelOptions&lt;float&gt;
+/// {
+///     Height = 64,
+///     Width = 64,
+///     Channels = 3,
+///     NumTimesteps = 1000
+/// };
+/// var model = new DDPMModel&lt;float&gt;(options);
+///
+/// // Generate an image from random noise
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 3, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]

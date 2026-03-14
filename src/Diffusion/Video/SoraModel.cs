@@ -414,7 +414,6 @@ public class SoraModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Sora",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Sora-architecture DiT video generation with native spatiotemporal patches",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

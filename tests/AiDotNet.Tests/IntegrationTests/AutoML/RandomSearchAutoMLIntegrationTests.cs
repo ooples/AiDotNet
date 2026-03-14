@@ -39,7 +39,7 @@ public class RandomSearchAutoMLIntegrationTests
 
         var autoML = new RandomSearchAutoML<double, Matrix<double>, Vector<double>>(random: RandomHelper.CreateSeededRandom(123));
         autoML.TrialLimit = 3;
-        autoML.SetCandidateModels(new List<ModelType> { ModelType.MultipleRegression });
+        autoML.SetCandidateModels(new List<Type> { typeof(AiDotNet.Regression.MultipleRegression<>) });
 
         // Act
         IFullModel<double, Matrix<double>, Vector<double>> best =

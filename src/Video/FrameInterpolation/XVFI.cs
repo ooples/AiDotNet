@@ -41,6 +41,19 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// objects move hundreds of pixels between frames.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an XVFI model for extreme 4K/8K frame interpolation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new XVFIOptions();
+/// var xvfi = new XVFI&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var xvfiOnnx = new XVFI&lt;double&gt;(architecture, "xvfi_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -176,7 +189,6 @@ public class XVFI<T> : FrameInterpolationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "XVFI" },

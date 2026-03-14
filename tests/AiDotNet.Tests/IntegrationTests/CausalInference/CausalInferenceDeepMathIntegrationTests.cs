@@ -1346,24 +1346,24 @@ public class CausalInferenceDeepMathIntegrationTests
     #region Model Type and Interface Tests
 
     [Fact]
-    public void IPW_GetModelType_ReturnsCorrectType()
+    public void IPW_IsCorrectType()
     {
         var ipw = new InverseProbabilityWeighting<double>();
-        Assert.Equal(AiDotNet.Enums.ModelType.InverseProbabilityWeighting, ipw.GetModelType());
+        Assert.IsType<InverseProbabilityWeighting<double>>(ipw);
     }
 
     [Fact]
-    public void PSM_GetModelType_ReturnsCorrectType()
+    public void PSM_IsCorrectType()
     {
         var psm = new PropensityScoreMatching<double>();
-        Assert.Equal(AiDotNet.Enums.ModelType.PropensityScoreMatching, psm.GetModelType());
+        Assert.IsType<PropensityScoreMatching<double>>(psm);
     }
 
     [Fact]
-    public void DR_GetModelType_ReturnsCorrectType()
+    public void DR_IsCorrectType()
     {
         var dr = new DoublyRobustEstimator<double>();
-        Assert.Equal(AiDotNet.Enums.ModelType.DoublyRobustEstimator, dr.GetModelType());
+        Assert.IsType<DoublyRobustEstimator<double>>(dr);
     }
 
     [Fact]

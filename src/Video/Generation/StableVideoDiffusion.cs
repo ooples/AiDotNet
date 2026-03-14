@@ -46,6 +46,20 @@ namespace AiDotNet.Video.Generation;
 /// Stability AI, 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Stable Video Diffusion model for image-to-video generation
+/// var svd = new StableVideoDiffusion&lt;double&gt;();
+///
+/// // Or configure with a specific variant and frame count
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 576, inputWidth: 576, inputDepth: 3, outputSize: 3);
+/// var model = new StableVideoDiffusion&lt;double&gt;(architecture,
+///     variant: SVDModelVariant.SVD, numFrames: 14, numInferenceSteps: 25);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -1254,7 +1268,6 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.TextToVideo,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

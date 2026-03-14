@@ -39,6 +39,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
 /// Famous for: StarCraft II micromanagement, cooperative games
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a QMIX agent for cooperative multi-agent tasks
+/// var options = new QMIXOptions&lt;double&gt; { NumAgents = 3, StateSize = 8, ActionSize = 4 };
+/// var agent = new QMIXAgent&lt;double&gt;(options);
+///
+/// // Each agent selects an action from its local observation
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2, 0.8, -0.1, 0.4, 0.6 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -641,7 +652,6 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

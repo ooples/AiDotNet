@@ -679,7 +679,6 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.HTMNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputSize", _inputSize },

@@ -44,6 +44,27 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// - Triguero et al. (2015). "Self-labeled techniques for semi-supervised learning"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create self-training classifier that iteratively labels confident predictions
+/// var options = new SelfTrainingOptions&lt;double&gt;();
+/// var classifier = new SelfTrainingClassifier&lt;double&gt;(options);
+///
+/// // Prepare data: -1 indicates unlabeled samples
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, -1, -1, 1, -1, -1 });
+///
+/// // Train iteratively, adding high-confidence predictions to training set
+/// classifier.Train(features, labels);
+///
+/// // Predict class for new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
@@ -500,14 +521,6 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _baseClassifier.ApplyGradients(gradients, learningRate);
-    }
-
-    /// <summary>
-    /// Gets the model type.
-    /// </summary>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.SelfTrainingClassifier;
     }
 
     /// <summary>

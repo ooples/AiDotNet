@@ -266,7 +266,6 @@ public class TitaNet<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeak
         {
             Name = _useNativeMode ? "TitaNet-Native" : "TitaNet-ONNX",
             Description = $"TitaNet-{_options.Variant} Speaker Embedding (Koluguri et al., ICASSP 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumEncoderBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

@@ -42,6 +42,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// Segmentation", CVPR 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Mask2Former model for universal image segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new Mask2Former&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for panoptic segmentation
+/// var onnxModel = new Mask2Former&lt;double&gt;(architecture, "mask2former.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
@@ -403,7 +416,6 @@ public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "Mask2Former" }, { "Description", "Mask2Former Universal Segmentation" },

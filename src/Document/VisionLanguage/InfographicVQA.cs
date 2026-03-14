@@ -483,7 +483,6 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return new ModelMetadata<T>
         {
             Name = "InfographicVQA",
-            ModelType = ModelType.NeuralNetwork,
             Description = "InfographicVQA for visual QA on infographics (WACV 2022)",
             FeatureCount = _fusionDim,
             Complexity = _visionLayers + _fusionLayers,

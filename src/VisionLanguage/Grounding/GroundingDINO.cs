@@ -17,10 +17,35 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Grounding DINO (Liu et al., 2024) combines the DINO detector with grounded pre-training
+/// for open-set object detection. It uses a dual-encoder architecture with a Swin/ViT image
+/// backbone and BERT-like text encoder, fused through cross-modal feature enhancement layers.
+/// Learned object queries attend to both modalities via a cross-modal decoder, producing
+/// text-conditioned bounding box detections with alignment scores.
+/// </para>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Grounding DINO: Marrying DINO with Grounded Pre-Training" (IDEA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> GroundingDINO is a vision-language model. Default values follow the original paper settings.</para>
+/// <list type="bullet"><item>Paper: "Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection" (IDEA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Grounding DINO is a vision-language model that detects objects
+/// in images based on text descriptions, enabling open-vocabulary detection without fixed
+/// category lists. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Grounding DINO model for open-set object detection
+/// // with cross-modal text-image feature fusion
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GroundingDINO&lt;double&gt;(architecture, "groundingdino.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GroundingDINO&lt;double&gt;(architecture, new GroundingDINOOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -193,7 +218,7 @@ public class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GroundingDINO-Native" : "GroundingDINO-ONNX", Description = "Grounding DINO: open-set detection combining DINO with grounded pre-training.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GroundingDINO-Native" : "GroundingDINO-ONNX", Description = "Grounding DINO: open-set detection combining DINO with grounded pre-training.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GroundingDINO";
         m.AdditionalInfo["NumQueryPositions"] = _options.NumQueryPositions.ToString();
         return m;

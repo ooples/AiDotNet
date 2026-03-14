@@ -241,7 +241,6 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         {
             Name = _useNativeMode ? "BandSplitRNN-Enhancer-Native" : "BandSplitRNN-Enhancer-ONNX",
             Description = $"Band-Split RNN {_options.Variant} enhancement (Luo & Yu, 2023)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins, Complexity = _options.NumRnnLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["NumBands"] = _options.NumBands.ToString();

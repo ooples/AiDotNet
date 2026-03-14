@@ -48,6 +48,13 @@ namespace AiDotNet.CausalInference;
 /// - Rosenbaum &amp; Rubin (1983). "The Central Role of the Propensity Score"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var psm = new PropensityScoreMatching&lt;double&gt;(caliper: 0.2, matchRatio: 1);
+/// psm.Fit(features, treatment, outcome);
+/// double att = psm.EstimateAtt();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.CausalModel)]
@@ -101,7 +108,6 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public override ModelType GetModelType() => ModelType.PropensityScoreMatching;
 
     /// <summary>
     /// Initializes a new instance of the PropensityScoreMatching class.

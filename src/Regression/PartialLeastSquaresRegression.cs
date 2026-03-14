@@ -26,6 +26,25 @@ namespace AiDotNet.Regression;
 /// that most influence the taste, rather than just the most abundant ingredients.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PLS regression for correlated predictors
+/// var options = new PartialLeastSquaresRegressionOptions&lt;double&gt;();
+/// var model = new PartialLeastSquaresRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 3 correlated features
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 3, new double[] {
+///     1, 2, 3,  4, 5, 6,  7, 8, 9,  10, 11, 12,  13, 14, 15 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 6.0, 15.1, 24.0, 33.2, 42.0 });
+///
+/// // Train by finding latent components maximizing covariance
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 16, 17, 18 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
@@ -301,7 +320,6 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
         {
             { "Coefficients", Coefficients },
@@ -328,7 +346,6 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// It's used internally by the library to keep track of different types of models.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.PartialLeastSquaresRegression;
 
     /// <summary>
     /// Calculates the importance of each feature in the model.

@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Geng et al., "Consistency Models Made Easy", NeurIPS 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 2 };
+/// var model = new EasyConsistencyModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -177,7 +185,6 @@ public class EasyConsistencyModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Easy Consistency Tuning (ECT)",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Progressive curriculum consistency training for stable single/few-step generation from pretrained diffusion models",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

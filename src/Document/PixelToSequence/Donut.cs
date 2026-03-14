@@ -1075,7 +1075,6 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         return new ModelMetadata<T>
         {
             Name = "Donut",
-            ModelType = ModelType.NeuralNetwork,
             Description = "OCR-free Document Understanding Transformer with Swin-B encoder (ECCV 2022)",
             FeatureCount = encoderOutputDim,
             Complexity = totalEncoderLayers + _numDecoderLayers,

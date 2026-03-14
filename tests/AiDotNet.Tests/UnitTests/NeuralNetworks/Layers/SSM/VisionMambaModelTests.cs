@@ -238,7 +238,7 @@ public class VisionMambaModelTests
 
         var metadata = model.GetModelMetadata();
 
-        Assert.Equal(ModelType.NeuralNetwork, metadata.ModelType);
+
         Assert.True(metadata.AdditionalInfo.ContainsKey("ImageHeight"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("ImageWidth"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("PatchSize"));

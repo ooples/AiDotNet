@@ -1,5 +1,7 @@
 using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -49,6 +51,21 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// - Temporal convolutions with kernel size 3 across frames
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new VideoUNetPredictor&lt;float&gt;(inputChannels: 4, baseChannels: 320, numFrames: 14);
+/// var noisyVideo = Tensor&lt;float&gt;.Random(new[] { 1, 4, 14, 64, 64 });
+/// var predicted = predictor.PredictNoise(noisyVideo, timestep: 500);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.VideoGeneration)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 {
     /// <summary>

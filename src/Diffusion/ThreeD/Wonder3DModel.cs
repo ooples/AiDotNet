@@ -266,7 +266,7 @@ public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Wonder3D", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Wonder3D", Version = "1.0",
             Description = "Wonder3D cross-domain multi-view 3D generation with RGB and normal maps",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

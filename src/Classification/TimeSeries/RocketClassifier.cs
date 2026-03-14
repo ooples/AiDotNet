@@ -40,6 +40,21 @@ namespace AiDotNet.Classification.TimeSeries;
 /// <para><b>Reference:</b> Dempster et al., "ROCKET: Exceptionally fast and accurate time series classification
 /// using random convolutional kernels" (2020)</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create ROCKET classifier with 10,000 random convolutional kernels
+/// var options = new RocketOptions&lt;double&gt;();
+/// var classifier = new RocketClassifier&lt;double&gt;(options);
+///
+/// // Prepare time series samples as tensors
+/// var series1 = new Tensor&lt;double&gt;(new double[] { 1.0, 1.2, 1.5, 1.3, 1.1 });
+/// var series2 = new Tensor&lt;double&gt;(new double[] { 2.0, 2.5, 2.3, 2.8, 3.0 });
+///
+/// // Extract max and PPV features from random kernels and classify
+/// var predictions = classifier.Predict(series1);
+/// Console.WriteLine($"Predicted class: {predictions[0]}");
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -109,7 +124,6 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.TimeSeriesClassifier;
 
     /// <summary>
     /// Trains the ROCKET classifier on time series data.

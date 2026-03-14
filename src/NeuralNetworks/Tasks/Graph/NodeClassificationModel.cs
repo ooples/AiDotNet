@@ -54,6 +54,24 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// - Graph structure helps propagate label information
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a node classification model for semi-supervised learning on graphs
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 16,   // node feature dimension
+///     outputSize: 7,   // number of node classes
+///     hiddenSizes: new[] { 64 });
+/// var model = new NodeClassificationModel&lt;float&gt;(architecture);
+///
+/// // Prepare graph data (adjacency + node features as tensors)
+/// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph
+/// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 100, 16 });
+///
+/// // Classify each node using GCN with neighborhood aggregation
+/// var predictions = model.Predict(nodeFeatures);
+/// Console.WriteLine($"Node 0 predicted class: {predictions}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
@@ -588,7 +606,6 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NetworkType"] = "NodeClassificationModel",

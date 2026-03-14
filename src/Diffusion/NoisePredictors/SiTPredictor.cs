@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -31,6 +33,20 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Ma et al., "SiT: Exploring Flow and Diffusion-based Generative Models with Scalable Interpolant Transformers", ECCV 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new SiTPredictor&lt;float&gt;(inputChannels: 4, hiddenSize: 1152, numLayers: 28, numHeads: 16);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class SiTPredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

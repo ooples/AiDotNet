@@ -48,6 +48,25 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// for Audio Pattern Recognition.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PANNs model for audio pattern recognition
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputSize: 64,
+///     outputSize: 527);
+///
+/// var model = new PANNsModel&lt;float&gt;(
+///     architecture: architecture,
+///     modelPath: "panns_cnn14.onnx",
+///     sampleRate: 32000,
+///     numClasses: 527);
+///
+/// // Classify audio and extract embeddings
+/// Tensor&lt;float&gt; predictions = model.Predict(audioTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelCategory(ModelCategory.FoundationModel)]
@@ -1000,7 +1019,6 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Name = $"PANNs-{_architectureType}",
             Description = $"Pretrained Audio Neural Network ({_numClasses} classes, {_architectureType})",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate,
             Complexity = _convBlocks.Count
         };

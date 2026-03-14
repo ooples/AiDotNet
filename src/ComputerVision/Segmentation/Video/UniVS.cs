@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 /// <b>Reference:</b> Li et al., "UniVS: Unified and Universal Video Segmentation with Prompts as Queries", CVPR 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UniVS model for unified multi-task video segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 480, inputWidth: 480, inputDepth: 3, outputSize: 80);
+/// var model = new UniVS&lt;double&gt;(architecture, numClasses: 80);
+///
+/// // Or load a pre-trained ONNX model for video instance/panoptic segmentation
+/// var onnxModel = new UniVS&lt;double&gt;(architecture, "univs.onnx", numClasses: 80);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -276,7 +289,6 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "UniVS" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

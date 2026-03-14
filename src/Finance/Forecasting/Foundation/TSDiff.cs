@@ -27,10 +27,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// TSDiff uses unconditional denoising diffusion as a self-supervised pretraining objective
 /// with self-guided refinement for high-quality probabilistic forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> TSDiff generates probabilistic forecasts using a three-step
+/// process: predict, refine, and synthesize. It first learns general time series patterns
+/// through diffusion (gradually adding and removing noise), then refines predictions using
+/// the model's own internal guidance. This self-guided approach produces high-quality
+/// forecasts with well-calibrated uncertainty estimates.</para>
 /// <para>
 /// <b>Reference:</b> Kollovieh et al., "Predict, Refine, Synthesize: Self-Guiding Diffusion Models for Probabilistic Time Series Forecasting", NeurIPS 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TSDiff self-guiding diffusion model for probabilistic forecasting
+/// // Three-step process: predict, refine, and synthesize with self-guided refinement
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with unconditional diffusion and self-guided refinement
+/// var model = new TSDiff&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TSDiff&lt;double&gt;(architecture, "tsdiff.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -270,7 +291,6 @@ public class TSDiff<T> : TimeSeriesFoundationModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.NeuralNetwork,
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "TSDiff" }, { "SequenceLength", _sequenceLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "NumDiffusionSteps", _numDiffusionSteps }, { "GuidanceScale", _guidanceScale }, { "UseNativeMode", _useNativeMode } },
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };

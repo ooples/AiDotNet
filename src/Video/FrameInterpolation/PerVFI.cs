@@ -166,7 +166,6 @@ public class PerVFI<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "PerVFI-Native" : "PerVFI-ONNX",
             Description = $"PerVFI {_options.Variant} perception-oriented interpolation (2024)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumRefinementIters * _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

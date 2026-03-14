@@ -246,7 +246,6 @@ public class MT3<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
         {
             Name = _useNativeMode ? "MT3-Native" : "MT3-ONNX",
             Description = "MT3 multi-track music transcription (Gardner et al., 2022, Google)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };
         m.AdditionalInfo["EncoderDim"] = _options.EncoderDim.ToString();

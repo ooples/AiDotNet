@@ -31,6 +31,23 @@ namespace AiDotNet.Regression;
 /// while still maintaining this "never decreasing" property.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an isotonic regression with monotonically non-decreasing constraint
+/// var model = new IsotonicRegression&lt;double&gt;();
+///
+/// // Prepare training data: 5 samples with 1 feature (single sorted predictor)
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 1, new double[] { 1, 2, 3, 4, 5 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 1.2, 2.8, 2.5, 4.1, 5.3 });
+///
+/// // Train with pool adjacent violators algorithm
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (output is monotonically non-decreasing)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 3.5 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -300,15 +317,6 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
         }
 
         return Math.Max(0, left - 1);
-    }
-
-    /// <summary>
-    /// Gets the model type of the Isotonic Regression model.
-    /// </summary>
-    /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.IsotonicRegression;
     }
 
     /// <summary>

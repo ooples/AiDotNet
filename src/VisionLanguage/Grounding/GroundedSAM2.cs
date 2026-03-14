@@ -17,10 +17,35 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Grounded-SAM 2 (Ren et al., 2024) combines Grounding DINO for text-conditioned object
+/// detection with SAM 2 for high-quality mask generation and video object tracking. The two-stage
+/// pipeline uses Grounding DINO's cross-modal DETR for bounding box detection, then SAM 2's
+/// memory-augmented mask decoder for segmentation. SAM 2 also enables video object tracking
+/// via memory attention across frames, supporting grounded tracking in videos.
+/// </para>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Grounded SAM 2: Ground and Track Anything in Videos" (IDEA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> GroundedSAM2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <list type="bullet"><item>Paper: "Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks" (IDEA, 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Grounded-SAM 2 is a vision-language model that combines text-based
+/// object detection with high-quality segmentation and video tracking. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Grounded-SAM 2 model for grounded segmentation and tracking
+/// // combining Grounding DINO detection with SAM 2 mask generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GroundedSAM2&lt;double&gt;(architecture, "groundedsam2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GroundedSAM2&lt;double&gt;(architecture, new GroundedSAM2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -261,7 +286,7 @@ public class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GroundedSAM2-Native" : "GroundedSAM2-ONNX", Description = "Grounded-SAM 2: combines Grounding DINO with SAM 2 for grounded segmentation and tracking.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GroundedSAM2-Native" : "GroundedSAM2-ONNX", Description = "Grounded-SAM 2: combines Grounding DINO with SAM 2 for grounded segmentation and tracking.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GroundedSAM2";
         m.AdditionalInfo["Segmentation"] = _options.EnableSegmentation.ToString();
         m.AdditionalInfo["Tracking"] = _options.EnableTracking.ToString();

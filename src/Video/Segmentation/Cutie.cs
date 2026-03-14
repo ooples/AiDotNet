@@ -773,7 +773,6 @@ public class Cutie<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoObjectSegmentation,
             AdditionalInfo = additionalInfo,
             ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };

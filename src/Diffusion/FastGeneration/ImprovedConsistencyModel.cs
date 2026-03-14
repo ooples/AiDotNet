@@ -33,6 +33,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Song and Dhariwal, "Improved Techniques for Training Consistency Models", ICLR 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 64, Width = 64, NumInferenceSteps = 1 };
+/// var model = new ImprovedConsistencyModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 8, 8 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -176,7 +184,6 @@ public class ImprovedConsistencyModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Improved Consistency Training (iCT)",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Single-step image generation via improved consistency training with lognormal schedule and pseudo-Huber loss",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

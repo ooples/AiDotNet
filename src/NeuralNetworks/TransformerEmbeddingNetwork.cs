@@ -437,7 +437,6 @@ namespace AiDotNet.NeuralNetworks
             return new ModelMetadata<T>
             {
                 Name = "TransformerEmbeddingNetwork",
-                ModelType = ModelType.Transformer,
                 Description = "Customizable Transformer-based embedding foundation",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>

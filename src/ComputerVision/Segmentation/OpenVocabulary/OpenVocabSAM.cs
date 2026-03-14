@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <b>Reference:</b> Yuan et al., "Open-Vocabulary SAM: Segment and Recognize Twenty-thousand Classes Interactively", ECCV 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an OpenVocabSAM model for text-prompted interactive segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
+/// var model = new OpenVocabSAM&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for 20,000+ category segmentation
+/// var onnxModel = new OpenVocabSAM&lt;double&gt;(architecture, "openvocabsam.onnx", numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -270,7 +283,6 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "OpenVocabSAM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

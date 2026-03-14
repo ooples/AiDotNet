@@ -407,7 +407,6 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "DreamGaussian",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DreamGaussian 3D Gaussian splatting generation with SDS optimization",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

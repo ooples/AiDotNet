@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <b>Reference:</b> Xie et al., "Mask-Adapter: The Devil is in the Masks for Open-Vocabulary Segmentation", arXiv 2025.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MaskAdapter model for SAM-enhanced open-vocabulary segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new MaskAdapter&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for improved boundary quality
+/// var onnxModel = new MaskAdapter&lt;double&gt;(architecture, "maskadapter.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -268,7 +281,6 @@ public class MaskAdapter<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "MaskAdapter" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

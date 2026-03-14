@@ -36,6 +36,27 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 /// - Computationally more expensive than LDA
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create QDA classifier with per-class covariance matrices
+/// var options = new DiscriminantAnalysisOptions&lt;double&gt;();
+/// var classifier = new QuadraticDiscriminantAnalysis&lt;double&gt;(options);
+///
+/// // Prepare training data with classes that have different covariance structures
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train to learn per-class Gaussian distributions with quadratic boundaries
+/// classifier.Train(features, labels);
+///
+/// // Classify new sample using quadratic discriminant function
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Classification)]
@@ -87,7 +108,6 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.QuadraticDiscriminantAnalysis;
 
     /// <summary>
     /// Trains the QDA classifier on the provided data.

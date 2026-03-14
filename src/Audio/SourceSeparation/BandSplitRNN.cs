@@ -221,7 +221,6 @@ public class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<
         {
             Name = _useNativeMode ? "BandSplitRNN-Native" : "BandSplitRNN-ONNX",
             Description = "BandSplitRNN music source separation (Luo & Yu, 2023)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins,
             Complexity = _options.NumBandRnnLayers + _options.NumSequenceRnnLayers
         };
         m.AdditionalInfo["NumBands"] = _options.NumBands.ToString();

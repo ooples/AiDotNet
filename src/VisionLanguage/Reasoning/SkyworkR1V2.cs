@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Skywork R1V2 (2025) achieves state-of-the-art multimodal reasoning through hybrid
+/// reinforcement learning combining MPO (Multi-head Policy Optimization) and GRPO (Group
+/// Relative Policy Optimization) objectives. This hybrid RL approach improves both the
+/// quality of reasoning chains and the accuracy of final answers on complex visual tasks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Skywork R1V2: Multimodal Hybrid Reinforcement Learning" (2025)</item></list></para>
-/// <para><b>For Beginners:</b> SkyworkR1V2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Skywork R1V2 is an advanced vision-language model using hybrid
+/// reinforcement learning for state-of-the-art multimodal reasoning. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Skywork R1V2 model for state-of-the-art multimodal reasoning
+/// // with hybrid RL training combining MPO and GRPO objectives
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SkyworkR1V2&lt;double&gt;(architecture, "skyworkr1v2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SkyworkR1V2&lt;double&gt;(architecture, new SkyworkR1V2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -224,7 +248,7 @@ public class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Skywork-R1V2-Native" : "Skywork-R1V2-ONNX", Description = "Skywork R1V2: hybrid RL (MPO + GRPO) for multimodal reasoning SOTA.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Skywork-R1V2-Native" : "Skywork-R1V2-ONNX", Description = "Skywork R1V2: hybrid RL (MPO + GRPO) for multimodal reasoning SOTA.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Skywork-R1V2";
         m.AdditionalInfo["ReasoningApproach"] = _options.ReasoningApproach;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

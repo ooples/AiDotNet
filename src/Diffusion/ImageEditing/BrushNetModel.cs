@@ -42,6 +42,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Ju et al., "BrushNet: A Plug-and-Play Image Inpainting Model with Decomposed Dual-Branch Diffusion", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new BrushNetModel&lt;float&gt;(options);
+/// var maskedImage = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var inpainted = model.Predict(maskedImage);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Inpainting)]
@@ -134,7 +142,7 @@ public class BrushNetModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "BrushNet", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "BrushNet", Version = "1.0",
             Description = "Dual-branch plug-and-play inpainting with dense per-layer conditioning",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

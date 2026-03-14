@@ -173,7 +173,7 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PANNs-Native" : "PANNs-ONNX", Description = "PANNs CNN14 (Kong et al., 2020)", ModelType = ModelType.NeuralNetwork, FeatureCount = ClassLabels.Count, Complexity = _options.NumBlocks };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PANNs-Native" : "PANNs-ONNX", Description = "PANNs CNN14 (Kong et al., 2020)", FeatureCount = ClassLabels.Count, Complexity = _options.NumBlocks };
         m.AdditionalInfo["Architecture"] = "PANNs-CNN14"; m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();
         m.AdditionalInfo["NumBlocks"] = _options.NumBlocks.ToString(); m.AdditionalInfo["NumClasses"] = ClassLabels.Count.ToString();
         return m;

@@ -22,6 +22,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// "semantic tokens" using a language model, then using conditional flow matching to generate
 /// high-quality mel-spectrograms from those tokens.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CosyVoice model for multilingual zero-shot TTS
+/// // with supervised semantic tokens and conditional flow matching
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CosyVoice&lt;double&gt;(architecture, "cosyvoice.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CosyVoice&lt;double&gt;(architecture, new CosyVoiceOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -218,7 +234,6 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "CosyVoice-Native" : "CosyVoice-ONNX",
             Description = "CosyVoice: Multilingual TTS with Supervised Semantic Tokens (Du et al., 2024)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.LLMDim
         };
     }

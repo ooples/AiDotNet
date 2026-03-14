@@ -59,8 +59,10 @@ public class PartitionMCMCAlgorithm<T> : BayesianCausalBase<T>
     {
         ApplyBayesianOptions(options);
         if (NumSamples < 1)
-            NumSamples = 1000;
+            throw new ArgumentException("NumSamples must be at least 1.");
         _maxParents = options?.MaxParents ?? 5;
+        if (_maxParents < 1)
+            throw new ArgumentException("MaxParents must be at least 1.");
         _burnIn = Math.Max(NumSamples / 5, 100);
     }
 

@@ -86,7 +86,7 @@ public class FinancialAutoMLOptions<T> : ModelOptions
     /// set of finance models for the selected domain.
     /// </para>
     /// </remarks>
-    public List<ModelType>? CandidateModels { get; set; }
+    public List<Type>? CandidateModels { get; set; }
 
     /// <summary>
     /// Gets or sets optional cross-validation settings.

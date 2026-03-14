@@ -32,6 +32,15 @@ namespace AiDotNet.TimeSeries;
 /// This is especially useful for financial risk management, option pricing, and trading strategies.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GARCH(1,1) model for modeling financial volatility clustering
+/// var options = new GARCHModelOptions&lt;double&gt;();
+/// var garch = new GARCHModel&lt;double&gt;(options);
+/// garch.Train(returnsMatrix, returnsVector);
+/// Vector&lt;double&gt; volatilityForecast = garch.Predict(inputMatrix);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelDomain(ModelDomain.Finance)]
@@ -1025,7 +1034,6 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.GARCHModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

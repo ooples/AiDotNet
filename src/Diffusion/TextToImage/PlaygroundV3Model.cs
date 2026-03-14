@@ -342,7 +342,6 @@ public class PlaygroundV3Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "Playground v3",
             Version = "3.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Aesthetically optimized MMDiT-X with DPO human preference alignment",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

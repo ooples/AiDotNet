@@ -1880,7 +1880,6 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Blip,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "EmbeddingDimension", _embeddingDimension },

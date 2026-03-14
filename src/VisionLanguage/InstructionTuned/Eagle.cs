@@ -17,10 +17,39 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Eagle (NVIDIA, 2024) takes a data-centric approach to vision-language model design, systematically
+/// exploring the design space of multimodal LLMs with a focus on high-quality training data curation.
+/// It uses a mixture of vision encoders to capture complementary visual features and demonstrates that
+/// careful data selection and training strategies matter more than architectural novelty for achieving
+/// strong multimodal performance.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Eagle: Exploring The Design Space for Multimodal LLMs" (NVIDIA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Eagle is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Eagle from NVIDIA focuses on getting the training data right
+/// rather than inventing complex new architectures. It systematically explores which design
+/// choices matter most for vision-language models — including vision encoder selection,
+/// projection strategies, and training data mixtures. The result is a model that achieves
+/// strong performance through careful engineering and high-quality data curation rather than
+/// architectural complexity. It uses a mixture of vision encoders to capture different aspects
+/// of visual information. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Eagle model for data-centric multimodal understanding
+/// // using mixture of vision encoders with high-quality training
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Eagle&lt;double&gt;(architecture, "eagle.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Eagle&lt;double&gt;(architecture, new EagleOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -89,7 +118,7 @@ public class Eagle<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Eagle-Native" : "Eagle-ONNX", Description = "Eagle: NVIDIA data-centric VLM with high-quality training data.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Eagle-Native" : "Eagle-ONNX", Description = "Eagle: NVIDIA data-centric VLM with high-quality training data.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Eagle";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

@@ -41,6 +41,14 @@ namespace AiDotNet.Clustering.SemiSupervised;
 /// - Data linkage: "These records refer to the same entity"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new COPKMeansOptions&lt;double&gt;();
+/// var cOPKMeans = new COPKMeans&lt;double&gt;(options);
+/// cOPKMeans.Fit(dataMatrix);
+/// int[] labels = cOPKMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -77,7 +85,6 @@ public class COPKMeans<T> : ClusteringBase<T>
     public int ConstraintViolations { get; private set; }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

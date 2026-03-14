@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1080, Width = 1920, NumInferenceSteps = 30 };
+/// var model = new MinimaxVideoModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 120, 135, 240 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -178,7 +186,6 @@ public class MinimaxVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "MinimaxVideo",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "MiniMax Hailuo video model with strong image-to-video generation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

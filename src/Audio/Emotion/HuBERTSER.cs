@@ -269,7 +269,6 @@ public class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         {
             Name = _useNativeMode ? "HuBERT-SER-Native" : "HuBERT-SER-ONNX",
             Description = $"HuBERT-{_options.Variant} Speech Emotion Recognition (Hsu et al., 2021)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumTransformerLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

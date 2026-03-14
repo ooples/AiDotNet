@@ -84,7 +84,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
 
         public void Train(Vector<double> input, Vector<double> expectedOutput) { }
-        public ModelMetadata<double> GetModelMetadata() => new() { ModelType = ModelType.None };
+        public ModelMetadata<double> GetModelMetadata() => new();
         public byte[] Serialize() => Array.Empty<byte>();
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }

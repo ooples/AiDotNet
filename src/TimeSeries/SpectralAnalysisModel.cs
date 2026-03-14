@@ -27,6 +27,16 @@ namespace AiDotNet.TimeSeries;
 /// showing you how strong each frequency component is in your data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Analyze frequency components in a time series signal
+/// var options = new SpectralAnalysisOptions&lt;double&gt;();
+/// var spectral = new SpectralAnalysisModel&lt;double&gt;(options);
+/// spectral.Train(signalMatrix, signalVector);
+/// Vector&lt;double&gt; frequencies = spectral.GetFrequencies();
+/// Vector&lt;double&gt; periodogram = spectral.GetPeriodogram();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.SignalProcessing)]
@@ -568,7 +578,6 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         // Create a new metadata object
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.SpectralAnalysisModel,
             AdditionalInfo = new Dictionary<string, object>()
         };
 

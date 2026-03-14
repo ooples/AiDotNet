@@ -287,7 +287,6 @@ public class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
         {
             Name = _useNativeMode ? "PyAnnote-Native" : "PyAnnote-ONNX",
             Description = "pyannote.audio 3.x Speaker Diarization (Plaquet & Bredin, ASRU 2023)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLSTMLayers
         };
         m.AdditionalInfo["MaxSpeakersPerChunk"] = _options.MaxSpeakersPerChunk.ToString();

@@ -36,6 +36,27 @@ namespace AiDotNet.Classification.Meta;
 /// - To leverage the strengths of different algorithms
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create voting classifier combining multiple models
+/// var options = new VotingClassifierOptions&lt;double&gt;();
+/// var classifier = new VotingClassifier&lt;double&gt;(options);
+///
+/// // Prepare training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train multiple diverse classifiers
+/// classifier.Train(features, labels);
+///
+/// // Predict using majority vote or averaged probabilities
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
@@ -84,7 +105,6 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.VotingClassifier;
 
     /// <summary>
     /// Trains all classifiers in the voting ensemble.

@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -63,6 +65,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// var noisePrediction = dit.PredictNoise(noisyLatent, timestep, textEmbedding);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 {
     /// <summary>

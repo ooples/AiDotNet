@@ -41,6 +41,14 @@ namespace AiDotNet.Clustering.Probabilistic;
 /// - Repeat until stable
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GMMOptions&lt;double&gt;();
+/// var gaussianMixtureModel = new GaussianMixtureModel&lt;double&gt;(options);
+/// gaussianMixtureModel.Fit(dataMatrix);
+/// int[] labels = gaussianMixtureModel.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -90,7 +98,6 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     public T LowerBound => _lowerBound;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

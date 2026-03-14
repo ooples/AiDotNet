@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Graph;
 
@@ -63,6 +63,21 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/1707.01926
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for spatial-temporal traffic forecasting (207 sensors, 12-step horizon)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 12, inputWidth: 207, inputDepth: 2, outputSize: 12);
+///
+/// // Training mode: diffusion convolutional recurrent network with graph structure
+/// var model = new DCRNN&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained DCRNN model
+/// var onnxModel = new DCRNN&lt;double&gt;(architecture, "dcrnn_traffic.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.GraphNetwork)]
@@ -615,7 +630,6 @@ public class DCRNN<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "DCRNN" },

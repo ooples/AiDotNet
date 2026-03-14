@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 /// <b>Reference:</b> Yang et al., "EfficientTAM: Efficient Track Anything Model", arXiv 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an EfficientTAM model for lightweight edge-device video segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 480, inputWidth: 480, inputDepth: 3, outputSize: 1);
+/// var model = new EfficientTAM&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for mobile video tracking
+/// var onnxModel = new EfficientTAM&lt;double&gt;(architecture, "efficienttam.onnx", numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -276,7 +289,6 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "EfficientTAM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

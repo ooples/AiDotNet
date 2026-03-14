@@ -481,7 +481,6 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "StableSR",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "StableSR diffusion-prior-based super-resolution with controllable feature wrapping",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

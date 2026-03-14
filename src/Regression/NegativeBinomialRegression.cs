@@ -24,6 +24,25 @@ namespace AiDotNet.Regression;
 /// that some days might have 5 calls while others have 40, which is more extreme variation than simpler models would expect.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a negative binomial regression for overdispersed count data
+/// var options = new NegativeBinomialRegressionOptions&lt;double&gt;();
+/// var model = new NegativeBinomialRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features, count targets
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2, 5, 12, 28, 45 });
+///
+/// // Train with log link and dispersion parameter estimation
+/// model.Train(features, targets);
+///
+/// // Predict count for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -407,30 +426,6 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
         _dispersion = NumOps.FromDouble(reader.ReadDouble());
         _options.MaxIterations = reader.ReadInt32();
         _options.Tolerance = reader.ReadDouble();
-    }
-
-    /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type, in this case, NegativeBinomialRegression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an enumeration value indicating that this is a negative binomial regression model. This is used
-    /// for type identification when working with different regression models in a unified manner.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply identifies what kind of model this is.
-    /// 
-    /// It returns a label (NegativeBinomialRegression) that:
-    /// - Identifies this specific type of model
-    /// - Helps other code handle the model appropriately
-    /// - Is used when saving or loading models
-    /// 
-    /// It's like a name tag that lets other parts of the program know what kind of model they're working with.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.NegativeBinomialRegression;
     }
 
     /// <summary>

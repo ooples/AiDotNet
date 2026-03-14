@@ -40,6 +40,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleDQN;
 /// van Hasselt et al., "Deep Reinforcement Learning with Double Q-learning", 2015.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Double DQN agent that reduces Q-value overestimation
+/// var options = new DoubleDQNOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, LearningRate = 0.001 };
+/// var agent = new DoubleDQNAgent&lt;double&gt;(options);
+///
+/// // Select an action for the current state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -262,7 +273,6 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DoubleDQN,
             FeatureCount = _options.StateSize,
         };
     }

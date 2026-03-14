@@ -40,6 +40,19 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 /// <b>Reference:</b> Ultralytics, "YOLOv8", 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a YOLOv8-Seg model for real-time instance segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 640, inputWidth: 640, inputDepth: 3, outputSize: 80);
+/// var model = new YOLOv8Seg&lt;double&gt;(architecture, numClasses: 80);
+///
+/// // Or load a pre-trained ONNX model for video stream processing
+/// var onnxModel = new YOLOv8Seg&lt;double&gt;(architecture, "yolov8n-seg.onnx", numClasses: 80);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Segmentation)]
@@ -328,7 +341,6 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     /// </summary>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.InstanceSegmentation,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "YOLOv8Seg" },

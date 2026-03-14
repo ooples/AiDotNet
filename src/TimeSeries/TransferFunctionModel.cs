@@ -31,6 +31,15 @@ namespace AiDotNet.TimeSeries;
 /// and you want to quantify their effects, including any time delays in those effects.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Model how advertising spend (input) affects sales (output) with time delays
+/// var options = new TransferFunctionOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var tfModel = new TransferFunctionModel&lt;double&gt;(options);
+/// tfModel.Train(inputOutputMatrix, outputVector);
+/// Vector&lt;double&gt; forecast = tfModel.Predict(futureInputs);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -640,7 +649,6 @@ public class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.TransferFunctionModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Model structure information

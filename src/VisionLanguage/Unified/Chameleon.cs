@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Chameleon (Meta, 2024) is a mixed-modal early-fusion foundation model that represents all
+/// modalities (text, images, code) as discrete tokens in a unified vocabulary. Images are
+/// quantized via a VQ-VAE encoder into discrete visual tokens, enabling a single autoregressive
+/// transformer to generate and understand any combination of text and images natively.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Chameleon: Mixed-Modal Early-Fusion Foundation Models" (Meta, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Chameleon is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Chameleon is a unified model that handles text and images
+/// using the same discrete token vocabulary. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Chameleon model for mixed-modal early-fusion generation
+/// // with discrete tokens for all modalities in a unified vocabulary
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Chameleon&lt;double&gt;(architecture, "chameleon.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Chameleon&lt;double&gt;(architecture, new ChameleonOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -213,7 +237,7 @@ public class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Chameleon-Native" : "Chameleon-ONNX", Description = "Chameleon: early fusion with discrete tokens for all modalities.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Chameleon-Native" : "Chameleon-ONNX", Description = "Chameleon: early fusion with discrete tokens for all modalities.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Chameleon";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         return m;

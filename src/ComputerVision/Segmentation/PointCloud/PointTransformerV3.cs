@@ -36,6 +36,16 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// <b>Reference:</b> Wu et al., "Point Transformer V3: Simpler, Faster, Stronger", CVPR 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Point Transformer V3 for 3D semantic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 6, outputSize: 40, networkType: NetworkType.Classification);
+/// var ptv3 = new PointTransformerV3&lt;float&gt;(architecture,
+///     numClasses: 40, modelSize: PointTransformerV3ModelSize.Base);
+/// Tensor&lt;float&gt; labels = ptv3.Forward(pointCloudTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -275,7 +285,6 @@ public class PointTransformerV3<T> : NeuralNetworkBase<T>, ISemanticSegmentation
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "PointTransformerV3" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

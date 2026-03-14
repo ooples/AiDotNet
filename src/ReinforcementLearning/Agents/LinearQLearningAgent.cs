@@ -12,13 +12,31 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// Linear Q-Learning agent using linear function approximation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Linear Q-Learning replaces the Q-table with a linear function
+/// Q(s,a) = w dot phi(s,a), where phi extracts features from state-action pairs. This allows
+/// handling continuous or large state spaces that would be impossible with tables. Think of it
+/// like using a formula instead of a lookup table. The trade-off is that it can only represent
+/// linear relationships, but it scales to much larger problems than tabular Q-learning.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a linear Q-Learning agent for continuous state spaces
+/// var options = new LinearQLearningOptions&lt;double&gt; { FeatureSize = 4, ActionSize = 2, LearningRate = 0.01 };
+/// var agent = new LinearQLearningAgent&lt;double&gt;(options);
+///
+/// // Select an action using linear function approximation
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
@@ -176,7 +194,7 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
     public override byte[] Serialize()

@@ -353,7 +353,6 @@ public class FlowFormer<T> : OpticalFlowBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.OpticalFlow,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "FlowFormer" }, { "EmbedDim", _embedDim },

@@ -18,6 +18,16 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Common in robotics where you have discrete mode selection and continuous parameter control.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create a mixed policy for environments with both discrete and continuous actions
+    /// var discreteNet = new NeuralNetwork&lt;double&gt;();
+    /// var continuousNet = new NeuralNetwork&lt;double&gt;();
+    /// var policy = new MixedPolicy&lt;double&gt;(discreteNet, continuousNet,
+    ///     discreteActionSize: 3, continuousActionSize: 2,
+    ///     new EpsilonGreedyExploration&lt;double&gt;(), new GaussianNoiseExploration&lt;double&gt;());
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -26,7 +36,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ModelPaper("Reinforcement Learning: An Introduction",
-        "http://incompleteideas.net/book/the-book-2nd.html",
+        "https://incompleteideas.net/book/the-book-2nd.html",
         Year = 2018,
         Authors = "Sutton, R. S. & Barto, A. G.")]
     public class MixedPolicy<T> : PolicyBase<T>

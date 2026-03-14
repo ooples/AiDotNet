@@ -435,7 +435,6 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         return new ModelMetadata<T>
         {
             Name = "ABINet",
-            ModelType = ModelType.NeuralNetwork,
             Description = "ABINet for robust text recognition (CVPR 2021)",
             FeatureCount = _visionDim,
             Complexity = _visionLayers + _languageLayers,

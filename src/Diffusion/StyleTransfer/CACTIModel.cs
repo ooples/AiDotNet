@@ -28,6 +28,14 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// them recognizable, while fully stylizing less important areas like backgrounds.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new CACTIModel&lt;float&gt;(options);
+/// var styleInput = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var stylized = model.Predict(styleInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.StyleTransfer)]
@@ -105,7 +113,7 @@ public class CACTIModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "CACTI", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "CACTI", Version = "1.0",
             Description = "Content-aware controllable style transfer with semantic region preservation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "content-aware-style-unet");

@@ -37,6 +37,15 @@ namespace AiDotNet.TimeSeries;
 /// The "X" is what makes ARIMAX different from ARIMA - it can include information from outside the time series itself.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an ARIMAX model with exogenous variables (e.g., weather affecting sales)
+/// var options = new ARIMAXModelOptions&lt;double&gt;();
+/// var arimax = new ARIMAXModel&lt;double&gt;(options);
+/// arimax.Train(trainingMatrix, trainingLabels); // matrix includes exogenous columns
+/// Vector&lt;double&gt; forecast = arimax.Predict(futureExogenousData);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -718,7 +727,6 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
 
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ARIMAXModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

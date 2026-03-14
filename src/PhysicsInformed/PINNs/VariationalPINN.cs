@@ -71,6 +71,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
     ///
     /// The variational formulation often provides better training dynamics and accuracy.
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 2, outputSize: 1);
+    /// Func&lt;float[], float[], float[,], float[], float[,], float&gt; weakForm =
+    ///     (u, x, grad_u, v, grad_v) =&gt; 0.0f;
+    /// var vpinn = new VariationalPINN&lt;float&gt;(architecture, weakForm);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -751,7 +762,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "InputSize", Architecture.InputSize },

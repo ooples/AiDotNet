@@ -42,6 +42,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Black Forest Labs, "FLUX.1 Fill", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 28 };
+/// var model = new FluxInpaintingModel&lt;float&gt;(options);
+/// var maskedInput = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var inpainted = model.Predict(maskedInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -138,7 +146,7 @@ public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "FLUX Fill", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "FLUX Fill", Version = "1.0",
             Description = "FLUX rectified flow transformer for high-quality mask-guided inpainting",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

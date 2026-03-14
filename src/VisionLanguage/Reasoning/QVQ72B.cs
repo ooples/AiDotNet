@@ -17,10 +17,35 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// QVQ-72B (Qwen Team, 2024) is the first open-source multimodal reasoning model, built
+/// on the Qwen architecture with 72 billion parameters. It features visual chain-of-thought
+/// reasoning where the model generates detailed step-by-step analysis of visual content
+/// before producing answers, achieving strong performance on mathematical and scientific
+/// visual reasoning benchmarks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "QVQ: To See the World with Wisdom" (Qwen Team, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> QVQ72B is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> QVQ-72B is a large open-source multimodal model with visual
+/// chain-of-thought reasoning capabilities. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a QVQ-72B model for open-source multimodal reasoning
+/// // based on the Qwen architecture with visual chain-of-thought
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new QVQ72B&lt;double&gt;(architecture, "qvq72b.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new QVQ72B&lt;double&gt;(architecture, new QVQ72BOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -165,7 +190,7 @@ public class QVQ72B<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "QVQ-72B-Native" : "QVQ-72B-ONNX", Description = "QVQ-72B: first open-source multimodal reasoning model from Qwen.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "QVQ-72B-Native" : "QVQ-72B-ONNX", Description = "QVQ-72B: first open-source multimodal reasoning model from Qwen.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "QVQ-72B";
         m.AdditionalInfo["ReasoningApproach"] = _options.ReasoningApproach;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

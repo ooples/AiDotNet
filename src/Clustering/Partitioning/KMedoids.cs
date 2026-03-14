@@ -40,6 +40,14 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - With K-Means, the center might not represent any real customer
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new KMedoidsOptions&lt;double&gt;();
+/// var kMedoids = new KMedoids&lt;double&gt;(options);
+/// kMedoids.Fit(dataMatrix);
+/// int[] labels = kMedoids.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -70,7 +78,6 @@ public class KMedoids<T> : ClusteringBase<T>
     public int[]? MedoidIndices => _medoidIndices;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

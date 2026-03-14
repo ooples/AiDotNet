@@ -195,8 +195,12 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
 
             // Update augmented Lagrangian with NOTEARS h(P) = tr(exp(P∘P)) - d
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValCurrent));
+            T rhoMax = NumOps.FromDouble(1e+16);
             if (NumOps.GreaterThan(hValCurrent, NumOps.FromDouble(0.25)))
-                rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+            {
+                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+                rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
+            }
         }
 
         // Final output: threshold edge probabilities and use posterior mean weights

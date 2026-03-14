@@ -337,7 +337,6 @@ public class KlingModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Kling",
             Version = "1.5",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Kling 3D spatiotemporal attention video generation model by Kuaishou",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -36,6 +36,16 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// <b>Reference:</b> Wu et al., "Sonata and Concerto: Mamba for 3D Point Clouds", arXiv 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Concerto hybrid Mamba-Transformer model for 3D point cloud segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 6, outputSize: 40, networkType: NetworkType.Classification);
+/// var concerto = new Concerto&lt;float&gt;(architecture,
+///     numClasses: 40, modelSize: ConcertoModelSize.Base, dropRate: 0.1);
+/// Tensor&lt;float&gt; segmentationMap = concerto.Forward(pointCloudTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -276,7 +286,6 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "Concerto" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

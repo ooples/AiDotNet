@@ -266,7 +266,7 @@ public class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "TripoSR", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "TripoSR", Version = "1.0",
             Description = "TripoSR fast single-image 3D reconstruction with LRM transformer",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

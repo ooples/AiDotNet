@@ -27,6 +27,25 @@ namespace AiDotNet.Regression;
 /// modeling complex, non-linear relationships in data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an RBF regression with radial basis function features
+/// var options = new RadialBasisFunctionRegressionOptions&lt;double&gt;();
+/// var model = new RadialBasisFunctionRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with RBF centers and weighted linear combination
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 6, 7 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Kernel)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -421,25 +440,6 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         Matrix<T> xTxInverse = xTxRegularized.Inverse();
         Matrix<T> xTxInverseXT = xTxInverse.Multiply(xTranspose);
         return xTxInverseXT.Multiply(y);
-    }
-
-    /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for radial basis function regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// This method simply returns an identifier that indicates this is a radial basis function regression model.
-    /// It's used internally by the library to keep track of different types of models.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.RadialBasisFunctionRegression;
     }
 
     /// <summary>

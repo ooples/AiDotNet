@@ -204,6 +204,15 @@ public class CausalDiscoveryOptions
     public double? SobolevWeight { get; set; }
 
     /// <summary>
+    /// Maximum number of segments for nonstationary time-series methods. Default: null (3).
+    /// </summary>
+    /// <remarks>
+    /// <para>Used by NTS-NOTEARS for change-point-based partitioning.
+    /// Higher values allow more regime changes to be detected.</para>
+    /// </remarks>
+    public int? MaxSegments { get; set; }
+
+    /// <summary>
     /// Maximum number of training epochs for deep learning-based methods. Default: null (algorithm-specific).
     /// </summary>
     /// <remarks>

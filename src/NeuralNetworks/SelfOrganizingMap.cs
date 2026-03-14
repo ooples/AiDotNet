@@ -759,7 +759,6 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SelfOrganizingMap,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputDimension", _inputDimension },

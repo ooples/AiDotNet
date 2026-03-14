@@ -46,6 +46,16 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// https://arxiv.org/abs/1704.04110
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new DeepAR&lt;double&gt;(architecture);
+/// var onnxModel = new DeepAR&lt;double&gt;(architecture, "deepar.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

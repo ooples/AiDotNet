@@ -46,7 +46,6 @@ public class ModelRegistryTests : IDisposable
         public ModelMetadata<double> GetModelMetadata() => new()
         {
             Name = "MockModel",
-            ModelType = ModelType.None,
             FeatureCount = 5,
             Complexity = 10
         };
@@ -57,7 +56,6 @@ public class ModelRegistryTests : IDisposable
         return new ModelMetadata<double>
         {
             Name = name,
-            ModelType = ModelType.None,
             FeatureCount = 10,
             Complexity = 5,
             Description = "Test model for unit tests",

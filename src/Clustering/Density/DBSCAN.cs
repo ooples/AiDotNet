@@ -45,6 +45,14 @@ namespace AiDotNet.Clustering.Density;
 /// - O(n²) complexity without spatial indexing
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new DBSCANOptions&lt;double&gt;();
+/// var dBSCAN = new DBSCAN&lt;double&gt;(options);
+/// dBSCAN.Fit(dataMatrix);
+/// int[] labels = dBSCAN.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -101,7 +109,6 @@ public class DBSCAN<T> : ClusteringBase<T>
     public bool[]? CorePointMask => _corePointMask;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

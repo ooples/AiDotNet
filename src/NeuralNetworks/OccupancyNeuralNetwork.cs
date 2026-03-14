@@ -625,7 +625,6 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.OccupancyNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputSize", Architecture.InputSize },

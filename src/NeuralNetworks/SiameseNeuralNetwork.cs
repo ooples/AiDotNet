@@ -405,7 +405,6 @@ namespace AiDotNet.NeuralNetworks
             return new ModelMetadata<T>
             {
                 Name = "SiameseNeuralNetwork",
-                ModelType = ModelType.SiameseNetwork,
                 Description = "Standardized Siamese dual-encoder high-performance network",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>

@@ -152,29 +152,87 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
             }
         }
 
-        // Phase 3: Detect possible latent confounders via discriminating path logic.
-        // For adjacent pairs where both directions were oriented (i→j AND j→i),
-        // this indicates conflicting evidence — mark as bidirected (latent confounder).
-        // Also: for edges where neither direction is oriented after v-structure phase,
-        // if both endpoints have a common collider child, mark as potential latent confounding.
+        // Phase 3: Detect possible latent confounders.
+        // 3a: Contradictory orientations indicate latent confounding.
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
                 if (!adj[i, j]) continue;
 
-                // If both directions were oriented during v-structure phase,
-                // this is contradictory → evidence of latent confounding
-                bool iToJ = oriented[i, j];
-                bool jToI = oriented[j, i];
-
-                if (iToJ && jToI)
+                if (oriented[i, j] && oriented[j, i])
                 {
-                    // Bidirected edge: i ↔ j (latent confounder)
                     bidirected[i, j] = true;
                     bidirected[j, i] = true;
                     oriented[i, j] = false;
                     oriented[j, i] = false;
+                }
+            }
+        }
+
+        // 3b: Discriminating path rule (bounded length for RFCI efficiency).
+        // A discriminating path for (b, c) is <a, ..., v, b, c> where:
+        //   - a is not adjacent to c
+        //   - every intermediate node between a and b is a collider and a parent of c
+        //   - b is adjacent to c
+        // If b is in sepSet(a, c): b is a non-collider → orient b → c
+        // If b is NOT in sepSet(a, c): b is a collider → orient b ← c (and mark bidirected if conflict)
+        for (int b = 0; b < d; b++)
+        {
+            for (int c = 0; c < d; c++)
+            {
+                if (b == c || !adj[b, c]) continue;
+                if (oriented[b, c] || oriented[c, b] || bidirected[b, c]) continue;
+
+                // Search for discriminating paths ending at (b, c)
+                // Start from b's neighbors that are parents of c
+                foreach (int v in GetAdjacencies(adj, b, c, d))
+                {
+                    if (!oriented[v, c]) continue; // v must be a parent of c
+
+                    // Try to extend the path backward from v
+                    // Need to find a node 'a' not adjacent to c
+                    if (!adj[v, c])
+                    {
+                        // v itself can be 'a' if not adjacent to c — but v is oriented[v,c], so adj[v,c] is true
+                        continue;
+                    }
+
+                    // Look for 'a' one more step back (path length 3: a → v → b → c)
+                    foreach (int a in GetAdjacencies(adj, v, b, d))
+                    {
+                        if (a == c || adj[a, c]) continue; // a must not be adjacent to c
+                        if (!oriented[a, v]) continue; // a → v must be oriented (collider at v)
+
+                        // Found discriminating path <a, v, b, c>
+                        // v is a collider and parent of c ✓
+                        // a is not adjacent to c ✓
+                        if (sepSets.TryGetValue((a, c), out var sepAC))
+                        {
+                            if (sepAC.Contains(b))
+                            {
+                                // b is non-collider → orient b → c
+                                if (!oriented[c, b])
+                                    oriented[b, c] = true;
+                            }
+                            else
+                            {
+                                // b is collider → orient b ← c
+                                if (oriented[b, c])
+                                {
+                                    // Conflict → bidirected (latent confounder)
+                                    bidirected[b, c] = true;
+                                    bidirected[c, b] = true;
+                                    oriented[b, c] = false;
+                                    oriented[c, b] = false;
+                                }
+                                else
+                                {
+                                    oriented[c, b] = true;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

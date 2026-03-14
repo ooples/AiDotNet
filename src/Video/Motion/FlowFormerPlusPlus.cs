@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// FlowFormer++ extends FlowFormer with masked cost volume autoencoding pretraining and tile-based processing for high-resolution optical flow.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FlowFormer++ model for high-resolution optical flow
+/// var flowFormerPP = new FlowFormerPlusPlus&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new FlowFormerPlusPlus&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -230,7 +243,6 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.OpticalFlow,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FlowFormerPlusPlus" },

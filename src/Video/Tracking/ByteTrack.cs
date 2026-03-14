@@ -400,7 +400,6 @@ public class ByteTrack<T> : NeuralNetworkBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.ObjectTracking,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "ByteTrack" }, { "NumClasses", _numClasses },

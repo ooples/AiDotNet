@@ -25,11 +25,32 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// It introduces patching (dividing time series into segments) and channel independence
 /// to achieve efficient and accurate forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> PatchTST treats a time series like a sentence: it breaks the
+/// data into "patches" (chunks of consecutive values) just as a sentence is split into words.
+/// A transformer then processes these patches to make predictions. This patching trick reduces
+/// computational cost dramatically while capturing long-range patterns. Each variable in a
+/// multivariate series is processed independently, which surprisingly improves accuracy.</para>
 /// <para>
 /// Reference: Nie et al., "A Time Series is Worth 64 Words: Long-term Forecasting
 /// with Transformers", ICLR 2023. https://arxiv.org/abs/2211.14730
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PatchTST for long-term forecasting with patching and channel independence
+/// // Divides time series into patches (like words in a sentence) for efficient transformer processing
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with patch embedding and channel-independent processing
+/// var model = new PatchTST&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new PatchTST&lt;double&gt;(architecture, "patchtst_etth1.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

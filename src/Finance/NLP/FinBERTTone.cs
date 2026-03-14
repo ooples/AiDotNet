@@ -18,6 +18,28 @@ namespace AiDotNet.Finance.NLP;
 /// FinBERT-tone neural network model specialized for financial sentiment analysis.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> FinBERT-Tone is a specialized sentiment analysis model for
+/// financial text. Given a sentence from an earnings call, news article, or analyst report,
+/// it classifies the sentiment as positive, negative, or neutral. It understands financial
+/// context, so "revenue declined less than expected" is correctly identified as positive
+/// sentiment despite containing the word "declined".</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for financial tone classification (512 tokens, 3 sentiment classes)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 3);
+///
+/// // Training mode: fine-tune BERT for financial tone detection in earnings calls
+/// var model = new FinBERTTone&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained FinBERT-Tone model
+/// var onnxModel = new FinBERTTone&lt;double&gt;(architecture, "finbert_tone.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -51,9 +53,24 @@ namespace AiDotNet.DistributedTraining;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Wrap an existing model for pipeline-parallel training across multiple ranks
+/// var config = new ShardingConfiguration&lt;float&gt;(worldSize: 4, rank: 0);
+/// var schedule = new GPipeSchedule&lt;float&gt;();
+/// var pipelineModel = new PipelineParallelModel&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(
+///     wrappedModel, config, microBatchCount: 4, schedule: schedule);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private readonly int _microBatchCount;

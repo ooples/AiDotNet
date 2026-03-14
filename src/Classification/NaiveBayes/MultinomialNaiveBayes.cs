@@ -36,6 +36,27 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// - Sentiment analysis (positive/negative word counts)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Multinomial Naive Bayes for text classification with word counts
+/// var options = new NaiveBayesOptions&lt;double&gt;();
+/// var classifier = new MultinomialNaiveBayes&lt;double&gt;(options);
+///
+/// // Prepare word count features (bag-of-words representation)
+/// var features = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
+///     5, 1, 0,  3, 2, 0,  // Class 0: high word1 frequency
+///     0, 1, 4,  0, 2, 3 });  // Class 1: high word3 frequency
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
+///
+/// // Train by learning word frequency distributions per class
+/// classifier.Train(features, labels);
+///
+/// // Predict class based on word count likelihoods
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 4, 1, 0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Bayesian)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -66,7 +87,6 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     /// Returns the model type identifier for this classifier.
     /// </summary>
     /// <returns>ModelType.MultinomialNaiveBayes</returns>
-    protected override ModelType GetModelType() => ModelType.MultinomialNaiveBayes;
 
     /// <summary>
     /// Computes the log feature probabilities for each class using Laplace smoothing.

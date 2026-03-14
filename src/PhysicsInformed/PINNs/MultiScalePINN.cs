@@ -56,6 +56,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// - Multi-physics problems (thermal + mechanical + chemical)
     /// - Climate modeling (global + regional + local scales)
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 2, outputSize: 1);
+    /// var pde = new MultiScaleReactionDiffusion&lt;float&gt;();
+    /// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
+    /// var msPinn = new MultiScalePINN&lt;float&gt;(architecture, pde, bc);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -740,7 +751,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "NetworkType", "MultiScalePINN" },

@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Editing;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Emu Edit (Meta, 2024) enables precise image editing by jointly training on recognition and
+/// generation tasks. The model learns to understand editing instructions through multi-task learning
+/// on 16 editing tasks including region-based editing, color/texture modifications, and object
+/// addition/removal, using a diffusion-based generation backbone conditioned on text instructions.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Emu Edit: Precise Image Editing via Recognition and Generation Tasks" (Meta, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> EmuEdit is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Emu Edit is a vision-language model for instruction-based image
+/// editing that understands natural language edit commands. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Emu Edit model for precise instruction-based image editing
+/// // via recognition and generation tasks with diffusion backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new EmuEdit&lt;double&gt;(architecture, "emuedit.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new EmuEdit&lt;double&gt;(architecture, new EmuEditOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -128,7 +152,7 @@ public class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "EmuEdit-Native" : "EmuEdit-ONNX", Description = "Emu Edit: precise image editing via recognition and generation tasks.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "EmuEdit-Native" : "EmuEdit-ONNX", Description = "Emu Edit: precise image editing via recognition and generation tasks.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "EmuEdit";
         m.AdditionalInfo["PreciseEditing"] = _options.EnablePreciseEditing.ToString();
         return m;

@@ -185,7 +185,6 @@ public class DynamiCrafter<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "DynamiCrafter-Native" : "DynamiCrafter-ONNX",
             Description = $"DynamiCrafter {_options.Variant} video diffusion interpolation (2024)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumResBlocks * _options.NumDiffusionSteps
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

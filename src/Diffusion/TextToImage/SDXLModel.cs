@@ -717,7 +717,6 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Stable Diffusion XL",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "SDXL base model with dual text encoders and 1024px native resolution",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

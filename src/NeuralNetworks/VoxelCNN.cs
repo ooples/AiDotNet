@@ -315,7 +315,6 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VoxelCNN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "VoxelResolution", VoxelResolution },

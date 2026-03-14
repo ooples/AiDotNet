@@ -34,6 +34,25 @@ namespace AiDotNet.Regression;
 /// - When you need both good prediction accuracy and the ability to adjust how much the model fits to noise
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kernel Ridge Regression for nonlinear relationships
+/// var options = new KernelRidgeRegressionOptions&lt;double&gt;();
+/// var model = new KernelRidgeRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train with kernel trick and L2 regularization
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Kernel)]
@@ -252,15 +271,6 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         metadata.AdditionalInfo["RegularizationType"] = Regularization.GetType().Name;
 
         return metadata;
-    }
-
-    /// <summary>
-    /// Gets the model type of the Kernel Ridge Regression model.
-    /// </summary>
-    /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.KernelRidgeRegression;
     }
 
     /// <summary>

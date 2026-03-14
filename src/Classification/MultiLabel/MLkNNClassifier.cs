@@ -33,6 +33,26 @@ namespace AiDotNet.Classification.MultiLabel;
 ///
 /// <para><b>Reference:</b> Zhang &amp; Zhou, "ML-KNN: A lazy learning approach to multi-label learning" (2007)</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create ML-kNN for multi-label classification with Bayesian inference
+/// var options = new MLkNNOptions&lt;double&gt;();
+/// var classifier = new MLkNNClassifier&lt;double&gt;(options);
+///
+/// // Prepare features and multi-label targets
+/// var features = Matrix&lt;double&gt;.Build.Dense(4, 2, new double[] {
+///     1.0, 2.0,  3.0, 4.0,  5.0, 6.0,  7.0, 8.0 });
+/// var labels = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
+///     1, 0, 1,  1, 1, 0,  0, 1, 1,  0, 0, 1 });
+///
+/// // Train by storing instances and computing Bayesian priors
+/// classifier.Train(features, labels);
+///
+/// // Predict labels using k-NN neighbor counts and Bayesian inference
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 2.0, 3.0 });
+/// var prediction = classifier.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.InstanceBased)]
@@ -426,7 +446,6 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.MultiLabelClassifier;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()

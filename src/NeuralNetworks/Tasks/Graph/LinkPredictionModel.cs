@@ -56,6 +56,24 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// ```
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a link prediction model for graph edge prediction
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 16,   // node feature dimension
+///     outputSize: 1,   // edge score
+///     hiddenSizes: new[] { 64, 32 });
+/// var model = new LinkPredictionModel&lt;float&gt;(architecture);
+///
+/// // Prepare graph data
+/// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph
+/// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 100, 16 });
+///
+/// // Predict edge likelihood between node pairs
+/// var scores = model.Predict(nodeFeatures);
+/// Console.WriteLine($"Link score: {scores}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Regression)]
@@ -661,7 +679,6 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NetworkType"] = "LinkPredictionModel",

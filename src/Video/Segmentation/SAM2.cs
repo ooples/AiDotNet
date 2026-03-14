@@ -46,6 +46,19 @@ namespace AiDotNet.Video.Segmentation;
 /// Meta AI, 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SAM2 model for interactive video object segmentation
+/// var sam2 = new SAM2&lt;double&gt;();
+///
+/// // Or configure with a specific model size and memory bank
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
+/// var model = new SAM2&lt;double&gt;(architecture, modelSize: SAM2ModelSize.Large, memoryBankSize: 7);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -1128,7 +1141,6 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoObjectSegmentation,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

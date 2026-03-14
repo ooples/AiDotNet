@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// pi-zero (Black et al., 2024) is a vision-language-action flow model built on PaliGemma VLM
+/// with a dedicated action expert for general robot control. It uses flow matching to generate
+/// continuous robot actions, trained across 8 different robot embodiments for dexterous
+/// manipulation including folding, assembly, and bin-picking tasks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "pi0: A Vision-Language-Action Flow Model for General Robot Control (Black et al., 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> PiZero is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> pi-zero is a vision-language-action model for general robot
+/// control across multiple robot platforms. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a pi-zero model for general robot control
+/// // PaliGemma VLM with action flow expert across 8 robot embodiments
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PiZero&lt;double&gt;(architecture, "pizero.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PiZero&lt;double&gt;(architecture, new PiZeroOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Robotics)]
@@ -199,7 +222,7 @@ public class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "pi-zero-Native" : "pi-zero-ONNX", Description = "pi-zero: PaliGemma VLM with action expert for 8 robot embodiments.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "pi-zero-Native" : "pi-zero-ONNX", Description = "pi-zero: PaliGemma VLM with action expert for 8 robot embodiments.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "pi-zero";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

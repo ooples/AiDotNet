@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// UniMatch unifies optical flow, stereo matching, and depth estimation in a single architecture, enabling cross-task transfer learning.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UniMatch model for unified flow, stereo, and depth estimation
+/// var uniMatch = new UniMatch&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new UniMatch&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -223,7 +236,6 @@ public class UniMatch<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "UniMatch" },

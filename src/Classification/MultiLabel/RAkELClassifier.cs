@@ -33,6 +33,25 @@ namespace AiDotNet.Classification.MultiLabel;
 ///
 /// <para><b>Reference:</b> Tsoumakas et al., "Random k-Labelsets for Multilabel Classification" (2011)</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create RAkEL classifier with random k-labelset ensemble
+/// var classifier = new RAkELClassifier&lt;double&gt;();
+///
+/// // Prepare features and multi-label targets
+/// var features = Matrix&lt;double&gt;.Build.Dense(4, 2, new double[] {
+///     1.0, 2.0,  3.0, 4.0,  5.0, 6.0,  7.0, 8.0 });
+/// var labels = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
+///     1, 0, 1,  1, 1, 0,  0, 1, 1,  0, 0, 1 });
+///
+/// // Train Label Powerset classifiers on random label subsets
+/// classifier.Train(features, labels);
+///
+/// // Predict by voting across overlapping labelset classifiers
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 2.0, 3.0 });
+/// var prediction = classifier.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -480,7 +499,6 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.RAkEL;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()

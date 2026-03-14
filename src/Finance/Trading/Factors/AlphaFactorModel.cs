@@ -39,6 +39,21 @@ namespace AiDotNet.Finance.Trading.Factors;
 /// Reference: Chen et al. (2020). "Deep Learning for Alpha Generation"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for alpha factor discovery (50 stocks, 10 features each, 5 latent factors)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 10, inputDepth: 1, outputSize: 5);
+///
+/// // Training mode: learns latent return-predictive factors from market data
+/// var model = new AlphaFactorModel&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained alpha factor model
+/// var onnxModel = new AlphaFactorModel&lt;double&gt;(architecture, "alpha_factors.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -369,7 +384,6 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NumFactors"] = _numFactors,

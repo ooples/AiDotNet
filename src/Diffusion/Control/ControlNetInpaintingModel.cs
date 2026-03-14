@@ -28,6 +28,23 @@ namespace AiDotNet.Diffusion.Control;
 /// erase a person from a photo and use an edge map to guide what replaces them.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ControlNet inpainting model
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 512,
+///     Width = 512,
+///     NumInferenceSteps = 30
+/// };
+/// var model = new ControlNetInpaintingModel&lt;float&gt;(options, ControlType.Canny);
+///
+/// // Inpaint masked regions guided by a control image
+/// var imageWithMask = Tensor&lt;float&gt;.Random(new[] { 1, 5, 64, 64 }); // 4 latent + 1 mask
+/// var result = model.Predict(imageWithMask);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Inpainting)]
@@ -124,7 +141,7 @@ public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "ControlNet-Inpainting", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNet-Inpainting", Version = "1.0",
             Description = "Mask-aware ControlNet inpainting with control signal guidance",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

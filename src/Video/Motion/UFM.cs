@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// UFM is the first to demonstrate that unified training for optical flow and feature matching outperforms specialized models on both tasks.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UFM model for unified flow and matching
+/// var ufm = new UFM&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new UFM&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -216,7 +229,6 @@ public class UFM<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "UFM" },

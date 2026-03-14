@@ -67,6 +67,22 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SigLIP 2 model for multi-objective contrastive training
+/// // with captioning, MIM, and multilingual support for 32+ languages
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SigLIP2&lt;double&gt;(architecture, "siglip2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SigLIP2&lt;double&gt;(architecture, new SigLIP2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -497,7 +513,6 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
             Name = _useNativeMode ? "SigLIP2-Native" : "SigLIP2-ONNX",
             Description = "SigLIP 2: Multilingual Vision-Language Encoders with " +
                           "Improved Semantic Understanding (Tschannen et al., 2025)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.ProjectionDim,
             Complexity = _options.NumVisionLayers + _options.NumTextLayers +
                          _options.NumCaptioningDecoderLayers + _options.NumMimDecoderLayers

@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// SEA-RAFT simplifies RAFT with a mixture of Laplace loss and direct initial flow prediction, achieving state-of-the-art accuracy with improved efficiency.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SEA-RAFT model for simple, efficient optical flow
+/// var seaRaft = new SEARAFT&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new SEARAFT&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -215,7 +228,6 @@ public class SEARAFT<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "SEARAFT" },

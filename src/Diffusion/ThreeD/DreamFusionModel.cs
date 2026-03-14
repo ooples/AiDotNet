@@ -55,6 +55,14 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// - Supports mesh extraction via marching cubes
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 64, Width = 64, NumInferenceSteps = 50 };
+/// var model = new DreamFusionModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 8, 8 });
+/// var rendering = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -671,7 +679,6 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "DreamFusion",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Text-to-3D generation via Score Distillation Sampling",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

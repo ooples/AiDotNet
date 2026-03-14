@@ -423,7 +423,6 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
         {
             Name = variant,
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = $"{variant} distilled single/few-step image generation via Adversarial Diffusion Distillation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

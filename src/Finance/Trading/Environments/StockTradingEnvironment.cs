@@ -21,6 +21,15 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// the agent decides whether to buy one unit, sell one unit, or do nothing.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a single-asset stock trading environment with buy/hold/sell actions
+/// var marketData = new Tensor&lt;double&gt;(new[] { 1000, 1 }); // 1000 timesteps, 1 asset
+/// var env = new StockTradingEnvironment&lt;double&gt;(
+///     marketData, windowSize: 20, initialCapital: NumOps.FromDouble(10000.0),
+///     tradeSize: NumOps.FromDouble(1.0), transactionCost: 0.001);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]

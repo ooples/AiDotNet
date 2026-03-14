@@ -669,7 +669,6 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.VideoActionRecognition,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "SlowFast" },

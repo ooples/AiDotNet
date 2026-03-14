@@ -26,6 +26,25 @@ namespace AiDotNet.Regression;
 /// ranges of the outcome.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a quantile regression model (e.g., median regression with tau=0.5)
+/// var options = new QuantileRegressionOptions&lt;double&gt;();
+/// var model = new QuantileRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train to estimate conditional quantile of the response
+/// model.Train(features, targets);
+///
+/// // Predict the specified quantile for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -203,24 +222,6 @@ public class QuantileRegression<T> : RegressionBase<T>
         metadata.AdditionalInfo["Quantile"] = _options.Quantile;
 
         return metadata;
-    }
-
-    /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for quantile regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method simply returns an identifier that indicates this is a quantile regression model.
-    /// It's used internally by the library to keep track of different types of models.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.QuantileRegression;
     }
 
     /// <summary>

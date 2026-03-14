@@ -539,7 +539,6 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         return new ModelMetadata<T>
         {
             Name = "EAST",
-            ModelType = ModelType.NeuralNetwork,
             Description = "EAST for efficient scene text detection (CVPR 2017)",
             FeatureCount = _featureChannels,
             Complexity = Layers.Count,

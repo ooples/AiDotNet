@@ -26,6 +26,16 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// rewards based on portfolio changes.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // TradingEnvironment is abstract; use StockTradingEnvironment or MarketMakingEnvironment
+/// // Example with StockTradingEnvironment for single-asset discrete trading:
+/// var marketData = new Tensor&lt;double&gt;(new[] { 1000, 1 });
+/// var env = new StockTradingEnvironment&lt;double&gt;(
+///     marketData, windowSize: 20, initialCapital: NumOps.FromDouble(10000.0),
+///     tradeSize: NumOps.FromDouble(1.0));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]

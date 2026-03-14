@@ -40,6 +40,25 @@ namespace AiDotNet.Regression.MixedEffects;
 /// which can then be converted to probabilities or rates.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GLMM for non-Gaussian hierarchical data (e.g., binary outcomes)
+/// var options = new GeneralizedLinearMixedModelOptions&lt;double&gt;();
+/// var model = new GeneralizedLinearMixedModel&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 fixed-effect features
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 0, 1, 0, 1, 1, 1 });
+///
+/// // Train with link function and random effects estimation
+/// model.Train(features, targets);
+///
+/// // Predict for a new observation
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 6, 7 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
@@ -919,7 +938,6 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.GeneralizedLinearMixedModel;
 
     /// <summary>
     /// Creates a new instance of the model with the same configuration.

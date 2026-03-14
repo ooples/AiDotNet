@@ -43,6 +43,26 @@ namespace AiDotNet.Regression;
 /// ```
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create ridge regression with L2 regularization
+/// var options = new RidgeRegressionOptions&lt;double&gt;();
+/// var model = new RidgeRegression&lt;double&gt;(options);
+///
+/// // Prepare training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
+///
+/// // Train with L2 penalty to prevent overfitting
+/// model.Train(features, targets);
+///
+/// // Predict for new input
+/// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newFeatures);
+/// Console.WriteLine($"Predicted value: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelCategory(ModelCategory.Regularization)]
@@ -187,14 +207,6 @@ public class RidgeRegression<T> : RegressionBase<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enumeration value for Ridge Regression.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.RidgeRegression;
-    }
 
     /// <summary>
     /// Creates a new instance of Ridge Regression with the same configuration.

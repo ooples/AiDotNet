@@ -27,6 +27,12 @@ namespace AiDotNet.NeuralNetworks;
 /// This implementation provides a vision-language model that can understand images and generate
 /// text responses, similar to GPT-4V, LLaVA, or other vision-language models.
 /// </para>
+/// <para><b>For Beginners:</b> GPT-4 Vision combines a visual understanding system with a
+/// language model, letting you ask questions about images and receive natural language answers.
+/// It first processes an image through a vision encoder (extracting features like objects,
+/// text, and spatial relationships), then feeds those features into a language model that
+/// generates human-readable responses. This enables tasks like describing images, reading
+/// text in photos, and answering visual questions.</para>
 /// <para><b>Architecture Overview:</b>
 /// 1. Vision Encoder: ViT-based encoder to extract visual features
 /// 2. Vision-Language Projector: Maps visual features to LLM embedding space
@@ -1687,7 +1693,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         return new ModelMetadata<T>
         {
             Name = "Gpt4VisionNeuralNetwork",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _embeddingDimension,
             Complexity = _visionEncoderLayers.Count + _languageModelLayers.Count + _crossAttentionLayers.Count,
             Description = "GPT-4V style vision-language model combining vision encoding with language generation",

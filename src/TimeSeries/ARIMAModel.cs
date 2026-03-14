@@ -35,6 +35,16 @@ namespace AiDotNet.TimeSeries;
 /// <item>q: How many past prediction errors to consider (MA component)</item>
 /// </list>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an ARIMA(1,1,1) model for non-stationary time series
+/// var options = new ARIMAOptions&lt;double&gt;();
+/// var arima = new ARIMAModel&lt;double&gt;(options);
+/// arima.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = arima.Predict(inputMatrix);
+/// Vector&lt;double&gt; anomalyScores = arima.ComputeAnomalyScores(timeSeries);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -699,7 +709,6 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ARIMAModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // ARIMA-specific parameters

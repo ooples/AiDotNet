@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Nguyen et al., "SwiftBrush: One-Step Text-to-Image Diffusion Model with Variational Score Distillation", CVPR 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 1 };
+/// var model = new SwiftBrushModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -141,7 +149,7 @@ public class SwiftBrushModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SwiftBrush", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SwiftBrush", Version = "1.0",
             Description = "Image-free one-step text-to-image distillation via variational score distillation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -39,6 +39,27 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// - Features are not counts (otherwise use Multinomial)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Categorical Naive Bayes for multi-valued categorical features
+/// var options = new NaiveBayesOptions&lt;double&gt;();
+/// var classifier = new CategoricalNaiveBayes&lt;double&gt;(options);
+///
+/// // Prepare categorical features (encoded as integers: 0=Red, 1=Blue, 2=Green)
+/// var features = Matrix&lt;double&gt;.Build.Dense(4, 2, new double[] {
+///     0, 0,  0, 1,  // Class 0: mostly Red
+///     2, 2,  1, 2 });  // Class 1: mostly Green/Blue
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
+///
+/// // Train by computing P(category_value | class) for each feature
+/// classifier.Train(features, labels);
+///
+/// // Predict class for new categorical sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 0, 0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Bayesian)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -72,7 +93,6 @@ public class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.CategoricalNaiveBayes;
 
     /// <summary>
     /// Computes category probabilities for all classes.

@@ -842,7 +842,6 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.MemoryNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MemorySize", _memorySize },

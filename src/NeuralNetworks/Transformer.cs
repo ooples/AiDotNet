@@ -607,7 +607,6 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Transformer,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumHeads", _transformerArchitecture.NumHeads },

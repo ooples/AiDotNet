@@ -1570,7 +1570,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GenerativeAdversarialNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },

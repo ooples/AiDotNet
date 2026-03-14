@@ -767,7 +767,6 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DeepBoltzmannMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfLayers", _layerSizes.Count },

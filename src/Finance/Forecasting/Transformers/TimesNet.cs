@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
@@ -44,6 +44,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// Time Series Analysis", ICLR 2023. https://arxiv.org/abs/2210.02186
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimesNet for time series analysis with 2D temporal variation modeling
+/// // Transforms 1D series into 2D based on discovered periods, then applies 2D convolutions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with FFT-based period discovery and inception convolutions
+/// var model = new TimesNet&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimesNet&lt;double&gt;(architecture, "timesnet_electricity.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -479,7 +495,6 @@ public class TimesNet<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimesNet" },

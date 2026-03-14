@@ -323,7 +323,6 @@ public class UNet3D<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.UNet3D,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "VoxelResolution", VoxelResolution },

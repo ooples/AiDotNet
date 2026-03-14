@@ -8,6 +8,13 @@ namespace AiDotNet.NeuralNetworks;
 /// Represents a Spiking Neural Network, which is a type of neural network that more closely models biological neurons with temporal dynamics.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Spiking Neural Networks (SNNs) work like real biological neurons:
+/// they communicate using timed electrical pulses (spikes) rather than continuous values. Each
+/// neuron accumulates input over time and only fires when a threshold is reached, then resets.
+/// This temporal coding makes SNNs extremely energy-efficient on neuromorphic hardware and
+/// naturally suited for processing time-varying signals like sensor data and event cameras.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Science)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -887,7 +894,6 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SpikingNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "TimeStep", _timeStep },

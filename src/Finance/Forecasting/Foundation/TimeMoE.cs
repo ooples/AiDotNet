@@ -28,11 +28,32 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// It uses a decoder-only transformer where each feed-forward layer is replaced by an
 /// MoE layer with a learned router.
 /// </para>
+/// <para><b>For Beginners:</b> Time-MoE is the first time series model to reach billions of
+/// parameters by using a Mixture of Experts approach. Instead of one giant network processing
+/// every input, it has many specialized "expert" sub-networks and a router that picks the best
+/// 2-3 experts for each data point. This means only a fraction of the parameters are active
+/// at any time, making it efficient despite its massive total size.</para>
 /// <para>
 /// <b>Reference:</b> Shi et al., "Time-MoE: Billion-Scale Time Series Foundation Models
 /// with Mixture of Experts", ICLR 2025. https://openreview.net/forum?id=e1wDDFmlVu
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Time-MoE billion-scale foundation model with Mixture of Experts
+/// // 2.4B total parameters with only ~300M active per token via sparse expert routing
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with MoE layers and learned expert routing
+/// var model = new TimeMoE&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimeMoE&lt;double&gt;(architecture, "time_moe.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -268,7 +289,6 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimeMoE" },

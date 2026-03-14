@@ -115,9 +115,9 @@ public class AgentsDeepMathIntegrationTests
         var registry = new HyperparameterRegistry();
 
         var treeModels = new[] {
-            ModelType.RandomForest, ModelType.GradientBoosting, ModelType.DecisionTree,
-            ModelType.ConditionalInferenceTree, ModelType.ExtremelyRandomizedTrees,
-            ModelType.HistGradientBoosting, ModelType.AdaBoostR2
+            typeof(AiDotNet.Regression.RandomForestRegression<>), typeof(AiDotNet.Regression.GradientBoostingRegression<>), typeof(AiDotNet.Regression.DecisionTreeRegression<>),
+            typeof(AiDotNet.Regression.ConditionalInferenceTreeRegression<>), typeof(AiDotNet.Regression.ExtremelyRandomizedTreesRegression<>),
+            typeof(AiDotNet.Regression.HistGradientBoostingRegression<>), typeof(AiDotNet.Regression.AdaBoostR2Regression<>)
         };
 
         foreach (var model in treeModels)
@@ -131,7 +131,7 @@ public class AgentsDeepMathIntegrationTests
     public void Registry_TreeModels_MaxDepth_Range1To100()
     {
         var registry = new HyperparameterRegistry();
-        var def = registry.GetDefinition(ModelType.RandomForest, "max_depth");
+        var def = registry.GetDefinition(typeof(AiDotNet.Regression.RandomForestRegression<>), "max_depth");
 
         Assert.NotNull(def);
         Assert.Equal(1.0, def.MinValue);
@@ -144,9 +144,9 @@ public class AgentsDeepMathIntegrationTests
         var registry = new HyperparameterRegistry();
 
         var ensembleModels = new[] {
-            ModelType.RandomForest, ModelType.GradientBoosting,
-            ModelType.ExtremelyRandomizedTrees, ModelType.HistGradientBoosting,
-            ModelType.AdaBoostR2
+            typeof(AiDotNet.Regression.RandomForestRegression<>), typeof(AiDotNet.Regression.GradientBoostingRegression<>),
+            typeof(AiDotNet.Regression.ExtremelyRandomizedTreesRegression<>), typeof(AiDotNet.Regression.HistGradientBoostingRegression<>),
+            typeof(AiDotNet.Regression.AdaBoostR2Regression<>)
         };
 
         foreach (var model in ensembleModels)
@@ -160,7 +160,7 @@ public class AgentsDeepMathIntegrationTests
     public void Registry_NumberOfTrees_Range1To10000()
     {
         var registry = new HyperparameterRegistry();
-        var def = registry.GetDefinition(ModelType.RandomForest, "n_estimators");
+        var def = registry.GetDefinition(typeof(AiDotNet.Regression.RandomForestRegression<>), "n_estimators");
 
         Assert.NotNull(def);
         Assert.Equal(1.0, def.MinValue);
@@ -175,7 +175,7 @@ public class AgentsDeepMathIntegrationTests
 
         foreach (var alias in aliases)
         {
-            var propName = registry.GetPropertyName(ModelType.RandomForest, alias);
+            var propName = registry.GetPropertyName(typeof(AiDotNet.Regression.RandomForestRegression<>), alias);
             Assert.Equal("NumberOfTrees", propName);
         }
     }
@@ -184,7 +184,7 @@ public class AgentsDeepMathIntegrationTests
     public void Registry_GradientBoosting_HasLearningRate()
     {
         var registry = new HyperparameterRegistry();
-        var def = registry.GetDefinition(ModelType.GradientBoosting, "learning_rate");
+        var def = registry.GetDefinition(typeof(AiDotNet.Regression.GradientBoostingRegression<>), "learning_rate");
 
         Assert.NotNull(def);
         Assert.Equal("LearningRate", def.PropertyName);
@@ -200,7 +200,7 @@ public class AgentsDeepMathIntegrationTests
 
         foreach (var alias in aliases)
         {
-            Assert.Equal("LearningRate", registry.GetPropertyName(ModelType.GradientBoosting, alias));
+            Assert.Equal("LearningRate", registry.GetPropertyName(typeof(AiDotNet.Regression.GradientBoostingRegression<>), alias));
         }
     }
 
@@ -208,7 +208,7 @@ public class AgentsDeepMathIntegrationTests
     public void Registry_GradientBoosting_SubsampleRatio()
     {
         var registry = new HyperparameterRegistry();
-        var def = registry.GetDefinition(ModelType.GradientBoosting, "subsample");
+        var def = registry.GetDefinition(typeof(AiDotNet.Regression.GradientBoostingRegression<>), "subsample");
 
         Assert.NotNull(def);
         Assert.Equal("SubsampleRatio", def.PropertyName);
@@ -221,7 +221,7 @@ public class AgentsDeepMathIntegrationTests
     {
         var registry = new HyperparameterRegistry();
 
-        var nnModels = new[] { ModelType.NeuralNetworkRegression, ModelType.MultilayerPerceptronRegression };
+        var nnModels = new[] { typeof(AiDotNet.Regression.NeuralNetworkRegression<>), typeof(AiDotNet.Regression.MultilayerPerceptronRegression<>) };
 
         foreach (var model in nnModels)
         {
@@ -235,7 +235,7 @@ public class AgentsDeepMathIntegrationTests
     public void Registry_NeuralNetwork_LearningRate_Range()
     {
         var registry = new HyperparameterRegistry();
-        var def = registry.GetDefinition(ModelType.NeuralNetworkRegression, "lr");
+        var def = registry.GetDefinition(typeof(AiDotNet.Regression.NeuralNetworkRegression<>), "lr");
 
         Assert.NotNull(def);
         Assert.Equal(1e-5, def.MinValue);
@@ -246,7 +246,7 @@ public class AgentsDeepMathIntegrationTests
     public void Registry_NeuralNetwork_Epochs_Range()
     {
         var registry = new HyperparameterRegistry();
-        var def = registry.GetDefinition(ModelType.NeuralNetworkRegression, "num_epochs");
+        var def = registry.GetDefinition(typeof(AiDotNet.Regression.NeuralNetworkRegression<>), "num_epochs");
 
         Assert.NotNull(def);
         Assert.Equal(1.0, def.MinValue);
@@ -257,7 +257,7 @@ public class AgentsDeepMathIntegrationTests
     public void Registry_PolynomialRegression_Degree()
     {
         var registry = new HyperparameterRegistry();
-        var def = registry.GetDefinition(ModelType.PolynomialRegression, "degree");
+        var def = registry.GetDefinition(typeof(AiDotNet.Regression.PolynomialRegression<>), "degree");
 
         Assert.NotNull(def);
         Assert.Equal("Degree", def.PropertyName);
@@ -270,7 +270,7 @@ public class AgentsDeepMathIntegrationTests
     {
         var registry = new HyperparameterRegistry();
 
-        var models = new[] { ModelType.RidgeRegression, ModelType.LassoRegression, ModelType.ElasticNetRegression };
+        var models = new[] { typeof(AiDotNet.Regression.RidgeRegression<>), typeof(AiDotNet.Regression.LassoRegression<>), typeof(AiDotNet.Regression.ElasticNetRegression<>) };
 
         foreach (var model in models)
         {
@@ -290,7 +290,7 @@ public class AgentsDeepMathIntegrationTests
 
         foreach (var alias in aliases)
         {
-            Assert.Equal("Alpha", registry.GetPropertyName(ModelType.RidgeRegression, alias));
+            Assert.Equal("Alpha", registry.GetPropertyName(typeof(AiDotNet.Regression.RidgeRegression<>), alias));
         }
     }
 
@@ -298,7 +298,7 @@ public class AgentsDeepMathIntegrationTests
     public void Registry_KNN_K()
     {
         var registry = new HyperparameterRegistry();
-        var def = registry.GetDefinition(ModelType.KNearestNeighbors, "n_neighbors");
+        var def = registry.GetDefinition(typeof(AiDotNet.Regression.KNearestNeighborsRegression<>), "n_neighbors");
 
         Assert.NotNull(def);
         Assert.Equal("K", def.PropertyName);
@@ -311,13 +311,13 @@ public class AgentsDeepMathIntegrationTests
     {
         var registry = new HyperparameterRegistry();
 
-        var cDef = registry.GetDefinition(ModelType.SupportVectorRegression, "cost");
+        var cDef = registry.GetDefinition(typeof(AiDotNet.Regression.SupportVectorRegression<>), "cost");
         Assert.NotNull(cDef);
         Assert.Equal("C", cDef.PropertyName);
         Assert.Equal(0.001, cDef.MinValue);
         Assert.Equal(10000.0, cDef.MaxValue);
 
-        var epsDef = registry.GetDefinition(ModelType.SupportVectorRegression, "epsilon");
+        var epsDef = registry.GetDefinition(typeof(AiDotNet.Regression.SupportVectorRegression<>), "epsilon");
         Assert.NotNull(epsDef);
         Assert.Equal("Epsilon", epsDef.PropertyName);
         Assert.Equal(0.0, epsDef.MinValue);
@@ -329,13 +329,13 @@ public class AgentsDeepMathIntegrationTests
     {
         var registry = new HyperparameterRegistry();
 
-        var lagDef = registry.GetDefinition(ModelType.TimeSeriesRegression, "lag_order");
+        var lagDef = registry.GetDefinition(typeof(AiDotNet.Regression.TimeSeriesRegression<>), "lag_order");
         Assert.NotNull(lagDef);
         Assert.Equal("LagOrder", lagDef.PropertyName);
         Assert.Equal(1.0, lagDef.MinValue);
         Assert.Equal(100.0, lagDef.MaxValue);
 
-        var seasonDef = registry.GetDefinition(ModelType.TimeSeriesRegression, "seasonal_period");
+        var seasonDef = registry.GetDefinition(typeof(AiDotNet.Regression.TimeSeriesRegression<>), "seasonal_period");
         Assert.NotNull(seasonDef);
         Assert.Equal("SeasonalPeriod", seasonDef.PropertyName);
         Assert.Equal(2.0, seasonDef.MinValue);
@@ -348,10 +348,10 @@ public class AgentsDeepMathIntegrationTests
         var registry = new HyperparameterRegistry();
 
         // Shared parameters should work for any model type
-        var propName = registry.GetPropertyName(ModelType.RandomForest, "random_seed");
+        var propName = registry.GetPropertyName(typeof(AiDotNet.Regression.RandomForestRegression<>), "random_seed");
         Assert.Equal("Seed", propName);
 
-        propName = registry.GetPropertyName(ModelType.NeuralNetworkRegression, "seed");
+        propName = registry.GetPropertyName(typeof(AiDotNet.Regression.NeuralNetworkRegression<>), "seed");
         Assert.Equal("Seed", propName);
     }
 
@@ -360,7 +360,7 @@ public class AgentsDeepMathIntegrationTests
     {
         var registry = new HyperparameterRegistry();
 
-        var propName = registry.GetPropertyName(ModelType.RidgeRegression, "fit_intercept");
+        var propName = registry.GetPropertyName(typeof(AiDotNet.Regression.RidgeRegression<>), "fit_intercept");
         Assert.Equal("UseIntercept", propName);
     }
 
@@ -369,7 +369,7 @@ public class AgentsDeepMathIntegrationTests
     {
         var registry = new HyperparameterRegistry();
 
-        var propName = registry.GetPropertyName(ModelType.RandomForest, "completely_unknown_param");
+        var propName = registry.GetPropertyName(typeof(AiDotNet.Regression.RandomForestRegression<>), "completely_unknown_param");
         Assert.Null(propName);
     }
 
@@ -382,7 +382,7 @@ public class AgentsDeepMathIntegrationTests
     {
         var registry = new HyperparameterRegistry();
 
-        var result = registry.Validate(ModelType.RandomForest, "max_depth", 10);
+        var result = registry.Validate(typeof(AiDotNet.Regression.RandomForestRegression<>), "max_depth", 10);
         Assert.True(result.IsValid);
         Assert.False(result.HasWarning);
     }
@@ -393,7 +393,7 @@ public class AgentsDeepMathIntegrationTests
         var registry = new HyperparameterRegistry();
 
         // max_depth minimum is 1, so 0 should warn
-        var result = registry.Validate(ModelType.RandomForest, "max_depth", 0);
+        var result = registry.Validate(typeof(AiDotNet.Regression.RandomForestRegression<>), "max_depth", 0);
         Assert.True(result.IsValid);
         Assert.True(result.HasWarning);
         Assert.Contains("below the typical minimum", result.Warning);
@@ -405,7 +405,7 @@ public class AgentsDeepMathIntegrationTests
         var registry = new HyperparameterRegistry();
 
         // max_depth maximum is 100, so 200 should warn
-        var result = registry.Validate(ModelType.RandomForest, "max_depth", 200);
+        var result = registry.Validate(typeof(AiDotNet.Regression.RandomForestRegression<>), "max_depth", 200);
         Assert.True(result.IsValid);
         Assert.True(result.HasWarning);
         Assert.Contains("above the typical maximum", result.Warning);
@@ -417,7 +417,7 @@ public class AgentsDeepMathIntegrationTests
         var registry = new HyperparameterRegistry();
 
         // Unknown parameters are always valid (no constraints to check)
-        var result = registry.Validate(ModelType.RandomForest, "unknown_param", 999);
+        var result = registry.Validate(typeof(AiDotNet.Regression.RandomForestRegression<>), "unknown_param", 999);
         Assert.True(result.IsValid);
         Assert.False(result.HasWarning);
     }
@@ -428,7 +428,7 @@ public class AgentsDeepMathIntegrationTests
         var registry = new HyperparameterRegistry();
 
         // Non-convertible values skip range validation
-        var result = registry.Validate(ModelType.RandomForest, "max_depth", "not_a_number");
+        var result = registry.Validate(typeof(AiDotNet.Regression.RandomForestRegression<>), "max_depth", "not_a_number");
         Assert.True(result.IsValid);
     }
 
@@ -438,7 +438,7 @@ public class AgentsDeepMathIntegrationTests
         var registry = new HyperparameterRegistry();
 
         // max_depth min is 1, so 1 should be valid (inclusive)
-        var result = registry.Validate(ModelType.RandomForest, "max_depth", 1);
+        var result = registry.Validate(typeof(AiDotNet.Regression.RandomForestRegression<>), "max_depth", 1);
         Assert.True(result.IsValid);
         Assert.False(result.HasWarning);
     }
@@ -449,7 +449,7 @@ public class AgentsDeepMathIntegrationTests
         var registry = new HyperparameterRegistry();
 
         // max_depth max is 100, so 100 should be valid (inclusive)
-        var result = registry.Validate(ModelType.RandomForest, "max_depth", 100);
+        var result = registry.Validate(typeof(AiDotNet.Regression.RandomForestRegression<>), "max_depth", 100);
         Assert.True(result.IsValid);
         Assert.False(result.HasWarning);
     }
@@ -757,7 +757,7 @@ Some text learning_rate: 0.1";
     {
         var registry = new HyperparameterRegistry();
 
-        registry.Register(ModelType.RandomForest, new HyperparameterDefinition
+        registry.Register(typeof(AiDotNet.Regression.RandomForestRegression<>), new HyperparameterDefinition
         {
             PropertyName = "CustomParam",
             Aliases = new List<string> { "custom_param", "my_param" },
@@ -766,8 +766,8 @@ Some text learning_rate: 0.1";
             MaxValue = 1.0
         });
 
-        Assert.Equal("CustomParam", registry.GetPropertyName(ModelType.RandomForest, "custom_param"));
-        Assert.Equal("CustomParam", registry.GetPropertyName(ModelType.RandomForest, "my_param"));
+        Assert.Equal("CustomParam", registry.GetPropertyName(typeof(AiDotNet.Regression.RandomForestRegression<>), "custom_param"));
+        Assert.Equal("CustomParam", registry.GetPropertyName(typeof(AiDotNet.Regression.RandomForestRegression<>), "my_param"));
     }
 
     [Fact]
@@ -777,7 +777,7 @@ Some text learning_rate: 0.1";
 
         // "seed" is registered as a shared parameter
         // Model-specific lookup should find the shared one
-        var propName = registry.GetPropertyName(ModelType.RandomForest, "seed");
+        var propName = registry.GetPropertyName(typeof(AiDotNet.Regression.RandomForestRegression<>), "seed");
         Assert.Equal("Seed", propName);
     }
 
@@ -800,14 +800,14 @@ Some text learning_rate: 0.1";
         Assert.Equal(3, parsed.Count);
 
         // Step 2: Resolve property names
-        Assert.Equal("NumberOfTrees", registry.GetPropertyName(ModelType.GradientBoosting, "n_estimators"));
-        Assert.Equal("MaxDepth", registry.GetPropertyName(ModelType.GradientBoosting, "max_depth"));
-        Assert.Equal("LearningRate", registry.GetPropertyName(ModelType.GradientBoosting, "learning_rate"));
+        Assert.Equal("NumberOfTrees", registry.GetPropertyName(typeof(AiDotNet.Regression.GradientBoostingRegression<>), "n_estimators"));
+        Assert.Equal("MaxDepth", registry.GetPropertyName(typeof(AiDotNet.Regression.GradientBoostingRegression<>), "max_depth"));
+        Assert.Equal("LearningRate", registry.GetPropertyName(typeof(AiDotNet.Regression.GradientBoostingRegression<>), "learning_rate"));
 
         // Step 3: Validate
         foreach (var kvp in parsed)
         {
-            var result = registry.Validate(ModelType.GradientBoosting, kvp.Key, kvp.Value);
+            var result = registry.Validate(typeof(AiDotNet.Regression.GradientBoostingRegression<>), kvp.Key, kvp.Value);
             Assert.True(result.IsValid);
             Assert.False(result.HasWarning);
         }
@@ -826,11 +826,11 @@ Some text learning_rate: 0.1";
         var parsed = parser.Parse(llmResponse);
 
         // max_depth 999 > max 100 → warning
-        var depthResult = registry.Validate(ModelType.GradientBoosting, "max_depth", parsed["max_depth"]);
+        var depthResult = registry.Validate(typeof(AiDotNet.Regression.GradientBoostingRegression<>), "max_depth", parsed["max_depth"]);
         Assert.True(depthResult.HasWarning);
 
         // learning_rate 5.0 > max 1.0 → warning
-        var lrResult = registry.Validate(ModelType.GradientBoosting, "learning_rate", parsed["learning_rate"]);
+        var lrResult = registry.Validate(typeof(AiDotNet.Regression.GradientBoostingRegression<>), "learning_rate", parsed["learning_rate"]);
         Assert.True(lrResult.HasWarning);
     }
 }

@@ -765,7 +765,6 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             Name = _useNativeMode ? "TtsModel-Native" : "TtsModel-FastSpeech2-HiFiGAN",
             Description = "Text-to-speech model using FastSpeech2 acoustic model and HiFi-GAN/Griffin-Lim vocoder",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _maxPhonemeLength,
             Complexity = 2
         };

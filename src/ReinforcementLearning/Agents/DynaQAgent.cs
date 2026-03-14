@@ -13,6 +13,24 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 /// Dyna-Q agent combining learning and planning using a learned model.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Dyna-Q learns from real experiences AND simulated ones.
+/// After each real interaction, it also "replays" past experiences in a mental model,
+/// like practicing chess moves in your head. This lets it learn much faster than
+/// pure Q-learning because each real experience generates many simulated learning updates.
+/// The planning steps parameter controls how many simulated updates happen per real step.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Dyna-Q agent that combines real and simulated learning
+/// var options = new DynaQOptions&lt;double&gt; { PlanningSteps = 10, StateSize = 4, ActionSize = 2 };
+/// var agent = new DynaQAgent&lt;double&gt;(options);
+///
+/// // Select an action and learn from both real and simulated experiences
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
@@ -196,7 +214,7 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()

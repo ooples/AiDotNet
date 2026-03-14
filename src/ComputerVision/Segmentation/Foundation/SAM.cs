@@ -39,6 +39,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// <b>Reference:</b> Kirillov et al., "Segment Anything", ICCV 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SAM model for promptable image segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
+/// var model = new SAM&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for zero-shot segmentation
+/// var onnxModel = new SAM&lt;double&gt;(architecture, "sam_vit_h.onnx", numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
@@ -350,7 +363,6 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </summary>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "SAM" },

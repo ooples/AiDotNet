@@ -42,6 +42,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Xiao et al., "OmniGen: Unified Image Generation", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 28 };
+/// var model = new OmniGen2Model&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var result = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -137,7 +145,7 @@ public class OmniGen2Model<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "OmniGen-2", Version = "2.0", ModelType = ModelType.NeuralNetwork,
+            Name = "OmniGen-2", Version = "2.0",
             Description = "Unified multi-task generation and editing with Phi-3 backbone and interleaved text-image input",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -16,6 +16,11 @@ namespace AiDotNet.NeuralNetworks;
 /// trained at 7B scale, achieving competitive results with Transformer-based models while
 /// maintaining constant memory during generation regardless of sequence length.
 /// </para>
+/// <para><b>For Beginners:</b> Falcon Mamba is a 7-billion parameter language model that works
+/// without attention mechanisms (unlike GPT or LLaMA). Instead, it uses the Mamba architecture
+/// which processes sequences with constant memory, meaning it can handle infinitely long
+/// conversations without slowing down. This makes it uniquely suited for applications requiring
+/// very long context windows.</para>
 /// <para><b>Reference:</b> Zuo et al., "Falcon Mamba: The First Competitive Attention-free 7B Language Model", 2024.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -141,7 +146,6 @@ public class FalconMambaLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "FalconMamba" },

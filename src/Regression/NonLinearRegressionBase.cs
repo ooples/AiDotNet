@@ -502,7 +502,6 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["KernelType"] = Options.KernelType,
@@ -531,7 +530,6 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// internally by the library to keep track of different types of models.
     /// </para>
     /// </remarks>
-    protected abstract ModelType GetModelType();
 
     /// <summary>
     /// Serializes the model to a byte array.

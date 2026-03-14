@@ -51,6 +51,25 @@ namespace AiDotNet.Classification.MultiLabel;
 /// - Label correlations are important
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Label Powerset treating each label combination as a class
+/// var classifier = new LabelPowerset&lt;double&gt;();
+///
+/// // Prepare features and multi-label targets
+/// var features = Matrix&lt;double&gt;.Build.Dense(4, 2, new double[] {
+///     1.0, 2.0,  3.0, 4.0,  5.0, 6.0,  7.0, 8.0 });
+/// var labels = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
+///     1, 0, 1,  1, 1, 0,  0, 1, 1,  0, 0, 1 });
+///
+/// // Train single multi-class classifier on label combination classes
+/// classifier.Train(features, labels);
+///
+/// // Predict complete label combination for new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 2.0, 3.0 });
+/// var prediction = classifier.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
@@ -449,21 +468,6 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     #endregion
 
     #region Abstract Method Implementations
-
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enum value for Label Powerset.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This identifies what kind of model this is within the
-    /// AiDotNet library's type system.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LabelPowersetClassifier;
-    }
 
     /// <summary>
     /// Gets all learnable parameters of the model as a single vector.

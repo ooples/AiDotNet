@@ -577,7 +577,6 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = additionalInfo,
             ModelData = UseNativeMode ? this.Serialize() : Array.Empty<byte>()
         };

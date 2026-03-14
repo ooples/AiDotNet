@@ -344,7 +344,6 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "Magic3D",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Magic3D two-stage coarse-to-fine text-to-3D generation with score distillation sampling",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

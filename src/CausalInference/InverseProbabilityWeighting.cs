@@ -51,6 +51,13 @@ namespace AiDotNet.CausalInference;
 /// - Robins, Rotnitzky &amp; Zhao (1994). "Estimation of Regression Coefficients"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var ipw = new InverseProbabilityWeighting&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);
+/// ipw.Fit(features, treatment, outcome);
+/// double ate = ipw.EstimateAte();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.CausalModel)]
@@ -98,7 +105,6 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public override ModelType GetModelType() => ModelType.InverseProbabilityWeighting;
 
     /// <summary>
     /// Initializes a new instance of the InverseProbabilityWeighting class.

@@ -1014,7 +1014,6 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         return new ModelMetadata<T>
         {
             Name = "TableTransformer",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DETR-style table detection and structure recognition (CVPR 2022)",
             FeatureCount = _hiddenDim,
             Complexity = _numEncoderLayers + _numDecoderLayers,

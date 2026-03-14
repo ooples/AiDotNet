@@ -593,7 +593,6 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
         return new ModelMetadata<T>
         {
             Name = "TRIE",
-            ModelType = ModelType.NeuralNetwork,
             Description = "TRIE for end-to-end text reading and information extraction (ACM MM 2020)",
             FeatureCount = _graphDim,
             Complexity = Layers.Count,

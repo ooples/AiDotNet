@@ -395,7 +395,6 @@ public class NSGAII<T, TInput, TOutput> :
     public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();
-        metadata.ModelType = ModelType.GeneticAlgorithmRegression;
         metadata.Description = "Model evolved using NSGA-II (Non-dominated Sorting Genetic Algorithm II)";
         metadata.AdditionalInfo["ObjectiveCount"] = _objectives.Count.ToString();
 

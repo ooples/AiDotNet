@@ -369,7 +369,6 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
         {
             Name = $"SANA {variantName}",
             Version = variantName,
-            ModelType = ModelType.NeuralNetwork,
             Description = $"SANA {variantName} linear DiT with DC-AE (32x compression) and Gemma text encoder for efficient high-resolution generation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

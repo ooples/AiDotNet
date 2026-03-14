@@ -39,6 +39,19 @@ namespace AiDotNet.Video.Inpainting;
 /// ICCV 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ProPainter model for video object removal and inpainting
+/// var proPainter = new ProPainter&lt;double&gt;();
+///
+/// // Or configure with custom transformer and feature parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new ProPainter&lt;double&gt;(architecture, numFeatures: 128, numTransformerBlocks: 6);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -911,7 +924,6 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoInpainting,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

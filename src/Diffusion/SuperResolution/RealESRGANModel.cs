@@ -482,7 +482,6 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Real-ESRGAN",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Real-ESRGAN practical blind super-resolution with second-order degradation model",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

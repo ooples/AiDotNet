@@ -55,6 +55,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// - Climate modeling (irregular Earth grids)
     /// - Particle systems
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var gno = new GraphNeuralOperator&lt;float&gt;();
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -467,7 +472,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "MessagePassingLayers", _numMessagePassingLayers },

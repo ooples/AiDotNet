@@ -182,7 +182,6 @@ public class FlashVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "FlashVSR-Native" : "FlashVSR-ONNX",
             Description = $"FlashVSR {_options.Variant} one-step diffusion VSR (Zhuang et al., 2025)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumLCSABlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

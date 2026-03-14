@@ -43,6 +43,14 @@ namespace AiDotNet.Clustering.Density;
 /// Best for: Smooth, well-defined clusters where density varies.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new DenclueOptions&lt;double&gt;();
+/// var denclue = new Denclue&lt;double&gt;(options);
+/// denclue.Fit(dataMatrix);
+/// int[] labels = denclue.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Kernel)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -81,7 +89,6 @@ public class Denclue<T> : ClusteringBase<T>
     public T[]? AttractorDensities => _attractorDensities;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

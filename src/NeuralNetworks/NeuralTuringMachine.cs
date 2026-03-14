@@ -1451,7 +1451,6 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralTuringMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MemorySize", _memorySize },

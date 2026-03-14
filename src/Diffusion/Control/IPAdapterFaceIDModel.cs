@@ -243,7 +243,7 @@ public class IPAdapterFaceIDModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "IP-Adapter FaceID", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "IP-Adapter FaceID", Version = "1.0",
             Description = "IP-Adapter FaceID face-specific identity preservation with ArcFace embeddings",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

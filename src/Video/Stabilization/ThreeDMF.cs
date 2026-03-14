@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Stabilization;
 /// depth-aware warping that correctly handles parallax and depth-dependent motion.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a 3DMF model for depth-aware 3D video stabilization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new ThreeDMFOptions();
+/// var threeDMF = new ThreeDMF&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var threeDMFOnnx = new ThreeDMF&lt;double&gt;(architecture, "3dmf_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -145,7 +158,6 @@ public class ThreeDMF<T> : VideoStabilizationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoStabilization,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "ThreeDMF" },

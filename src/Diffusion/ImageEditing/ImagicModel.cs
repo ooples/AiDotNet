@@ -50,6 +50,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Kawar et al., "Imagic: Text-Based Real Image Editing with Diffusion Models", CVPR 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new ImagicModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Editing)]
@@ -345,7 +353,6 @@ public class ImagicModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Imagic",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Imagic edits real images to match target text via text embedding optimization and model fine-tuning",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

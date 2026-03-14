@@ -713,7 +713,6 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         return new ModelMetadata<T>
         {
             Name = "TrOCR",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Transformer-based OCR with ViT encoder (AAAI 2022)",
             FeatureCount = _decoderHiddenDim,
             Complexity = _numEncoderLayers + _numDecoderLayers,

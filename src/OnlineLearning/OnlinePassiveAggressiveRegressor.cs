@@ -97,7 +97,6 @@ public class OnlinePassiveAggressiveRegressor<T> : OnlineLearningModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public override ModelType GetModelType() => ModelType.OnlinePassiveAggressiveRegressor;
 
     /// <summary>
     /// Gets whether JIT compilation is supported.

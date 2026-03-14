@@ -25,8 +25,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Kosmos-2: Grounding Multimodal Large Language Models to the World" (Peng et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> KOSMOS2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> KOSMOS-2 extends KOSMOS-1 with visual grounding — the ability
+/// to link words in generated text to specific bounding box locations in the image. It uses
+/// special location tokens to encode bounding box coordinates, enabling the model to output
+/// phrases like "the dog &lt;box&gt;x1,y1,x2,y2&lt;/box&gt;" that point to objects in the image.
+/// Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a KOSMOS-2 model for grounded multimodal generation
+/// // linking text spans to bounding box locations in images
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new KOSMOS2&lt;double&gt;(architecture, "kosmos2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new KOSMOS2&lt;double&gt;(architecture, new KOSMOS2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -112,7 +132,7 @@ public class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "KOSMOS-2-Native" : "KOSMOS-2-ONNX", Description = "Kosmos-2: Grounding Multimodal Large Language Models to the World (Peng et al., 2023)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "KOSMOS-2"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "KOSMOS-2-Native" : "KOSMOS-2-ONNX", Description = "Kosmos-2: Grounding Multimodal Large Language Models to the World (Peng et al., 2023)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "KOSMOS-2"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.EnableGroundingTokens); writer.Write(_options.NumLocationBins); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.EnableGroundingTokens = reader.ReadBoolean(); _options.NumLocationBins = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new KOSMOS2<T>(Architecture, mp, _options); return new KOSMOS2<T>(Architecture, _options); }

@@ -42,6 +42,27 @@ namespace AiDotNet.Classification.Meta;
 /// - Computationally expensive
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create stacking classifier with base classifiers and meta-learner
+/// var options = new StackingClassifierOptions&lt;double&gt;();
+/// var classifier = new StackingClassifier&lt;double&gt;(options);
+///
+/// // Prepare training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train base classifiers and meta-classifier on stacked predictions
+/// classifier.Train(features, labels);
+///
+/// // Predict using meta-classifier on base classifier outputs
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
@@ -101,7 +122,6 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.StackingClassifier;
 
     /// <summary>
     /// Trains the stacking classifier.

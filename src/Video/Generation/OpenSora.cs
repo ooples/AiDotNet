@@ -41,6 +41,19 @@ namespace AiDotNet.Video.Generation;
 /// - Progressive training strategy
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an OpenSora model for text-to-video generation
+/// var openSora = new OpenSora&lt;double&gt;();
+///
+/// // Or configure with custom generation parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 3);
+/// var model = new OpenSora&lt;double&gt;(architecture, numFrames: 16, numInferenceSteps: 50);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -1195,7 +1208,6 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.TextToVideo,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "OpenSora" },

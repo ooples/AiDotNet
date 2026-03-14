@@ -181,7 +181,6 @@ public class MIAVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "MIAVSR-Native" : "MIAVSR-ONNX",
             Description = $"MIA-VSR {_options.Variant} masked inter/intra-frame attention VSR (Zhou et al., CVPR 2024)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

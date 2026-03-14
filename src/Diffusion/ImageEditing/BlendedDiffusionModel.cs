@@ -51,6 +51,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Avrahami et al., "Blended Diffusion for Text-driven Editing of Natural Images", CVPR 2022
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new BlendedDiffusionModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.ImageEditing)]
@@ -346,7 +354,6 @@ public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Blended Diffusion",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Blended Diffusion enables text-guided local editing by blending denoised results within user-specified masks",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

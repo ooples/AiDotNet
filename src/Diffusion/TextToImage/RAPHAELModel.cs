@@ -55,6 +55,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// Reference: Xue et al., "RAPHAEL: Text-to-Image Generation via Large Mixture of Diffusion Paths", NeurIPS 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 30 };
+/// var model = new RAPHAELModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -260,7 +268,6 @@ public class RAPHAELModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "RAPHAEL",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "RAPHAEL Mixture-of-Experts text-to-image diffusion model",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

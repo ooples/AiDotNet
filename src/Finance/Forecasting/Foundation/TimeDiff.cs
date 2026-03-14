@@ -26,10 +26,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// TimeDiff extends DDPM with future-mixup training augmentation and autoregressive initialization
 /// at inference for high-quality non-autoregressive time series forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> TimeDiff improves diffusion-based forecasting with two clever
+/// tricks. During training, it mixes future values into the input (future-mixup) to help the
+/// model learn what comes next. During prediction, it uses an initial rough forecast to guide
+/// the diffusion process, producing all future values at once rather than one at a time, which
+/// is both faster and more consistent.</para>
 /// <para>
 /// <b>Reference:</b> Shen &amp; Kwok, "Non-autoregressive Conditional Diffusion Models for Time Series Prediction", ICML 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimeDiff non-autoregressive conditional diffusion model
+/// // Uses future-mixup training and autoregressive initialization for consistent forecasts
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with future-mixup augmentation
+/// var model = new TimeDiff&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimeDiff&lt;double&gt;(architecture, "timediff.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -292,7 +313,6 @@ public class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.NeuralNetwork,
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "TimeDiff" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "UseFutureMixup", _useFutureMixup }, { "UseAutoregressiveInit", _useAutoregressiveInit }, { "UseNativeMode", _useNativeMode } },
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };

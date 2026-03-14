@@ -47,6 +47,27 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create balanced random forest for imbalanced fraud detection
+/// var options = new BalancedRandomForestOptions&lt;double&gt;();
+/// var classifier = new BalancedRandomForestClassifier&lt;double&gt;(options);
+///
+/// // Prepare imbalanced training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(8, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,  1.3, 0.7,
+///     5.0, 5.1,  5.2, 4.9,  0.0, 0.0,  0.0, 0.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 0, 1, 1, 1, 1 });
+///
+/// // Train trees on balanced bootstrap samples with random feature subsets
+/// classifier.Train(features, labels);
+///
+/// // Predict using ensemble vote
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 5.1, 5.0 });
+/// var prediction = classifier.Predict(newSample);
+/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -189,7 +210,6 @@ public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This identifier helps the system track what type of model this is.</para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.BalancedRandomForestClassifier;
 
     /// <summary>
     /// Trains the balanced random forest classifier.

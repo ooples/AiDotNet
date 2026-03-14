@@ -46,6 +46,14 @@ namespace AiDotNet.Clustering.Streaming;
 /// - Any data that arrives continuously
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new OnlineKMeansOptions&lt;double&gt;();
+/// var onlineKMeans = new OnlineKMeans&lt;double&gt;(options);
+/// onlineKMeans.Fit(dataMatrix);
+/// int[] labels = onlineKMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -82,7 +90,6 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     public double CurrentLearningRate { get; private set; }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()

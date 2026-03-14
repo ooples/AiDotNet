@@ -632,7 +632,6 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "Stable Diffusion 1.5",
             Version = "1.5",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Stable Diffusion 1.5 latent diffusion model with CLIP ViT-L/14 text conditioning",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

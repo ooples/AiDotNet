@@ -496,7 +496,6 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             Version = "1.0.0",
             AdditionalInfo = new Dictionary<string, object>
             {

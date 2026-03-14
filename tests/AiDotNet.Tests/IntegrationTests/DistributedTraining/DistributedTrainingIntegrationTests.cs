@@ -2166,7 +2166,6 @@ public class DistributedTrainingIntegrationTests
             return new ModelMetadata<double>
             {
                 Name = "MockDistributedModel",
-                ModelType = ModelType.NeuralNetwork,
                 TrainingDate = DateTimeOffset.UtcNow,
                 FeatureCount = _parameterCount
             };

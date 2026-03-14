@@ -30,6 +30,24 @@ namespace AiDotNet.Regression;
 /// estimate someone's weight if you only know their height.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create simple linear regression (y = mx + b)
+/// var model = new SimpleRegression&lt;double&gt;();
+///
+/// // Prepare single-feature data
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 1, new double[] { 1, 2, 3, 4, 5 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
+///
+/// // Train to find best-fit line
+/// model.Train(features, targets);
+///
+/// // Predict for new input
+/// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 6 });
+/// var prediction = model.Predict(newFeatures);
+/// Console.WriteLine($"Predicted value: {prediction[0]}");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
@@ -159,32 +177,5 @@ public class SimpleRegression<T> : RegressionBase<T>
     {
         // Create a new instance with the same options and regularization
         return new SimpleRegression<T>(Options, Regularization);
-    }
-
-    /// <summary>
-    /// Returns the type identifier for this regression model.
-    /// </summary>
-    /// <returns>
-    /// The model type identifier for simple regression.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used internally for model identification and serialization purposes.
-    /// It returns an enum value that identifies this model as a simple regression model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply tells the system what kind of model this is.
-    /// 
-    /// It's like a name tag for the model that says "I am a simple regression model."
-    /// This is useful when:
-    /// - Saving the model to a file
-    /// - Loading a model from a file
-    /// - Logging information about the model
-    /// 
-    /// You generally won't need to call this method directly in your code.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.SimpleRegression;
     }
 }

@@ -61,6 +61,10 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
         ApplyTimeSeriesOptions(options);
         _convergenceThreshold = options?.EdgeThreshold ?? 0.05;
         _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
+        if (_convergenceThreshold < 0 || _convergenceThreshold > 1)
+            throw new ArgumentException("EdgeThreshold (convergence threshold) must be between 0 and 1.");
+        if (_correlationThreshold < 0 || _correlationThreshold > 1)
+            throw new ArgumentException("CorrelationThreshold must be between 0 and 1.");
     }
 
     /// <inheritdoc/>
@@ -72,11 +76,14 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
         int embDim = MaxLag + 1;
         int tau = 1;
         int minLib = embDim + 2;
+        // The half-library convergence test requires validN/2 >= minLib,
+        // so validN >= 2*minLib, meaning n >= 2*minLib + (embDim-1)*tau
+        int minSamples = 2 * minLib + (embDim - 1) * tau;
 
         if (d < 2)
             throw new ArgumentException($"CCM requires at least 2 variables, got {d}.");
-        if (n < minLib * 2)
-            throw new ArgumentException($"CCM requires at least {minLib * 2} samples for embedding dimension {embDim}, got {n}.");
+        if (n < minSamples)
+            throw new ArgumentException($"CCM requires at least {minSamples} samples for embedding dimension {embDim}, got {n}.");
 
         var result = new Matrix<T>(d, d);
 

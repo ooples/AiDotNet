@@ -277,7 +277,6 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = _useNativeMode ? "TF-GridNet-Native" : "TF-GridNet-ONNX",
             Description = "TF-GridNet Time-Frequency Grid Enhancement (Wang et al., ICASSP 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.NumFreqBins,
             Complexity = _options.NumBlocks
         };

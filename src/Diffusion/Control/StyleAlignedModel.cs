@@ -31,6 +31,23 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Hertz et al., "Style Aligned Image Generation via Shared Attention", CVPR 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Style-Aligned model for consistent style across batches
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 512,
+///     Width = 512,
+///     NumInferenceSteps = 30
+/// };
+/// var model = new StyleAlignedModel&lt;float&gt;(options);
+///
+/// // Generate multiple images with consistent artistic style
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 4, 4, 64, 64 });
+/// var styledBatch = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -138,7 +155,7 @@ public class StyleAlignedModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Style-Aligned", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Style-Aligned", Version = "1.0",
             Description = "Shared attention for consistent style across multiple generated images",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

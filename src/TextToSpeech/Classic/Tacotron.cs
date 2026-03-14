@@ -22,6 +22,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> Tacotron is an attention-based text-to-speech model that converts text input into speech audio output.
 /// It uses a sequence-to-sequence architecture where an encoder processes text characters and a decoder generates
 /// mel-spectrogram frames one at a time (autoregressively), using attention to align text with audio.</para>
+/// <example>
+/// <code>
+/// // Create a Tacotron model for sequence-to-sequence TTS
+/// // with CBHG encoder and autoregressive decoder with attention
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Tacotron&lt;double&gt;(architecture, "tacotron.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Tacotron&lt;double&gt;(architecture, new TacotronOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -296,7 +312,6 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "Tacotron-Native" : "Tacotron-ONNX",
             Description = "Tacotron: Towards End-to-End Speech Synthesis (Wang et al., 2017)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };

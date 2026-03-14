@@ -27,7 +27,28 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// operating in continuous space with a score-matching objective for high-quality
 /// probabilistic forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> CCDM generates future time series values using a diffusion
+/// process, similar to how image generators create pictures by gradually refining random
+/// noise. Instead of predicting a single future value, it produces a range of probable
+/// outcomes, giving you confidence intervals for your forecasts. This is especially
+/// useful in finance where understanding uncertainty is as important as the prediction itself.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CCDM conditional continuous diffusion model for probabilistic forecasting
+/// // Generates future values by refining random noise conditioned on observed history
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with score-matching diffusion objective
+/// var model = new CCDM&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new CCDM&lt;double&gt;(architecture, "ccdm.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -281,7 +302,6 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.NeuralNetwork,
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "CCDM" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "SigmaMin", _sigmaMin }, { "SigmaMax", _sigmaMax }, { "UseNativeMode", _useNativeMode } },
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };

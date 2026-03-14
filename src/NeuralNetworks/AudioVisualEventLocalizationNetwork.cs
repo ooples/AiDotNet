@@ -22,6 +22,36 @@ namespace AiDotNet.NeuralNetworks;
 /// in video by jointly analyzing audio and visual streams with precise temporal boundaries.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// This network jointly analyzes audio and visual streams to identify when and where events
+/// occur in video, producing precise temporal boundaries for detected events.
+/// </para>
+/// <para><b>For Beginners:</b> This model watches and listens to video simultaneously to find
+/// specific events. For example, in a concert video it can identify:
+/// - WHEN the guitar solo starts and ends (temporal localization)
+/// - WHERE on screen the guitar player is (spatial localization)
+///
+/// It works by processing audio and video frames in parallel, then using cross-modal
+/// attention to find moments where what's heard matches what's seen. This is useful for
+/// video surveillance, sports analysis, and content moderation.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create an audio-visual event localization network
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Detection,
+///     inputSize: 512,
+///     outputSize: 128);
+///
+/// var model = new AudioVisualEventLocalizationNetwork&lt;float&gt;(architecture);
+///
+/// // Detect and localize events in audio-visual input
+/// Tensor&lt;float&gt; detections = model.Predict(inputTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -1342,7 +1372,6 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         return new ModelMetadata<T>
         {
             Name = "AudioVisualEventLocalizationNetwork",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _embeddingDimension,
             Complexity = _numEncoderLayers * 2 + 4,
             Description = "Audio-visual event localization network for temporal and spatial event detection"

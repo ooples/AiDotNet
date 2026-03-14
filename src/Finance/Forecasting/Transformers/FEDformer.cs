@@ -12,7 +12,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
@@ -41,6 +41,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// ICML 2022. https://arxiv.org/abs/2201.12740
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FEDformer for long-term forecasting with frequency-domain attention
+/// // Achieves O(N) complexity via Fourier/Wavelet transforms instead of O(N^2) attention
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with frequency-enhanced decomposed attention
+/// var model = new FEDformer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new FEDformer&lt;double&gt;(architecture, "fedformer_etth2.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -576,7 +592,6 @@ public class FEDformer<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "FEDformer" },

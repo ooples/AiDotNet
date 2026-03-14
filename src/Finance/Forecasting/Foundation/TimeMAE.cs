@@ -28,10 +28,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// and training a transformer to reconstruct the missing patches, learning rich temporal representations.
 /// It uses an asymmetric encoder-decoder architecture where the encoder processes visible patches only.
 /// </para>
+/// <para><b>For Beginners:</b> TimeMAE learns about time series by hiding random chunks of
+/// data and training a model to fill them back in, similar to how a student learns vocabulary
+/// by doing fill-in-the-blank exercises. The model only processes the visible chunks with a
+/// large encoder and uses a smaller decoder to reconstruct the hidden ones, making training
+/// very efficient. The learned representations transfer well to forecasting tasks.</para>
 /// <para>
 /// <b>Reference:</b> Cheng et al., "TimeMAE: Self-Supervised Representations of Time Series with Decoupled Masked Autoencoders", 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimeMAE masked autoencoder for time series representation learning
+/// // Asymmetric encoder-decoder learns by reconstructing randomly masked patches
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with masked patch reconstruction
+/// var model = new TimeMAE&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimeMAE&lt;double&gt;(architecture, "timemae.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -271,7 +292,6 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimeMAE" },

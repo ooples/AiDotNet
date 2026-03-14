@@ -38,6 +38,25 @@ namespace AiDotNet.Regression;
 /// Modelling Rates and Proportions". Journal of Applied Statistics, 31(7), 799-815.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Beta regression for modeling proportions (values in 0-1)
+/// var options = new BetaRegressionOptions&lt;double&gt;();
+/// var model = new BetaRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features, targets are proportions
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 0.15, 0.35, 0.50, 0.72, 0.88 });
+///
+/// // Train the model (predictions will be bounded between 0 and 1)
+/// model.Train(features, targets);
+///
+/// // Predict a proportion for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -667,7 +686,6 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.BetaRegression,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "LinkFunction", _options.LinkFunction.ToString() },

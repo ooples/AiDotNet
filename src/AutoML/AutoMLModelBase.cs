@@ -21,13 +21,19 @@ namespace AiDotNet.AutoML
     public abstract class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>, IModelShape
     {
         /// <summary>
+        /// Standard key used in trial parameter dictionaries to store the model <see cref="Type"/>.
+        /// Using this constant avoids typo-related runtime failures across all AutoML strategies.
+        /// </summary>
+        internal const string ModelTypeKey = "ModelType";
+
+        /// <summary>
         /// Hardware-accelerated engine for vector/tensor operations.
         /// </summary>
         protected static IEngine Engine => AiDotNetEngine.Current;
 
         protected readonly List<TrialResult> _trialHistory = new();
         protected readonly Dictionary<string, ParameterRange> _searchSpace = new();
-        protected readonly List<ModelType> _candidateModels = new();
+        protected readonly List<Type> _candidateModels = new();
         protected readonly List<SearchConstraint> _constraints = new();
         protected readonly object _lock = new();
 
@@ -60,7 +66,6 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Gets the model type
         /// </summary>
-        public virtual ModelType Type => ModelType.AutoML;
 
         /// <summary>
         /// Gets the current optimization status
@@ -116,7 +121,7 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Sets the models to consider in the search
         /// </summary>
-        public virtual void SetCandidateModels(List<ModelType> modelTypes)
+        public virtual void SetCandidateModels(List<Type> modelTypes)
         {
             lock (_lock)
             {
@@ -261,7 +266,7 @@ namespace AiDotNet.AutoML
                 TrainingDate = DateTimeOffset.UtcNow
             };
 
-            metadata.SetProperty("Type", Type.ToString());
+            metadata.SetProperty("Type", GetType().Name);
             metadata.SetProperty("Status", Status.ToString());
             metadata.SetProperty("BestScore", BestScore);
             metadata.SetProperty("TrialsCompleted", _trialHistory.Count);
@@ -298,7 +303,7 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Creates a model instance for the given type and parameters
         /// </summary>
-        protected abstract Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(ModelType modelType, Dictionary<string, object> parameters);
+        protected abstract Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(Type modelType, Dictionary<string, object> parameters);
 
         /// <summary>
         /// Evaluates a model on the validation set
@@ -594,7 +599,7 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Gets the default search space for a model type
         /// </summary>
-        protected abstract Dictionary<string, ParameterRange> GetDefaultSearchSpace(ModelType modelType);
+        protected abstract Dictionary<string, ParameterRange> GetDefaultSearchSpace(Type modelType);
 
         #region IModel Implementation
 
@@ -847,7 +852,7 @@ namespace AiDotNet.AutoML
                 copy._searchSpace[kvp.Key] = (ParameterRange)kvp.Value.Clone();
             }
 
-            // Copy candidate models (ModelType is an enum, so no deep copy needed)
+            // Copy candidate models (Type references, no deep copy needed)
             foreach (var model in _candidateModels)
             {
                 copy._candidateModels.Add(model);
@@ -964,21 +969,16 @@ namespace AiDotNet.AutoML
 
         #region IAutoMLModel Additional Interface Members
 
-        private static ModelType? TryExtractCandidateModelType(IReadOnlyDictionary<string, object> parameters)
+        private static Type? TryExtractCandidateModelType(IReadOnlyDictionary<string, object> parameters)
         {
-            if (parameters is null || !parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is null)
+            if (parameters is null || !parameters.TryGetValue(ModelTypeKey, out var modelTypeObj) || modelTypeObj is null)
             {
                 return null;
             }
 
-            if (modelTypeObj is ModelType modelType)
+            if (modelTypeObj is Type modelType)
             {
                 return modelType;
-            }
-
-            if (modelTypeObj is string text && Enum.TryParse<ModelType>(text, ignoreCase: true, out var parsed))
-            {
-                return parsed;
             }
 
             return null;
@@ -1100,7 +1100,7 @@ namespace AiDotNet.AutoML
         /// Sets which model types should be considered during the search
         /// </summary>
         /// <param name="modelTypes">List of model types to evaluate</param>
-        public virtual void SetModelsToTry(List<ModelType> modelTypes)
+        public virtual void SetModelsToTry(List<Type> modelTypes)
         {
             SetCandidateModels(modelTypes);
         }
