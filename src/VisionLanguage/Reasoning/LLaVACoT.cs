@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// <list type="bullet"><item>Paper: "LLaVA-CoT: Let Vision Language Models Reason Step-by-Step" (2024)</item></list></para>
 /// <para><b>For Beginners:</b> LLaVACoT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LLaVA-CoT model for step-by-step visual reasoning
+/// // with chain-of-thought structured output for complex visual tasks
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LLaVACoT&lt;double&gt;(architecture, "llavacot.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LLaVACoT&lt;double&gt;(architecture, new LLaVACoTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

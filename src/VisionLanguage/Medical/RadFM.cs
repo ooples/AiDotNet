@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <list type="bullet"><item>Paper: "RadFM: Towards Generalist Foundation Model for Radiology (Various, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> RadFM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RadFM model for radiology report generation and VQA
+/// // with 3D ViT encoding for volumetric CT/MRI data
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new RadFM&lt;double&gt;(architecture, "radfm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new RadFM&lt;double&gt;(architecture, new RadFMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Healthcare)]

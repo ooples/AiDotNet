@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// <list type="bullet"><item>Paper: "Scene-LLM: Extending Language Model for 3D Visual Understanding and Reasoning (Various, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> SceneLLM is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Scene-LLM model for voxel-based 3D scene understanding
+/// // with language-guided spatial reasoning over indoor environments
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SceneLLM&lt;double&gt;(architecture, "scenellm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SceneLLM&lt;double&gt;(architecture, new SceneLLMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.ThreeD)]

@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// <list type="bullet"><item>Paper: "QVQ: To See the World with Wisdom" (Qwen Team, 2024)</item></list></para>
 /// <para><b>For Beginners:</b> QVQ72B is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a QVQ-72B model for open-source multimodal reasoning
+/// // based on the Qwen architecture with visual chain-of-thought
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new QVQ72B&lt;double&gt;(architecture, "qvq72b.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new QVQ72B&lt;double&gt;(architecture, new QVQ72BOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

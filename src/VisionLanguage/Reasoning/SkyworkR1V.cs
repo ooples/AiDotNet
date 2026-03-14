@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// <list type="bullet"><item>Paper: "Skywork R1V: Pioneering Multimodal Reasoning with Chain-of-Thought" (2025)</item></list></para>
 /// <para><b>For Beginners:</b> SkyworkR1V is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Skywork R1V model for multimodal chain-of-thought reasoning
+/// // with cross-modal transfer of reasoning capabilities from LLMs to vision
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SkyworkR1V&lt;double&gt;(architecture, "skyworkr1v.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SkyworkR1V&lt;double&gt;(architecture, new SkyworkR1VOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]

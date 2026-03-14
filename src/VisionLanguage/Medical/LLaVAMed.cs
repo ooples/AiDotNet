@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <list type="bullet"><item>Paper: "LLaVA-Med: Training a Large Language-and-Vision Assistant for Biomedicine (Microsoft, 2023)"</item></list></para>
 /// <para><b>For Beginners:</b> LLaVAMed is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LLaVA-Med model for biomedical visual question answering
+/// // with curriculum learning on PubMed Central figure-caption pairs
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LLaVAMed&lt;double&gt;(architecture, "llavamed.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LLaVAMed&lt;double&gt;(architecture, new LLaVAMedOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Healthcare)]

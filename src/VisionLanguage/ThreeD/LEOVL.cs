@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// <list type="bullet"><item>Paper: "LEO-VL: Efficient 3D Scene Understanding via Multi-View RGB-D (Various, 2025)"</item></list></para>
 /// <para><b>For Beginners:</b> LEOVL is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LEO-VL model for 3D scene understanding
+/// // with efficient multi-view RGB-D representation learning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LEOVL&lt;double&gt;(architecture, "leovl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LEOVL&lt;double&gt;(architecture, new LEOVLOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.ThreeD)]

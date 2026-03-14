@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// <list type="bullet"><item>Paper: "Dragonfly-Med: Multi-Resolution Visual Encoding for Medical Image Understanding (Together.ai, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> DragonflyMed is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Dragonfly-Med model for medical image understanding
+/// // with multi-resolution visual encoding for fine-grained clinical details
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DragonflyMed&lt;double&gt;(architecture, "dragonflymed.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DragonflyMed&lt;double&gt;(architecture, new DragonflyMedOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Healthcare)]

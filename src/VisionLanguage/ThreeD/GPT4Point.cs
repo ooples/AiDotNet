@@ -21,6 +21,22 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// <list type="bullet"><item>Paper: "GPT4Point: A Unified Framework for Point-Language Understanding and Generation (Various, 2024)"</item></list></para>
 /// <para><b>For Beginners:</b> GPT4Point is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GPT4Point model for unified point cloud-language understanding
+/// // and 3D point cloud generation from text descriptions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GPT4Point&lt;double&gt;(architecture, "gpt4point.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GPT4Point&lt;double&gt;(architecture, new GPT4PointOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.ThreeD)]
