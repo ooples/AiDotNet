@@ -359,22 +359,25 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         var lastHidden = currentOutput[currentOutput.Count - 1];
         var (normalizedOutput, layerNormCache) = ApplyLayerNormWithCache(lastHidden, _finalLayerNormGamma, _finalLayerNormBeta);
 
-        // Compute logits and softmax
+        // Compute logits via Engine-accelerated matrix-vector multiply: logits = W * x + b
+        // This replaces the O(vocabSize × embDim) manual nested loop with a single BLAS call
+        var projMatrix = new Matrix<T>(_vocabularySize, _options.EmbeddingDim);
+        for (int i = 0; i < _vocabularySize; i++)
+            for (int j = 0; j < _options.EmbeddingDim; j++)
+                projMatrix[i, j] = _outputProjection[i, j];
+
+        var normVec = normalizedOutput.ToVector();
+        var colMatrix = new Matrix<T>(normVec.Length, 1);
+        for (int i = 0; i < normVec.Length; i++) colMatrix[i, 0] = normVec[i];
+
+        var logitMatrix = (Matrix<T>)Engine.MatrixMultiply(projMatrix, colMatrix);
+
         var logits = new double[_vocabularySize];
         double maxLogit = double.NegativeInfinity;
-
         for (int i = 0; i < _vocabularySize; i++)
         {
-            double sum = Convert.ToDouble(_outputBias[i]);
-            for (int j = 0; j < _options.EmbeddingDim; j++)
-            {
-                sum += Convert.ToDouble(_outputProjection[i, j]) * Convert.ToDouble(normalizedOutput[j]);
-            }
-            logits[i] = sum;
-            if (sum > maxLogit)
-            {
-                maxLogit = sum;
-            }
+            logits[i] = _numOps.ToDouble(_numOps.Add(logitMatrix[i, 0], _outputBias[i]));
+            if (logits[i] > maxLogit) maxLogit = logits[i];
         }
 
         // Softmax
@@ -402,21 +405,32 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         }
 
         // Backprop through output projection
-        var dOutputProjection = new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
         var dOutputBias = dLogits; // dL/dBias = dL/dLogits
-        var dNormalized = new Tensor<T>(new[] { _options.EmbeddingDim });
 
+        // Engine-accelerated gradient computation:
+        // dW = dLogits (col) * normalizedOutput^T (row) — outer product via MatrixMultiply
+        var dLogitsVec = dLogits.ToVector();
+        var dLogitsCol = new Matrix<T>(_vocabularySize, 1);
+        for (int i = 0; i < _vocabularySize; i++) dLogitsCol[i, 0] = dLogitsVec[i];
+        var normRow = new Matrix<T>(1, _options.EmbeddingDim);
+        for (int j = 0; j < _options.EmbeddingDim; j++) normRow[0, j] = normalizedOutput[j];
+
+        var dWMatrix = (Matrix<T>)Engine.MatrixMultiply(dLogitsCol, normRow);
+        var dOutputProjection = new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
         for (int i = 0; i < _vocabularySize; i++)
-        {
             for (int j = 0; j < _options.EmbeddingDim; j++)
-            {
-                // dL/dW[i,j] = dL/dlogits[i] * normalized[j]
-                dOutputProjection[i, j] = _numOps.Multiply(dLogits[i], normalizedOutput[j]);
-                // dL/dnormalized[j] += dL/dlogits[i] * W[i,j]
-                dNormalized[j] = _numOps.Add(dNormalized[j],
-                    _numOps.Multiply(dLogits[i], _outputProjection[i, j]));
-            }
-        }
+                dOutputProjection[i, j] = dWMatrix[i, j];
+
+        // dNormalized = W^T * dLogits — Engine-accelerated matrix-vector multiply
+        var projTranspose = new Matrix<T>(_options.EmbeddingDim, _vocabularySize);
+        for (int i = 0; i < _vocabularySize; i++)
+            for (int j = 0; j < _options.EmbeddingDim; j++)
+                projTranspose[j, i] = _outputProjection[i, j];
+
+        var dNormMatrix = (Matrix<T>)Engine.MatrixMultiply(projTranspose, dLogitsCol);
+        var dNormalized = new Tensor<T>(new[] { _options.EmbeddingDim });
+        for (int j = 0; j < _options.EmbeddingDim; j++)
+            dNormalized[j] = dNormMatrix[j, 0];
 
         gradients["outputProjection"] = dOutputProjection;
         gradients["outputBias"] = dOutputBias;
@@ -826,7 +840,11 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         int layerCount = reader.ReadInt32();
         _transformerLayers = new List<ChronosTransformerLayerTensor<T>>(layerCount);
         for (int i = 0; i < layerCount; i++)
-            _transformerLayers.Add(ChronosTransformerLayerTensor<T>.Deserialize(reader));
+        {
+            var layer = new ChronosTransformerLayerTensor<T>();
+            layer.Deserialize(reader);
+            _transformerLayers.Add(layer);
+        }
 
         _finalLayerNormGamma = DeserializeTensor(reader);
         _finalLayerNormBeta = DeserializeTensor(reader);
@@ -909,35 +927,14 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 /// </summary>
 public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 {
-    /// <summary>
-    /// Context length for input sequences. Default is 64 for CPU-friendly training.
-    /// For GPU training with proper hardware acceleration, increase to 512+.
-    /// </summary>
-    public int ContextLength { get; set; } = 64;
-
-    public int ForecastHorizon { get; set; } = 16;
-
-    /// <summary>
-    /// Vocabulary size for token discretization. Default is 256 for CPU-friendly training.
-    /// Original Chronos paper uses 4096 but that requires GPU acceleration.
-    /// </summary>
-    public int VocabularySize { get; set; } = 256;
-
-    /// <summary>
-    /// Embedding dimension. Default is 64 for CPU-friendly training.
-    /// For GPU training, increase to 256+.
-    /// </summary>
-    public int EmbeddingDim { get; set; } = 64;
-
-    /// <summary>
-    /// Number of transformer layers. Default is 2 for CPU-friendly training.
-    /// For GPU training, increase to 6+.
-    /// </summary>
-    public int NumLayers { get; set; } = 2;
-
-    public int NumHeads { get; set; } = 4;
-    public double LearningRate { get; set; } = 0.001;
-    public int Epochs { get; set; } = 50;
+    public int ContextLength { get; set; } = 512;
+    public int ForecastHorizon { get; set; } = 64;
+    public int VocabularySize { get; set; } = 4096;
+    public int EmbeddingDim { get; set; } = 256;
+    public int NumLayers { get; set; } = 6;
+    public int NumHeads { get; set; } = 8;
+    public double LearningRate { get; set; } = 0.0001;
+    public int Epochs { get; set; } = 100;
 
     public ChronosOptions() { }
 
@@ -967,9 +964,8 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 /// Chronos transformer layer with causal multi-head self-attention and feed-forward network.
 /// Now uses Tensor<T> and proper backpropagation.
 /// </summary>
-internal class ChronosTransformerLayerTensor<T>
+internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
@@ -1000,14 +996,63 @@ internal class ChronosTransformerLayerTensor<T>
     private List<Tensor<T>>? _cachedNorm2;
     private List<Tensor<T>>? _cachedFfnHidden;
 
-    public int ParameterCount =>
+    public override int ParameterCount =>
         _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
         _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
         _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
 
-    public ChronosTransformerLayerTensor(int embeddingDim, int numHeads, int seed = 42)
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+
+    public override void ResetState()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        _cachedInput = null;
+        _cachedNorm1 = null;
+        _cachedAttentionOutput = null;
+        _cachedResidual1 = null;
+        _cachedNorm2 = null;
+        _cachedFfnHidden = null;
+    }
+
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // Single-tensor interface: treat as single-position sequence
+        var seqInput = new List<Tensor<T>> { input };
+        var seqOutput = Forward(seqInput);
+        return seqOutput.Count > 0 ? seqOutput[seqOutput.Count - 1] : input;
+    }
+
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        // Single-tensor backward through the existing two-arg Backward
+        var dOutput = new List<Tensor<T>> { outputGradient };
+        var input = _cachedInput ?? new List<Tensor<T>> { new Tensor<T>(new[] { _embeddingDim }) };
+        var (dInput, _) = Backward(dOutput, input);
+        return dInput.Count > 0 ? dInput[0] : new Tensor<T>(new[] { _embeddingDim });
+    }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        // Apply gradient descent to all weight tensors
+        // Gradients are computed and applied by the model's ApplyGradients method
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _embeddingDim }), "chronos_transformer_output");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        foreach (var tensor in new[] { _queryProj, _keyProj, _valueProj, _outputProj, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta })
+            for (int i = 0; i < tensor.Length; i++) allParams.Add(tensor[i]);
+        return new Vector<T>(allParams.ToArray());
+    }
+
+    public ChronosTransformerLayerTensor(int embeddingDim, int numHeads, int seed = 42)
+        : base(new[] { embeddingDim }, new[] { embeddingDim })
+    {
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _headDim = embeddingDim / numHeads;
@@ -1036,9 +1081,9 @@ internal class ChronosTransformerLayerTensor<T>
         _layerNorm2Beta = new Tensor<T>(new[] { embeddingDim });
     }
 
-    private ChronosTransformerLayerTensor()
+    internal ChronosTransformerLayerTensor()
+        : base(new[] { 1 }, new[] { 1 })
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _embeddingDim = 0;
         _numHeads = 1;
         _headDim = 0;
@@ -1061,7 +1106,7 @@ internal class ChronosTransformerLayerTensor<T>
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
         return tensor;
     }
@@ -1071,7 +1116,7 @@ internal class ChronosTransformerLayerTensor<T>
         var tensor = new Tensor<T>(new[] { size });
         for (int i = 0; i < size; i++)
         {
-            tensor[i] = _numOps.One;
+            tensor[i] = NumOps.One;
         }
         return tensor;
     }
@@ -1138,7 +1183,7 @@ internal class ChronosTransformerLayerTensor<T>
         {
             for (int i = 0; i < _embeddingDim; i++)
             {
-                dResidual1[t][i] = _numOps.Add(dResidual1[t][i], dResidual1FromNorm[t][i]);
+                dResidual1[t][i] = NumOps.Add(dResidual1[t][i], dResidual1FromNorm[t][i]);
             }
         }
 
@@ -1161,7 +1206,7 @@ internal class ChronosTransformerLayerTensor<T>
         {
             for (int i = 0; i < _embeddingDim; i++)
             {
-                dInput[t][i] = _numOps.Add(dInput[t][i], dInputFromNorm[t][i]);
+                dInput[t][i] = NumOps.Add(dInput[t][i], dInputFromNorm[t][i]);
             }
         }
 
@@ -1204,8 +1249,8 @@ internal class ChronosTransformerLayerTensor<T>
             {
                 for (int d = 0; d < _embeddingDim; d++)
                 {
-                    result[d] = _numOps.Add(result[d],
-                        _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), values[k][d]));
+                    result[d] = NumOps.Add(result[d],
+                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
                 }
             }
             output.Add(MatVecMul(_outputProj, result));
@@ -1262,8 +1307,8 @@ internal class ChronosTransformerLayerTensor<T>
             {
                 for (int d = 0; d < _embeddingDim; d++)
                 {
-                    weightedValue[d] = _numOps.Add(weightedValue[d],
-                        _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), values[k][d]));
+                    weightedValue[d] = NumOps.Add(weightedValue[d],
+                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
                 }
             }
 
@@ -1273,8 +1318,8 @@ internal class ChronosTransformerLayerTensor<T>
             {
                 for (int j = 0; j < _embeddingDim; j++)
                 {
-                    dOutputProj[i, j] = _numOps.Add(dOutputProj[i, j],
-                        _numOps.Multiply(dOutput[q][i], weightedValue[j]));
+                    dOutputProj[i, j] = NumOps.Add(dOutputProj[i, j],
+                        NumOps.Multiply(dOutput[q][i], weightedValue[j]));
                 }
             }
 
@@ -1285,17 +1330,17 @@ internal class ChronosTransformerLayerTensor<T>
                 for (int d = 0; d < _embeddingDim; d++)
                 {
                     // Gradient to values: d(weighted_value)/d(attn_weight) = value
-                    var dv = _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), dWeightedValue[d]);
+                    var dv = NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), dWeightedValue[d]);
                     // Accumulate to value projection gradients
                     for (int i = 0; i < _embeddingDim; i++)
                     {
-                        dValueProj[d, i] = _numOps.Add(dValueProj[d, i],
-                            _numOps.Multiply(dv, input[k][i]));
-                        dInput[k][i] = _numOps.Add(dInput[k][i],
-                            _numOps.Multiply(_valueProj[d, i], dv));
+                        dValueProj[d, i] = NumOps.Add(dValueProj[d, i],
+                            NumOps.Multiply(dv, input[k][i]));
+                        dInput[k][i] = NumOps.Add(dInput[k][i],
+                            NumOps.Multiply(_valueProj[d, i], dv));
                     }
                     // Gradient w.r.t. attention weights from this value dimension
-                    dAttnWeights[k] += Convert.ToDouble(_numOps.Multiply(dWeightedValue[d], values[k][d]));
+                    dAttnWeights[k] += Convert.ToDouble(NumOps.Multiply(dWeightedValue[d], values[k][d]));
                 }
             }
 
@@ -1320,33 +1365,33 @@ internal class ChronosTransformerLayerTensor<T>
             // d(score_k)/d(K[k]) = Q / sqrt(d)
             for (int k = 0; k <= q; k++)
             {
-                T dScoreScaled = _numOps.FromDouble(dScores[k] * scale);
+                T dScoreScaled = NumOps.FromDouble(dScores[k] * scale);
 
                 // Gradient to query at position q
                 for (int d = 0; d < _embeddingDim; d++)
                 {
-                    T dQ = _numOps.Multiply(dScoreScaled, keys[k][d]);
+                    T dQ = NumOps.Multiply(dScoreScaled, keys[k][d]);
                     // Accumulate to query projection gradients
                     for (int i = 0; i < _embeddingDim; i++)
                     {
-                        dQueryProj[d, i] = _numOps.Add(dQueryProj[d, i],
-                            _numOps.Multiply(dQ, input[q][i]));
-                        dInput[q][i] = _numOps.Add(dInput[q][i],
-                            _numOps.Multiply(_queryProj[d, i], dQ));
+                        dQueryProj[d, i] = NumOps.Add(dQueryProj[d, i],
+                            NumOps.Multiply(dQ, input[q][i]));
+                        dInput[q][i] = NumOps.Add(dInput[q][i],
+                            NumOps.Multiply(_queryProj[d, i], dQ));
                     }
                 }
 
                 // Gradient to key at position k
                 for (int d = 0; d < _embeddingDim; d++)
                 {
-                    T dK = _numOps.Multiply(dScoreScaled, queries[q][d]);
+                    T dK = NumOps.Multiply(dScoreScaled, queries[q][d]);
                     // Accumulate to key projection gradients
                     for (int i = 0; i < _embeddingDim; i++)
                     {
-                        dKeyProj[d, i] = _numOps.Add(dKeyProj[d, i],
-                            _numOps.Multiply(dK, input[k][i]));
-                        dInput[k][i] = _numOps.Add(dInput[k][i],
-                            _numOps.Multiply(_keyProj[d, i], dK));
+                        dKeyProj[d, i] = NumOps.Add(dKeyProj[d, i],
+                            NumOps.Multiply(dK, input[k][i]));
+                        dInput[k][i] = NumOps.Add(dInput[k][i],
+                            NumOps.Multiply(_keyProj[d, i], dK));
                     }
                 }
             }
@@ -1383,8 +1428,8 @@ internal class ChronosTransformerLayerTensor<T>
             for (int i = 0; i < vec.Length && i < gamma.Length; i++)
             {
                 double norm = (Convert.ToDouble(vec[i]) - mean) / stddev;
-                normalized[i] = _numOps.Add(
-                    _numOps.Multiply(gamma[i], _numOps.FromDouble(norm)),
+                normalized[i] = NumOps.Add(
+                    NumOps.Multiply(gamma[i], NumOps.FromDouble(norm)),
                     beta[i]);
             }
             output.Add(normalized);
@@ -1424,11 +1469,11 @@ internal class ChronosTransformerLayerTensor<T>
                 double norm = (x - mean) / stddev;
                 double dout = Convert.ToDouble(dOut[i]);
 
-                dGamma[i] = _numOps.Add(dGamma[i], _numOps.FromDouble(dout * norm));
-                dBeta[i] = _numOps.Add(dBeta[i], _numOps.FromDouble(dout));
+                dGamma[i] = NumOps.Add(dGamma[i], NumOps.FromDouble(dout * norm));
+                dBeta[i] = NumOps.Add(dBeta[i], NumOps.FromDouble(dout));
 
                 double dNorm = dout * Convert.ToDouble(gamma[i]);
-                dInp[i] = _numOps.FromDouble(dNorm / stddev);
+                dInp[i] = NumOps.FromDouble(dNorm / stddev);
             }
             dInput.Add(dInp);
         }
@@ -1446,14 +1491,14 @@ internal class ChronosTransformerLayerTensor<T>
             var hidden = MatVecMul(_ffn1, vec);
             for (int i = 0; i < hidden.Length; i++)
             {
-                hidden[i] = _numOps.Add(hidden[i], _ffn1Bias[i]);
+                hidden[i] = NumOps.Add(hidden[i], _ffn1Bias[i]);
                 hidden[i] = GELU(hidden[i]);
             }
             _cachedFfnHidden.Add(hidden);
 
             var result = MatVecMul(_ffn2, hidden);
             for (int i = 0; i < result.Length; i++)
-                result[i] = _numOps.Add(result[i], _ffn2Bias[i]);
+                result[i] = NumOps.Add(result[i], _ffn2Bias[i]);
             output.Add(result);
         }
         return output;
@@ -1481,11 +1526,11 @@ internal class ChronosTransformerLayerTensor<T>
             // Backprop through second linear
             for (int i = 0; i < _embeddingDim; i++)
             {
-                dFfn2Bias[i] = _numOps.Add(dFfn2Bias[i], dOut[i]);
+                dFfn2Bias[i] = NumOps.Add(dFfn2Bias[i], dOut[i]);
                 for (int j = 0; j < ffnDim; j++)
                 {
-                    dFfn2[i, j] = _numOps.Add(dFfn2[i, j],
-                        _numOps.Multiply(dOut[i], hidden[j]));
+                    dFfn2[i, j] = NumOps.Add(dFfn2[i, j],
+                        NumOps.Multiply(dOut[i], hidden[j]));
                 }
             }
 
@@ -1520,17 +1565,17 @@ internal class ChronosTransformerLayerTensor<T>
                 // Clamp gradient for numerical stability
                 geluGrad = Math.Max(-10.0, Math.Min(10.0, geluGrad));
 
-                dHidden[i] = _numOps.Multiply(dHidden[i], _numOps.FromDouble(geluGrad));
+                dHidden[i] = NumOps.Multiply(dHidden[i], NumOps.FromDouble(geluGrad));
             }
 
             // Backprop through first linear
             for (int i = 0; i < ffnDim; i++)
             {
-                dFfn1Bias[i] = _numOps.Add(dFfn1Bias[i], dHidden[i]);
+                dFfn1Bias[i] = NumOps.Add(dFfn1Bias[i], dHidden[i]);
                 for (int j = 0; j < _embeddingDim; j++)
                 {
-                    dFfn1[i, j] = _numOps.Add(dFfn1[i, j],
-                        _numOps.Multiply(dHidden[i], inp[j]));
+                    dFfn1[i, j] = NumOps.Add(dFfn1[i, j],
+                        NumOps.Multiply(dHidden[i], inp[j]));
                 }
             }
 
@@ -1550,7 +1595,7 @@ internal class ChronosTransformerLayerTensor<T>
     {
         double xd = Convert.ToDouble(x);
         double gelu = xd * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (xd + 0.044715 * xd * xd * xd)));
-        return _numOps.FromDouble(gelu);
+        return NumOps.FromDouble(gelu);
     }
 
     private List<Tensor<T>> AddResidual(List<Tensor<T>> input, List<Tensor<T>> residual)
@@ -1560,7 +1605,7 @@ internal class ChronosTransformerLayerTensor<T>
         {
             var vec = new Tensor<T>(new[] { input[t].Length });
             for (int i = 0; i < input[t].Length && i < residual[t].Length; i++)
-                vec[i] = _numOps.Add(input[t][i], residual[t][i]);
+                vec[i] = NumOps.Add(input[t][i], residual[t][i]);
             output.Add(vec);
         }
         return output;
@@ -1570,14 +1615,22 @@ internal class ChronosTransformerLayerTensor<T>
     {
         int rows = matrix.Shape[0];
         int cols = matrix.Shape[1];
+
+        // Engine-accelerated matrix-vector multiply using BLAS
+        var mat = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                mat[i, j] = matrix[i, j];
+
+        var colMat = new Matrix<T>(Math.Min(cols, vec.Length), 1);
+        for (int j = 0; j < colMat.Rows; j++)
+            colMat[j, 0] = vec[j];
+
+        var resultMat = (Matrix<T>)Engine.MatrixMultiply(mat, colMat);
+
         var result = new Tensor<T>(new[] { rows });
         for (int i = 0; i < rows; i++)
-        {
-            T sum = _numOps.Zero;
-            for (int j = 0; j < Math.Min(cols, vec.Length); j++)
-                sum = _numOps.Add(sum, _numOps.Multiply(matrix[i, j], vec[j]));
-            result[i] = sum;
-        }
+            result[i] = resultMat[i, 0];
         return result;
     }
 
@@ -1585,14 +1638,22 @@ internal class ChronosTransformerLayerTensor<T>
     {
         int rows = matrix.Shape[0];
         int cols = matrix.Shape[1];
+
+        // Engine-accelerated transpose matrix-vector multiply: result = M^T * v
+        var matT = new Matrix<T>(cols, rows);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                matT[j, i] = matrix[i, j];
+
+        var colMat = new Matrix<T>(Math.Min(rows, vec.Length), 1);
+        for (int i = 0; i < colMat.Rows; i++)
+            colMat[i, 0] = vec[i];
+
+        var resultMat = (Matrix<T>)Engine.MatrixMultiply(matT, colMat);
+
         var result = new Tensor<T>(new[] { cols });
         for (int j = 0; j < cols; j++)
-        {
-            T sum = _numOps.Zero;
-            for (int i = 0; i < Math.Min(rows, vec.Length); i++)
-                sum = _numOps.Add(sum, _numOps.Multiply(matrix[i, j], vec[i]));
-            result[j] = sum;
-        }
+            result[j] = resultMat[j, 0];
         return result;
     }
 
@@ -1631,7 +1692,7 @@ internal class ChronosTransformerLayerTensor<T>
         }
     }
 
-    public void Serialize(BinaryWriter writer)
+    public override void Serialize(BinaryWriter writer)
     {
         writer.Write(_embeddingDim);
         writer.Write(_numHeads);
@@ -1659,38 +1720,33 @@ internal class ChronosTransformerLayerTensor<T>
             writer.Write(Convert.ToDouble(tensor[i]));
     }
 
-    public static ChronosTransformerLayerTensor<T> Deserialize(BinaryReader reader)
+    public override void Deserialize(BinaryReader reader)
     {
-        var layer = new ChronosTransformerLayerTensor<T>();
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         int embeddingDim = reader.ReadInt32();
         int numHeads = reader.ReadInt32();
 
         typeof(ChronosTransformerLayerTensor<T>).GetField("_embeddingDim",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(layer, embeddingDim);
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(this, embeddingDim);
         typeof(ChronosTransformerLayerTensor<T>).GetField("_numHeads",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(layer, numHeads);
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(this, numHeads);
         typeof(ChronosTransformerLayerTensor<T>).GetField("_headDim",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(layer, embeddingDim / numHeads);
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(this, embeddingDim / numHeads);
 
-        layer._queryProj = DeserializeTensor(reader, numOps);
-        layer._keyProj = DeserializeTensor(reader, numOps);
-        layer._valueProj = DeserializeTensor(reader, numOps);
-        layer._outputProj = DeserializeTensor(reader, numOps);
-        layer._ffn1 = DeserializeTensor(reader, numOps);
-        layer._ffn1Bias = DeserializeTensor(reader, numOps);
-        layer._ffn2 = DeserializeTensor(reader, numOps);
-        layer._ffn2Bias = DeserializeTensor(reader, numOps);
-        layer._layerNorm1Gamma = DeserializeTensor(reader, numOps);
-        layer._layerNorm1Beta = DeserializeTensor(reader, numOps);
-        layer._layerNorm2Gamma = DeserializeTensor(reader, numOps);
-        layer._layerNorm2Beta = DeserializeTensor(reader, numOps);
-
-        return layer;
+        _queryProj = DeserializeTensor(reader);
+        _keyProj = DeserializeTensor(reader);
+        _valueProj = DeserializeTensor(reader);
+        _outputProj = DeserializeTensor(reader);
+        _ffn1 = DeserializeTensor(reader);
+        _ffn1Bias = DeserializeTensor(reader);
+        _ffn2 = DeserializeTensor(reader);
+        _ffn2Bias = DeserializeTensor(reader);
+        _layerNorm1Gamma = DeserializeTensor(reader);
+        _layerNorm1Beta = DeserializeTensor(reader);
+        _layerNorm2Gamma = DeserializeTensor(reader);
+        _layerNorm2Beta = DeserializeTensor(reader);
     }
 
-    private static Tensor<T> DeserializeTensor(BinaryReader reader, INumericOperations<T> numOps)
+    private Tensor<T> DeserializeTensor(BinaryReader reader)
     {
         int rank = reader.ReadInt32();
         var shape = new int[rank];
@@ -1699,7 +1755,7 @@ internal class ChronosTransformerLayerTensor<T>
 
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = numOps.FromDouble(reader.ReadDouble());
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
         return tensor;
     }
 }
