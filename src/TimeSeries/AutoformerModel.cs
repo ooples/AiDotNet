@@ -1698,8 +1698,9 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         var seasonal = new Tensor<T>(input.Shape);
-        var encoderOutput = _lastEncoderOutput ?? input;
-        var (outTrend, outSeasonal) = Forward(input, seasonal, encoderOutput, _topK);
+        var encTrend = _lastEncoderOutput ?? input;
+        var encSeasonal = new Tensor<T>(input.Shape);
+        var (outTrend, outSeasonal) = Forward(input, seasonal, encTrend, encSeasonal, _topK);
         var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
         for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
         for (int i = 0; i < outSeasonal.Length; i++) output[outTrend.Length + i] = outSeasonal[i];
@@ -1708,10 +1709,10 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override Tensor<T> Forward(params Tensor<T>[] inputs)
     {
-        if (inputs.Length >= 3)
+        if (inputs.Length >= 4)
         {
             _lastEncoderOutput = inputs[2];
-            var (outTrend, outSeasonal) = Forward(inputs[0], inputs[1], inputs[2], _topK);
+            var (outTrend, outSeasonal) = Forward(inputs[0], inputs[1], inputs[2], inputs[3], _topK);
             var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
             for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
             for (int i = 0; i < outSeasonal.Length; i++) output[outTrend.Length + i] = outSeasonal[i];
