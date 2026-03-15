@@ -51,10 +51,10 @@ public class OPTICS<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private T[]? _reachabilityDistances;
-    private T[]? _coreDistances;
-    private int[]? _ordering;
-    private int[]? _predecessor;
+    private Vector<T> _reachabilityDistances = new Vector<T>(0);
+    private Vector<T> _coreDistances = new Vector<T>(0);
+    private int[] _ordering = Array.Empty<int>();
+    private int[] _predecessor = Array.Empty<int>();
 
     /// <summary>
     /// Noise label for points not in any cluster.
@@ -74,17 +74,17 @@ public class OPTICS<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the reachability distances in ordering.
     /// </summary>
-    public T[]? ReachabilityDistances => _reachabilityDistances;
+    public Vector<T> ReachabilityDistances => _reachabilityDistances;
 
     /// <summary>
     /// Gets the core distances for each point.
     /// </summary>
-    public T[]? CoreDistances => _coreDistances;
+    public Vector<T> CoreDistances => _coreDistances;
 
     /// <summary>
     /// Gets the cluster ordering.
     /// </summary>
-    public int[]? Ordering => _ordering;
+    public int[] Ordering => _ordering;
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;
@@ -125,8 +125,8 @@ public class OPTICS<T> : ClusteringBase<T>
         }
 
         // Initialize arrays
-        _reachabilityDistances = new T[n];
-        _coreDistances = new T[n];
+        _reachabilityDistances = new Vector<T>(n);
+        _coreDistances = new Vector<T>(n);
         _ordering = new int[n];
         _predecessor = new int[n];
         var processed = new bool[n];
@@ -226,7 +226,7 @@ public class OPTICS<T> : ClusteringBase<T>
         var centerPoint = GetRow(x, centerIdx);
         var neighbors = FindNeighbors(neighborFinder, x, centerPoint, maxEps);
 
-        T coreDist = _coreDistances![centerIdx];
+        T coreDist = _coreDistances[centerIdx];
 
         foreach (int neighborIdx in neighbors)
         {
@@ -236,13 +236,13 @@ public class OPTICS<T> : ClusteringBase<T>
             T dist = metric.Compute(centerPoint, neighborPoint);
             T reachDist = NumOps.GreaterThan(coreDist, dist) ? coreDist : dist;
 
-            if (NumOps.LessThan(reachDist, _reachabilityDistances![neighborIdx]))
+            if (NumOps.LessThan(reachDist, _reachabilityDistances[neighborIdx]))
             {
                 // Remove old entry if exists (use double for SortedSet)
                 seeds.Remove((NumOps.ToDouble(_reachabilityDistances[neighborIdx]), neighborIdx));
 
                 _reachabilityDistances[neighborIdx] = reachDist;
-                _predecessor![neighborIdx] = centerIdx;
+                _predecessor[neighborIdx] = centerIdx;
 
                 seeds.Add((NumOps.ToDouble(reachDist), neighborIdx));
             }
@@ -275,12 +275,12 @@ public class OPTICS<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            int pointIdx = _ordering![i];
+            int pointIdx = _ordering[i];
 
-            if (NumOps.GreaterThan(_reachabilityDistances![pointIdx], eps))
+            if (NumOps.GreaterThan(_reachabilityDistances[pointIdx], eps))
             {
                 // Start new cluster or noise
-                if (NumOps.LessThan(_coreDistances![pointIdx], infinity) &&
+                if (NumOps.LessThan(_coreDistances[pointIdx], infinity) &&
                     !NumOps.GreaterThan(_coreDistances[pointIdx], eps))
                 {
                     if (Labels is not null)
@@ -317,11 +317,11 @@ public class OPTICS<T> : ClusteringBase<T>
         // Find steep up and down areas
         for (int i = 1; i < n; i++)
         {
-            int prevIdx = _ordering![i - 1];
-            int currIdx = _ordering![i];
+            int prevIdx = _ordering[i - 1];
+            int currIdx = _ordering[i];
 
-            T prevReach = _reachabilityDistances![prevIdx];
-            T currReach = _reachabilityDistances![currIdx];
+            T prevReach = _reachabilityDistances[prevIdx];
+            T currReach = _reachabilityDistances[currIdx];
 
             if (!NumOps.LessThan(prevReach, infinity)) prevReach = maxEps;
             if (!NumOps.LessThan(currReach, infinity)) currReach = maxEps;
@@ -337,11 +337,11 @@ public class OPTICS<T> : ClusteringBase<T>
                 // Extend the steep area
                 while (end < n - 1)
                 {
-                    int nextPrevIdx = _ordering![end];
-                    int nextCurrIdx = _ordering![end + 1];
+                    int nextPrevIdx = _ordering[end];
+                    int nextCurrIdx = _ordering[end + 1];
 
-                    T nextPrevReach = _reachabilityDistances![nextPrevIdx];
-                    T nextCurrReach = _reachabilityDistances![nextCurrIdx];
+                    T nextPrevReach = _reachabilityDistances[nextPrevIdx];
+                    T nextCurrReach = _reachabilityDistances[nextCurrIdx];
 
                     if (!NumOps.LessThan(nextPrevReach, infinity)) nextPrevReach = maxEps;
                     if (!NumOps.LessThan(nextCurrReach, infinity)) nextCurrReach = maxEps;
@@ -393,7 +393,7 @@ public class OPTICS<T> : ClusteringBase<T>
         {
             for (int i = start; i <= end && i < n; i++)
             {
-                int pointIdx = _ordering![i];
+                int pointIdx = _ordering[i];
                 if (Labels is not null && NumOps.LessThan(Labels[pointIdx], NumOps.Zero))
                 {
                     Labels[pointIdx] = NumOps.FromDouble(currentCluster);
@@ -565,7 +565,7 @@ public class OPTICS<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = _ordering!.Length;
+        int n = _ordering.Length;
         T infinity = NumOps.MaxValue;
         T maxEps = NumOps.FromDouble(_options.MaxEpsilon);
         var plot = new (int, T)[n];
@@ -573,7 +573,7 @@ public class OPTICS<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             int pointIdx = _ordering[i];
-            T reach = _reachabilityDistances![pointIdx];
+            T reach = _reachabilityDistances[pointIdx];
             if (!NumOps.LessThan(reach, infinity))
             {
                 reach = maxEps;
@@ -593,7 +593,7 @@ public class OPTICS<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = _ordering!.Length;
+        int n = _ordering.Length;
         T epsT = NumOps.FromDouble(epsilon);
         T infinity = NumOps.MaxValue;
         var labels = new Vector<T>(n);
@@ -608,9 +608,9 @@ public class OPTICS<T> : ClusteringBase<T>
         {
             int pointIdx = _ordering[i];
 
-            if (NumOps.GreaterThan(_reachabilityDistances![pointIdx], epsT))
+            if (NumOps.GreaterThan(_reachabilityDistances[pointIdx], epsT))
             {
-                if (NumOps.LessThan(_coreDistances![pointIdx], infinity) &&
+                if (NumOps.LessThan(_coreDistances[pointIdx], infinity) &&
                     !NumOps.GreaterThan(_coreDistances[pointIdx], epsT))
                 {
                     labels[pointIdx] = NumOps.FromDouble(currentCluster);
