@@ -37,6 +37,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// Reference: "TabDPT: Scaling Tabular Foundation Models" (2025)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new TabDPTOptions { NumFeatures = 20, EmbeddingDim = 128, NumLayers = 12 };
+/// var model = new TabDPTNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

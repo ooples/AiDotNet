@@ -40,6 +40,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// Reference: "AutoInt: Automatic Feature Interaction Learning via Self-Attentive Neural Networks" (2018)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new AutoIntOptions { NumFeatures = 20, EmbeddingDim = 16, NumHeads = 2, NumLayers = 3 };
+/// var model = new AutoIntNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -40,6 +40,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// Reference: "TabNet: Attentive Interpretable Tabular Learning" (Arik &amp; Pfister, AAAI 2021)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new TabNetOptions { NumFeatures = 20, NumDecisionSteps = 5, RelaxationFactor = 1.5 };
+/// var model = new TabNetNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

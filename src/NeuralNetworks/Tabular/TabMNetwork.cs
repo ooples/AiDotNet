@@ -39,6 +39,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// Reference: "TabM: Advancing Tabular Deep Learning With Parameter-Efficient Ensembling" (2024)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new TabMOptions { NumFeatures = 20, NumSubmodels = 32, HiddenSize = 128 };
+/// var model = new TabMNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

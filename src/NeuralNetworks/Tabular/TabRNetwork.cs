@@ -42,6 +42,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// Reference: "TabR: Tabular Deep Learning Meets Nearest Neighbors" (2023)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new TabROptions { NumFeatures = 20, HiddenSize = 256, NumNeighbors = 96 };
+/// var model = new TabRNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -35,6 +35,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// Reference: "GANDALF: Gated Adaptive Network for Deep Automated Learning of Features" (2022)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GANDALFOptions { NumFeatures = 20, NumTrees = 64, TreeDepth = 6 };
+/// var model = new GANDALFNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
