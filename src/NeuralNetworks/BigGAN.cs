@@ -36,6 +36,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Based on "Large Scale GAN Training for High Fidelity Natural Image Synthesis"
 /// by Brock et al. (2019)
 /// </summary>
+/// <example>
+/// <code>
+/// var options = new BigGANOptions { LatentSize = 128, NumClasses = 1000 };
+/// var model = new BigGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]

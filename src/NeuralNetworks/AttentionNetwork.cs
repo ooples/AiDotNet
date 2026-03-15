@@ -31,6 +31,14 @@ namespace AiDotNet.NeuralNetworks;
 /// powerful for language tasks, time series prediction, and many other sequence-based problems.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new AttentionNetworkOptions { HiddenSize = 256, NumHeads = 8 };
+/// var model = new AttentionNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10, 64 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

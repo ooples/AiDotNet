@@ -36,6 +36,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Reference: Odena et al., "Conditional Image Synthesis with Auxiliary Classifier GANs" (2017)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ACGANOptions { LatentSize = 100, NumClasses = 10 };
+/// var model = new ACGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Generative)]
