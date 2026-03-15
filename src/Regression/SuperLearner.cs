@@ -414,13 +414,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// </summary>
     private IFullModel<T, Matrix<T>, Vector<T>> CloneModel(IFullModel<T, Matrix<T>, Vector<T>> model)
     {
-        // Serialize and deserialize to clone
-        byte[] data = model.Serialize();
-        var instance = Activator.CreateInstance(model.GetType())
-            ?? throw new InvalidOperationException($"Failed to create instance of {model.GetType().Name}");
-        var clone = (IFullModel<T, Matrix<T>, Vector<T>>)instance;
-        clone.Deserialize(data);
-        return clone;
+        return model.Clone();
     }
 
     /// <summary>
