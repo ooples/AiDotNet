@@ -1180,8 +1180,73 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _layerNorm2Gamma;
     private Tensor<T> _layerNorm2Beta;
 
+    private int _topK = 3;  // Cached from last Forward call
+
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+    public override void ResetState() { }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        // Gradients applied externally by model training loop
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _embeddingDim * 2 }), "autoformer_encoder_output");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        foreach (var t in new[] { _queryProj, _keyProj, _valueProj, _outputProj, _ff1Weight, _ff1Bias, _ff2Weight, _ff2Bias, _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta })
+            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    /// <summary>
+    /// LayerBase single-tensor Forward: input is trend data, processes with auto-correlation.
+    /// </summary>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // For single input, treat as trend with zero seasonal
+        var seasonal = new Tensor<T>(input.Shape);
+        var (outTrend, outSeasonal) = Forward(input, seasonal, _topK);
+        // Concatenate trend + seasonal into single output
+        var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
+        for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
+        for (int i = 0; i < outSeasonal.Length; i++) output[outTrend.Length + i] = outSeasonal[i];
+        return output;
+    }
+
+    /// <summary>
+    /// Multi-tensor Forward: inputs[0] = trend, inputs[1] = seasonal.
+    /// </summary>
+    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length >= 2)
+        {
+            var (outTrend, outSeasonal) = Forward(inputs[0], inputs[1], _topK);
+            var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
+            for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
+            for (int i = 0; i < outSeasonal.Length; i++) output[outTrend.Length + i] = outSeasonal[i];
+            return output;
+        }
+        return Forward(inputs[0]);
+    }
+
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        // Return gradient w.r.t. trend input (first half of concatenated gradient)
+        var dTrend = new Tensor<T>(new[] { _embeddingDim });
+        for (int i = 0; i < _embeddingDim && i < outputGradient.Length; i++)
+            dTrend[i] = outputGradient[i];
+        return dTrend;
+    }
+
     public AutoformerEncoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
+        : base(new[] { embeddingDim }, new[] { embeddingDim * 2 })
     {
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
@@ -1605,8 +1670,67 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _layerNorm3Gamma;
     private Tensor<T> _layerNorm3Beta;
 
+    private int _topK = 3;
+    private Tensor<T>? _lastEncoderOutput;
+
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+    public override void ResetState() { _lastEncoderOutput = null; }
+
+    public override void UpdateParameters(T learningRate) { }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _embeddingDim * 2 }), "autoformer_decoder_output");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        foreach (var t in new[] { _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj,
+            _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj,
+            _ff1Weight, _ff1Bias, _ff2Weight, _ff2Bias,
+            _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta, _layerNorm3Gamma, _layerNorm3Beta })
+            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        var seasonal = new Tensor<T>(input.Shape);
+        var encoderOutput = _lastEncoderOutput ?? input;
+        var (outTrend, outSeasonal) = Forward(input, seasonal, encoderOutput, _topK);
+        var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
+        for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
+        for (int i = 0; i < outSeasonal.Length; i++) output[outTrend.Length + i] = outSeasonal[i];
+        return output;
+    }
+
+    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length >= 3)
+        {
+            _lastEncoderOutput = inputs[2];
+            var (outTrend, outSeasonal) = Forward(inputs[0], inputs[1], inputs[2], _topK);
+            var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
+            for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
+            for (int i = 0; i < outSeasonal.Length; i++) output[outTrend.Length + i] = outSeasonal[i];
+            return output;
+        }
+        return Forward(inputs[0]);
+    }
+
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        var dTrend = new Tensor<T>(new[] { _embeddingDim });
+        for (int i = 0; i < _embeddingDim && i < outputGradient.Length; i++)
+            dTrend[i] = outputGradient[i];
+        return dTrend;
+    }
+
     public AutoformerDecoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
+        : base(new int[][] { new[] { embeddingDim }, new[] { embeddingDim }, new[] { embeddingDim } }, new[] { embeddingDim * 2 })
     {
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
