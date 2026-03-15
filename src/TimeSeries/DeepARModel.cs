@@ -591,21 +591,6 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 /// </summary>
 internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    // --- LayerBase<T> required overrides ---
-    public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
-    public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-    public override Tensor<T> Forward(Tensor<T> input) => input; // Override with actual implementation
-    public override Tensor<T> Backward(Tensor<T> outputGradient) => outputGradient; // Override with actual implementation
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { 1 }), "DeepARLstmCellTensor_output");
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        // Collect all weight parameters
-        return new Vector<T>(p.ToArray());
-    }
-    // --- End LayerBase overrides ---
 
     private readonly int _inputSize;
     private readonly int _hiddenSize;
@@ -659,7 +644,7 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _lastPrevCell = new Tensor<T>([hiddenSize]);
     }
 
-    public void ResetState()
+    public override void ResetState()
     {
         for (int i = 0; i < _hiddenSize; i++)
         {

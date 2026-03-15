@@ -357,21 +357,6 @@ public class LSTMVAEOptions<T> : TimeSeriesRegressionOptions<T>
 /// </summary>
 internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    // --- LayerBase<T> required overrides ---
-    public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
-    public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-    public override Tensor<T> Forward(Tensor<T> input) => input; // Override with actual implementation
-    public override Tensor<T> Backward(Tensor<T> outputGradient) => outputGradient; // Override with actual implementation
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { 1 }), "LSTMEncoderTensor_output");
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        // Collect all weight parameters
-        return new Vector<T>(p.ToArray());
-    }
-    // --- End LayerBase overrides ---
 
     private readonly int _inputSize;
     private readonly int _latentDim;
@@ -641,21 +626,6 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 /// </summary>
 internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    // --- LayerBase<T> required overrides ---
-    public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
-    public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-    public override Tensor<T> Forward(Tensor<T> input) => input; // Override with actual implementation
-    public override Tensor<T> Backward(Tensor<T> outputGradient) => outputGradient; // Override with actual implementation
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { 1 }), "LSTMDecoderTensor_output");
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        // Collect all weight parameters
-        return new Vector<T>(p.ToArray());
-    }
-    // --- End LayerBase overrides ---
 
     private readonly int _latentDim;
     private readonly int _outputSize;

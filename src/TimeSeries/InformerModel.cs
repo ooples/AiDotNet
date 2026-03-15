@@ -833,21 +833,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 /// </summary>
 internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    // --- LayerBase<T> required overrides ---
-    public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
-    public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-    public override Tensor<T> Forward(Tensor<T> input) => input; // Override with actual implementation
-    public override Tensor<T> Backward(Tensor<T> outputGradient) => outputGradient; // Override with actual implementation
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { 1 }), "InformerEncoderLayerTensor_output");
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        // Collect all weight parameters
-        return new Vector<T>(p.ToArray());
-    }
-    // --- End LayerBase overrides ---
 
     private readonly int _embeddingDim;
     private readonly int _numHeads;
@@ -1122,7 +1107,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     /// Writes all attention projection weights (Q, K, V, O), feed-forward network weights and biases,
     /// and layer normalization parameters to preserve the trained state of the encoder layer.
     /// </remarks>
-    public override void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
+    public void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
     {
         writeTensor(writer, _queryProj);
         writeTensor(writer, _keyProj);
@@ -1148,7 +1133,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     /// and layer normalization parameters from serialized data. The deserialized values
     /// are copied into the existing tensors to preserve the layer structure.
     /// </remarks>
-    public override void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
+    public void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
     {
         CopyTensorData(readTensor(reader), _queryProj);
         CopyTensorData(readTensor(reader), _keyProj);
@@ -1222,21 +1207,6 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 /// </summary>
 internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    // --- LayerBase<T> required overrides ---
-    public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
-    public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-    public override Tensor<T> Forward(Tensor<T> input) => input; // Override with actual implementation
-    public override Tensor<T> Backward(Tensor<T> outputGradient) => outputGradient; // Override with actual implementation
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { 1 }), "DistillingConvTensor_output");
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        // Collect all weight parameters
-        return new Vector<T>(p.ToArray());
-    }
-    // --- End LayerBase overrides ---
 
     private readonly int _embeddingDim;
     private readonly int _distillingFactor;
@@ -1364,7 +1334,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     /// Writes the 1D convolution weights and biases used for sequence compression
     /// during the distilling process.
     /// </remarks>
-    public override void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
+    public void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
     {
         writeTensor(writer, _convWeights);
         writeTensor(writer, _convBias);
@@ -1379,7 +1349,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     /// Restores the convolution weights and biases from serialized data. The deserialized
     /// values are copied into the existing tensors to preserve the layer structure.
     /// </remarks>
-    public override void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
+    public void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
     {
         CopyTensorData(readTensor(reader), _convWeights);
         CopyTensorData(readTensor(reader), _convBias);
@@ -1445,21 +1415,6 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 /// </summary>
 internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    // --- LayerBase<T> required overrides ---
-    public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
-    public override void ResetState() { }
-    public override void UpdateParameters(T learningRate) { }
-    public override Tensor<T> Forward(Tensor<T> input) => input; // Override with actual implementation
-    public override Tensor<T> Backward(Tensor<T> outputGradient) => outputGradient; // Override with actual implementation
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { 1 }), "InformerDecoderLayerTensor_output");
-    public override Vector<T> GetParameters()
-    {
-        var p = new List<T>();
-        // Collect all weight parameters
-        return new Vector<T>(p.ToArray());
-    }
-    // --- End LayerBase overrides ---
 
     private readonly int _embeddingDim;
     private readonly int _numHeads;
@@ -1820,7 +1775,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     /// </list>
     /// </para>
     /// </remarks>
-    public override void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
+    public void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
     {
         // Self-attention
         writeTensor(writer, _selfQueryProj);
@@ -1858,7 +1813,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     /// The deserialized values are copied into the existing tensors to preserve the layer structure.
     /// </para>
     /// </remarks>
-    public override void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
+    public void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
     {
         // Self-attention
         CopyTensorData(readTensor(reader), _selfQueryProj);
