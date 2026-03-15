@@ -66,6 +66,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+
     // Fully-qualified attribute names (without "Attribute" suffix for matching)
     private const string ModelDomainAttributeName = "AiDotNet.Attributes.ModelDomainAttribute";
     private const string ModelCategoryAttributeName = "AiDotNet.Attributes.ModelCategoryAttribute";
@@ -274,7 +275,16 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
     {
         var className = modelClass.Name;
         var location = modelClass.Locations.FirstOrDefault();
+
+        // Primary: use Roslyn's semantic XML doc API
         var xmlDoc = modelClass.GetDocumentationCommentXml();
+
+        // Fallback: if the semantic API returns empty (can happen in some build configurations),
+        // check the syntax tree directly for XML doc trivia on the class declaration
+        if (string.IsNullOrWhiteSpace(xmlDoc))
+        {
+            xmlDoc = ExtractXmlDocFromSyntax(modelClass);
+        }
 
         if (string.IsNullOrWhiteSpace(xmlDoc))
         {
@@ -284,20 +294,49 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             return;
         }
 
-        if (!xmlDoc.Contains("<summary>"))
+        // Case-insensitive checks to avoid brittle string matching
+        if (xmlDoc.IndexOf("<summary>", System.StringComparison.OrdinalIgnoreCase) < 0)
         {
             context.ReportDiagnostic(Diagnostic.Create(MissingSummary, location, className));
         }
 
-        if (!xmlDoc.Contains("For Beginners"))
+        if (xmlDoc.IndexOf("For Beginners", System.StringComparison.OrdinalIgnoreCase) < 0)
         {
             context.ReportDiagnostic(Diagnostic.Create(MissingBeginnerRemarks, location, className));
         }
 
-        if (!xmlDoc.Contains("<example>") && !xmlDoc.Contains("<code>"))
+        if (xmlDoc.IndexOf("<example>", System.StringComparison.OrdinalIgnoreCase) < 0 &&
+            xmlDoc.IndexOf("<code>", System.StringComparison.OrdinalIgnoreCase) < 0)
         {
             context.ReportDiagnostic(Diagnostic.Create(MissingExample, location, className));
         }
+    }
+
+    /// <summary>
+    /// Fallback: extracts XML documentation directly from the syntax tree trivia
+    /// when <see cref="ISymbol.GetDocumentationCommentXml"/> returns empty.
+    /// This can happen in certain build configurations or target frameworks.
+    /// </summary>
+    private static string? ExtractXmlDocFromSyntax(INamedTypeSymbol modelClass)
+    {
+        foreach (var syntaxRef in modelClass.DeclaringSyntaxReferences)
+        {
+            var syntaxNode = syntaxRef.GetSyntax();
+            if (syntaxNode is not ClassDeclarationSyntax classDecl)
+                continue;
+
+            // Walk the leading trivia to find XML doc comments
+            foreach (var trivia in classDecl.GetLeadingTrivia())
+            {
+                if (trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SingleLineDocumentationCommentTrivia) ||
+                    trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.MultiLineDocumentationCommentTrivia))
+                {
+                    return trivia.ToFullString();
+                }
+            }
+        }
+
+        return null;
     }
 
     private static bool HasAttribute(ImmutableArray<AttributeData> attributes, INamedTypeSymbol attributeType)
