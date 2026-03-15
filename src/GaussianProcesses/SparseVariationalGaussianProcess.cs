@@ -373,48 +373,32 @@ public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
         double noiseVariance = Math.Max(_noiseVariance, 1e-10);
         T noisePrecision = _numOps.FromDouble(1.0 / noiseVariance);
 
-        for (int iter = 0; iter < _maxIterations; iter++)
+        // For Gaussian likelihood, the optimal variational parameters have closed-form solutions:
+        //   S* = (Kuu^{-1} + σ^{-2} Kuf Kuf^T)^{-1}
+        //   m* = σ^{-2} S* Kuf y
+        //
+        // Using iterative gradient descent is unnecessary and numerically unstable (the gradient
+        // magnitude is proportional to σ^{-2} which can be 10^4+, causing divergence).
+        // The closed-form solution is exact and avoids all convergence issues.
+
+        // Step 1: Compute S (variational covariance) — already numerically stable
+        UpdateVariationalCovariance(Kuf, noisePrecision);
+
+        // Step 2: Compute m* = σ^{-2} S Kuf y using the Cholesky factor L where S = L L^T
+        //   m* = σ^{-2} L L^T Kuf y = L (σ^{-2} L^T Kuf y)
+        var Kufy = Kuf.Multiply(_y);
+        var scaledKufy = new Vector<T>(Kufy.Length);
+        for (int i = 0; i < Kufy.Length; i++)
         {
-            // Note: S = L * L^T (variational covariance) is stored implicitly via _variationalCovCholesky
-            // The covariance is reconstructed only when needed (e.g., in ComputeKLDivergence)
-
-            // Compute gradient of ELBO with respect to m (variational mean)
-            // grad_m = Kuf * (y - predictive_mean) / σ² - Kuu^(-1) * m
-            var predictiveMean = ComputePredictiveMean(KuuInvKuf);
-            var residual = new Vector<T>(_y.Length);
-            for (int i = 0; i < _y.Length; i++)
-            {
-                residual[i] = _numOps.Subtract(_y[i], predictiveMean[i]);
-            }
-
-            var KufResidual = Kuf.Multiply(residual);
-            var grad_m = new Vector<T>(_variationalMean.Length);
-
-            // Kuu^(-1) * m
-            var KuuInvM = MatrixSolutionHelper.SolveLinearSystem(_Kuu, _variationalMean, _decompositionType);
-
-            for (int i = 0; i < grad_m.Length; i++)
-            {
-                T dataGrad = _numOps.Multiply(KufResidual[i], noisePrecision);
-                grad_m[i] = _numOps.Subtract(dataGrad, KuuInvM[i]);
-            }
-
-            // Update variational mean
-            for (int i = 0; i < _variationalMean.Length; i++)
-            {
-                T update = _numOps.Multiply(_numOps.FromDouble(_learningRate), grad_m[i]);
-                _variationalMean[i] = _numOps.Add(_variationalMean[i], update);
-            }
-
-            // Simplified update for covariance Cholesky factor
-            // In a full implementation, we'd also update L, but for stability we'll use a fixed
-            // covariance that approximates the posterior
-            if (iter == 0)
-            {
-                // One-time covariance update based on data
-                UpdateVariationalCovariance(Kuf, noisePrecision);
-            }
+            scaledKufy[i] = _numOps.Multiply(noisePrecision, Kufy[i]);
         }
+
+        // Compute L^T * scaledKufy
+        var LT = _variationalCovCholesky.Transpose();
+        var LTKufy = LT.Multiply(scaledKufy);
+
+        // Compute m = L * LTKufy
+        _variationalMean = _variationalCovCholesky.Multiply(LTKufy);
     }
 
     /// <summary>
