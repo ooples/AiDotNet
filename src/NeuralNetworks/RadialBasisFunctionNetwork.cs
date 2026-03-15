@@ -32,6 +32,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Classification problems (determining which category something belongs to)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new RadialBasisFunctionNetworkOptions { InputSize = 10, NumCenters = 50 };
+/// var model = new RadialBasisFunctionNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

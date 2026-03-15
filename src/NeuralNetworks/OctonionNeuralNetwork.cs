@@ -29,6 +29,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Tasks requiring rich rotational representations
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new OctonionNeuralNetworkOptions { InputSize = 8, HiddenSize = 64 };
+/// var model = new OctonionNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 8 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]

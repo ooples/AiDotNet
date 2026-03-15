@@ -22,6 +22,14 @@ namespace AiDotNet.NeuralNetworks;
 /// useful for smart buildings, energy management, security systems, and space utilization analysis.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new OccupancyNetworkOptions { InputSize = 3, HiddenSize = 256 };
+/// var model = new OccupancyNeuralNetwork&lt;float&gt;(options);
+/// var points = Tensor&lt;float&gt;.Random(new[] { 1, 1000, 3 });
+/// var occupancy = model.Predict(points);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.ThreeDGeneration)]

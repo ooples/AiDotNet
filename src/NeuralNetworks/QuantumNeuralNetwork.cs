@@ -29,6 +29,14 @@ namespace AiDotNet.NeuralNetworks;
 /// as having the potential to explore many possible solutions simultaneously rather than one at a time.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new QuantumNeuralNetworkOptions { NumQubits = 4, NumLayers = 6 };
+/// var model = new QuantumNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Science)]

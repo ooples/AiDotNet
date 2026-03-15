@@ -30,6 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// inputs they've never seen before during training.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SiameseNetworkOptions { InputSize = 128, EmbeddingSize = 64 };
+/// var model = new SiameseNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var embedding = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Embedding)]

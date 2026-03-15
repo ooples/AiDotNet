@@ -33,6 +33,14 @@ namespace AiDotNet.NeuralNetworks;
 /// complex patterns in data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ResidualNeuralNetworkOptions { InputSize = 784, NumResidualBlocks = 4, HiddenSize = 256 };
+/// var model = new ResidualNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
