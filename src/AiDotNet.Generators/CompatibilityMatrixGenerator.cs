@@ -50,8 +50,8 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     // Diagnostic for suspicious model/optimizer combinations
     private static readonly DiagnosticDescriptor SuspiciousOptimizer = new(
         id: "AIDN030",
-        title: "Suspicious model-optimizer combination",
-        messageFormat: "Model '{0}' uses category '{1}' which may not work well with SGD optimizer. Consider Adam or RMSProp.",
+        title: "Conflicting optimizer requirements across model categories",
+        messageFormat: "Model '{0}' has categories '{1}' with conflicting optimizer requirements. Ensure the model's default optimizer is from the intersection of compatible optimizers for all its categories.",
         category: "AiDotNet.Compatibility",
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
@@ -159,20 +159,21 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
 
         entries.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
 
-        // Emit AIDN030 diagnostics for models with compatibility warnings
+        // Emit AIDN030 diagnostics for models whose categories have conflicting optimizer
+        // requirements. For example, a model with [NeuralNetwork, GAN] categories: NeuralNetwork
+        // allows all gradient optimizers (including SGD), but GAN restricts to Adam/RMSProp/AdamW.
+        // The intersection removes SGD, and AIDN030 fires to flag the conflict so developers
+        // ensure the model's default optimizer is from the safe intersection set.
         foreach (var entry in entries)
         {
             var (_, _, _, warnings) = GetCompatibilityRules(entry.Categories);
             if (warnings.Count > 0 && entry.Location is not null)
             {
-                foreach (var warning in warnings)
-                {
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        SuspiciousOptimizer,
-                        entry.Location,
-                        entry.ClassName,
-                        string.Join(", ", entry.Categories.Select(c => GetCategoryName(c, categoryEnumType)))));
-                }
+                context.ReportDiagnostic(Diagnostic.Create(
+                    SuspiciousOptimizer,
+                    entry.Location,
+                    entry.ClassName,
+                    string.Join(", ", entry.Categories.Select(c => GetCategoryName(c, categoryEnumType)))));
             }
         }
 
@@ -359,13 +360,18 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
 
     private static (List<string> optimizers, List<string> lossFunctions, List<string> preprocessors, List<string> warnings) GetCompatibilityRules(List<int> categories)
     {
-        var optimizers = new HashSet<string>();
         var lossFunctions = new HashSet<string>();
         var preprocessors = new HashSet<string>();
         var warnings = new List<string>();
 
+        // Collect each category's optimizer set separately so we can intersect them.
+        // Union is used for loss functions and preprocessors (additive),
+        // but intersection is used for optimizers (restrictive — every category must agree).
+        var perCategoryOptimizers = new List<HashSet<string>>();
+
         foreach (var cat in categories)
         {
+            var catOptimizers = new HashSet<string>();
             switch (cat)
             {
                 case CatClassifier:
@@ -373,7 +379,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add("BinaryCrossEntropy");
                     lossFunctions.Add("Hinge");
                     lossFunctions.Add("FocalLoss");
-                    AddAllGradientOptimizers(optimizers);
+                    AddAllGradientOptimizers(catOptimizers);
                     preprocessors.Add("StandardScaler");
                     preprocessors.Add("OneHotEncoder");
                     break;
@@ -384,7 +390,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add("MAE");
                     lossFunctions.Add("Huber");
                     lossFunctions.Add("LogCosh");
-                    AddAllGradientOptimizers(optimizers);
+                    AddAllGradientOptimizers(catOptimizers);
                     preprocessors.Add("StandardScaler");
                     preprocessors.Add("MinMaxScaler");
                     break;
@@ -393,10 +399,9 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add("Adversarial");
                     lossFunctions.Add("Wasserstein");
                     lossFunctions.Add("HingeLoss");
-                    optimizers.Add("Adam");
-                    optimizers.Add("RMSProp");
-                    optimizers.Add("AdamW");
-                    warnings.Add("SGD not recommended for GAN training");
+                    catOptimizers.Add("Adam");
+                    catOptimizers.Add("RMSProp");
+                    catOptimizers.Add("AdamW");
                     preprocessors.Add("MinMaxScaler");
                     break;
 
@@ -404,17 +409,17 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("L1");
                     lossFunctions.Add("VLB");
-                    optimizers.Add("Adam");
-                    optimizers.Add("AdamW");
+                    catOptimizers.Add("Adam");
+                    catOptimizers.Add("AdamW");
                     preprocessors.Add("StandardScaler");
                     break;
 
                 case CatTransformer:
                     lossFunctions.Add("CrossEntropy");
                     lossFunctions.Add("MSE");
-                    optimizers.Add("Adam");
-                    optimizers.Add("AdamW");
-                    optimizers.Add("LAMB");
+                    catOptimizers.Add("Adam");
+                    catOptimizers.Add("AdamW");
+                    catOptimizers.Add("LAMB");
                     preprocessors.Add("TokenizerPreprocessor");
                     preprocessors.Add("StandardScaler");
                     break;
@@ -423,15 +428,15 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("BCE");
                     lossFunctions.Add("KLDivergence");
-                    AddAllGradientOptimizers(optimizers);
+                    AddAllGradientOptimizers(catOptimizers);
                     preprocessors.Add("MinMaxScaler");
                     break;
 
                 case CatSurvivalModel:
                     lossFunctions.Add("CoxPartialLikelihood");
                     lossFunctions.Add("LogRankLoss");
-                    optimizers.Add("Adam");
-                    optimizers.Add("LBFGS");
+                    catOptimizers.Add("Adam");
+                    catOptimizers.Add("LBFGS");
                     preprocessors.Add("StandardScaler");
                     break;
 
@@ -439,9 +444,9 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("MAE");
                     lossFunctions.Add("QuantileLoss");
-                    optimizers.Add("Adam");
-                    optimizers.Add("AdaGrad");
-                    optimizers.Add("RMSProp");
+                    catOptimizers.Add("Adam");
+                    catOptimizers.Add("AdaGrad");
+                    catOptimizers.Add("RMSProp");
                     preprocessors.Add("TimeSeriesScaler");
                     preprocessors.Add("StandardScaler");
                     break;
@@ -452,15 +457,15 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("CrossEntropy");
                     lossFunctions.Add("MAE");
-                    AddAllGradientOptimizers(optimizers);
+                    AddAllGradientOptimizers(catOptimizers);
                     preprocessors.Add("StandardScaler");
                     break;
 
                 case CatGraphNetwork:
                     lossFunctions.Add("CrossEntropy");
                     lossFunctions.Add("MSE");
-                    optimizers.Add("Adam");
-                    optimizers.Add("AdamW");
+                    catOptimizers.Add("Adam");
+                    catOptimizers.Add("AdamW");
                     preprocessors.Add("GraphNormalizer");
                     preprocessors.Add("StandardScaler");
                     break;
@@ -468,7 +473,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                 case CatSyntheticDataGenerator:
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("KLDivergence");
-                    optimizers.Add("Adam");
+                    catOptimizers.Add("Adam");
                     preprocessors.Add("MinMaxScaler");
                     break;
 
@@ -478,7 +483,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add("MAE");
                     lossFunctions.Add("CrossEntropy");
                     // Tree models don't use gradient optimizers
-                    optimizers.Add("BuiltIn");
+                    catOptimizers.Add("BuiltIn");
                     preprocessors.Add("StandardScaler");
                     break;
 
@@ -486,15 +491,15 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                 case CatKernel:
                     lossFunctions.Add("Hinge");
                     lossFunctions.Add("MSE");
-                    optimizers.Add("SMO");
-                    optimizers.Add("LBFGS");
+                    catOptimizers.Add("SMO");
+                    catOptimizers.Add("LBFGS");
                     preprocessors.Add("StandardScaler");
                     break;
 
                 case CatInstanceBased:
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("MAE");
-                    optimizers.Add("BuiltIn");
+                    catOptimizers.Add("BuiltIn");
                     preprocessors.Add("StandardScaler");
                     preprocessors.Add("MinMaxScaler");
                     break;
@@ -503,9 +508,48 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     // General defaults for unrecognized categories
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("CrossEntropy");
-                    AddAllGradientOptimizers(optimizers);
+                    AddAllGradientOptimizers(catOptimizers);
                     preprocessors.Add("StandardScaler");
                     break;
+            }
+
+            if (catOptimizers.Count > 0)
+                perCategoryOptimizers.Add(catOptimizers);
+        }
+
+        // Build the final optimizer set. Use union across categories for the compatibility
+        // matrix (what CAN work), but check for conflicts: if a restrictive category (GAN,
+        // Diffusion, Transformer, etc.) is combined with a permissive one (NeuralNetwork),
+        // the restrictive category's set should be the final answer. When this happens, we
+        // emit AIDN030 so developers verify their model uses an optimizer from the safe set.
+        var optimizers = new HashSet<string>();
+        foreach (var set in perCategoryOptimizers)
+            optimizers.UnionWith(set);
+
+        if (optimizers.Count == 0)
+            AddAllGradientOptimizers(optimizers);
+
+        // Detect conflicts: if we have multiple category optimizer sets and they disagree,
+        // compute the intersection to find the safe set. If the safe set is smaller than
+        // the union, there's a conflict worth flagging.
+        if (perCategoryOptimizers.Count > 1)
+        {
+            var safeSet = new HashSet<string>(perCategoryOptimizers[0]);
+            for (int i = 1; i < perCategoryOptimizers.Count; i++)
+                safeSet.IntersectWith(perCategoryOptimizers[i]);
+
+            // Only warn if the intersection actually removed optimizers that are known to be
+            // problematic for certain model types (e.g., SGD removed because GAN category
+            // doesn't include it). We use the intersection as the final optimizer set to
+            // enforce that all categories agree.
+            if (safeSet.Count > 0 && safeSet.Count < optimizers.Count)
+            {
+                var removed = new HashSet<string>(optimizers);
+                removed.ExceptWith(safeSet);
+
+                // Use the safe intersection as the actual optimizer set
+                optimizers = safeSet;
+                warnings.Add($"Incompatible optimizers removed: {string.Join(", ", removed.OrderBy(r => r))}");
             }
         }
 
