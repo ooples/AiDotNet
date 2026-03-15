@@ -40,12 +40,12 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// <summary>
     /// Training input data.
     /// </summary>
-    private Matrix<T>? _X;
+    private Matrix<T> _X = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Training output data.
     /// </summary>
-    private Vector<T>? _y;
+    private Vector<T> _y = new Vector<T>(0);
 
     /// <summary>
     /// MCMC samples of hyperparameters [lengthscale, outputVariance, noiseVariance].
@@ -590,7 +590,7 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// </summary>
     private Matrix<T> BuildKernelMatrix(double lengthscale, double outputVar, double noiseVar)
     {
-        int n = _X!.Rows;
+        int n = _X.Rows;
         var K = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
@@ -624,7 +624,7 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     {
         // Note: lengthscale and outputVar parameters are from MCMC samples but the actual
         // kernel function is used. For non-RBF kernels, these parameters are diagnostic only.
-        int n = _X!.Rows;
+        int n = _X.Rows;
         var kstar = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
