@@ -221,6 +221,9 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         // Training loop with epochs
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
+            // Check cancellation (supports both caller token and MaxTrainingTimeSeconds timeout)
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+
             T epochLoss = NumOps.Zero;
 
             // Process in mini-batches
@@ -242,6 +245,9 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
                     for (int paramIdx = 0; paramIdx < currentParams.Length; paramIdx++)
                     {
+                        // Check cancellation in inner loop (this loop is O(params * blocks) per batch)
+                        if (paramIdx % 50 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
+
                         // Save original value
                         T originalValue = currentParams[paramIdx];
 

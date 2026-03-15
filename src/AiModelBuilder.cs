@@ -1163,7 +1163,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync()
+    public Task<AiModelResult<T, TInput, TOutput>> BuildAsync() => BuildAsync(CancellationToken.None);
+
+    public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)
     {
         AiModelResult<T, TInput, TOutput> result;
 

@@ -1,3 +1,4 @@
+using System.Threading;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 
@@ -261,7 +262,17 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// will implement its own training algorithm.
     /// </para>
     /// </remarks>
-    public void Train(Matrix<T> x, Vector<T> y)
+    /// <summary>
+    /// Cancellation token that is active during training. Derived classes should check
+    /// <c>TrainingCancellationToken.IsCancellationRequested</c> in their training loops
+    /// to support both caller-initiated cancellation and wall-clock timeout from
+    /// <see cref="TimeSeriesRegressionOptions{T}.MaxTrainingTimeSeconds"/>.
+    /// </summary>
+    protected CancellationToken TrainingCancellationToken { get; private set; } = CancellationToken.None;
+
+    public void Train(Matrix<T> x, Vector<T> y) => Train(x, y, CancellationToken.None);
+
+    public void Train(Matrix<T> x, Vector<T> y, CancellationToken callerToken)
     {
         // Input validation
         ValidateTrainingInputs(x, y);
@@ -269,8 +280,26 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         // Reset model state before training
         Reset();
 
-        // Perform model-specific training (implemented by derived classes)
-        TrainCore(x, y);
+        // Create a linked CancellationTokenSource that combines:
+        // 1. The caller's token (for external cancellation)
+        // 2. A wall-clock timeout from MaxTrainingTimeSeconds (safety net)
+        // Whichever fires first wins.
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
+        if (Options.MaxTrainingTimeSeconds > 0)
+        {
+            linkedCts.CancelAfter(TimeSpan.FromSeconds(Options.MaxTrainingTimeSeconds));
+        }
+        TrainingCancellationToken = linkedCts.Token;
+
+        try
+        {
+            // Perform model-specific training (implemented by derived classes)
+            TrainCore(x, y);
+        }
+        finally
+        {
+            TrainingCancellationToken = CancellationToken.None;
+        }
 
         // Mark the model as trained
         IsTrained = true;

@@ -124,6 +124,8 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+
             // Shuffle training order for each epoch
             var indices = Enumerable.Range(0, numSamples).OrderBy(_ => _random.Next()).ToList();
 

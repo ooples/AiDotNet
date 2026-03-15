@@ -378,6 +378,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
             var shuffled = sampleIndices.OrderBy(_ => _random.Next()).ToList();
 
             for (int batchStart = 0; batchStart < shuffled.Count; batchStart += _options.BatchSize)

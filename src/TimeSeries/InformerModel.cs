@@ -245,6 +245,8 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+
             var shuffled = validIndices.OrderBy(_ => _random.Next()).ToList();
             double epochLoss = 0;
             int sampleCount = 0;
