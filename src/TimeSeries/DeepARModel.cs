@@ -761,7 +761,7 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public override Tensor<T> Backward(Tensor<T> dHidden)
     {
         LastGradients = BackwardInternal(dHidden);
-        if (LastGradients.TryGetValue("input", out var dInput))
+        if (LastGradients.TryGetValue("input_gradient", out var dInput))
             return dInput;
         return new Tensor<T>(new[] { _inputSize });
     }
