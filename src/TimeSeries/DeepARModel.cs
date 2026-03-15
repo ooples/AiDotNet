@@ -589,7 +589,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 /// Production-ready LSTM cell with proper gates (input, forget, output, cell).
 /// Uses Tensor operations for GPU acceleration and proper backpropagation.
 /// </summary>
-internal class DeepARLstmCellTensor<T>
+internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _inputSize;

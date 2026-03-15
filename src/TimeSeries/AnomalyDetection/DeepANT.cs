@@ -508,7 +508,7 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
 /// <para>This layer uses fixed random weights (Random Features approach) which has been shown
 /// to be effective for time series feature extraction while being computationally efficient.</para>
 /// </remarks>
-internal class ConvLayerTensor<T>
+internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private int _outputChannels;

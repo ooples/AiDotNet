@@ -1153,7 +1153,7 @@ internal class AutoformerCache<T>
 /// <summary>
 /// Autoformer encoder layer with series decomposition and auto-correlation.
 /// </summary>
-internal class AutoformerEncoderLayer<T>
+internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly int _embeddingDim;
@@ -1570,7 +1570,7 @@ internal class AutoformerEncoderLayer<T>
 /// <summary>
 /// Autoformer decoder layer with cross-attention and series decomposition.
 /// </summary>
-internal class AutoformerDecoderLayer<T>
+internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly int _embeddingDim;

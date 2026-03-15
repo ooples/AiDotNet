@@ -355,7 +355,7 @@ public class LSTMVAEOptions<T> : TimeSeriesRegressionOptions<T>
 /// <summary>
 /// Tensor-based LSTM Encoder for VAE with proper backpropagation.
 /// </summary>
-internal class LSTMEncoderTensor<T>
+internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly int _inputSize;
@@ -624,7 +624,7 @@ internal class LSTMEncoderTensor<T>
 /// <summary>
 /// Tensor-based LSTM Decoder for VAE with proper backpropagation.
 /// </summary>
-internal class LSTMDecoderTensor<T>
+internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly int _latentDim;
