@@ -449,13 +449,15 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
 
             if (features.All(f => f != null && f.Length > 0))
             {
+                // All features verified non-null by the All() check above
+                var validFeatures = features.Select(f => f ?? Array.Empty<double>()).ToList();
                 // Compute class mean
-                int featureDim = features[0]!.Length;
+                int featureDim = validFeatures[0].Length;
                 double[] classMean = new double[featureDim];
-                foreach (var f in features)
+                foreach (var f in validFeatures)
                 {
                     for (int d = 0; d < featureDim; d++)
-                        classMean[d] += (f ?? throw new InvalidOperationException("f has not been initialized."))[d];
+                        classMean[d] += f[d];
                 }
                 for (int d = 0; d < featureDim; d++)
                     classMean[d] /= features.Count;
@@ -477,7 +479,7 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
                         double[] hypotheticalMean = new double[featureDim];
                         for (int d = 0; d < featureDim; d++)
                         {
-                            hypotheticalMean[d] = (runningMean[d] * selectedIndices.Count + features[j]![d]) / (selectedIndices.Count + 1);
+                            hypotheticalMean[d] = (runningMean[d] * selectedIndices.Count + validFeatures[j][d]) / (selectedIndices.Count + 1);
                         }
 
                         // Distance from class mean
@@ -502,7 +504,7 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
                         // Update running mean
                         for (int d = 0; d < featureDim; d++)
                         {
-                            runningMean[d] = (runningMean[d] * (selectedIndices.Count - 1) + features[bestIdx]![d]) / selectedIndices.Count;
+                            runningMean[d] = (runningMean[d] * (selectedIndices.Count - 1) + validFeatures[bestIdx][d]) / selectedIndices.Count;
                         }
                     }
                 }
@@ -538,6 +540,8 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
         // Check if we can use feature-based distance
         if (features.All(f => f != null && f.Length > 0))
         {
+            // All features verified non-null by the All() check above
+            var validFeatures = features.Select(f => f ?? Array.Empty<double>()).ToList();
             var selected = new List<DataPoint<T, TInput, TOutput>>();
             var selectedIndices = new HashSet<int>();
             var selectedFeatures = new List<double[]>();
@@ -546,7 +550,7 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
             int firstIdx = _random.Next(items.Count);
             selected.Add(items[firstIdx]);
             selectedIndices.Add(firstIdx);
-            selectedFeatures.Add(features[firstIdx]!);
+            selectedFeatures.Add(validFeatures[firstIdx]);
 
             // Greedily add points that maximize minimum distance to selected set
             while (selected.Count < k)
@@ -562,7 +566,7 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
                     double minDist = double.MaxValue;
                     foreach (var sf in selectedFeatures)
                     {
-                        double dist = ComputeSquaredDistance(features[i]!, sf);
+                        double dist = ComputeSquaredDistance(validFeatures[i], sf);
                         if (dist < minDist) minDist = dist;
                     }
 
@@ -578,7 +582,7 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
                 {
                     selected.Add(items[bestIdx]);
                     selectedIndices.Add(bestIdx);
-                    selectedFeatures.Add(features[bestIdx]!);
+                    selectedFeatures.Add(validFeatures[bestIdx]);
                 }
                 else break;
             }

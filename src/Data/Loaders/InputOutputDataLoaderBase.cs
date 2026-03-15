@@ -79,7 +79,8 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
         get
         {
             EnsureLoaded();
-            return LoadedFeatures!;
+            return LoadedFeatures
+                ?? throw new InvalidOperationException("Features have not been loaded.");
         }
     }
 
@@ -89,7 +90,8 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
         get
         {
             EnsureLoaded();
-            return LoadedLabels!;
+            return LoadedLabels
+                ?? throw new InvalidOperationException("Labels have not been loaded.");
         }
     }
 
@@ -127,10 +129,11 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
         int actualBatchSize = batchEnd - batchStart;
 
         // Get indices for this batch (respecting shuffle order)
+        var currentIndices = Indices ?? throw new InvalidOperationException("Indices have not been initialized.");
         var batchIndices = new int[actualBatchSize];
         for (int i = 0; i < actualBatchSize; i++)
         {
-            batchIndices[i] = Indices![batchStart + i];
+            batchIndices[i] = currentIndices[batchStart + i];
         }
 
         // Extract features and labels for this batch
@@ -166,10 +169,11 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
             : RandomHelper.CreateSecureRandom();
 
         // Fisher-Yates shuffle
-        for (int i = Indices!.Length - 1; i > 0; i--)
+        var shuffleIndices = Indices ?? throw new InvalidOperationException("Indices have not been initialized.");
+        for (int i = shuffleIndices.Length - 1; i > 0; i--)
         {
             int j = random.Next(i + 1);
-            (Indices[i], Indices[j]) = (Indices[j], Indices[i]);
+            (shuffleIndices[i], shuffleIndices[j]) = (shuffleIndices[j], shuffleIndices[i]);
         }
 
         _isShuffled = true;
@@ -181,9 +185,10 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
         EnsureLoaded();
 
         // Restore original order
-        for (int i = 0; i < Indices!.Length; i++)
+        var unshuffleIndices = Indices ?? throw new InvalidOperationException("Indices have not been initialized.");
+        for (int i = 0; i < unshuffleIndices.Length; i++)
         {
-            Indices[i] = i;
+            unshuffleIndices[i] = i;
         }
 
         _isShuffled = false;
