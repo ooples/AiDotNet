@@ -27,6 +27,14 @@ namespace AiDotNet.NeuralNetworks;
 /// them useful for applications where training speed is critical.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ExtremeLearningMachineOptions { InputSize = 10, HiddenSize = 500 };
+/// var model = new ExtremeLearningMachine&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

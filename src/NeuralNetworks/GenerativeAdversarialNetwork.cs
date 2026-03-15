@@ -30,6 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// can create remarkably realistic synthetic data like images, music, or text.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GenerativeAdversarialNetworkOptions { LatentSize = 100, ImageSize = 28 };
+/// var model = new GenerativeAdversarialNetwork&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Generative)]
