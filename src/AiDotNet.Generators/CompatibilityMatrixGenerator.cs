@@ -467,6 +467,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add(LossVLB);
                     catOptimizers.Add(OptAdam);
                     catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
                     preprocessors.Add(PrepStandardScaler);
                     break;
 
@@ -475,7 +476,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add(LossMSE);
                     catOptimizers.Add(OptAdam);
                     catOptimizers.Add(OptAdamW);
-                    catOptimizers.Add(OptLAMB);
+                    catOptimizers.Add(OptRMSProp);
                     preprocessors.Add(PrepTokenizerPreprocessor);
                     preprocessors.Add(PrepStandardScaler);
                     break;
@@ -584,12 +585,12 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                 case CatFoundationModel:
                 case CatEmbeddingModel:
                 case CatTabularModel:
-                    // Foundation models, embeddings, and tabular models use AdamW as industry standard
+                    // Foundation models, embeddings, and tabular models use adaptive optimizers
                     lossFunctions.Add(LossMSE);
                     lossFunctions.Add(LossCrossEntropy);
                     catOptimizers.Add(OptAdam);
                     catOptimizers.Add(OptAdamW);
-                    catOptimizers.Add(OptLAMB);
+                    catOptimizers.Add(OptRMSProp);
                     preprocessors.Add(PrepStandardScaler);
                     break;
 
