@@ -32,6 +32,14 @@ namespace AiDotNet.NeuralNetworks;
 /// gradually improving its predictions through a process called training.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new NeuralNetworkOptions { InputSize = 10, HiddenLayers = new[] { 64, 32 }, OutputSize = 2 };
+/// var model = new NeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
