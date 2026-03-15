@@ -152,8 +152,8 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
         ClassLabels = ExtractClassLabels(labels);
         NumClasses = ClassLabels.Length;
 
-        int minInterval = Math.Max(3, (int)(seqLen * _options.MinIntervalFraction));
-        int maxInterval = Math.Min(seqLen, (int)(seqLen * _options.MaxIntervalFraction));
+        int minInterval = Math.Max(1, Math.Min(seqLen, (int)(seqLen * _options.MinIntervalFraction)));
+        int maxInterval = Math.Min(seqLen, Math.Max(minInterval, (int)(seqLen * _options.MaxIntervalFraction)));
 
         _trees = new List<IntervalTree>(_options.NumTrees);
 

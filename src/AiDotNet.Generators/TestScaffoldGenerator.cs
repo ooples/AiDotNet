@@ -186,10 +186,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 testNames, testedModels, untestedModels, seen);
         }
 
+        // Track whether models were found from source (meaning we're in the source project).
+        // When models are discovered from source, test classes live in a separate test project
+        // and won't be visible here — so diagnostics would be inaccurate (all models flagged).
+        bool modelsFoundFromSource = seen.Count > 0;
+
         // Second: if no source models were found, discover models from referenced assemblies.
         // This happens when the generator runs in the test project, where model classes
         // come from a compiled project reference rather than source files.
-        if (seen.Count == 0)
+        if (!modelsFoundFromSource)
         {
             DiscoverModelsFromReferencedAssemblies(compilation, domainAttrSymbol, exemptAttrSymbol,
                 testNames, testedModels, untestedModels, seen);
@@ -198,28 +203,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         testedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
         untestedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
 
-        // Emit AIDN040 diagnostic for each untested model
-        foreach (var model in untestedModels)
+        // Only emit diagnostics when running in the test project (models discovered from
+        // referenced assemblies). When running in the source project, test classes live in a
+        // separate compilation and aren't visible, so all models appear untested — skip to
+        // avoid duplicates. The test project will correctly report truly untested models.
+        if (!modelsFoundFromSource)
         {
-            // Models from referenced assemblies have no source location, so use Location.None
-            var location = model.Location ?? Location.None;
-            context.ReportDiagnostic(Diagnostic.Create(
-                UntestedModel,
-                location,
-                model.ClassName));
-        }
+            // Emit AIDN040 diagnostic for each untested model
+            foreach (var model in untestedModels)
+            {
+                // Models from referenced assemblies have no source location, so use Location.None
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UntestedModel,
+                    Location.None,
+                    model.ClassName));
+            }
 
-        // Emit AIDN041 summary diagnostic
-        var totalCount = testedModels.Count + untestedModels.Count;
-        if (totalCount > 0)
-        {
-            var coveragePct = testedModels.Count * 100.0 / totalCount;
-            context.ReportDiagnostic(Diagnostic.Create(
-                CoverageSummary,
-                Location.None,
-                testedModels.Count,
-                totalCount,
-                coveragePct));
+            // Emit AIDN041 summary diagnostic
+            var totalCount = testedModels.Count + untestedModels.Count;
+            if (totalCount > 0)
+            {
+                var coveragePct = testedModels.Count * 100.0 / totalCount;
+                context.ReportDiagnostic(Diagnostic.Create(
+                    CoverageSummary,
+                    Location.None,
+                    testedModels.Count,
+                    totalCount,
+                    coveragePct));
+            }
         }
 
         EmitTestCoverageClass(context, testedModels, untestedModels);

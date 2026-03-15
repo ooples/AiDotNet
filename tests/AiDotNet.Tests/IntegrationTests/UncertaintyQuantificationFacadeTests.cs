@@ -74,15 +74,15 @@ public sealed class UncertaintyQuantificationFacadeTests
             .BuildAsync();
 
         var trainedModel = Assert.IsType<NeuralNetwork<double>>(result.OptimizationResult.BestSolution);
-        var injectedMcDropoutLayers = trainedModel.Network.LayersReadOnly.OfType<MCDropoutLayer<double>>().ToList();
+        var injectedMcDropoutLayers = trainedModel.Layers.OfType<MCDropoutLayer<double>>().ToList();
         Assert.NotEmpty(injectedMcDropoutLayers);
 
-        var parameters = trainedModel.Network.GetParameters();
+        var parameters = trainedModel.GetParameters();
         for (int i = 0; i < parameters.Length; i++)
         {
             parameters[i] = (i + 1) * 0.01;
         }
-        trainedModel.Network.UpdateParameters(parameters);
+        trainedModel.UpdateParameters(parameters);
 
         // Sanity-check: MC mode should yield stochastic predictions.
         foreach (var layer in injectedMcDropoutLayers)
@@ -143,12 +143,12 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .BuildAsync();
         var trainedModel = Assert.IsType<NeuralNetwork<double>>(result.OptimizationResult.BestSolution);
-        var parameters = trainedModel.Network.GetParameters();
+        var parameters = trainedModel.GetParameters();
         for (int i = 0; i < parameters.Length; i++)
         {
             parameters[i] = (i + 1) * 0.01;
         }
-        trainedModel.Network.UpdateParameters(parameters);
+        trainedModel.UpdateParameters(parameters);
 
         var first = result.PredictWithUncertainty(x);
         var second = result.PredictWithUncertainty(x);

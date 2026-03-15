@@ -1428,6 +1428,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     {
         if (trainingData == null) throw new ArgumentNullException(nameof(trainingData));
 
+        // Use the Strategy pattern: let the model decide if it supports parameter initialization.
+        // Models like decision trees, meta classifiers, and untrained clustering models don't
+        // support having random parameters injected — they learn their structure during training.
+        if (!RequireModel().SupportsParameterInitialization)
+        {
+            return RequireModel().Clone();
+        }
+
         // Compute lower and upper bounds from the training data
         // Following GitHub Copilot's suggestion: compute min/max from the data
         Vector<T> lowerBounds;

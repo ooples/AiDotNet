@@ -467,6 +467,13 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
             return new Vector<T>(0);
         }
 
+        // Ensure NumFeatures is derived from ClusterCenters if it wasn't set during training.
+        // This fixes a bug where subclasses set ClusterCenters but forget to set NumFeatures.
+        if (NumFeatures == 0 && ClusterCenters.Columns > 0)
+        {
+            NumFeatures = ClusterCenters.Columns;
+        }
+
         var parameters = new Vector<T>(NumClusters * NumFeatures);
         int idx = 0;
         for (int k = 0; k < NumClusters; k++)

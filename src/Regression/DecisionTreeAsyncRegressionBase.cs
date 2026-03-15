@@ -553,6 +553,9 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// Sets the parameters for this model.
     /// </summary>
     /// <param name="parameters">A vector containing the model parameters.</param>
+    /// <inheritdoc/>
+    public bool SupportsParameterInitialization => false;
+
     public virtual void SetParameters(Vector<T> parameters)
     {
         throw new NotSupportedException("Decision trees do not support direct parameter setting. Use WithParameters to create a new model with different parameters.");

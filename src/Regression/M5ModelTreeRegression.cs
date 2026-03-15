@@ -433,12 +433,23 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// rather than just using a single average value.
     /// </para>
     /// </remarks>
-    private SimpleRegression<T> FitLinearModel(Matrix<T> x, Vector<T> y)
+    private RegressionBase<T> FitLinearModel(Matrix<T> x, Vector<T> y)
     {
-        var regression = new SimpleRegression<T>(regularization: Regularization);
-        regression.Train(x, y);
-
-        return regression;
+        // Use RidgeRegression for multi-feature data, SimpleRegression for single-feature.
+        // M5 model trees fit linear models at each leaf using all features in the split path,
+        // which can be more than one feature.
+        if (x.Columns == 1)
+        {
+            var regression = new SimpleRegression<T>(regularization: Regularization);
+            regression.Train(x, y);
+            return regression;
+        }
+        else
+        {
+            var regression = new RidgeRegression<T>();
+            regression.Train(x, y);
+            return regression;
+        }
     }
 
     /// <summary>

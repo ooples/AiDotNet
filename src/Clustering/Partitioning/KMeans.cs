@@ -117,6 +117,7 @@ public class KMeans<T> : ClusteringBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputData(x);
+        NumFeatures = x.Columns;
 
         Matrix<T>? bestCenters = null;
         Vector<T>? bestLabels = null;

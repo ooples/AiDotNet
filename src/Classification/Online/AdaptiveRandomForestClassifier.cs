@@ -198,57 +198,62 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
                 throw new InvalidOperationException("Ensemble member is not properly initialized.");
             }
 
-            // Evaluate prequentially (predict BEFORE training to avoid bias)
-            var selectedFeaturesForPred = ExtractSelectedFeatures(features, member.SelectedFeatures);
-            var prediction = member.Tree.Predict(ConvertToMatrix(selectedFeaturesForPred));
-            bool isCorrect = NumOps.Compare(prediction[0], label) == 0;
-
-            // Update accuracy estimate with exponential decay
-            member.TotalCount++;
-            if (isCorrect) member.CorrectCount++;
-            member.AccuracyEstimate = (double)member.CorrectCount / member.TotalCount;
-
-            // Update drift detectors with error (1 = error, 0 = correct)
-            T error = isCorrect ? NumOps.Zero : NumOps.One;
-
-            bool warningTriggered = member.WarningDetector.AddObservation(error);
-            bool driftTriggered = member.DriftDetector.AddObservation(error);
-
-            // Handle warning state
-            if (member.WarningDetector.IsInWarning && !member.InWarning)
+            // Evaluate prequentially (predict BEFORE training to avoid bias).
+            // Skip if the tree hasn't been trained yet — can't evaluate a tree with no classes.
+            bool driftTriggered = false;
+            if (member.Tree.IsWarm)
             {
-                member.InWarning = true;
-                member.BackgroundTree = CreateTree();
-            }
-            else if (!member.WarningDetector.IsInWarning && member.InWarning && !driftTriggered)
-            {
-                // Warning cleared, discard background tree
-                member.InWarning = false;
-                member.BackgroundTree = null;
-            }
+                var selectedFeaturesForPred = ExtractSelectedFeatures(features, member.SelectedFeatures);
+                var prediction = member.Tree.Predict(ConvertToMatrix(selectedFeaturesForPred));
+                bool isCorrect = NumOps.Compare(prediction[0], label) == 0;
 
-            // Handle drift detection
-            if (driftTriggered)
-            {
-                if (member.BackgroundTree is not null)
+                // Update accuracy estimate with exponential decay
+                member.TotalCount++;
+                if (isCorrect) member.CorrectCount++;
+                member.AccuracyEstimate = (double)member.CorrectCount / member.TotalCount;
+
+                // Update drift detectors with error (1 = error, 0 = correct)
+                T error = isCorrect ? NumOps.Zero : NumOps.One;
+
+                bool warningTriggered = member.WarningDetector.AddObservation(error);
+                driftTriggered = member.DriftDetector.AddObservation(error);
+
+                // Handle warning state
+                if (member.WarningDetector.IsInWarning && !member.InWarning)
                 {
-                    // Replace with background tree
-                    member.Tree = member.BackgroundTree;
+                    member.InWarning = true;
+                    member.BackgroundTree = CreateTree();
                 }
-                else
+                else if (!member.WarningDetector.IsInWarning && member.InWarning && !driftTriggered)
                 {
-                    // Create new tree
-                    member.Tree = CreateTree();
+                    // Warning cleared, discard background tree
+                    member.InWarning = false;
+                    member.BackgroundTree = null;
                 }
 
-                // Reset state
-                member.BackgroundTree = null;
-                member.InWarning = false;
-                member.DriftDetector.Reset();
-                member.WarningDetector.Reset();
-                member.CorrectCount = 0;
-                member.TotalCount = 0;
-                member.AccuracyEstimate = 1.0;
+                // Handle drift detection
+                if (driftTriggered)
+                {
+                    if (member.BackgroundTree is not null)
+                    {
+                        // Replace with background tree
+                        member.Tree = member.BackgroundTree;
+                    }
+                    else
+                    {
+                        // Create new tree
+                        member.Tree = CreateTree();
+                    }
+
+                    // Reset state
+                    member.BackgroundTree = null;
+                    member.InWarning = false;
+                    member.DriftDetector.Reset();
+                    member.WarningDetector.Reset();
+                    member.CorrectCount = 0;
+                    member.TotalCount = 0;
+                    member.AccuracyEstimate = 1.0;
+                }
             }
 
             // Poisson sampling for diversity (train AFTER evaluation)
@@ -330,6 +335,11 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
         {
             var memberFeatures = member.SelectedFeatures ?? throw new InvalidOperationException("SelectedFeatures has not been initialized.");
             var memberTree = member.Tree ?? throw new InvalidOperationException("Tree has not been initialized.");
+
+            // Skip trees that haven't been trained yet (Poisson sampling may have skipped them)
+            if (!memberTree.IsWarm)
+                continue;
+
             var selectedFeatures = ExtractSelectedFeatures(features, memberFeatures);
             var treePrediction = memberTree.Predict(ConvertToMatrix(selectedFeatures));
 

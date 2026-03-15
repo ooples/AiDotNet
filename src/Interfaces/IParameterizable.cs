@@ -37,6 +37,17 @@ public interface IParameterizable<T, TInput, TOutput>
     int ParameterCount { get; }
 
     /// <summary>
+    /// Gets whether this model supports direct parameter-based initialization.
+    /// </summary>
+    /// <remarks>
+    /// Models that learn their structure during training (decision trees, ensemble methods, clustering)
+    /// may not support having random parameters injected before training. The optimizer uses this
+    /// property to decide whether to call <see cref="SetParameters"/> during random initialization.
+    /// The default implementation returns <c>true</c> when <see cref="ParameterCount"/> is greater than zero.
+    /// </remarks>
+    bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>
     IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);
