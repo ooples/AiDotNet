@@ -35,6 +35,14 @@ namespace AiDotNet.NeuralNetworks;
 /// model through special cross-attention layers, letting the language model "see" the image
 /// while generating text responses.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new FlamingoOptions { ImageSize = 224, MaxTextLength = 256 };
+/// var model = new FlamingoNeuralNetwork&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]

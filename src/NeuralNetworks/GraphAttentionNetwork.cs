@@ -51,6 +51,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Citation networks, social networks, knowledge graphs
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GraphAttentionNetworkOptions { NodeFeatureSize = 16, HiddenSize = 64, NumHeads = 8 };
+/// var model = new GraphAttentionNetwork&lt;float&gt;(options);
+/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 10, 16 });
+/// var output = model.Predict(nodeFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.GraphNetwork)]

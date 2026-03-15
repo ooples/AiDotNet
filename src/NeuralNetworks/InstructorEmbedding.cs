@@ -32,6 +32,14 @@ namespace AiDotNet.NeuralNetworks
     /// on the mood. It makes the "coordinates" (embeddings) much more useful for your specific goal.
     /// </para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new InstructorEmbeddingOptions { EmbeddingDim = 768, MaxSequenceLength = 512 };
+    /// var model = new InstructorEmbedding&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Language)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Transformer)]

@@ -57,6 +57,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Any task where graph structure similarity matters
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GraphIsomorphismNetworkOptions { NodeFeatureSize = 16, HiddenSize = 64, NumLayers = 5 };
+/// var model = new GraphIsomorphismNetwork&lt;float&gt;(options);
+/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 20, 16 });
+/// var output = model.Predict(nodeFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.GraphNetwork)]

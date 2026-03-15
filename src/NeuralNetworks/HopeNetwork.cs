@@ -24,6 +24,14 @@ namespace AiDotNet.NeuralNetworks;
 /// patterns without being retrained. Think of it as a network that can "learn to learn" in
 /// real time.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new HopeNetworkOptions { InputSize = 10, HiddenSize = 64 };
+/// var model = new HopeNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]

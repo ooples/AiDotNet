@@ -51,6 +51,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Protein structure generation
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GraphGenerationModelOptions { NodeFeatureSize = 9, MaxNodes = 50, HiddenSize = 128 };
+/// var model = new GraphGenerationModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var graph = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

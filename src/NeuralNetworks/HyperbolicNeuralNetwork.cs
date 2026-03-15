@@ -34,6 +34,14 @@ namespace AiDotNet.NeuralNetworks;
 /// more specific "leaf" concepts.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new HyperbolicNeuralNetworkOptions { InputSize = 64, HiddenSize = 128, Curvature = 1.0 };
+/// var model = new HyperbolicNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 64 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
