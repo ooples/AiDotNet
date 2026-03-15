@@ -40,12 +40,25 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     private const int CatRecurrentNetwork = 15;
     private const int CatConvolutionalNetwork = 16;
     private const int CatGraphNetwork = 17;
+    private const int CatEmbeddingModel = 18;
+    private const int CatFoundationModel = 19;
+    private const int CatMetaLearning = 20;
+    private const int CatTabularModel = 21;
     private const int CatSyntheticDataGenerator = 22;
+    private const int CatPhysicsInformed = 23;
+    private const int CatNeuralOperator = 24;
+    private const int CatAgent = 25;
+    private const int CatSignalProcessing = 26;
     private const int CatSVM = 27;
     private const int CatKernel = 28;
     private const int CatInstanceBased = 29;
     private const int CatLinear = 30;
     private const int CatDecisionTree = 31;
+    private const int CatStatistical = 32;
+    private const int CatRegularization = 33;
+    private const int CatInterpretable = 34;
+    private const int CatOptimization = 35;
+    private const int CatAnomalyDetection = 36;
 
     // Diagnostic for suspicious model/optimizer combinations
     private static readonly DiagnosticDescriptor SuspiciousOptimizer = new(
@@ -504,8 +517,82 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add("MinMaxScaler");
                     break;
 
+                case CatFoundationModel:
+                case CatEmbeddingModel:
+                case CatTabularModel:
+                    // Foundation models, embeddings, and tabular models use AdamW as industry standard
+                    lossFunctions.Add("MSE");
+                    lossFunctions.Add("CrossEntropy");
+                    catOptimizers.Add("Adam");
+                    catOptimizers.Add("AdamW");
+                    catOptimizers.Add("LAMB");
+                    preprocessors.Add("StandardScaler");
+                    break;
+
+                case CatStatistical:
+                case CatRegularization:
+                case CatInterpretable:
+                    // Statistical and regularized models typically use built-in solvers or LBFGS
+                    lossFunctions.Add("MSE");
+                    lossFunctions.Add("MAE");
+                    lossFunctions.Add("CrossEntropy");
+                    catOptimizers.Add("BuiltIn");
+                    catOptimizers.Add("LBFGS");
+                    catOptimizers.Add("Adam");
+                    preprocessors.Add("StandardScaler");
+                    break;
+
+                case CatPhysicsInformed:
+                case CatNeuralOperator:
+                    // Physics-informed models use Adam or LBFGS
+                    lossFunctions.Add("MSE");
+                    lossFunctions.Add("L1");
+                    catOptimizers.Add("Adam");
+                    catOptimizers.Add("AdamW");
+                    catOptimizers.Add("LBFGS");
+                    preprocessors.Add("StandardScaler");
+                    break;
+
+                case CatMetaLearning:
+                case CatAgent:
+                    // Meta-learning and agents use Adam
+                    lossFunctions.Add("MSE");
+                    lossFunctions.Add("CrossEntropy");
+                    catOptimizers.Add("Adam");
+                    catOptimizers.Add("AdamW");
+                    preprocessors.Add("StandardScaler");
+                    break;
+
+                case CatSignalProcessing:
+                    // Signal processing models use built-in or Adam
+                    lossFunctions.Add("MSE");
+                    lossFunctions.Add("MAE");
+                    catOptimizers.Add("BuiltIn");
+                    catOptimizers.Add("Adam");
+                    preprocessors.Add("StandardScaler");
+                    break;
+
+                case CatOptimization:
+                    // Optimization-based models use their own solvers
+                    lossFunctions.Add("MSE");
+                    catOptimizers.Add("BuiltIn");
+                    catOptimizers.Add("Adam");
+                    preprocessors.Add("StandardScaler");
+                    break;
+
+                case CatAnomalyDetection:
+                    // Anomaly detection uses Adam or built-in
+                    lossFunctions.Add("MSE");
+                    lossFunctions.Add("MAE");
+                    catOptimizers.Add("Adam");
+                    catOptimizers.Add("AdamW");
+                    catOptimizers.Add("BuiltIn");
+                    preprocessors.Add("StandardScaler");
+                    preprocessors.Add("MinMaxScaler");
+                    break;
+
                 default:
-                    // General defaults for unrecognized categories
+                    // Unknown categories get all gradient optimizers as fallback
                     lossFunctions.Add("MSE");
                     lossFunctions.Add("CrossEntropy");
                     AddAllGradientOptimizers(catOptimizers);
