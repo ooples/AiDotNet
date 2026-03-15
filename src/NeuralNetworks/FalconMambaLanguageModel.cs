@@ -23,6 +23,14 @@ namespace AiDotNet.NeuralNetworks;
 /// very long context windows.</para>
 /// <para><b>Reference:</b> Zuo et al., "Falcon Mamba: The First Competitive Attention-free 7B Language Model", 2024.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new FalconMambaOptions { VocabSize = 65024, ModelDim = 4096, NumLayers = 64 };
+/// var model = new FalconMambaLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

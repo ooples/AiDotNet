@@ -26,6 +26,14 @@ namespace AiDotNet.NeuralNetworks;
 /// https://arxiv.org/abs/2404.05892
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new FinchOptions { VocabSize = 65536, ModelDim = 2560, NumLayers = 32, NumHeads = 40 };
+/// var model = new FinchLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
