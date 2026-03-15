@@ -30,6 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// navigating a subway map or following a multi-step recipe.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new DifferentiableNeuralComputerOptions { InputSize = 64, MemorySize = 128, MemoryWordSize = 32 };
+/// var model = new DifferentiableNeuralComputer&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10, 64 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

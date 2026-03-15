@@ -29,6 +29,14 @@ namespace AiDotNet.NeuralNetworks;
 /// DBMs can both recognize patterns in data and generate new data with similar patterns.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new DeepBoltzmannMachineOptions { VisibleSize = 784, HiddenLayers = new[] { 500, 200 } };
+/// var model = new DeepBoltzmannMachine&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
