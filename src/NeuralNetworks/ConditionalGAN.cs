@@ -35,6 +35,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Reference: Mirza and Osindero, "Conditional Generative Adversarial Nets" (2014)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ConditionalGANOptions { LatentSize = 100, NumClasses = 10 };
+/// var model = new ConditionalGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Generative)]

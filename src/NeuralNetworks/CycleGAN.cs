@@ -41,6 +41,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Cycle-Consistent Adversarial Networks" (2017)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new CycleGANOptions { ImageSize = 256, NumResidualBlocks = 9 };
+/// var model = new CycleGAN&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 3, 256, 256 });
+/// var translated = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]

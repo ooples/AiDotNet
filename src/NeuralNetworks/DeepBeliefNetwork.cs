@@ -31,6 +31,14 @@ namespace AiDotNet.NeuralNetworks;
 /// This layer-by-layer approach helps the network discover meaningful patterns even when you don't have a lot of labeled examples.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new DeepBeliefNetworkOptions { InputSize = 784, HiddenLayers = new[] { 500, 200 } };
+/// var model = new DeepBeliefNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

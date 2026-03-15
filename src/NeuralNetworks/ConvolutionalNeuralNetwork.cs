@@ -22,6 +22,14 @@ namespace AiDotNet.NeuralNetworks;
 /// recognizing objects in photos, detecting faces, or reading handwritten text.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ConvolutionalNeuralNetworkOptions { InputChannels = 3, InputHeight = 32, InputWidth = 32 };
+/// var model = new ConvolutionalNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 3, 32, 32 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
