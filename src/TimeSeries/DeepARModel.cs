@@ -304,13 +304,15 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
         for (int layer = _lstmLayers.Count - 1; layer >= 0; layer--)
         {
-            var lstmGradients = _lstmLayers[layer].Backward(dHidden);
-            foreach (var kvp in lstmGradients)
+            var dInput = _lstmLayers[layer].Backward(dHidden);
+            var lstmGradients = _lstmLayers[layer].LastGradients;
+            if (lstmGradients is not null)
             {
-                gradients[$"lstm_{layer}_{kvp.Key}"] = kvp.Value;
+                foreach (var kvp in lstmGradients)
+                    gradients[$"lstm_{layer}_{kvp.Key}"] = kvp.Value;
             }
 
-            if (layer > 0 && lstmGradients.TryGetValue("input_gradient", out var inputGrad))
+            if (layer > 0 && lstmGradients is not null && lstmGradients.TryGetValue("input_gradient", out var inputGrad))
             {
                 dHidden = inputGrad;
             }
@@ -613,9 +615,31 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override int ParameterCount => _weights.Length + _bias.Length;
 
-    public DeepARLstmCellTensor(int inputSize, int hiddenSize, int seed = 42)
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
     {
-                _inputSize = inputSize;
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _hiddenSize }), "lstm_cell_output");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        for (int i = 0; i < _weights.Length; i++) p.Add(_weights[i]);
+        for (int i = 0; i < _bias.Length; i++) p.Add(_bias[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        // Gradients are applied externally by the model's training loop
+    }
+
+    public DeepARLstmCellTensor(int inputSize, int hiddenSize, int seed = 42)
+        : base(new[] { inputSize }, new[] { hiddenSize })
+    {
+        _inputSize = inputSize;
         _hiddenSize = hiddenSize;
 
         var random = RandomHelper.CreateSeededRandom(seed);
@@ -729,7 +753,20 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(x))));
     }
 
-    public Dictionary<string, Tensor<T>> Backward(Tensor<T> dHidden)
+    /// <summary>
+    /// Stored gradients from last backward pass, accessible by the model's training loop.
+    /// </summary>
+    public Dictionary<string, Tensor<T>>? LastGradients { get; private set; }
+
+    public override Tensor<T> Backward(Tensor<T> dHidden)
+    {
+        LastGradients = BackwardInternal(dHidden);
+        if (LastGradients.TryGetValue("input", out var dInput))
+            return dInput;
+        return new Tensor<T>(new[] { _inputSize });
+    }
+
+    private Dictionary<string, Tensor<T>> BackwardInternal(Tensor<T> dHidden)
     {
         var gradients = new Dictionary<string, Tensor<T>>();
 
