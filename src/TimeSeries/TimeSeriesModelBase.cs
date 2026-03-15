@@ -270,6 +270,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </summary>
     protected CancellationToken TrainingCancellationToken { get; private set; } = CancellationToken.None;
 
+    /// <summary>
+    /// Auto-scaled guard threshold computed from training data.
+    /// Set to 1000 * max(|y|) during training. Falls back to 1e15 if not trained.
+    /// </summary>
+    private double _autoGuardThreshold = 1e15;
+
     public void Train(Matrix<T> x, Vector<T> y) => Train(x, y, CancellationToken.None);
 
     public void Train(Matrix<T> x, Vector<T> y, CancellationToken callerToken)
@@ -282,6 +288,17 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
         // Reset model state before training
         Reset();
+
+        // Auto-scale guard threshold from training data: 1000x max observed absolute value.
+        // This adapts overflow protection to the dataset scale instead of a fixed magic number.
+        double maxAbsY = 0;
+        for (int i = 0; i < y.Length; i++)
+        {
+            double absVal = Math.Abs(NumOps.ToDouble(y[i]));
+            if (absVal > maxAbsY && !double.IsNaN(absVal) && !double.IsInfinity(absVal))
+                maxAbsY = absVal;
+        }
+        _autoGuardThreshold = maxAbsY > 0 ? maxAbsY * 1000.0 : 1e15;
 
         // Create a linked CancellationTokenSource that combines:
         // 1. The caller's token (for external cancellation)
@@ -458,15 +475,25 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// in recursive/autoregressive forecasting loops.
     /// </summary>
     /// <param name="value">The raw prediction value.</param>
-    /// <param name="maxAbsValue">Maximum allowed absolute value (default 1e15).</param>
+    /// <param name="maxAbsValue">
+    /// Maximum allowed absolute value. If not specified, uses the priority chain:
+    /// (1) user-configured <see cref="TimeSeriesRegressionOptions{T}.MaxPredictionAbsValue"/>,
+    /// (2) auto-scaled from training data (1000x max |y|),
+    /// (3) fallback to 1e15.
+    /// </param>
     /// <returns>A finite, clamped value.</returns>
-    protected T GuardPrediction(T value, double maxAbsValue = 1e15)
+    protected T GuardPrediction(T value, double maxAbsValue = -1)
     {
+        // Priority chain: explicit parameter > user option > auto-scaled > 1e15 fallback
+        double threshold = maxAbsValue > 0
+            ? maxAbsValue
+            : Options.MaxPredictionAbsValue ?? _autoGuardThreshold;
+
         var d = NumOps.ToDouble(value);
-        if (double.IsNaN(d) || double.IsInfinity(d) || Math.Abs(d) > maxAbsValue)
+        if (double.IsNaN(d) || double.IsInfinity(d) || Math.Abs(d) > threshold)
         {
             var safe = double.IsNaN(d) ? 0.0 : d;
-            var clamped = MathPolyfill.Clamp(safe, -maxAbsValue, maxAbsValue);
+            var clamped = MathPolyfill.Clamp(safe, -threshold, threshold);
             return NumOps.FromDouble(clamped);
         }
         return value;

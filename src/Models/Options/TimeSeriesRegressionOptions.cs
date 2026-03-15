@@ -127,6 +127,33 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     public ILossFunction<T>? LossFunction { get; set; } = null;
 
     /// <summary>
+    /// Gets or sets the maximum absolute value allowed for predictions.
+    /// </summary>
+    /// <value>
+    /// A positive value to clamp predictions, or <c>null</c> (default) to auto-scale
+    /// based on training data range (1000x the maximum observed absolute value).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This guards against numerical overflow in recursive/autoregressive forecasting loops
+    /// where unstable coefficients can cause predictions to diverge exponentially.
+    /// </para>
+    /// <para>
+    /// Priority chain:
+    /// <list type="number">
+    /// <item>User-specified value (this property) — for domain-specific bounds</item>
+    /// <item>Auto-scaled from training data (1000x max |y|) — adapts to dataset scale</item>
+    /// <item>Fallback to 1e15 — when no training data is available</item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> Leave this as null (the default) and the model will
+    /// automatically determine a reasonable limit based on your training data. Only set
+    /// this if you know your predictions should stay within specific bounds (e.g., set to
+    /// 100 for percentage data that should never exceed 100).</para>
+    /// </remarks>
+    public double? MaxPredictionAbsValue { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets the maximum wall-clock training time in seconds.
     /// </summary>
     /// <value>Maximum training time in seconds, defaulting to 0 (no limit).</value>
