@@ -8,5 +8,5 @@ AIDN011 | AiDotNet.ModelMetadata | Error | ModelMetadataValidationGenerator, Mis
 AIDN012 | AiDotNet.ModelMetadata | Error | ModelMetadataValidationGenerator, Missing usage example
 AIDN020 | AiDotNet.ModelMetadata | Error | ModelMetadataValidationGenerator, Invalid ModelPaper URL
 AIDN030 | AiDotNet.Compatibility | Warning | CompatibilityMatrixGenerator, Suspicious model-optimizer combination
-AIDN040 | AiDotNet.TestCoverage | Warning | TestScaffoldGenerator, Model has no test coverage
+AIDN040 | AiDotNet.TestCoverage | Error | TestScaffoldGenerator, Model has no test coverage
 AIDN041 | AiDotNet.TestCoverage | Warning | TestScaffoldGenerator, Model test coverage summary

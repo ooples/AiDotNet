@@ -39,7 +39,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         title: "Model has no test coverage",
         messageFormat: "Model '{0}' has no corresponding test class (expected: '{0}Tests' or similar)",
         category: "AiDotNet.TestCoverage",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Every model class should have at least basic test coverage.");
 
