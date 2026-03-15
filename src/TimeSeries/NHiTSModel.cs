@@ -139,6 +139,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
                 for (int bi = 0; bi < batchSize; bi++)
                 {
+                    if (bi % 8 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
                     int i = indices[batchStart + bi];
                     var input = ConvertRowToTensor(x, i);
                     T target = y[i];

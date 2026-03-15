@@ -288,6 +288,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
                 // Accumulate gradients over batch
                 for (int b = 0; b < actualBatchSize; b++)
                 {
+                    if (b % 4 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
                     int idx = indices[batch + b];
                     Vector<T> input = x.GetRow(idx);
                     T target = y[idx];
@@ -908,14 +909,35 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 /// </summary>
 public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 {
-    public int ContextLength { get; set; } = 512;
-    public int ForecastHorizon { get; set; } = 64;
-    public int VocabularySize { get; set; } = 4096;
-    public int EmbeddingDim { get; set; } = 256;
-    public int NumLayers { get; set; } = 6;
-    public int NumHeads { get; set; } = 8;
-    public double LearningRate { get; set; } = 0.0001;
-    public int Epochs { get; set; } = 100;
+    /// <summary>
+    /// Context length for input sequences. Default is 64 for CPU-friendly training.
+    /// For GPU training with proper hardware acceleration, increase to 512+.
+    /// </summary>
+    public int ContextLength { get; set; } = 64;
+
+    public int ForecastHorizon { get; set; } = 16;
+
+    /// <summary>
+    /// Vocabulary size for token discretization. Default is 256 for CPU-friendly training.
+    /// Original Chronos paper uses 4096 but that requires GPU acceleration.
+    /// </summary>
+    public int VocabularySize { get; set; } = 256;
+
+    /// <summary>
+    /// Embedding dimension. Default is 64 for CPU-friendly training.
+    /// For GPU training, increase to 256+.
+    /// </summary>
+    public int EmbeddingDim { get; set; } = 64;
+
+    /// <summary>
+    /// Number of transformer layers. Default is 2 for CPU-friendly training.
+    /// For GPU training, increase to 6+.
+    /// </summary>
+    public int NumLayers { get; set; } = 2;
+
+    public int NumHeads { get; set; } = 4;
+    public double LearningRate { get; set; } = 0.001;
+    public int Epochs { get; set; } = 50;
 
     public ChronosOptions() { }
 

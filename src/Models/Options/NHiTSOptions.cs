@@ -110,8 +110,8 @@ public class NHiTSOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the hidden layer size for fully connected layers within each block.
     /// </summary>
-    /// <value>The hidden layer size, defaulting to 512.</value>
-    public int HiddenLayerSize { get; set; } = 512;
+    /// <value>The hidden layer size, defaulting to 128. For GPU training, increase to 512+.</value>
+    public int HiddenLayerSize { get; set; } = 128;
 
     /// <summary>
     /// Gets or sets the number of hidden layers within each block.
