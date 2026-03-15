@@ -57,22 +57,22 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Class means for each class.
     /// </summary>
-    private Matrix<T>? _classMeans;
+    private Matrix<T> _classMeans = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Pooled within-class covariance matrix (shared by all classes).
     /// </summary>
-    private Matrix<T>? _pooledCovariance;
+    private Matrix<T> _pooledCovariance = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Inverse of the pooled covariance matrix.
     /// </summary>
-    private Matrix<T>? _covarianceInverse;
+    private Matrix<T> _covarianceInverse = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Class priors (prior probabilities).
     /// </summary>
-    private Vector<T>? _classPriors;
+    private Vector<T> _classPriors = new Vector<T>(0);
 
     /// <summary>
     /// Initializes a new instance of the LinearDiscriminantAnalysis class.
@@ -206,7 +206,7 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
             var mean = new Vector<T>(NumFeatures);
             for (int j = 0; j < NumFeatures; j++)
             {
-                mean[j] = _classMeans![c, j];
+                mean[j] = _classMeans[c, j];
             }
 
             // Accumulate (x - mean)(x - mean)^T for this class
@@ -677,10 +677,10 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
             }
         }
 
-        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans");
-        _pooledCovariance = DeserializeMatrix(modelDataObj, "PooledCovariance");
-        _covarianceInverse = DeserializeMatrix(modelDataObj, "CovarianceInverse");
-        _classPriors = DeserializeVector(modelDataObj, "ClassPriors");
+        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans") ?? new Matrix<T>(0, 0);
+        _pooledCovariance = DeserializeMatrix(modelDataObj, "PooledCovariance") ?? new Matrix<T>(0, 0);
+        _covarianceInverse = DeserializeMatrix(modelDataObj, "CovarianceInverse") ?? new Matrix<T>(0, 0);
+        _classPriors = DeserializeVector(modelDataObj, "ClassPriors") ?? new Vector<T>(0);
     }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)

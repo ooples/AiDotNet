@@ -50,17 +50,17 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
     /// <summary>
     /// Lambda values (log-SNR) for each inference timestep.
     /// </summary>
-    private Vector<T>? _lambdas;
+    private Vector<T> _lambdas = new Vector<T>(0);
 
     /// <summary>
     /// Alpha_t values for inference timesteps.
     /// </summary>
-    private Vector<T>? _alphaTs;
+    private Vector<T> _alphaTs = new Vector<T>(0);
 
     /// <summary>
     /// Sigma_t values for inference timesteps.
     /// </summary>
-    private Vector<T>? _sigmaTs;
+    private Vector<T> _sigmaTs = new Vector<T>(0);
 
     /// <summary>
     /// Current step counter for tracking multi-step order.
@@ -205,10 +205,10 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
     /// <returns>The predicted sample at the next timestep.</returns>
     private Vector<T> PredictorStep(Vector<T> sample, int stepIndex, int nextStepIndex, int order)
     {
-        T lambda_s = _lambdas![stepIndex];
+        T lambda_s = _lambdas[stepIndex];
         T lambda_t = _lambdas[nextStepIndex];
-        T alpha_t = _alphaTs![nextStepIndex];
-        T sigma_t = _sigmaTs![nextStepIndex];
+        T alpha_t = _alphaTs[nextStepIndex];
+        T sigma_t = _sigmaTs[nextStepIndex];
         T sigma_s = _sigmaTs[stepIndex];
 
         T h = NumOps.Subtract(lambda_t, lambda_s);
@@ -267,10 +267,10 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
     private Vector<T> CorrectorStep(Vector<T> predictedSample, Vector<T> currentSample,
         int stepIndex, int nextStepIndex, int order)
     {
-        T lambda_s = _lambdas![stepIndex];
-        T lambda_t = _lambdas![nextStepIndex];
-        T alpha_t = _alphaTs![nextStepIndex];
-        T sigma_t = _sigmaTs![nextStepIndex];
+        T lambda_s = _lambdas[stepIndex];
+        T lambda_t = _lambdas[nextStepIndex];
+        T alpha_t = _alphaTs[nextStepIndex];
+        T sigma_t = _sigmaTs[nextStepIndex];
         T sigma_s = _sigmaTs[stepIndex];
 
         T h = NumOps.Subtract(lambda_t, lambda_s);

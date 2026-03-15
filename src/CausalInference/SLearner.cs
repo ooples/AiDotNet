@@ -54,7 +54,7 @@ public class SLearner<T> : CausalModelBase<T>
     /// <summary>
     /// The model weights (including treatment as a feature).
     /// </summary>
-    private Vector<T>? _weights;
+    private Vector<T> _weights = new Vector<T>(0);
 
     /// <summary>
     /// The bias term.
@@ -168,8 +168,8 @@ public class SLearner<T> : CausalModelBase<T>
             // Predict with treatment = 1
             double predTreated = NumOps.ToDouble(_bias);
             for (int j = 0; j < features.Columns; j++)
-                predTreated += NumOps.ToDouble(_weights![j]) * NumOps.ToDouble(features[i, j]);
-            predTreated += NumOps.ToDouble(_weights![features.Columns]) * 1.0; // T = 1
+                predTreated += NumOps.ToDouble(_weights[j]) * NumOps.ToDouble(features[i, j]);
+            predTreated += NumOps.ToDouble(_weights[features.Columns]) * 1.0; // T = 1
 
             // Predict with treatment = 0
             double predControl = NumOps.ToDouble(_bias);
@@ -195,8 +195,8 @@ public class SLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_bias);
             for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weights![j]) * NumOps.ToDouble(features[i, j]);
-            pred += NumOps.ToDouble(_weights![features.Columns]) * 1.0;
+                pred += NumOps.ToDouble(_weights[j]) * NumOps.ToDouble(features[i, j]);
+            pred += NumOps.ToDouble(_weights[features.Columns]) * 1.0;
             result[i] = NumOps.FromDouble(pred);
         }
         return result;
@@ -214,7 +214,7 @@ public class SLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_bias);
             for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weights![j]) * NumOps.ToDouble(features[i, j]);
+                pred += NumOps.ToDouble(_weights[j]) * NumOps.ToDouble(features[i, j]);
             // Treatment = 0, so treatment weight not added
             result[i] = NumOps.FromDouble(pred);
         }
