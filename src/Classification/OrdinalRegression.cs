@@ -359,13 +359,12 @@ public class OrdinalRegression<T> : ClassifierBase<T>
                 dPdEta += cumProbs[yi - 1] * (1 - cumProbs[yi - 1]); // +sigmoid'(α_{yi-1} - η)
             }
 
-            // Gradient for coefficients: (1/P(Y=yi)) × dP(Y=yi)/dη × x
-            // Note: since dP/dη is negative of dP/d(α-η), and we want dL/dβ = Σ dL/dP × dP/dη × (-x)
+            // Gradient for coefficients: dL/dβ_j = Σ_i (1/P(Y=yi)) × dP(Y=yi)/dη × x_ij
+            // Since η = β^T x, dη/dβ = x, so the coefficient gradient accumulates dPdEta/P * x.
             T coeffFactor = NumOps.FromDouble(dPdEta / classProbs[yi]);
             for (int j = 0; j < NumFeatures; j++)
             {
-                // The sign is negative because ∂η/∂β = x and ∂(α-η)/∂β = -x
-                coeffGradient[j] = NumOps.Subtract(coeffGradient[j], NumOps.Multiply(coeffFactor, x[i, j]));
+                coeffGradient[j] = NumOps.Add(coeffGradient[j], NumOps.Multiply(coeffFactor, x[i, j]));
             }
 
             // Gradient for thresholds: (1/P(Y=yi)) × dP(Y=yi)/dα_k

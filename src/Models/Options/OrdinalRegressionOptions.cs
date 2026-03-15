@@ -48,7 +48,7 @@ public class OrdinalRegressionOptions<T> : ClassifierOptions<T>
     /// you get convergence warnings.
     /// </para>
     /// </remarks>
-    public int MaxIterations { get; set; } = 100;
+    public int MaxIterations { get; set; } = 1000;
 
     /// <summary>
     /// Gets or sets the convergence tolerance for the optimization algorithm.
