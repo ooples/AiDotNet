@@ -104,7 +104,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     private readonly bool _layerWisePruning;
 
     // Mask tracking: 0 = available, task_id = assigned to that task
-    private int[]? _parameterOwnership;
+    private int[] _parameterOwnership = Array.Empty<int>();
 
     // Accumulated gradient importance for gradient-based pruning
     private Vector<T>? _gradientImportance;
@@ -347,7 +347,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
         var availableIndices = new List<int>();
         for (int i = 0; i < parameters.Length; i++)
         {
-            if (_parameterOwnership![i] == 0)
+            if (_parameterOwnership[i] == 0)
             {
                 availableIndices.Add(i);
             }
@@ -390,7 +390,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     {
         for (int i = 0; i < taskMask.Length; i++)
         {
-            if (taskMask[i] && _parameterOwnership![i] == 0)
+            if (taskMask[i] && _parameterOwnership[i] == 0)
             {
                 // Assign this parameter to the current task
                 _parameterOwnership[i] = taskId;
