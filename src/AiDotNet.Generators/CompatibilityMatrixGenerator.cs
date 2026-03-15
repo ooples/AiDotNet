@@ -30,6 +30,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     private const int CatNeuralNetwork = 0;
     private const int CatRegression = 1;
     private const int CatClassifier = 2;
+    private const int CatClustering = 3;
     private const int CatGAN = 4;
     private const int CatDiffusion = 5;
     private const int CatTransformer = 6;
@@ -38,6 +39,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     private const int CatEnsemble = 9;
     private const int CatBayesian = 10;
     private const int CatSurvivalModel = 11;
+    private const int CatCausalModel = 12;
     private const int CatTimeSeriesModel = 13;
     private const int CatAutoencoder = 14;
     private const int CatRecurrentNetwork = 15;
@@ -435,7 +437,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add(LossBinaryCrossEntropy);
                     lossFunctions.Add(LossHinge);
                     lossFunctions.Add(LossFocalLoss);
-                    AddAllGradientOptimizers(catOptimizers);
+                    AddModernOptimizers(catOptimizers);
                     preprocessors.Add(PrepStandardScaler);
                     preprocessors.Add(PrepOneHotEncoder);
                     break;
@@ -446,7 +448,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add(LossMAE);
                     lossFunctions.Add(LossHuber);
                     lossFunctions.Add(LossLogCosh);
-                    AddAllGradientOptimizers(catOptimizers);
+                    AddModernOptimizers(catOptimizers);
                     preprocessors.Add(PrepStandardScaler);
                     preprocessors.Add(PrepMinMaxScaler);
                     break;
@@ -556,8 +558,8 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add(LossMSE);
                     lossFunctions.Add(LossMAE);
                     lossFunctions.Add(LossCrossEntropy);
-                    // Tree models don't use gradient optimizers
-                    catOptimizers.Add(OptBuiltIn);
+                    // Tree models primarily use built-in, but hybrid models may need adaptive optimizers
+                    AddModernOptimizers(catOptimizers);
                     preprocessors.Add(PrepStandardScaler);
                     break;
 
@@ -566,14 +568,16 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add(LossHinge);
                     lossFunctions.Add(LossMSE);
                     catOptimizers.Add(OptSMO);
-                    catOptimizers.Add(OptLBFGS);
+                    AddModernOptimizers(catOptimizers);
                     preprocessors.Add(PrepStandardScaler);
                     break;
 
+                case CatClustering:
+                case CatCausalModel:
                 case CatInstanceBased:
                     lossFunctions.Add(LossMSE);
                     lossFunctions.Add(LossMAE);
-                    catOptimizers.Add(OptBuiltIn);
+                    AddModernOptimizers(catOptimizers);
                     preprocessors.Add(PrepStandardScaler);
                     preprocessors.Add(PrepMinMaxScaler);
                     break;
@@ -618,13 +622,10 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
 
                 case CatPhysicsInformed:
                 case CatNeuralOperator:
-                    // Physics-informed models use Adam, LBFGS, or RMSProp
+                    // Physics-informed models use adaptive optimizers and LBFGS
                     lossFunctions.Add(LossMSE);
                     lossFunctions.Add(LossL1);
-                    catOptimizers.Add(OptAdam);
-                    catOptimizers.Add(OptAdamW);
-                    catOptimizers.Add(OptRMSProp);
-                    catOptimizers.Add(OptLBFGS);
+                    AddModernOptimizers(catOptimizers);
                     preprocessors.Add(PrepStandardScaler);
                     break;
 
