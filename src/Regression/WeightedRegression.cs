@@ -131,12 +131,11 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     public WeightedRegression(WeightedRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new WeightedRegressionOptions<T>(), regularization)
     {
-        Guard.NotNull(options);
-        Guard.NotNull(options.Weights);
-        _weights = options.Weights;
-        _order = options.Order;
+        var opts = options ?? new WeightedRegressionOptions<T>();
+        _weights = opts.Weights;
+        _order = opts.Order;
     }
 
     /// <summary>
