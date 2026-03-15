@@ -141,5 +141,14 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// if you want to prevent training from running indefinitely. This is useful for large datasets
     /// or complex models where training might hang.</para>
     /// </remarks>
-    public int MaxTrainingTimeSeconds { get; set; } = 0;
+    private int _maxTrainingTimeSeconds;
+
+    public int MaxTrainingTimeSeconds
+    {
+        get => _maxTrainingTimeSeconds;
+        set => _maxTrainingTimeSeconds = value < 0
+            ? throw new ArgumentOutOfRangeException(nameof(MaxTrainingTimeSeconds),
+                value, "MaxTrainingTimeSeconds cannot be negative. Use 0 for no limit.")
+            : value;
+    }
 }

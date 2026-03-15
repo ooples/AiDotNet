@@ -391,16 +391,28 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
 
-        // Read training state for prediction initialization
-        int diffLen = reader.ReadInt32();
-        _lastTrainDiffValues = new Vector<T>(diffLen);
-        for (int i = 0; i < diffLen; i++)
-            _lastTrainDiffValues[i] = NumOps.FromDouble(reader.ReadDouble());
+        // Read training state for prediction initialization.
+        // These fields were added post-patch; older serialized models won't have them.
+        try
+        {
+            int diffLen = reader.ReadInt32();
+            _lastTrainDiffValues = new Vector<T>(diffLen);
+            for (int i = 0; i < diffLen; i++)
+                _lastTrainDiffValues[i] = NumOps.FromDouble(reader.ReadDouble());
 
-        int residLen = reader.ReadInt32();
-        _lastTrainResiduals = new Vector<T>(residLen);
-        for (int i = 0; i < residLen; i++)
-            _lastTrainResiduals[i] = NumOps.FromDouble(reader.ReadDouble());
+            int residLen = reader.ReadInt32();
+            _lastTrainResiduals = new Vector<T>(residLen);
+            for (int i = 0; i < residLen; i++)
+                _lastTrainResiduals[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            // Pre-patch model — initialize with empty vectors.
+            // Predictions will still work but won't have historical context
+            // for the first few steps.
+            _lastTrainDiffValues ??= new Vector<T>(0);
+            _lastTrainResiduals ??= new Vector<T>(0);
+        }
     }
 
     /// <summary>

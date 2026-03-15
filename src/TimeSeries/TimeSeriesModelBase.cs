@@ -274,6 +274,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
     public void Train(Matrix<T> x, Vector<T> y, CancellationToken callerToken)
     {
+        // Fail fast if already cancelled — don't discard existing trained state
+        callerToken.ThrowIfCancellationRequested();
+
         // Input validation
         ValidateTrainingInputs(x, y);
 

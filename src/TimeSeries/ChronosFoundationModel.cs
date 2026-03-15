@@ -966,9 +966,9 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 /// </summary>
 internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private readonly int _embeddingDim;
-    private readonly int _numHeads;
-    private readonly int _headDim;
+    private int _embeddingDim;
+    private int _numHeads;
+    private int _headDim;
 
     // Self-attention weights - now using Tensor<T>
     private Tensor<T> _queryProj;     // [embeddingDim, embeddingDim]
@@ -1725,12 +1725,9 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         int embeddingDim = reader.ReadInt32();
         int numHeads = reader.ReadInt32();
 
-        typeof(ChronosTransformerLayerTensor<T>).GetField("_embeddingDim",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(this, embeddingDim);
-        typeof(ChronosTransformerLayerTensor<T>).GetField("_numHeads",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(this, numHeads);
-        typeof(ChronosTransformerLayerTensor<T>).GetField("_headDim",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.SetValue(this, embeddingDim / numHeads);
+        _embeddingDim = embeddingDim;
+        _numHeads = numHeads;
+        _headDim = embeddingDim / numHeads;
 
         _queryProj = DeserializeTensor(reader);
         _keyProj = DeserializeTensor(reader);
