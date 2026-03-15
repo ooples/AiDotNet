@@ -332,6 +332,15 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         {
             writer.Write(Convert.ToDouble(_maCoefficients[i]));
         }
+
+        // Write training state needed for prediction initialization
+        writer.Write(_lastTrainDiffValues.Length);
+        for (int i = 0; i < _lastTrainDiffValues.Length; i++)
+            writer.Write(Convert.ToDouble(_lastTrainDiffValues[i]));
+
+        writer.Write(_lastTrainResiduals.Length);
+        for (int i = 0; i < _lastTrainResiduals.Length; i++)
+            writer.Write(Convert.ToDouble(_lastTrainResiduals[i]));
     }
 
     /// <summary>
@@ -381,6 +390,17 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         {
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+
+        // Read training state for prediction initialization
+        int diffLen = reader.ReadInt32();
+        _lastTrainDiffValues = new Vector<T>(diffLen);
+        for (int i = 0; i < diffLen; i++)
+            _lastTrainDiffValues[i] = NumOps.FromDouble(reader.ReadDouble());
+
+        int residLen = reader.ReadInt32();
+        _lastTrainResiduals = new Vector<T>(residLen);
+        for (int i = 0; i < residLen; i++)
+            _lastTrainResiduals[i] = NumOps.FromDouble(reader.ReadDouble());
     }
 
     /// <summary>
