@@ -462,7 +462,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     public override void Reset()
     {
         base.Reset();
-        _parameterOwnership = null;
+        _parameterOwnership = Array.Empty<int>();
         _gradientImportance = null;
         _gradientCount = 0;
         _preTaskParameters = null;

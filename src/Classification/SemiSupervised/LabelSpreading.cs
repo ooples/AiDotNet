@@ -826,7 +826,8 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private int GetClassIndex(T label)
     {
-        for (int i = 0; i < ClassLabels!.Length; i++)
+        if (ClassLabels is null) return -1;
+        for (int i = 0; i < ClassLabels.Length; i++)
         {
             if (NumOps.Compare(ClassLabels[i], label) == 0)
             {
