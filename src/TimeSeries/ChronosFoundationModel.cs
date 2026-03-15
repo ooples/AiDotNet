@@ -90,6 +90,13 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private Tensor<T> _finalLayerNormGamma;  // [embeddingDim]
     private Tensor<T> _finalLayerNormBeta;   // [embeddingDim]
 
+    // Pre-allocated gradient computation buffers (reused across gradient steps)
+    private Matrix<T>? _gradProjBuffer;       // [vocabularySize, embeddingDim]
+    private Matrix<T>? _gradProjTranspose;    // [embeddingDim, vocabularySize]
+    private Matrix<T>? _gradColBuffer;        // [embeddingDim, 1]
+    private Matrix<T>? _gradDLogitsCol;       // [vocabularySize, 1]
+    private Matrix<T>? _gradNormRow;          // [1, embeddingDim]
+
     // Gradient accumulators for batch training
     private readonly Dictionary<string, Tensor<T>> _gradientAccumulators;
     private int _gradientCount;
@@ -360,17 +367,17 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         var (normalizedOutput, layerNormCache) = ApplyLayerNormWithCache(lastHidden, _finalLayerNormGamma, _finalLayerNormBeta);
 
         // Compute logits via Engine-accelerated matrix-vector multiply: logits = W * x + b
-        // This replaces the O(vocabSize × embDim) manual nested loop with a single BLAS call
-        var projMatrix = new Matrix<T>(_vocabularySize, _options.EmbeddingDim);
+        // Pre-allocated buffers reused across gradient steps to avoid O(vocab×embDim) allocation per step
+        _gradProjBuffer ??= new Matrix<T>(_vocabularySize, _options.EmbeddingDim);
+        _gradColBuffer ??= new Matrix<T>(_options.EmbeddingDim, 1);
         for (int i = 0; i < _vocabularySize; i++)
             for (int j = 0; j < _options.EmbeddingDim; j++)
-                projMatrix[i, j] = _outputProjection[i, j];
+                _gradProjBuffer[i, j] = _outputProjection[i, j];
 
         var normVec = normalizedOutput.ToVector();
-        var colMatrix = new Matrix<T>(normVec.Length, 1);
-        for (int i = 0; i < normVec.Length; i++) colMatrix[i, 0] = normVec[i];
+        for (int i = 0; i < normVec.Length; i++) _gradColBuffer[i, 0] = normVec[i];
 
-        var logitMatrix = (Matrix<T>)Engine.MatrixMultiply(projMatrix, colMatrix);
+        var logitMatrix = (Matrix<T>)Engine.MatrixMultiply(_gradProjBuffer, _gradColBuffer);
 
         var logits = new double[_vocabularySize];
         double maxLogit = double.NegativeInfinity;
@@ -407,27 +414,27 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         // Backprop through output projection
         var dOutputBias = dLogits; // dL/dBias = dL/dLogits
 
-        // Engine-accelerated gradient computation:
+        // Engine-accelerated gradient computation using pre-allocated buffers:
         // dW = dLogits (col) * normalizedOutput^T (row) — outer product via MatrixMultiply
         var dLogitsVec = dLogits.ToVector();
-        var dLogitsCol = new Matrix<T>(_vocabularySize, 1);
-        for (int i = 0; i < _vocabularySize; i++) dLogitsCol[i, 0] = dLogitsVec[i];
-        var normRow = new Matrix<T>(1, _options.EmbeddingDim);
-        for (int j = 0; j < _options.EmbeddingDim; j++) normRow[0, j] = normalizedOutput[j];
+        _gradDLogitsCol ??= new Matrix<T>(_vocabularySize, 1);
+        for (int i = 0; i < _vocabularySize; i++) _gradDLogitsCol[i, 0] = dLogitsVec[i];
+        _gradNormRow ??= new Matrix<T>(1, _options.EmbeddingDim);
+        for (int j = 0; j < _options.EmbeddingDim; j++) _gradNormRow[0, j] = normalizedOutput[j];
 
-        var dWMatrix = (Matrix<T>)Engine.MatrixMultiply(dLogitsCol, normRow);
+        var dWMatrix = (Matrix<T>)Engine.MatrixMultiply(_gradDLogitsCol, _gradNormRow);
         var dOutputProjection = new Tensor<T>(new[] { _vocabularySize, _options.EmbeddingDim });
         for (int i = 0; i < _vocabularySize; i++)
             for (int j = 0; j < _options.EmbeddingDim; j++)
                 dOutputProjection[i, j] = dWMatrix[i, j];
 
         // dNormalized = W^T * dLogits — Engine-accelerated matrix-vector multiply
-        var projTranspose = new Matrix<T>(_options.EmbeddingDim, _vocabularySize);
+        _gradProjTranspose ??= new Matrix<T>(_options.EmbeddingDim, _vocabularySize);
         for (int i = 0; i < _vocabularySize; i++)
             for (int j = 0; j < _options.EmbeddingDim; j++)
-                projTranspose[j, i] = _outputProjection[i, j];
+                _gradProjTranspose[j, i] = _outputProjection[i, j];
 
-        var dNormMatrix = (Matrix<T>)Engine.MatrixMultiply(projTranspose, dLogitsCol);
+        var dNormMatrix = (Matrix<T>)Engine.MatrixMultiply(_gradProjTranspose, _gradDLogitsCol);
         var dNormalized = new Tensor<T>(new[] { _options.EmbeddingDim });
         for (int j = 0; j < _options.EmbeddingDim; j++)
             dNormalized[j] = dNormMatrix[j, 0];
