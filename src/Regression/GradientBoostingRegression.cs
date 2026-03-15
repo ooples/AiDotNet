@@ -555,6 +555,19 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return new GradientBoostingRegression<T>(_options, Regularization);
     }
 
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (GradientBoostingRegression<T>)base.Clone();
+        clone._initialPrediction = _initialPrediction;
+        clone._trees = new List<DecisionTreeRegression<T>>(_trees.Count);
+        foreach (var tree in _trees)
+        {
+            clone._trees.Add((DecisionTreeRegression<T>)tree.Clone());
+        }
+        return clone;
+    }
+
     #region IJitCompilable Implementation Override
 
     /// <summary>

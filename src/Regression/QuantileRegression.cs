@@ -119,10 +119,8 @@ public class QuantileRegression<T> : RegressionBase<T>
         Coefficients = new Vector<T>(p);
         Intercept = NumOps.Zero;
 
-        // Apply regularization to the input matrix
-        x = Regularization.Regularize(x);
-
-        // Gradient descent optimization
+        // Gradient descent optimization for quantile regression
+        T invN = NumOps.FromDouble(1.0 / n);
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
             Vector<T> gradients = new(p);
@@ -143,14 +141,17 @@ public class QuantileRegression<T> : RegressionBase<T>
                 interceptGradient = NumOps.Add(interceptGradient, gradient);
             }
 
-            // Update coefficients and intercept
+            // Average gradients over samples and update
+            T lr = NumOps.FromDouble(_options.LearningRate);
             for (int j = 0; j < p; j++)
             {
-                Coefficients[j] = NumOps.Add(Coefficients[j], NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), gradients[j]));
+                T avgGrad = NumOps.Multiply(gradients[j], invN);
+                Coefficients[j] = NumOps.Add(Coefficients[j], NumOps.Multiply(lr, avgGrad));
             }
-            Intercept = NumOps.Add(Intercept, NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), interceptGradient));
+            T avgInterceptGrad = NumOps.Multiply(interceptGradient, invN);
+            Intercept = NumOps.Add(Intercept, NumOps.Multiply(lr, avgInterceptGrad));
 
-            // Apply regularization to coefficients
+            // Apply regularization to coefficients (not to input data)
             Coefficients = Regularization.Regularize(Coefficients);
         }
     }
