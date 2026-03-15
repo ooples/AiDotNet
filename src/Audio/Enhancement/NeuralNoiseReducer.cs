@@ -159,12 +159,12 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Input buffer for streaming mode.
     /// </summary>
-    private T[]? _inputBuffer;
+    private Vector<T> _inputBuffer = new Vector<T>(0);
 
     /// <summary>
     /// Output buffer for overlap-add.
     /// </summary>
-    private T[]? _outputBuffer;
+    private Vector<T> _outputBuffer = new Vector<T>(0);
 
     /// <summary>
     /// Current position in input buffer.
@@ -174,7 +174,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <summary>
     /// Window function for STFT.
     /// </summary>
-    private T[]? _window;
+    private Vector<T> _window = new Vector<T>(0);
 
     /// <summary>
     /// Noise profile estimate (optional).
@@ -337,15 +337,15 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
     private void InitializeStreamingBuffers()
     {
-        _inputBuffer = new T[_fftSize];
-        _outputBuffer = new T[_fftSize];
+        _inputBuffer = new Vector<T>(_fftSize);
+        _outputBuffer = new Vector<T>(_fftSize);
         _bufferPosition = 0;
         _window = CreateHannWindow(_fftSize);
     }
 
-    private T[] CreateHannWindow(int size)
+    private Vector<T> CreateHannWindow(int size)
     {
-        var window = new T[size];
+        var window = new Vector<T>(size);
         for (int i = 0; i < size; i++)
         {
             var value = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (size - 1)));
@@ -449,8 +449,8 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// </summary>
     public void ResetEnhancerState()
     {
-        _inputBuffer = new T[_fftSize];
-        _outputBuffer = new T[_fftSize];
+        _inputBuffer = new Vector<T>(_fftSize);
+        _outputBuffer = new Vector<T>(_fftSize);
         _bufferPosition = 0;
     }
 
@@ -470,7 +470,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// </summary>
     private T[] ProcessOverlapAdd(T[] input)
     {
-        if (_window is null)
+        if (_window.Length == 0)
             InitializeStreamingBuffers();
 
         int numFrames = (input.Length - _fftSize) / _hopSize + 1;
@@ -484,7 +484,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             var frameData = new T[_fftSize];
             for (int i = 0; i < _fftSize && start + i < input.Length; i++)
             {
-                frameData[i] = NumOps.Multiply(input[start + i], _window![i]);
+                frameData[i] = NumOps.Multiply(input[start + i], _window[i]);
             }
 
             // Compute STFT
@@ -499,7 +499,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             // Window and overlap-add
             for (int i = 0; i < _fftSize && start + i < output.Length; i++)
             {
-                var windowed = NumOps.Multiply(enhanced[i], _window![i]);
+                var windowed = NumOps.Multiply(enhanced[i], _window[i]);
                 output[start + i] = NumOps.Add(output[start + i], windowed);
             }
         }
@@ -512,7 +512,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// </summary>
     private T[] ProcessStreamingChunk(T[] chunk)
     {
-        if (_inputBuffer is null || _outputBuffer is null)
+        if (_inputBuffer.Length == 0 || _outputBuffer.Length == 0)
             InitializeStreamingBuffers();
 
         var output = new T[chunk.Length];
@@ -520,7 +520,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
         for (int i = 0; i < chunk.Length; i++)
         {
-            _inputBuffer![_bufferPosition] = chunk[i];
+            _inputBuffer[_bufferPosition] = chunk[i];
             _bufferPosition++;
 
             if (_bufferPosition >= _hopSize)
@@ -530,7 +530,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
                 for (int j = 0; j < _fftSize; j++)
                 {
                     int idx = (j + _bufferPosition - _hopSize) % _fftSize;
-                    frameData[j] = NumOps.Multiply(_inputBuffer[idx], _window![j]);
+                    frameData[j] = NumOps.Multiply(_inputBuffer[idx], _window[j]);
                 }
 
                 var (magnitudes, phases) = ComputeSTFT(frameData);
@@ -540,19 +540,19 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
                 // Overlap-add to output buffer
                 for (int j = 0; j < _fftSize; j++)
                 {
-                    var windowed = NumOps.Multiply(enhanced[j], _window![j]);
-                    _outputBuffer![j] = NumOps.Add(_outputBuffer[j], windowed);
+                    var windowed = NumOps.Multiply(enhanced[j], _window[j]);
+                    _outputBuffer[j] = NumOps.Add(_outputBuffer[j], windowed);
                 }
 
                 // Output hop samples
                 for (int j = 0; j < _hopSize && outputPos < output.Length; j++)
                 {
-                    output[outputPos++] = _outputBuffer![j];
+                    output[outputPos++] = _outputBuffer[j];
                 }
 
                 // Shift output buffer
-                Array.Copy(_outputBuffer!, _hopSize, _outputBuffer!, 0, _fftSize - _hopSize);
-                Array.Clear(_outputBuffer!, _fftSize - _hopSize, _hopSize);
+                Array.Copy(_outputBuffer, _hopSize, _outputBuffer, 0, _fftSize - _hopSize);
+                Array.Clear(_outputBuffer, _fftSize - _hopSize, _hopSize);
 
                 _bufferPosition = 0;
             }
@@ -707,7 +707,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
             for (int i = 0; i < _fftSize && start + i < noiseAudio.Length; i++)
             {
-                frameData[i] = NumOps.Multiply(noiseAudio[start + i], _window![i]);
+                frameData[i] = NumOps.Multiply(noiseAudio[start + i], _window[i]);
             }
 
             var (magnitudes, _) = ComputeSTFT(frameData);
@@ -742,7 +742,7 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         var windowed = new T[Math.Min(samples.Length, _fftSize)];
         for (int i = 0; i < windowed.Length; i++)
         {
-            windowed[i] = NumOps.Multiply(samples[i], _window![i]);
+            windowed[i] = NumOps.Multiply(samples[i], _window[i]);
         }
 
         // Compute magnitude spectrum
