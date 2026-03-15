@@ -567,7 +567,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                 case CatKernel:
                     lossFunctions.Add(LossHinge);
                     lossFunctions.Add(LossMSE);
-                    catOptimizers.Add(OptSMO);
+                    // SMO is captured by BuiltIn (SVM-specific built-in solver)
                     AddModernOptimizers(catOptimizers);
                     preprocessors.Add(PrepStandardScaler);
                     break;
