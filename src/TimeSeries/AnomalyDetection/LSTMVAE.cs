@@ -386,7 +386,69 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
                                   _meanWeights.Length + _meanBias.Length +
                                   _logVarWeights.Length + _logVarBias.Length;
 
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+
+    public override void ResetState() { ResetGradients(); }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        ApplyGradients(learningRate, 1);
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _latentDim * 2 }), "lstm_encoder_output");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        foreach (var t in new[] { _weights, _bias, _meanWeights, _meanBias, _logVarWeights, _logVarBias })
+            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    /// <summary>
+    /// Forward pass: takes input tensor, runs through LSTM + VAE projections.
+    /// Output is [mean | logVar] concatenated (2 * latentDim).
+    /// </summary>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        var vec = input.ToVector();
+        var (mean, logVar) = Encode(vec);
+        var output = new Tensor<T>(new[] { _latentDim * 2 });
+        for (int i = 0; i < _latentDim; i++)
+        {
+            output[i] = mean[i];
+            output[_latentDim + i] = logVar[i];
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Backward pass: dOutput is gradient w.r.t. [mean | logVar].
+    /// Delegates to existing BackwardInternal with split gradients.
+    /// </summary>
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        var dMean = new Tensor<T>(new[] { _latentDim });
+        var dLogVar = new Tensor<T>(new[] { _latentDim });
+        for (int i = 0; i < _latentDim && i < outputGradient.Length; i++)
+        {
+            dMean[i] = outputGradient[i];
+            if (i + _latentDim < outputGradient.Length)
+                dLogVar[i] = outputGradient[_latentDim + i];
+        }
+        // Use zero hidden and input for gradient computation
+        var hidden = new Tensor<T>(new[] { _hiddenSize });
+        var input = new Vector<T>(_inputSize);
+        Backward(dMean, dLogVar, hidden, input);
+        return new Tensor<T>(new[] { _inputSize });
+    }
+
     public LSTMEncoderTensor(int inputSize, int latentDim, int hiddenSize)
+        : base(new[] { inputSize }, new[] { latentDim * 2 })
     {
         _inputSize = inputSize;
         _latentDim = latentDim;
@@ -648,7 +710,49 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public override int ParameterCount => _weights.Length + _bias.Length +
                                   _outputWeights.Length + _outputBias.Length;
 
+    private Tensor<T>? _lastLatent;
+    private Tensor<T>? _lastHidden;
+
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+
+    public override void ResetState() { ResetGradients(); _lastLatent = null; _lastHidden = null; }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        ApplyGradients(learningRate, 1);
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _outputSize }), "lstm_decoder_output");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        foreach (var t in new[] { _weights, _bias, _outputWeights, _outputBias })
+            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        _lastLatent = input;
+        var (output, hidden) = DecodeWithCache(input);
+        _lastHidden = hidden;
+        return output;
+    }
+
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        var hidden = _lastHidden ?? new Tensor<T>(new[] { _hiddenSize });
+        var latent = _lastLatent ?? new Tensor<T>(new[] { _latentDim });
+        return Backward(outputGradient, hidden, latent);
+    }
+
     public LSTMDecoderTensor(int latentDim, int outputSize, int hiddenSize)
+        : base(new[] { latentDim }, new[] { outputSize })
     {
         _latentDim = latentDim;
         _outputSize = outputSize;
