@@ -7,7 +7,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
 /// <summary>
 /// Base test class for neural network models implementing INeuralNetworkModel&lt;double&gt;.
-/// Neural networks use Tensor&lt;T&gt; for input/output (not Matrix/Vector).
+/// Tests mathematical invariants: training loss decrease, gradient flow,
+/// parameter sensitivity, output stability, and architecture consistency.
 /// </summary>
 public abstract class NeuralNetworkModelTestBase
 {
@@ -15,7 +16,7 @@ public abstract class NeuralNetworkModelTestBase
 
     protected virtual int[] InputShape => [1, 4];
     protected virtual int[] OutputShape => [1, 1];
-    protected virtual int TrainingIterations => 5;
+    protected virtual int TrainingIterations => 10;
 
     private Tensor<double> CreateRandomTensor(int[] shape, Random rng)
     {
@@ -25,73 +26,57 @@ public abstract class NeuralNetworkModelTestBase
         return tensor;
     }
 
-    // --- Forward Pass ---
-
-    [Fact]
-    public void Predict_ForwardPass_OutputNotNull()
+    private Tensor<double> CreateConstantTensor(int[] shape, double value)
     {
-        var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
-
-        var output = network.Predict(input);
-
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0, "Output tensor should have at least one element.");
+        var tensor = new Tensor<double>(shape);
+        for (int i = 0; i < tensor.Length; i++)
+            tensor[i] = value;
+        return tensor;
     }
 
-    [Fact]
-    public void Predict_OutputAllFinite()
-    {
-        var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
-
-        var output = network.Predict(input);
-
-        for (int i = 0; i < output.Length; i++)
-        {
-            Assert.False(double.IsNaN(output[i]),
-                $"Output[{i}] is NaN on forward pass.");
-            Assert.False(double.IsInfinity(output[i]),
-                $"Output[{i}] is Infinity on forward pass.");
-        }
-    }
-
-    // --- Determinism ---
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Training Should Reduce Loss
+    // After multiple training iterations on a fixed (input, target) pair,
+    // the output should move closer to the target. If it doesn't, the
+    // gradient computation or parameter update is broken.
+    // =====================================================
 
     [Fact]
-    public void Predict_Deterministic_SameInputSameOutput()
-    {
-        var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
-
-        var output1 = network.Predict(input);
-        var output2 = network.Predict(input);
-
-        Assert.Equal(output1.Length, output2.Length);
-        for (int i = 0; i < output1.Length; i++)
-        {
-            Assert.Equal(output1[i], output2[i]);
-        }
-    }
-
-    // --- Training ---
-
-    [Fact]
-    public void Train_DoesNotThrow()
+    public void Training_ShouldReduceLoss()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
-        network.Train(input, target);
+        // Measure initial loss (MSE)
+        var initialOutput = network.Predict(input);
+        double initialLoss = ComputeMSE(initialOutput, target);
+
+        // Train
+        for (int i = 0; i < TrainingIterations * 3; i++)
+            network.Train(input, target);
+
+        // Measure final loss
+        var finalOutput = network.Predict(input);
+        double finalLoss = ComputeMSE(finalOutput, target);
+
+        if (!double.IsNaN(initialLoss) && !double.IsNaN(finalLoss))
+        {
+            Assert.True(finalLoss <= initialLoss + 1e-6,
+                $"Training did not reduce loss: initial={initialLoss:F6}, final={finalLoss:F6}. " +
+                "Gradient computation or parameter update may be broken.");
+        }
     }
 
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Parameters Should Change After Training
+    // If training doesn't change parameters, the gradient is zero or
+    // the learning rate is zero — both are bugs.
+    // =====================================================
+
     [Fact]
-    public void Train_ParametersChange()
+    public void Training_ShouldChangeParameters()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -99,62 +84,172 @@ public abstract class NeuralNetworkModelTestBase
         var target = CreateRandomTensor(OutputShape, rng);
 
         var paramsBefore = network.GetParameters();
-        var beforeValues = new double[paramsBefore.Length];
+        var snapshot = new double[paramsBefore.Length];
         for (int i = 0; i < paramsBefore.Length; i++)
-            beforeValues[i] = paramsBefore[i];
+            snapshot[i] = paramsBefore[i];
 
-        for (int iter = 0; iter < TrainingIterations; iter++)
+        for (int i = 0; i < TrainingIterations; i++)
             network.Train(input, target);
 
         var paramsAfter = network.GetParameters();
-
         bool anyChanged = false;
-        int minLen = Math.Min(beforeValues.Length, paramsAfter.Length);
+        int minLen = Math.Min(snapshot.Length, paramsAfter.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(beforeValues[i] - paramsAfter[i]) > 1e-15)
+            if (Math.Abs(snapshot[i] - paramsAfter[i]) > 1e-15)
             {
                 anyChanged = true;
                 break;
             }
         }
         Assert.True(anyChanged,
-            "Parameters should change after training iterations.");
+            "Parameters did not change after training. Gradients may be zero or learning rate is 0.");
     }
 
-    // --- IParameterizable Contract ---
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Output Sensitivity to Input
+    // Different inputs should produce different outputs. A network that
+    // produces the same output for all inputs has collapsed (dead neurons,
+    // zero weights, or broken forward pass).
+    // =====================================================
 
     [Fact]
-    public void GetParameters_ReturnsNonEmptyVector()
+    public void DifferentInputs_ShouldProduceDifferentOutputs()
     {
+        var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var parameters = network.GetParameters();
 
-        Assert.NotNull(parameters);
-        Assert.True(parameters.Length > 0,
-            "Neural network should have at least one learnable parameter.");
+        var input1 = CreateConstantTensor(InputShape, 0.1);
+        var input2 = CreateConstantTensor(InputShape, 0.9);
+
+        var output1 = network.Predict(input1);
+        var output2 = network.Predict(input2);
+
+        bool anyDifferent = false;
+        int minLen = Math.Min(output1.Length, output2.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            {
+                anyDifferent = true;
+                break;
+            }
+        }
+        Assert.True(anyDifferent,
+            "Network produces identical output for inputs [0.1,...] and [0.9,...]. " +
+            "The network may have collapsed (dead neurons or zero weights).");
     }
 
-    // --- Metadata ---
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Output Finite (No NaN/Infinity)
+    // Numerical instability in forward pass produces NaN/Inf.
+    // =====================================================
 
     [Fact]
-    public void GetModelMetadata_ReturnsNonNull()
+    public void ForwardPass_ShouldProduceFiniteOutput()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+
+        var output = network.Predict(input);
+        Assert.True(output.Length > 0, "Output should not be empty.");
+
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN — numerical instability.");
+            Assert.False(double.IsInfinity(output[i]), $"Output[{i}] is Infinity — overflow.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Finite Output After Training
+    // Training should not destabilize the forward pass.
+    // =====================================================
+
+    [Fact]
+    public void ForwardPass_ShouldBeFinite_AfterTraining()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
-        network.Train(input, target);
+        for (int i = 0; i < TrainingIterations; i++)
+            network.Train(input, target);
 
-        var metadata = network.GetModelMetadata();
-        Assert.NotNull(metadata);
+        var output = network.Predict(input);
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.False(double.IsNaN(output[i]),
+                $"Output[{i}] is NaN after {TrainingIterations} training iterations.");
+            Assert.False(double.IsInfinity(output[i]),
+                $"Output[{i}] is Infinity after training — potential gradient explosion.");
+        }
     }
 
-    // --- Clone Contract ---
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Scaling Input Should Change Output
+    // If f(x) ≈ f(10x) for all x, the network ignores input magnitude.
+    // =====================================================
 
     [Fact]
-    public void Clone_ProducesSameOutput()
+    public void ScaledInput_ShouldChangeOutput()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var network = CreateNetwork();
+
+        var input = CreateRandomTensor(InputShape, rng);
+        var scaledInput = new Tensor<double>(InputShape);
+        for (int i = 0; i < input.Length; i++)
+            scaledInput[i] = input[i] * 10.0;
+
+        var output1 = network.Predict(input);
+        var output2 = network.Predict(scaledInput);
+
+        bool anyDifferent = false;
+        int minLen = Math.Min(output1.Length, output2.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            if (Math.Abs(output1[i] - output2[i]) > 1e-10)
+            {
+                anyDifferent = true;
+                break;
+            }
+        }
+        Assert.True(anyDifferent,
+            "Network output didn't change when input was scaled 10x. Forward pass may ignore input values.");
+    }
+
+    // =====================================================
+    // BASIC CONTRACTS: Determinism, Parameters, Clone, Metadata, Architecture
+    // =====================================================
+
+    [Fact]
+    public void Predict_ShouldBeDeterministic()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+
+        var out1 = network.Predict(input);
+        var out2 = network.Predict(input);
+
+        Assert.Equal(out1.Length, out2.Length);
+        for (int i = 0; i < out1.Length; i++)
+            Assert.Equal(out1[i], out2[i]);
+    }
+
+    [Fact]
+    public void Parameters_ShouldBeNonEmpty()
+    {
+        var network = CreateNetwork();
+        var parameters = network.GetParameters();
+        Assert.True(parameters.Length > 0, "Neural network should have learnable parameters.");
+    }
+
+    [Fact]
+    public void Clone_ShouldProduceIdenticalOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -166,25 +261,29 @@ public abstract class NeuralNetworkModelTestBase
 
         Assert.Equal(original.Length, clonedOutput.Length);
         for (int i = 0; i < original.Length; i++)
-        {
             Assert.Equal(original[i], clonedOutput[i]);
-        }
     }
 
-    // --- Architecture Contract ---
+    [Fact]
+    public void Metadata_ShouldExist()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTensor(OutputShape, rng);
+        network.Train(input, target);
+        Assert.NotNull(network.GetModelMetadata());
+    }
 
     [Fact]
-    public void GetArchitecture_ReturnsNonNull()
+    public void Architecture_ShouldBeNonNull()
     {
         var network = CreateNetwork();
-        var architecture = network.GetArchitecture();
-        Assert.NotNull(architecture);
+        Assert.NotNull(network.GetArchitecture());
     }
 
-    // --- Named Activations Contract ---
-
     [Fact]
-    public void GetNamedLayerActivations_AfterForwardPass_ReturnsNonEmpty()
+    public void NamedLayerActivations_ShouldBeNonEmpty()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
@@ -192,7 +291,19 @@ public abstract class NeuralNetworkModelTestBase
 
         var activations = network.GetNamedLayerActivations(input);
         Assert.NotNull(activations);
-        Assert.True(activations.Count > 0,
-            "Named layer activations should not be empty after a forward pass.");
+        Assert.True(activations.Count > 0, "Named layer activations should not be empty.");
+    }
+
+    private double ComputeMSE(Tensor<double> output, Tensor<double> target)
+    {
+        double mse = 0;
+        int len = Math.Min(output.Length, target.Length);
+        if (len == 0) return double.NaN;
+        for (int i = 0; i < len; i++)
+        {
+            double diff = output[i] - target[i];
+            mse += diff * diff;
+        }
+        return mse / len;
     }
 }

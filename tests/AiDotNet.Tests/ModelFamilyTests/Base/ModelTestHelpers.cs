@@ -285,6 +285,20 @@ internal static class ModelTestHelpers
         return n < 2 ? 0 : (long)n * (n - 1) / 2;
     }
 
+    /// <summary>
+    /// Computes the range (max - min) of a vector.
+    /// </summary>
+    public static double ComputeRange(Vector<double> v)
+    {
+        double min = double.MaxValue, max = double.MinValue;
+        for (int i = 0; i < v.Length; i++)
+        {
+            if (v[i] < min) min = v[i];
+            if (v[i] > max) max = v[i];
+        }
+        return max - min;
+    }
+
     private static void ShuffleRows(Matrix<double> x, Vector<double> y, Random rng)
     {
         int n = x.Rows;
