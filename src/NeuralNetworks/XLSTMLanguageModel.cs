@@ -20,6 +20,14 @@ namespace AiDotNet.NeuralNetworks;
 /// linear-time inference.</para>
 /// <para><b>Reference:</b> Beck et al., "xLSTM: Extended Long Short-Term Memory", 2024.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new XLSTMOptions { VocabSize = 32000, ModelDim = 2048, NumLayers = 24 };
+/// var model = new XLSTMLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -38,6 +38,14 @@ namespace AiDotNet.NeuralNetworks;
 /// VAEs are used for image generation, data compression, anomaly detection, and other creative applications.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new VariationalAutoencoderOptions { InputSize = 784, LatentSize = 20 };
+/// var model = new VariationalAutoencoder&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var reconstructed = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Generative)]

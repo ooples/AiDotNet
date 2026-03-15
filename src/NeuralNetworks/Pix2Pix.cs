@@ -37,6 +37,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Adversarial Networks" (2017)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new Pix2PixOptions { ImageSize = 256, InputChannels = 3, OutputChannels = 3 };
+/// var model = new Pix2Pix&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 3, 256, 256 });
+/// var translated = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]

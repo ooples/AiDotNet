@@ -51,6 +51,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Generative Adversarial Networks" (2019)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new StyleGANOptions { LatentSize = 512, MaxResolution = 1024 };
+/// var model = new StyleGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]

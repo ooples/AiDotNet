@@ -20,6 +20,14 @@ namespace AiDotNet.NeuralNetworks;
 /// sliding window attention (for precise local interactions) for efficient unlimited-context modeling.</para>
 /// <para><b>Reference:</b> Ren et al., "Samba: Simple Hybrid State Space Models for Efficient Unlimited Context Language Modeling", 2024.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SambaOptions { VocabSize = 32000, ModelDim = 2048, NumLayers = 24 };
+/// var model = new SambaLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -35,6 +35,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Reference: Gulrajani et al., "Improved Training of Wasserstein GANs" (2017)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new WGANGPOptions { LatentSize = 100, GradientPenaltyWeight = 10.0 };
+/// var model = new WGANGP&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Generative)]

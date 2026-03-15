@@ -20,6 +20,14 @@ namespace AiDotNet.NeuralNetworks;
 /// attention layers for better efficiency and quality.</para>
 /// <para><b>Reference:</b> Glorioso et al., "Zamba2-7B", 2024.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new Zamba2Options { VocabSize = 32000, ModelDim = 3712, NumLayers = 54 };
+/// var model = new Zamba2LanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

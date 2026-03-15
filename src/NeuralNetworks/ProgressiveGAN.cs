@@ -30,6 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Based on "Progressive Growing of GANs for Improved Quality, Stability, and Variation"
 /// by Karras et al. (2018)
 /// </summary>
+/// <example>
+/// <code>
+/// var options = new ProgressiveGANOptions { LatentSize = 512, MaxResolution = 1024 };
+/// var model = new ProgressiveGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]
