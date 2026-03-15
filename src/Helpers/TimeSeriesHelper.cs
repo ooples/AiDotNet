@@ -72,9 +72,10 @@ public static class TimeSeriesHelper<T>
         var coefficients = MatrixSolutionHelper.SolveLinearSystem(X, Y, decompositionType);
 
         // Enforce stationarity: if the sum of absolute AR coefficients >= 1, the model
-        // is unstable and predictions will diverge exponentially. This is a necessary
-        // (though not sufficient) condition for stationarity. When violated, scale
-        // coefficients down to ensure stability. See: https://github.com/ooples/AiDotNet/issues/991
+        // is unstable and predictions will diverge exponentially. The condition
+        // |a1| + |a2| + ... + |ap| < 1 is sufficient (though not necessary) for
+        // stationarity. When violated, scale coefficients down to ensure stability.
+        // See: https://github.com/ooples/AiDotNet/issues/991
         double absSum = 0;
         for (int i = 0; i < coefficients.Length; i++)
         {

@@ -22,7 +22,8 @@ namespace AiDotNet.Tests.IntegrationTests.TimeSeries;
 ///
 /// Mathematical basis: For AR(p) process X_t = a1*X_{t-1} + ... + ap*X_{t-p} + e_t,
 /// stationarity requires all roots of 1 - a1*z - a2*z^2 - ... - ap*z^p = 0
-/// to lie outside the unit circle. Necessary condition: |a1| + |a2| + ... + |ap| &lt; 1.
+/// to lie outside the unit circle. Sufficient condition enforced here:
+/// |a1| + |a2| + ... + |ap| &lt; 1 (guarantees all roots outside unit circle).
 /// </summary>
 public class ARIMAStabilityTests
 {
@@ -143,7 +144,7 @@ public class ARIMAStabilityTests
                 $"ARIMA({p},{d},{q}): Prediction[{i}] is NaN");
             Assert.False(double.IsInfinity(predictions[i]),
                 $"ARIMA({p},{d},{q}): Prediction[{i}] is Infinity ({predictions[i]})");
-            Assert.True(Math.Abs(predictions[i]) < 1e15,
+            Assert.True(Math.Abs(predictions[i]) <= 1e15,
                 $"ARIMA({p},{d},{q}): Prediction[{i}] overflowed ({predictions[i]})");
         }
     }
@@ -169,7 +170,7 @@ public class ARIMAStabilityTests
                 $"ARIMA({p},{d},{q}): Forecast[{i}] is NaN");
             Assert.False(double.IsInfinity(forecasts[i]),
                 $"ARIMA({p},{d},{q}): Forecast[{i}] is Infinity ({forecasts[i]})");
-            Assert.True(Math.Abs(forecasts[i]) < 1e15,
+            Assert.True(Math.Abs(forecasts[i]) <= 1e15,
                 $"ARIMA({p},{d},{q}): Forecast[{i}] overflowed ({forecasts[i]})");
         }
     }
@@ -254,32 +255,72 @@ public class ARIMAStabilityTests
     #region GuardPrediction Safety Net Tests
 
     [Fact]
-    public void GuardPrediction_ShouldClampNaN()
+    public void GuardPrediction_ShouldClampNaNToZero()
     {
-        var (x, y) = CreateTrendingData(n: 30);
-        var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0, MaxIterations = 10 };
+        var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
         var model = new TestableTimeSeriesModel(options);
-        model.Train(x, y);
 
-        // GuardPrediction is protected — test via the model's public interface
-        // If predictions were NaN before the fix, they should now be finite
-        var testX = new Matrix<double>(5, 1);
-        for (int i = 0; i < 5; i++) testX[i, 0] = 30 + i;
-        var predictions = model.Predict(testX);
+        double result = model.TestGuardPrediction(double.NaN);
+        Assert.False(double.IsNaN(result), "NaN was not clamped");
+        Assert.Equal(0.0, result);
+    }
 
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            Assert.False(double.IsNaN(predictions[i]),
-                $"GuardPrediction failed: Prediction[{i}] is still NaN");
-        }
+    [Fact]
+    public void GuardPrediction_ShouldClampPositiveInfinity()
+    {
+        var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
+        var model = new TestableTimeSeriesModel(options);
+
+        double result = model.TestGuardPrediction(double.PositiveInfinity);
+        Assert.False(double.IsInfinity(result), "PositiveInfinity was not clamped");
+        Assert.Equal(1e15, result);
+    }
+
+    [Fact]
+    public void GuardPrediction_ShouldClampNegativeInfinity()
+    {
+        var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
+        var model = new TestableTimeSeriesModel(options);
+
+        double result = model.TestGuardPrediction(double.NegativeInfinity);
+        Assert.False(double.IsInfinity(result), "NegativeInfinity was not clamped");
+        Assert.Equal(-1e15, result);
+    }
+
+    [Fact]
+    public void GuardPrediction_ShouldClampOverflow()
+    {
+        var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
+        var model = new TestableTimeSeriesModel(options);
+
+        double result = model.TestGuardPrediction(1e79);
+        Assert.True(Math.Abs(result) <= 1e15,
+            $"Overflow value was not clamped: {result}");
+        Assert.Equal(1e15, result);
+    }
+
+    [Fact]
+    public void GuardPrediction_ShouldPassThroughFiniteValues()
+    {
+        var options = new ARIMAOptions<double> { P = 1, D = 0, Q = 0 };
+        var model = new TestableTimeSeriesModel(options);
+
+        Assert.Equal(42.0, model.TestGuardPrediction(42.0));
+        Assert.Equal(-100.5, model.TestGuardPrediction(-100.5));
+        Assert.Equal(0.0, model.TestGuardPrediction(0.0));
     }
 
     /// <summary>
-    /// Minimal model subclass to test GuardPrediction through public interface.
+    /// Subclass that exposes GuardPrediction for direct unit testing.
     /// </summary>
     private class TestableTimeSeriesModel : ARIMAModel<double>
     {
         public TestableTimeSeriesModel(ARIMAOptions<double> options) : base(options) { }
+
+        public double TestGuardPrediction(double value, double maxAbsValue = 1e15)
+        {
+            return GuardPrediction(value, maxAbsValue);
+        }
     }
 
     #endregion

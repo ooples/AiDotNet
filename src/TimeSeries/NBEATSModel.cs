@@ -53,7 +53,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 {
     private readonly NBEATSModelOptions<T> _options;
     private readonly List<NBEATSBlock<T>> _blocks;
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the NBEATSModel class.
@@ -74,7 +73,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     {
         _options = options ?? new NBEATSModelOptions<T>();
         Options = _options;
-        _numOps = MathHelper.GetNumericOperations<T>();
         _blocks = new List<NBEATSBlock<T>>();
 
         // Validate options
@@ -218,182 +216,124 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         int numSamples = x.Rows;
         T learningRate = NumOps.FromDouble(_options.LearningRate);
 
-        // Training loop with epochs
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
-            // Check cancellation (supports both caller token and MaxTrainingTimeSeconds timeout)
             TrainingCancellationToken.ThrowIfCancellationRequested();
 
             T epochLoss = NumOps.Zero;
 
-            // Process in mini-batches
             for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)
             {
                 int batchEnd = Math.Min(batchStart + _options.BatchSize, numSamples);
                 int batchSize = batchEnd - batchStart;
 
-                // Compute gradients using AutoDiff (GradientTape) for O(1) backward pass
-                // instead of O(params) numerical finite differences.
-                // Falls back to simplified numerical gradients if AutoDiff fails.
-                List<Vector<T>> blockGradients = new List<Vector<T>>();
-                T batchLoss = ComputeBatchLoss(x, y, batchStart, batchEnd);
+                // Scale learning rate by 1/batchSize so per-sample updates
+                // approximate mini-batch gradient averaging
+                T scaledLr = NumOps.Divide(learningRate, NumOps.FromDouble(batchSize));
 
-                bool usedAutodiff = false;
-                try
+                for (int sampleIdx = batchStart; sampleIdx < batchEnd; sampleIdx++)
                 {
-                    using var tape = new Autodiff.GradientTape<T>();
-                    var allParamNodes = new List<(int blockIdx, List<Autodiff.ComputationNode<T>> nodes)>();
+                    if (sampleIdx % 50 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
+
+                    Vector<T> input = ExtractLookbackWindow(x, y, sampleIdx);
+
+                    // Forward pass through all blocks using doubly-residual architecture.
+                    // Each block.Forward() caches activations internally for its Backward() pass.
+                    // Block objects are independent, so their caches don't interfere.
+                    Vector<T> residual = input.Clone();
+                    T prediction = NumOps.Zero;
 
                     for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
                     {
-                        var currentParams = _blocks[blockIdx].GetParameters();
-                        var paramNodes = new List<Autodiff.ComputationNode<T>>();
-                        for (int i = 0; i < currentParams.Length; i++)
-                        {
-                            var pv = new Vector<T>(1) { [0] = currentParams[i] };
-                            var pt = new Tensor<T>(new[] { 1 }, pv);
-                            var pn = Autodiff.TensorOperations<T>.Variable(pt, $"b{blockIdx}_p{i}");
-                            tape.Watch(pn);
-                            paramNodes.Add(pn);
-                        }
-                        allParamNodes.Add((blockIdx, paramNodes));
+                        var inputTensor = new Tensor<T>(new[] { _options.LookbackWindow }, residual);
+                        var outputTensor = _blocks[blockIdx].Forward(inputTensor);
+
+                        // Output layout: [backcast(lookbackWindow) | forecast(forecastHorizon)]
+                        var backcast = new Vector<T>(_options.LookbackWindow);
+                        for (int j = 0; j < _options.LookbackWindow; j++)
+                            backcast[j] = outputTensor[j];
+
+                        // Update residual (Engine.Subtract creates a new vector)
+                        residual = (Vector<T>)Engine.Subtract(residual, backcast);
+
+                        // Accumulate forecast (only first element for single-step prediction)
+                        prediction = NumOps.Add(prediction, outputTensor[_options.LookbackWindow]);
                     }
 
-                    // Create loss node for backward pass
-                    var lossVec = new Vector<T>(1) { [0] = batchLoss };
-                    var lossTensor = new Tensor<T>(new[] { 1 }, lossVec);
-                    var lossNode = Autodiff.TensorOperations<T>.Variable(lossTensor, "loss", requiresGradient: false);
+                    // MSE loss for this sample
+                    T error = NumOps.Subtract(prediction, y[sampleIdx]);
+                    epochLoss = NumOps.Add(epochLoss, NumOps.Multiply(error, error));
 
-                    // Get all param nodes flat for gradient computation
-                    var allNodes = allParamNodes.SelectMany(b => b.nodes).ToList();
-                    var gradDict = tape.Gradient(lossNode, allNodes);
+                    // Loss gradient: dL/d_prediction = 2 * (prediction - target)
+                    T dLdPred = NumOps.Multiply(NumOps.FromDouble(2.0), error);
 
-                    // Extract gradients per block
-                    foreach (var (blockIdx, nodes) in allParamNodes)
+                    // Backward pass through blocks in reverse order.
+                    // Propagates gradients through the doubly-residual architecture:
+                    //   residual_{i+1} = residual_i - backcast_i
+                    //   total_forecast = sum(forecast_i)
+                    var dLdResidual = new Vector<T>(_options.LookbackWindow);
+
+                    for (int blockIdx = _blocks.Count - 1; blockIdx >= 0; blockIdx--)
                     {
-                        var grad = new Vector<T>(nodes.Count);
-                        for (int i = 0; i < nodes.Count; i++)
-                        {
-                            if (gradDict.TryGetValue(nodes[i], out var g) && g.Length > 0)
-                                grad[i] = g[0];
-                        }
-                        blockGradients.Add(grad);
-                    }
+                        // Construct output gradient matching block output layout:
+                        //   [dL/d_backcast | dL/d_forecast]
+                        var outputGrad = new Tensor<T>(
+                            new[] { _options.LookbackWindow + _options.ForecastHorizon });
 
-                    // Check if we got non-zero gradients
-                    usedAutodiff = blockGradients.Any(g =>
-                    {
-                        for (int i = 0; i < g.Length; i++)
-                            if (!NumOps.Equals(g[i], NumOps.Zero)) return true;
-                        return false;
-                    });
-                }
-                catch
-                {
-                    // AutoDiff not available for this model configuration — fall through
-                }
+                        // dL/d_backcast_i = -dL/d_residual_{i+1}
+                        // Chain rule: residual_{i+1} = residual_i - backcast_i
+                        //   => d_residual_{i+1}/d_backcast_i = -I
+                        for (int j = 0; j < _options.LookbackWindow; j++)
+                            outputGrad[j] = NumOps.Negate(dLdResidual[j]);
 
-                // Fallback: simplified numerical gradient (single forward difference, not central)
-                // Still O(params) but with half the cost of the original central difference
-                if (!usedAutodiff)
-                {
-                    blockGradients.Clear();
-                    T epsilon = NumOps.FromDouble(1e-5);
-                    for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
-                    {
-                        TrainingCancellationToken.ThrowIfCancellationRequested();
-                        var currentParams = _blocks[blockIdx].GetParameters();
-                        var gradient = new Vector<T>(currentParams.Length);
+                        // dL/d_forecast_i[0] = dL/d_prediction
+                        // Only the first forecast element contributes to the prediction
+                        outputGrad[_options.LookbackWindow] = dLdPred;
 
-                        for (int paramIdx = 0; paramIdx < currentParams.Length; paramIdx++)
-                        {
-                            if (paramIdx % 100 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
+                        // Backward: computes dL/dW and dL/db internally, returns dL/d_input
+                        var inputGrad = _blocks[blockIdx].Backward(outputGrad);
 
-                            T original = currentParams[paramIdx];
-                            currentParams[paramIdx] = NumOps.Add(original, epsilon);
-                            _blocks[blockIdx].SetParameters(currentParams);
-                            T lossPlus = ComputeBatchLoss(x, y, batchStart, batchEnd);
-                            currentParams[paramIdx] = original;
-                            _blocks[blockIdx].SetParameters(currentParams);
+                        // Propagate gradient through residual connection:
+                        // residual_i feeds into block_i (via Forward) AND into
+                        // residual_{i+1} = residual_i - backcast_i (identity path).
+                        // Total: dL/d_residual_i = dL/d_input + dL/d_residual_{i+1}
+                        for (int j = 0; j < _options.LookbackWindow; j++)
+                            dLdResidual[j] = NumOps.Add(inputGrad[j], dLdResidual[j]);
 
-                            // Forward difference: (f(x+h) - f(x)) / h
-                            gradient[paramIdx] = NumOps.Divide(
-                                NumOps.Subtract(lossPlus, batchLoss), epsilon);
-                        }
-                        blockGradients.Add(gradient);
+                        // Apply stored parameter gradients
+                        _blocks[blockIdx].UpdateParameters(scaledLr);
                     }
                 }
-
-                // Update parameters using computed gradients
-                for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
-                {
-                    Vector<T> currentParams = _blocks[blockIdx].GetParameters();
-                    Vector<T> gradient = blockGradients[blockIdx];
-
-                    for (int paramIdx = 0; paramIdx < currentParams.Length; paramIdx++)
-                    {
-                        // Gradient descent: param = param - learningRate * gradient
-                        T update = NumOps.Multiply(learningRate, gradient[paramIdx]);
-                        currentParams[paramIdx] = NumOps.Subtract(currentParams[paramIdx], update);
-                    }
-
-                    _blocks[blockIdx].SetParameters(currentParams);
-                }
-
-                // Accumulate batch loss for monitoring
-                epochLoss = NumOps.Add(epochLoss, ComputeBatchLoss(x, y, batchStart, batchEnd));
             }
-
-            // Optional: Could log epoch loss here for debugging
-            // epochLoss now contains the total loss for this epoch
         }
     }
 
     /// <summary>
-    /// Computes the mean squared error loss for a batch of samples.
+    /// Extracts a lookback window vector for a given sample index.
     /// </summary>
     /// <param name="x">Input features matrix.</param>
     /// <param name="y">Target values vector.</param>
-    /// <param name="batchStart">Starting index of the batch (inclusive).</param>
-    /// <param name="batchEnd">Ending index of the batch (exclusive).</param>
-    /// <returns>The mean squared error for the batch.</returns>
-    private T ComputeBatchLoss(Matrix<T> x, Vector<T> y, int batchStart, int batchEnd)
+    /// <param name="sampleIdx">The index of the current sample.</param>
+    /// <returns>A vector of length <see cref="NBEATSModelOptions{T}.LookbackWindow"/>.</returns>
+    private Vector<T> ExtractLookbackWindow(Matrix<T> x, Vector<T> y, int sampleIdx)
     {
-        T totalLoss = NumOps.Zero;
-        int batchSize = batchEnd - batchStart;
-
-        for (int sampleIdx = batchStart; sampleIdx < batchEnd; sampleIdx++)
+        var input = new Vector<T>(_options.LookbackWindow);
+        if (x.Columns >= _options.LookbackWindow)
         {
-            Vector<T> input = new Vector<T>(_options.LookbackWindow);
-            if (x.Columns >= _options.LookbackWindow)
+            for (int j = 0; j < _options.LookbackWindow; j++)
+                input[j] = x[sampleIdx, j];
+        }
+        else
+        {
+            // Univariate: construct lookback window from preceding y values
+            for (int j = 0; j < _options.LookbackWindow; j++)
             {
-                // Feature matrix already has lookback-width columns
-                for (int j = 0; j < _options.LookbackWindow; j++)
-                {
-                    input[j] = x[sampleIdx, j];
-                }
+                int yIdx = sampleIdx - _options.LookbackWindow + j;
+                input[j] = yIdx >= 0 ? y[yIdx] : NumOps.Zero;
             }
-            else
-            {
-                // Univariate: construct lookback window from preceding y values
-                for (int j = 0; j < _options.LookbackWindow; j++)
-                {
-                    int yIdx = sampleIdx - _options.LookbackWindow + j;
-                    input[j] = yIdx >= 0 ? y[yIdx] : NumOps.Zero;
-                }
-            }
-
-            // Get prediction
-            T prediction = PredictSingle(input);
-
-            // Compute squared error
-            T error = NumOps.Subtract(prediction, y[sampleIdx]);
-            T squaredError = NumOps.Multiply(error, error);
-            totalLoss = NumOps.Add(totalLoss, squaredError);
         }
 
-        // Return mean squared error
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return input;
     }
 
     /// <summary>

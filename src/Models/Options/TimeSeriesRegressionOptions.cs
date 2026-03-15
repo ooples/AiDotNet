@@ -129,17 +129,17 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// <summary>
     /// Gets or sets the maximum wall-clock training time in seconds.
     /// </summary>
-    /// <value>Maximum training time in seconds, defaulting to 300 (5 minutes). Set to 0 for no limit.</value>
+    /// <value>Maximum training time in seconds, defaulting to 0 (no limit).</value>
     /// <remarks>
     /// <para>
-    /// This provides a safety net to prevent runaway training. If training exceeds this time,
-    /// a <see cref="OperationCanceledException"/> is thrown. This composes with any
-    /// <see cref="CancellationToken"/> passed by the caller — whichever fires first wins.
+    /// When set to a positive value, this provides a safety net to prevent runaway training.
+    /// If training exceeds this time, a <see cref="OperationCanceledException"/> is thrown.
+    /// This composes with any <see cref="CancellationToken"/> passed by the caller — whichever fires first wins.
     /// </para>
-    /// <para><b>For Beginners:</b> This is a safety limit on how long training can take. The default
-    /// is 5 minutes, which is enough for most models. If your model needs more time (e.g., training
-    /// on very large datasets), increase this value. Set to 0 to disable the time limit entirely.
-    /// If training is taking too long, it usually means the model needs tuning rather than more time.</para>
+    /// <para><b>For Beginners:</b> This is an optional safety limit on how long training can take.
+    /// The default is 0, meaning no time limit. Set to a positive value (e.g., 300 for 5 minutes)
+    /// if you want to prevent training from running indefinitely. This is useful for large datasets
+    /// or complex models where training might hang.</para>
     /// </remarks>
-    public int MaxTrainingTimeSeconds { get; set; } = 300;
+    public int MaxTrainingTimeSeconds { get; set; } = 0;
 }
