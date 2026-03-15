@@ -31,6 +31,14 @@ namespace AiDotNet.NeuralNetworks;
 /// what similar customers have purchased, by analyzing the connections between customers and products.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GraphNeuralNetworkOptions { NodeFeatureSize = 16, HiddenSize = 64, NumLayers = 3 };
+/// var model = new GraphNeuralNetwork&lt;float&gt;(options);
+/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 10, 16 });
+/// var output = model.Predict(nodeFeatures);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

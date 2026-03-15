@@ -36,6 +36,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Solving certain optimization problems
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new HopfieldNetworkOptions { PatternSize = 100, MaxPatterns = 10 };
+/// var model = new HopfieldNetwork&lt;float&gt;(options);
+/// var pattern = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var recalled = model.Predict(pattern);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

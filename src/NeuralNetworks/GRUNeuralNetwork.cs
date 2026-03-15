@@ -31,6 +31,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Any task where the order and context of data matters
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GRUNeuralNetworkOptions { InputSize = 10, HiddenSize = 128, NumLayers = 2 };
+/// var model = new GRUNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20, 10 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.TimeSeries)]
