@@ -212,6 +212,16 @@ public static class ModelHelper<T, TInput, TOutput>
     {
         if (input is Matrix<T> matrix)
         {
+            // Validate all indices are within the matrix column range
+            for (int idx = 0; idx < indices.Length; idx++)
+            {
+                if (indices[idx] < 0 || indices[idx] >= matrix.Columns)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(indices),
+                        $"Feature index {indices[idx]} is out of range [0, {matrix.Columns}). " +
+                        $"The model's GetActiveFeatureIndices() returned an index that exceeds the input matrix dimensions.");
+                }
+            }
             return [.. indices.Select(i => matrix.GetColumn(i))];
         }
         else if (input is Tensor<T> tensor)

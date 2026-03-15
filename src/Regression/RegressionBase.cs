@@ -116,6 +116,12 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     public string[]? FeatureNames { get; set; }
 
     /// <summary>
+    /// Gets or sets the number of input features seen during training.
+    /// Used to bound GetActiveFeatureIndices to the actual input feature space.
+    /// </summary>
+    protected int TrainingFeatureCount { get; set; }
+
+    /// <summary>
     /// Gets the expected number of parameters (coefficients plus intercept if used).
     /// </summary>
     /// <value>
@@ -616,7 +622,11 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// </remarks>
     public virtual IEnumerable<int> GetActiveFeatureIndices()
     {
-        for (int i = 0; i < Coefficients.Length; i++)
+        // Bound indices to the actual input feature count to prevent out-of-range access.
+        // Coefficients.Length may exceed the input feature count when the model includes
+        // intercept terms or generated features (e.g., in genetic/symbolic regression).
+        int maxIndex = TrainingFeatureCount > 0 ? TrainingFeatureCount : Coefficients.Length;
+        for (int i = 0; i < Math.Min(Coefficients.Length, maxIndex); i++)
         {
             // If the coefficient is not zero (using a threshold for floating-point comparison)
             if (!NumOps.Equals(Coefficients[i], NumOps.Zero))

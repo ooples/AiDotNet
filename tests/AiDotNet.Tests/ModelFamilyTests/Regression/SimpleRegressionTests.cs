@@ -9,4 +9,7 @@ public class SimpleRegressionTests : RegressionModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new SimpleRegression<double>();
+
+    // SimpleRegression only supports exactly 1 feature (univariate regression)
+    protected override int Features => 1;
 }
