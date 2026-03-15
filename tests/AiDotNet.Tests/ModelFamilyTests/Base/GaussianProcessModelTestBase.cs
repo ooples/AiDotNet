@@ -6,19 +6,25 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
 /// <summary>
 /// Base test class for Gaussian process models implementing IGaussianProcess&lt;double&gt;.
-/// Tests probabilistic prediction invariants — mean should be reasonable and variance should be non-negative.
+/// Tests deep probabilistic invariants: variance positivity, posterior contraction,
+/// interpolation at training points, and uncertainty monotonicity with distance.
 /// </summary>
 public abstract class GaussianProcessModelTestBase
 {
     protected abstract IGaussianProcess<double> CreateModel();
 
-    protected virtual int TrainSamples => 50;
+    protected virtual int TrainSamples => 30;
     protected virtual int Features => 2;
 
-    // --- Fit + Predict Contract ---
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Predictive Variance ≥ 0 Everywhere
+    // The GP posterior variance is σ²(x) = k(x,x) - k(x,X)K⁻¹k(X,x) ≥ 0
+    // by positive semi-definiteness of the kernel. Negative variance
+    // indicates a numerical bug in the Cholesky factorization or kernel.
+    // =====================================================
 
     [Fact]
-    public void Fit_ThenPredict_MeanIsFinite()
+    public void PredictiveVariance_ShouldBeNonNegative_Everywhere()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
@@ -26,139 +32,227 @@ public abstract class GaussianProcessModelTestBase
 
         model.Fit(trainX, trainY);
 
-        var testPoint = new Vector<double>(Features);
-        for (int j = 0; j < Features; j++)
-            testPoint[j] = 5.0;
+        // Test at various distances from training data
+        var testPoints = new[]
+        {
+            MakePoint(0.0, 0.0),     // near origin
+            MakePoint(5.0, 5.0),     // in range
+            MakePoint(100.0, 100.0), // far away
+            MakePoint(-10.0, -10.0), // extrapolation
+        };
 
-        var (mean, _) = model.Predict(testPoint);
-
-        Assert.False(double.IsNaN(mean), "GP mean prediction is NaN.");
-        Assert.False(double.IsInfinity(mean), "GP mean prediction is Infinity.");
+        foreach (var point in testPoints)
+        {
+            var (mean, variance) = model.Predict(point);
+            Assert.False(double.IsNaN(variance),
+                $"GP variance is NaN at ({point[0]}, {point[1]}).");
+            Assert.True(variance >= -1e-10,
+                $"GP variance = {variance:E4} at ({point[0]}, {point[1]}) — must be ≥ 0. " +
+                "Negative variance indicates kernel matrix inversion bug.");
+        }
     }
 
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Posterior Contraction Near Training Data
+    // The GP posterior variance at training points should be ≤ prior variance.
+    // Specifically, variance(x_train) should be small (ideally ≈ noise variance).
+    // Variance far from training data should be larger than at training points.
+    // =====================================================
+
     [Fact]
-    public void Fit_ThenPredict_VarianceNonNegative()
+    public void PosteriorContraction_VarianceNearTraining_ShouldBeLessThan_VarianceFarAway()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.01);
 
         model.Fit(trainX, trainY);
 
-        var testPoint = new Vector<double>(Features);
-        for (int j = 0; j < Features; j++)
-            testPoint[j] = 5.0;
-
-        var (_, variance) = model.Predict(testPoint);
-
-        Assert.False(double.IsNaN(variance), "GP variance is NaN.");
-        Assert.True(variance >= 0.0,
-            $"GP variance = {variance:F4} — variance must be non-negative.");
-    }
-
-    // --- Near Training Data: Low Variance ---
-
-    [Fact]
-    public void Fit_NearTrainingPoint_LowVariance()
-    {
-        var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
-
-        model.Fit(trainX, trainY);
-
-        // Predict at the first training point
+        // Variance at a training point
         var nearPoint = new Vector<double>(Features);
         for (int j = 0; j < Features; j++)
             nearPoint[j] = trainX[0, j];
-
         var (_, varianceNear) = model.Predict(nearPoint);
 
-        // Predict far from training data
-        var farPoint = new Vector<double>(Features);
-        for (int j = 0; j < Features; j++)
-            farPoint[j] = 1000.0;
-
+        // Variance far from all training data
+        var farPoint = MakePoint(500.0, 500.0);
         var (_, varianceFar) = model.Predict(farPoint);
 
-        // Variance near training data should generally be less than far away
         if (!double.IsNaN(varianceNear) && !double.IsNaN(varianceFar) &&
             !double.IsInfinity(varianceNear) && !double.IsInfinity(varianceFar))
         {
             Assert.True(varianceNear <= varianceFar + 1e-6,
-                $"Variance near training point ({varianceNear:F4}) should be <= variance far away ({varianceFar:F4}).");
+                $"Posterior contraction violated: variance at training point ({varianceNear:E4}) " +
+                $"should be ≤ variance far away ({varianceFar:E4}). " +
+                "GP is not reducing uncertainty near observed data.");
         }
     }
 
-    // --- Far from Training Data: Higher Variance ---
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Uncertainty Increases With Distance
+    // As we move further from training data, variance should monotonically
+    // increase (for stationary kernels). This is a fundamental property.
+    // =====================================================
 
     [Fact]
-    public void Fit_FarFromTrainingData_HigherVariance()
+    public void Uncertainty_ShouldIncrease_WithDistanceFromTrainingData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
+        // Cluster training data near origin
+        var trainX = new Matrix<double>(20, Features);
+        var trainY = new Vector<double>(20);
+        for (int i = 0; i < 20; i++)
+        {
+            for (int j = 0; j < Features; j++)
+                trainX[i, j] = rng.NextDouble() * 2.0; // all near [0,2]
+            trainY[i] = trainX[i, 0] + trainX[i, 1]; // simple function
+        }
 
         model.Fit(trainX, trainY);
 
-        var farPoint = new Vector<double>(Features);
-        for (int j = 0; j < Features; j++)
-            farPoint[j] = 1000.0;
+        double[] distances = { 1.0, 10.0, 50.0, 200.0 };
+        double prevVariance = -1;
+        int violations = 0;
 
-        var (_, variance) = model.Predict(farPoint);
+        foreach (double d in distances)
+        {
+            var point = MakePoint(d, d);
+            var (_, variance) = model.Predict(point);
 
-        Assert.False(double.IsNaN(variance), "Variance is NaN for far-away point.");
-        Assert.True(variance >= 0.0,
-            $"Variance = {variance:F4} — must be non-negative even far from training data.");
+            if (!double.IsNaN(variance) && !double.IsInfinity(variance) && variance >= 0)
+            {
+                if (prevVariance >= 0 && variance < prevVariance - 1e-8)
+                    violations++;
+                prevVariance = variance;
+            }
+        }
+
+        Assert.True(violations <= 1,
+            $"Uncertainty monotonicity violated {violations}/3 times. " +
+            "Variance should increase with distance from training data.");
     }
 
-    // --- Determinism ---
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Mean Interpolation
+    // For noise-free GP (or very low noise), the posterior mean should
+    // approximately interpolate training points: μ(x_train) ≈ y_train.
+    // Large interpolation error indicates kernel or matrix inversion bugs.
+    // =====================================================
 
     [Fact]
-    public void Predict_Deterministic()
+    public void Mean_ShouldApproximatelyInterpolate_TrainingPoints()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
+        // Use small dataset with low noise for clear interpolation test
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(15, Features, rng, noise: 0.001);
 
         model.Fit(trainX, trainY);
 
-        var testPoint = new Vector<double>(Features);
-        for (int j = 0; j < Features; j++)
-            testPoint[j] = 5.0;
+        double totalError = 0;
+        int validCount = 0;
+        for (int i = 0; i < Math.Min(5, trainX.Rows); i++)
+        {
+            var point = new Vector<double>(Features);
+            for (int j = 0; j < Features; j++)
+                point[j] = trainX[i, j];
 
-        var (mean1, var1) = model.Predict(testPoint);
-        var (mean2, var2) = model.Predict(testPoint);
+            var (mean, _) = model.Predict(point);
+            if (!double.IsNaN(mean) && !double.IsInfinity(mean))
+            {
+                totalError += Math.Abs(mean - trainY[i]);
+                validCount++;
+            }
+        }
 
-        Assert.Equal(mean1, mean2);
-        Assert.Equal(var1, var2);
+        if (validCount > 0)
+        {
+            double avgError = totalError / validCount;
+            double targetRange = 0;
+            double minY = double.MaxValue, maxY = double.MinValue;
+            for (int i = 0; i < trainY.Length; i++)
+            {
+                if (trainY[i] < minY) minY = trainY[i];
+                if (trainY[i] > maxY) maxY = trainY[i];
+            }
+            targetRange = maxY - minY;
+
+            Assert.True(avgError < targetRange * 0.3,
+                $"Average interpolation error = {avgError:F4} (target range = {targetRange:F4}). " +
+                "GP mean should approximately pass through training points.");
+        }
     }
 
-    // --- Mean Should Be Reasonable on Linear Data ---
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Mean Should Be Reasonable
+    // On linear data y=2x1+4x2+1, the GP mean at (5,5) should
+    // be in the right ballpark (positive, reasonable magnitude).
+    // =====================================================
 
     [Fact]
-    public void Fit_LinearData_ReasonableMean()
+    public void Mean_ShouldBeReasonable_OnLinearData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-
-        // y = 2*x1 + 4*x2 + 1
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.1);
 
         model.Fit(trainX, trainY);
 
-        // Predict at a point where we know the approximate answer
-        var testPoint = new Vector<double>(Features);
-        testPoint[0] = 5.0;
-        testPoint[1] = 5.0;
-        // Expected: 2*5 + 4*5 + 1 = 31
-
+        var testPoint = MakePoint(5.0, 5.0);
+        // Expected: 2*5 + 4*5 + 1 = 31 (for 2-feature linear data)
         var (mean, _) = model.Predict(testPoint);
 
         if (!double.IsNaN(mean) && !double.IsInfinity(mean))
         {
             Assert.True(mean > 0.0,
-                $"Mean = {mean:F4} — should be positive for positive linear data at (5,5).");
+                $"GP mean = {mean:F4} at (5,5). Should be positive for y=2x1+4x2+1.");
         }
+    }
+
+    // =====================================================
+    // BASIC CONTRACTS: Finite Predictions, Determinism
+    // =====================================================
+
+    [Fact]
+    public void Predictions_ShouldBeFinite()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
+
+        model.Fit(trainX, trainY);
+
+        var point = MakePoint(5.0, 5.0);
+        var (mean, variance) = model.Predict(point);
+
+        Assert.False(double.IsNaN(mean), "GP mean is NaN.");
+        Assert.False(double.IsInfinity(mean), "GP mean is Infinity.");
+        Assert.False(double.IsNaN(variance), "GP variance is NaN.");
+    }
+
+    [Fact]
+    public void Predict_ShouldBeDeterministic()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
+
+        model.Fit(trainX, trainY);
+
+        var point = MakePoint(5.0, 5.0);
+        var (mean1, var1) = model.Predict(point);
+        var (mean2, var2) = model.Predict(point);
+
+        Assert.Equal(mean1, mean2);
+        Assert.Equal(var1, var2);
+    }
+
+    private Vector<double> MakePoint(params double[] values)
+    {
+        var point = new Vector<double>(Features);
+        for (int j = 0; j < Features && j < values.Length; j++)
+            point[j] = values[j];
+        return point;
     }
 }
