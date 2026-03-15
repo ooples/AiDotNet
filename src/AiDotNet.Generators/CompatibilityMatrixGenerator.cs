@@ -106,7 +106,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         title: "Conflicting optimizer requirements across model categories",
         messageFormat: "Model '{0}' has categories '{1}' with conflicting optimizer requirements. Ensure the model's default optimizer is from the intersection of compatible optimizers for all its categories.",
         category: "AiDotNet.Compatibility",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
