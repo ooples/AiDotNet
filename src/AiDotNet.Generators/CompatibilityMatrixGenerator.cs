@@ -60,6 +60,46 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     private const int CatOptimization = 35;
     private const int CatAnomalyDetection = 36;
 
+    // Optimizer name constants (must match actual optimizer class names in AiDotNet.Optimizers)
+    private const string OptSGD = "SGD";
+    private const string OptAdam = "Adam";
+    private const string OptAdamW = "AdamW";
+    private const string OptRMSProp = "RMSProp";
+    private const string OptAdaGrad = "AdaGrad";
+    private const string OptAdadelta = "Adadelta";
+    private const string OptLAMB = "LAMB";
+    private const string OptLBFGS = "LBFGS";
+    private const string OptSMO = "SMO";
+    private const string OptBuiltIn = "BuiltIn";
+
+    // Loss function name constants (must match actual loss class names in AiDotNet.LossFunctions)
+    private const string LossMSE = "MSE";
+    private const string LossMAE = "MAE";
+    private const string LossHuber = "Huber";
+    private const string LossLogCosh = "LogCosh";
+    private const string LossCrossEntropy = "CrossEntropy";
+    private const string LossBinaryCrossEntropy = "BinaryCrossEntropy";
+    private const string LossHinge = "Hinge";
+    private const string LossFocalLoss = "FocalLoss";
+    private const string LossAdversarial = "Adversarial";
+    private const string LossWasserstein = "Wasserstein";
+    private const string LossHingeLoss = "HingeLoss";
+    private const string LossL1 = "L1";
+    private const string LossVLB = "VLB";
+    private const string LossBCE = "BCE";
+    private const string LossKLDivergence = "KLDivergence";
+    private const string LossCoxPartialLikelihood = "CoxPartialLikelihood";
+    private const string LossLogRankLoss = "LogRankLoss";
+    private const string LossQuantileLoss = "QuantileLoss";
+
+    // Preprocessor name constants
+    private const string PrepStandardScaler = "StandardScaler";
+    private const string PrepMinMaxScaler = "MinMaxScaler";
+    private const string PrepOneHotEncoder = "OneHotEncoder";
+    private const string PrepTokenizerPreprocessor = "TokenizerPreprocessor";
+    private const string PrepGraphNormalizer = "GraphNormalizer";
+    private const string PrepTimeSeriesScaler = "TimeSeriesScaler";
+
     // Diagnostic for suspicious model/optimizer combinations
     private static readonly DiagnosticDescriptor SuspiciousOptimizer = new(
         id: "AIDN030",
@@ -388,215 +428,215 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
             switch (cat)
             {
                 case CatClassifier:
-                    lossFunctions.Add("CrossEntropy");
-                    lossFunctions.Add("BinaryCrossEntropy");
-                    lossFunctions.Add("Hinge");
-                    lossFunctions.Add("FocalLoss");
+                    lossFunctions.Add(LossCrossEntropy);
+                    lossFunctions.Add(LossBinaryCrossEntropy);
+                    lossFunctions.Add(LossHinge);
+                    lossFunctions.Add(LossFocalLoss);
                     AddAllGradientOptimizers(catOptimizers);
-                    preprocessors.Add("StandardScaler");
-                    preprocessors.Add("OneHotEncoder");
+                    preprocessors.Add(PrepStandardScaler);
+                    preprocessors.Add(PrepOneHotEncoder);
                     break;
 
                 case CatRegression:
                 case CatLinear:
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("MAE");
-                    lossFunctions.Add("Huber");
-                    lossFunctions.Add("LogCosh");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    lossFunctions.Add(LossHuber);
+                    lossFunctions.Add(LossLogCosh);
                     AddAllGradientOptimizers(catOptimizers);
-                    preprocessors.Add("StandardScaler");
-                    preprocessors.Add("MinMaxScaler");
+                    preprocessors.Add(PrepStandardScaler);
+                    preprocessors.Add(PrepMinMaxScaler);
                     break;
 
                 case CatGAN:
-                    lossFunctions.Add("Adversarial");
-                    lossFunctions.Add("Wasserstein");
-                    lossFunctions.Add("HingeLoss");
-                    catOptimizers.Add("Adam");
-                    catOptimizers.Add("RMSProp");
-                    catOptimizers.Add("AdamW");
-                    preprocessors.Add("MinMaxScaler");
+                    lossFunctions.Add(LossAdversarial);
+                    lossFunctions.Add(LossWasserstein);
+                    lossFunctions.Add(LossHingeLoss);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptRMSProp);
+                    catOptimizers.Add(OptAdamW);
+                    preprocessors.Add(PrepMinMaxScaler);
                     break;
 
                 case CatDiffusion:
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("L1");
-                    lossFunctions.Add("VLB");
-                    catOptimizers.Add("Adam");
-                    catOptimizers.Add("AdamW");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossL1);
+                    lossFunctions.Add(LossVLB);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatTransformer:
-                    lossFunctions.Add("CrossEntropy");
-                    lossFunctions.Add("MSE");
-                    catOptimizers.Add("Adam");
-                    catOptimizers.Add("AdamW");
-                    catOptimizers.Add("LAMB");
-                    preprocessors.Add("TokenizerPreprocessor");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossCrossEntropy);
+                    lossFunctions.Add(LossMSE);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptLAMB);
+                    preprocessors.Add(PrepTokenizerPreprocessor);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatAutoencoder:
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("BCE");
-                    lossFunctions.Add("KLDivergence");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossBCE);
+                    lossFunctions.Add(LossKLDivergence);
                     AddAllGradientOptimizers(catOptimizers);
-                    preprocessors.Add("MinMaxScaler");
+                    preprocessors.Add(PrepMinMaxScaler);
                     break;
 
                 case CatSurvivalModel:
-                    lossFunctions.Add("CoxPartialLikelihood");
-                    lossFunctions.Add("LogRankLoss");
-                    catOptimizers.Add("Adam");
-                    catOptimizers.Add("LBFGS");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossCoxPartialLikelihood);
+                    lossFunctions.Add(LossLogRankLoss);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptLBFGS);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatTimeSeriesModel:
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("MAE");
-                    lossFunctions.Add("QuantileLoss");
-                    catOptimizers.Add("Adam");
-                    catOptimizers.Add("AdaGrad");
-                    catOptimizers.Add("RMSProp");
-                    preprocessors.Add("TimeSeriesScaler");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    lossFunctions.Add(LossQuantileLoss);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdaGrad);
+                    catOptimizers.Add(OptRMSProp);
+                    preprocessors.Add(PrepTimeSeriesScaler);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatNeuralNetwork:
                 case CatRecurrentNetwork:
                 case CatConvolutionalNetwork:
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("CrossEntropy");
-                    lossFunctions.Add("MAE");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossCrossEntropy);
+                    lossFunctions.Add(LossMAE);
                     AddAllGradientOptimizers(catOptimizers);
-                    preprocessors.Add("StandardScaler");
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatGraphNetwork:
-                    lossFunctions.Add("CrossEntropy");
-                    lossFunctions.Add("MSE");
-                    catOptimizers.Add("Adam");
-                    catOptimizers.Add("AdamW");
-                    preprocessors.Add("GraphNormalizer");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossCrossEntropy);
+                    lossFunctions.Add(LossMSE);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    preprocessors.Add(PrepGraphNormalizer);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatSyntheticDataGenerator:
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("KLDivergence");
-                    catOptimizers.Add("Adam");
-                    preprocessors.Add("MinMaxScaler");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossKLDivergence);
+                    catOptimizers.Add(OptAdam);
+                    preprocessors.Add(PrepMinMaxScaler);
                     break;
 
                 case CatEnsemble:
                 case CatDecisionTree:
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("MAE");
-                    lossFunctions.Add("CrossEntropy");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    lossFunctions.Add(LossCrossEntropy);
                     // Tree models don't use gradient optimizers
-                    catOptimizers.Add("BuiltIn");
-                    preprocessors.Add("StandardScaler");
+                    catOptimizers.Add(OptBuiltIn);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatSVM:
                 case CatKernel:
-                    lossFunctions.Add("Hinge");
-                    lossFunctions.Add("MSE");
-                    catOptimizers.Add("SMO");
-                    catOptimizers.Add("LBFGS");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossHinge);
+                    lossFunctions.Add(LossMSE);
+                    catOptimizers.Add(OptSMO);
+                    catOptimizers.Add(OptLBFGS);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatInstanceBased:
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("MAE");
-                    catOptimizers.Add("BuiltIn");
-                    preprocessors.Add("StandardScaler");
-                    preprocessors.Add("MinMaxScaler");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    catOptimizers.Add(OptBuiltIn);
+                    preprocessors.Add(PrepStandardScaler);
+                    preprocessors.Add(PrepMinMaxScaler);
                     break;
 
                 case CatFoundationModel:
                 case CatEmbeddingModel:
                 case CatTabularModel:
                     // Foundation models, embeddings, and tabular models use AdamW as industry standard
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("CrossEntropy");
-                    catOptimizers.Add("Adam");
-                    catOptimizers.Add("AdamW");
-                    catOptimizers.Add("LAMB");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossCrossEntropy);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptLAMB);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatStatistical:
                 case CatRegularization:
                 case CatInterpretable:
                     // Statistical and regularized models typically use built-in solvers or LBFGS
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("MAE");
-                    lossFunctions.Add("CrossEntropy");
-                    catOptimizers.Add("BuiltIn");
-                    catOptimizers.Add("LBFGS");
-                    catOptimizers.Add("Adam");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    lossFunctions.Add(LossCrossEntropy);
+                    catOptimizers.Add(OptBuiltIn);
+                    catOptimizers.Add(OptLBFGS);
+                    catOptimizers.Add(OptAdam);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatPhysicsInformed:
                 case CatNeuralOperator:
                     // Physics-informed models use Adam or LBFGS
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("L1");
-                    catOptimizers.Add("Adam");
-                    catOptimizers.Add("AdamW");
-                    catOptimizers.Add("LBFGS");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossL1);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptLBFGS);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatMetaLearning:
                 case CatAgent:
                     // Meta-learning and agents use Adam
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("CrossEntropy");
-                    catOptimizers.Add("Adam");
-                    catOptimizers.Add("AdamW");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossCrossEntropy);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatSignalProcessing:
                     // Signal processing models use built-in or Adam
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("MAE");
-                    catOptimizers.Add("BuiltIn");
-                    catOptimizers.Add("Adam");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    catOptimizers.Add(OptBuiltIn);
+                    catOptimizers.Add(OptAdam);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatOptimization:
                     // Optimization-based models use their own solvers
-                    lossFunctions.Add("MSE");
-                    catOptimizers.Add("BuiltIn");
-                    catOptimizers.Add("Adam");
-                    preprocessors.Add("StandardScaler");
+                    lossFunctions.Add(LossMSE);
+                    catOptimizers.Add(OptBuiltIn);
+                    catOptimizers.Add(OptAdam);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatAnomalyDetection:
                     // Anomaly detection uses Adam or built-in
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("MAE");
-                    catOptimizers.Add("Adam");
-                    catOptimizers.Add("AdamW");
-                    catOptimizers.Add("BuiltIn");
-                    preprocessors.Add("StandardScaler");
-                    preprocessors.Add("MinMaxScaler");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptBuiltIn);
+                    preprocessors.Add(PrepStandardScaler);
+                    preprocessors.Add(PrepMinMaxScaler);
                     break;
 
                 default:
                     // Unknown categories get all gradient optimizers as fallback
-                    lossFunctions.Add("MSE");
-                    lossFunctions.Add("CrossEntropy");
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossCrossEntropy);
                     AddAllGradientOptimizers(catOptimizers);
-                    preprocessors.Add("StandardScaler");
+                    preprocessors.Add(PrepStandardScaler);
                     break;
             }
 
@@ -648,12 +688,12 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
 
     private static void AddAllGradientOptimizers(HashSet<string> optimizers)
     {
-        optimizers.Add("SGD");
-        optimizers.Add("Adam");
-        optimizers.Add("AdamW");
-        optimizers.Add("RMSProp");
-        optimizers.Add("AdaGrad");
-        optimizers.Add("Adadelta");
+        optimizers.Add(OptSGD);
+        optimizers.Add(OptAdam);
+        optimizers.Add(OptAdamW);
+        optimizers.Add(OptRMSProp);
+        optimizers.Add(OptAdaGrad);
+        optimizers.Add(OptAdadelta);
     }
 
     private static string BuildTypeOfExpression(CompatEntry entry)
