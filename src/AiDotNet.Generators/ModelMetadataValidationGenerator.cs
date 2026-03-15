@@ -276,14 +276,16 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         var className = modelClass.Name;
         var location = modelClass.Locations.FirstOrDefault();
 
-        // Primary: use Roslyn's semantic XML doc API
-        var xmlDoc = modelClass.GetDocumentationCommentXml();
+        // Use syntax tree trivia as the primary source of truth for XML doc detection.
+        // GetDocumentationCommentXml() depends on compilation settings (DocumentationMode)
+        // and can return empty on certain build configurations (observed on CI for net471).
+        // The syntax tree always has the trivia regardless of compilation settings.
+        var xmlDoc = ExtractXmlDocFromSyntax(modelClass);
 
-        // Fallback: if the semantic API returns empty (can happen in some build configurations),
-        // check the syntax tree directly for XML doc trivia on the class declaration
+        // Fallback to semantic API if syntax extraction found nothing
         if (string.IsNullOrWhiteSpace(xmlDoc))
         {
-            xmlDoc = ExtractXmlDocFromSyntax(modelClass);
+            xmlDoc = modelClass.GetDocumentationCommentXml();
         }
 
         if (string.IsNullOrWhiteSpace(xmlDoc))
@@ -325,13 +327,33 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             if (syntaxNode is not ClassDeclarationSyntax classDecl)
                 continue;
 
-            // Walk the leading trivia to find XML doc comments
-            foreach (var trivia in classDecl.GetLeadingTrivia())
+            // XML doc comments may be leading trivia on:
+            // 1. The class declaration itself
+            // 2. The first attribute (when attributes separate the doc from the class keyword)
+            // 3. The first token of the entire declaration
+            // Check all leading trivia sources to find the doc comment.
+
+            // First: check the first token of the entire class declaration (includes attributes)
+            var firstToken = classDecl.GetFirstToken();
+            foreach (var trivia in firstToken.LeadingTrivia)
             {
                 if (trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SingleLineDocumentationCommentTrivia) ||
                     trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.MultiLineDocumentationCommentTrivia))
                 {
                     return trivia.ToFullString();
+                }
+            }
+
+            // Second: check attribute lists (doc comments may be trivia on the first attribute)
+            foreach (var attrList in classDecl.AttributeLists)
+            {
+                foreach (var trivia in attrList.GetLeadingTrivia())
+                {
+                    if (trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SingleLineDocumentationCommentTrivia) ||
+                        trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.MultiLineDocumentationCommentTrivia))
+                    {
+                        return trivia.ToFullString();
+                    }
                 }
             }
         }
