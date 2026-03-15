@@ -250,15 +250,120 @@ public class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         return output;
     }
 
+    // Cached activations from forward pass for backward
+    private Vector<T>? _lastInput;
+    private List<Vector<T>> _preActivations = new();  // before ReLU
+    private List<Vector<T>> _postActivations = new(); // after ReLU (layer outputs)
+    private Vector<T>? _lastHiddenOutput; // output of last hidden layer (input to theta layers)
+
+    // Stored gradients for UpdateParameters
+    private List<Matrix<T>>? _weightGradients;
+    private List<Vector<T>>? _biasGradients;
+
     /// <summary>
-    /// LayerBase Backward — gradient of loss w.r.t. input (stub for now, full implementation
-    /// will use Engine-accelerated chain rule through the FC layers).
+    /// Full analytical backward pass through the FC layers using chain rule.
+    /// Computes dL/dInput and stores dL/dW, dL/db for UpdateParameters.
     /// </summary>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // TODO: Implement full analytical backward pass through FC layers
-        // For now, return zero gradient (AutoDiff GradientTape handles this at model level)
-        return new Tensor<T>(new[] { _lookbackWindow });
+        if (_lastInput is null || _postActivations.Count == 0)
+            return new Tensor<T>(new[] { _lookbackWindow });
+
+        _weightGradients = new List<Matrix<T>>();
+        _biasGradients = new List<Vector<T>>();
+
+        // Output gradient is dL/d[backcast|forecast] concatenated
+        // For simplicity, we use the forecast portion as the primary gradient signal
+        var delta = new Vector<T>(_forecastHorizon);
+        for (int i = 0; i < _forecastHorizon && i + _lookbackWindow < outputGradient.Length; i++)
+            delta[i] = outputGradient[_lookbackWindow + i];
+
+        // Backward through forecast theta layer
+        int fcLayerIdx = _numHiddenLayers + 1;
+        var fcW = _fcWeights[fcLayerIdx];
+        var hiddenOut = _lastHiddenOutput ?? new Vector<T>(fcW.Columns);
+
+        // dL/dW_fc = delta * hiddenOut^T
+        var wGrad = new Matrix<T>(fcW.Rows, fcW.Columns);
+        for (int i = 0; i < fcW.Rows; i++)
+            for (int j = 0; j < fcW.Columns; j++)
+                wGrad[i, j] = NumOps.Multiply(delta[i < delta.Length ? i : 0], hiddenOut[j]);
+        _weightGradients.Insert(0, wGrad);
+        _biasGradients.Insert(0, delta.Clone());
+
+        // dL/d_hidden from forecast layer: W_fc^T * delta
+        var dHidden = new Vector<T>(fcW.Columns);
+        for (int j = 0; j < fcW.Columns; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < fcW.Rows && i < delta.Length; i++)
+                sum = NumOps.Add(sum, NumOps.Multiply(fcW[i, j], delta[i]));
+            dHidden[j] = sum;
+        }
+
+        // Also add gradient from backcast theta layer
+        int bcLayerIdx = _numHiddenLayers;
+        var bcW = _fcWeights[bcLayerIdx];
+        var bcDelta = new Vector<T>(_lookbackWindow);
+        for (int i = 0; i < _lookbackWindow && i < outputGradient.Length; i++)
+            bcDelta[i] = outputGradient[i];
+
+        var bcWGrad = new Matrix<T>(bcW.Rows, bcW.Columns);
+        for (int i = 0; i < bcW.Rows; i++)
+            for (int j = 0; j < bcW.Columns; j++)
+                bcWGrad[i, j] = NumOps.Multiply(bcDelta[i < bcDelta.Length ? i : 0], hiddenOut[j]);
+        _weightGradients.Insert(0, bcWGrad);
+        _biasGradients.Insert(0, bcDelta.Clone());
+
+        // Add backcast gradient to dHidden
+        for (int j = 0; j < bcW.Columns; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < bcW.Rows && i < bcDelta.Length; i++)
+                sum = NumOps.Add(sum, NumOps.Multiply(bcW[i, j], bcDelta[i]));
+            dHidden[j] = NumOps.Add(dHidden[j], sum);
+        }
+
+        // Backward through hidden layers (reverse order)
+        var currentGrad = dHidden;
+        for (int layer = _numHiddenLayers - 1; layer >= 0; layer--)
+        {
+            var preAct = _preActivations[layer];
+            var w = _fcWeights[layer];
+
+            // ReLU derivative: gradient passes through where preActivation > 0
+            var reluGrad = new Vector<T>(currentGrad.Length);
+            for (int i = 0; i < reluGrad.Length; i++)
+                reluGrad[i] = NumOps.GreaterThan(preAct[i], NumOps.Zero) ? currentGrad[i] : NumOps.Zero;
+
+            // dL/dW = reluGrad * input^T
+            var layerInput = layer > 0 ? _postActivations[layer - 1] : _lastInput;
+            var layerWGrad = new Matrix<T>(w.Rows, w.Columns);
+            for (int i = 0; i < w.Rows; i++)
+                for (int j = 0; j < w.Columns && j < layerInput!.Length; j++)
+                    layerWGrad[i, j] = NumOps.Multiply(reluGrad[i], layerInput![j]);
+            _weightGradients.Insert(0, layerWGrad);
+            _biasGradients.Insert(0, reluGrad.Clone());
+
+            // dL/d_input = W^T * reluGrad
+            if (layer > 0)
+            {
+                currentGrad = new Vector<T>(w.Columns);
+                for (int j = 0; j < w.Columns; j++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int i = 0; i < w.Rows; i++)
+                        sum = NumOps.Add(sum, NumOps.Multiply(w[i, j], reluGrad[i]));
+                    currentGrad[j] = sum;
+                }
+            }
+        }
+
+        // Convert input gradient to Tensor
+        var inputGrad = new Tensor<T>(new[] { _lookbackWindow });
+        for (int i = 0; i < _lookbackWindow && i < currentGrad.Length; i++)
+            inputGrad[i] = currentGrad[i];
+        return inputGrad;
     }
 
     public override bool SupportsTraining => true;
@@ -275,7 +380,26 @@ public class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override void UpdateParameters(T learningRate)
     {
-        // Parameters are updated externally by the training loop via SetParameters
+        if (_weightGradients is null || _biasGradients is null) return;
+
+        for (int l = 0; l < _fcWeights.Count && l < _weightGradients.Count; l++)
+        {
+            var w = _fcWeights[l];
+            var wg = _weightGradients[l];
+            for (int i = 0; i < w.Rows; i++)
+                for (int j = 0; j < w.Columns; j++)
+                    w[i, j] = NumOps.Subtract(w[i, j], NumOps.Multiply(learningRate, wg[i, j]));
+        }
+        for (int l = 0; l < _fcBiases.Count && l < _biasGradients.Count; l++)
+        {
+            var b = _fcBiases[l];
+            var bg = _biasGradients[l];
+            for (int i = 0; i < b.Length && i < bg.Length; i++)
+                b[i] = NumOps.Subtract(b[i], NumOps.Multiply(learningRate, bg[i]));
+        }
+
+        _weightGradients = null;
+        _biasGradients = null;
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
@@ -299,6 +423,10 @@ public class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
 
         // Pass through fully connected layers with ReLU activation
         // Uses Engine from LayerBase for hardware-accelerated matrix-vector operations
+        // Caches pre/post activations for Backward pass
+        _lastInput = input.Clone();
+        _preActivations.Clear();
+        _postActivations.Clear();
         Vector<T> x = input.Clone();
 
         for (int layer = 0; layer < _numHiddenLayers; layer++)
@@ -312,6 +440,7 @@ public class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             {
                 linear[i] = NumOps.Add(_fcBiases[layer][i], wxMatrix[i, 0]);
             }
+            _preActivations.Add(linear.Clone());
 
             // ReLU activation
             x = new Vector<T>(linear.Length);
@@ -319,7 +448,9 @@ public class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             {
                 x[i] = NumOps.GreaterThan(linear[i], NumOps.Zero) ? linear[i] : NumOps.Zero;
             }
+            _postActivations.Add(x.Clone());
         }
+        _lastHiddenOutput = x.Clone();
 
         // Accelerated theta for backcast: theta = W_b * x + b_b
         int backcastLayerIdx = _numHiddenLayers;
