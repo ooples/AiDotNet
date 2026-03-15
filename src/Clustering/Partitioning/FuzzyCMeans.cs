@@ -51,7 +51,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private T[,]? _membershipMatrix;
+    private Matrix<T> _membershipMatrix = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Initializes a new FuzzyCMeans instance.
@@ -70,7 +70,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
     /// Each row sums to 1. membershipMatrix[i, k] is the degree to which
     /// point i belongs to cluster k.
     /// </remarks>
-    public T[,]? MembershipMatrix => _membershipMatrix;
+    public Matrix<T> MembershipMatrix => _membershipMatrix;
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;
@@ -117,7 +117,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Initialize membership matrix randomly
-        _membershipMatrix = new T[n, k];
+        _membershipMatrix = new Matrix<T>(n, k);
         InitializeMembership(n, k, rand);
 
         // Cluster centers
@@ -178,14 +178,14 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             T sum = NumOps.Zero;
             for (int c = 0; c < k; c++)
             {
-                _membershipMatrix![i, c] = NumOps.FromDouble(rand.NextDouble());
+                _membershipMatrix[i, c] = NumOps.FromDouble(rand.NextDouble());
                 sum = NumOps.Add(sum, _membershipMatrix[i, c]);
             }
 
             // Normalize to sum to 1
             for (int c = 0; c < k; c++)
             {
-                _membershipMatrix![i, c] = NumOps.Divide(_membershipMatrix[i, c], sum);
+                _membershipMatrix[i, c] = NumOps.Divide(_membershipMatrix[i, c], sum);
             }
         }
     }
@@ -201,7 +201,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
 
                 for (int i = 0; i < n; i++)
                 {
-                    T membership = NumOps.FromDouble(Math.Pow(NumOps.ToDouble(_membershipMatrix![i, c]), m));
+                    T membership = NumOps.FromDouble(Math.Pow(NumOps.ToDouble(_membershipMatrix[i, c]), m));
                     numerator = NumOps.Add(numerator, NumOps.Multiply(membership, x[i, j]));
                     denominator = NumOps.Add(denominator, membership);
                 }
@@ -248,7 +248,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             // Update memberships
             for (int c = 0; c < k; c++)
             {
-                T oldMembership = _membershipMatrix![i, c];
+                T oldMembership = _membershipMatrix[i, c];
                 T newMembership;
 
                 if (hasZeroDistance)
