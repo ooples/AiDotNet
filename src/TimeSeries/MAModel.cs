@@ -90,7 +90,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Flag indicating whether the model has been trained.
     /// </summary>
-    private bool _isTrained;
+    // IsTrained is inherited from TimeSeriesModelBase
 
     /// <summary>
     /// Maximum number of iterations for optimization algorithms.
@@ -121,7 +121,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         _maCoefficients = new Vector<T>(_maOptions.MAOrder);
         _recentErrors = new Vector<T>(_maOptions.MAOrder);
         _noiseVariance = NumOps.One;
-        _isTrained = false;
+        IsTrained = false;
         _convergenceTolerance = NumOps.FromDouble(1e-6);
     }
 
@@ -174,7 +174,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         // Step 5: Calculate the most recent errors for making future predictions
         _recentErrors = CalculateRecentErrors(y);
 
-        _isTrained = true;
+        IsTrained = true;
     }
 
     /// <summary>
@@ -844,7 +844,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     public override T PredictSingle(Vector<T> input)
     {
         // Check if model has been trained
-        if (!_isTrained)
+        if (!IsTrained)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
@@ -882,7 +882,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         // Check if model has been trained
-        if (!_isTrained)
+        if (!IsTrained)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
@@ -945,7 +945,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     public override Dictionary<string, T> EvaluateModel(Matrix<T> xTest, Vector<T> yTest)
     {
         // Check if model has been trained
-        if (!_isTrained)
+        if (!IsTrained)
         {
             throw new InvalidOperationException("Model must be trained before evaluation.");
         }
@@ -993,8 +993,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void SerializeCore(BinaryWriter writer)
     {
-        // Write model status
-        writer.Write(_isTrained);
+        // Note: IsTrained is handled by base class Serialize, don't duplicate
 
         // Write MA-specific options
         writer.Write(_maOptions.MAOrder);
@@ -1038,8 +1037,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void DeserializeCore(BinaryReader reader)
     {
-        // Read model status
-        _isTrained = reader.ReadBoolean();
+        // Note: IsTrained is handled by base class Deserialize
 
         // Read MA-specific options
         int q = reader.ReadInt32();
@@ -1096,7 +1094,7 @@ public class MAModel<T> : TimeSeriesModelBase<T>
             {
                 // MA-specific parameters
                 { "Q", _maOptions.MAOrder },
-                { "IsTrained", _isTrained },
+                { "IsTrained", IsTrained },
                 
                 // Model parameters
                 { "MACoefficientsCount", _maCoefficients.Length },

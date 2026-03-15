@@ -135,7 +135,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// before it's ready.
     /// </para>
     /// </remarks>
-    protected bool IsTrained { get; private set; } = false;
+    protected bool IsTrained { get; set; } = false;
 
     /// <summary>
     /// The default loss function used for gradient computation.
