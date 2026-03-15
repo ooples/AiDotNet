@@ -27,12 +27,13 @@ create index if not exists idx_license_activations_key
 -- RLS
 alter table public.license_activations enable row level security;
 
--- Users can view activations for their own license keys
+-- Users can view activations for their own license keys; admins can view all
 create policy "license_activations_select_own"
     on public.license_activations
     for select
     to authenticated
     using (
+        public.is_admin() or
         license_key_id in (
             select id from public.license_keys where user_id = auth.uid()
         )
@@ -76,6 +77,7 @@ create or replace function public.validate_license_key(
 returns jsonb
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
     v_license record;
@@ -137,7 +139,11 @@ begin
         );
     end if;
 
-    -- Count active activations
+    -- Advisory lock on the license key ID to prevent race conditions
+    -- when two concurrent validations try to activate the same license
+    perform pg_advisory_xact_lock(v_license.id);
+
+    -- Re-count active activations after acquiring the lock
     select count(*) into v_activation_count
     from public.license_activations
     where license_key_id = v_license.id
@@ -165,6 +171,10 @@ begin
     );
 end;
 $$;
+
+-- Restrict execution to only the service_role and authenticated users (not anon)
+revoke execute on function public.validate_license_key from anon;
+grant execute on function public.validate_license_key to service_role;
 
 -- Comments
 comment on table public.license_activations is 'Tracks which machines have activated a given license key. Enforces max_activations limit.';

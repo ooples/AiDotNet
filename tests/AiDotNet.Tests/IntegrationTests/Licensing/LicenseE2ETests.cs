@@ -76,7 +76,7 @@ public class LicenseE2ETests : IDisposable
         var licenseKeyObj = new AiDotNetLicenseKey(communityKey) { ServerUrl = string.Empty };
         var validator = new LicenseValidator(licenseKeyObj);
         var validationResult = validator.Validate();
-        Assert.Equal(LicenseKeyStatus.Active, validationResult.Status);
+        AssertOfflineValidationStatus(validationResult);
 
         // Step 5: Train a model (training is always free, never requires license)
         var result = TrainSimpleModel();
@@ -122,7 +122,9 @@ public class LicenseE2ETests : IDisposable
         Assert.Equal(communityKey, resolvedKey);
 
         // Step 3: Train, serialize, deserialize, predict
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", communityKey);
+        // Keep env var cleared so the file-based license path is exercised
+        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", null);
+        Assert.Equal(communityKey, LicenseKeyResolver.Resolve(null));
         var result = TrainSimpleModel();
         byte[] serialized = new AiModelBuilder<double, Matrix<double>, Vector<double>>().SerializeModel(result);
         var restored = new AiModelBuilder<double, Matrix<double>, Vector<double>>().DeserializeModel(serialized);
@@ -149,7 +151,7 @@ public class LicenseE2ETests : IDisposable
         // Step 2: Verify offline validation passes
         var validator = new LicenseValidator(licenseKey);
         var validationResult = validator.Validate();
-        Assert.Equal(LicenseKeyStatus.Active, validationResult.Status);
+        AssertOfflineValidationStatus(validationResult);
 
         // Step 3: Train a model
         // Set env var so the guard finds a valid key during training helper calls
@@ -230,9 +232,8 @@ public class LicenseE2ETests : IDisposable
         {
             if (string.IsNullOrWhiteSpace(key))
             {
-                // Empty/whitespace keys are rejected before format check
-                var emptyKeyObj = new AiDotNetLicenseKey("placeholder") { ServerUrl = string.Empty };
-                // Can't construct with empty key — that throws in constructor
+                // Empty/whitespace keys should be rejected by the constructor
+                Assert.ThrowsAny<ArgumentException>(() => new AiDotNetLicenseKey(key));
                 continue;
             }
 
@@ -260,7 +261,7 @@ public class LicenseE2ETests : IDisposable
             var validator = new LicenseValidator(keyObj);
             var result = validator.Validate();
 
-            Assert.Equal(LicenseKeyStatus.Active, result.Status);
+            AssertOfflineValidationStatus(result);
         }
     }
 
@@ -336,6 +337,24 @@ public class LicenseE2ETests : IDisposable
     }
 
     // ─── Helpers ───
+
+    /// <summary>
+    /// Asserts the correct offline validation status depending on whether this is
+    /// an official build (with HMAC enforcement) or a dev/CI build (format-only).
+    /// </summary>
+    private static void AssertOfflineValidationStatus(LicenseValidationResult result)
+    {
+        if (BuildKeyProvider.IsOfficialBuild)
+        {
+            // Official builds enforce HMAC — unsigned test keys should be rejected
+            Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
+        }
+        else
+        {
+            // Dev/CI builds without a build key only check format — valid format passes
+            Assert.Equal(LicenseKeyStatus.Active, result.Status);
+        }
+    }
 
     private static AiModelResult<double, Matrix<double>, Vector<double>> TrainSimpleModel()
     {

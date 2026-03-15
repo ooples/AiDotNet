@@ -1212,6 +1212,7 @@ Areas where we especially welcome help:
 **Business Source License 1.1** — see [LICENSE](LICENSE) for full terms.
 
 ### What's free (always, no license needed)
+
 - Model training (all algorithms, all configurations)
 - Model inference and prediction
 - Data preprocessing, feature engineering, AutoML
@@ -1219,19 +1220,21 @@ Areas where we especially welcome help:
 - All utility functions and helpers
 
 ### What requires a license
+
 - Model save/load operations (SaveModel, LoadModel, Serialize, Deserialize)
 - Free trial: 30 days or 10 operations, whichever comes first
 
 ### License tiers
+
 | Tier | Price | Who qualifies |
 |------|-------|---------------|
 | **Community** | Free | Open-source, education, personal projects, companies <$1M revenue with <5 devs |
 | **Professional** | $29/mo per seat | Commercial use, individual developers and small teams |
 | **Enterprise** | $99/mo per seat | Large organizations, dedicated support, custom SLAs |
 
-Register for a free community license at [aidotnet.dev/pricing](https://ooples.github.io/AiDotNet/pricing/).
+See the [pricing page](https://ooples.github.io/AiDotNet/pricing/) for details and to register for a free community license.
 
-Each version automatically converts to **Apache License 2.0** four years after release.
+Each version automatically converts to **Apache License 2.0** three years after release.
 
 ---
 

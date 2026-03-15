@@ -3367,25 +3367,26 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         if (resolvedKey is not null)
         {
-            // Licensed user — validate license status before saving
-            if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
-            {
-                var validationResult = ValidateLicense();
-                if (validationResult.Status != LicenseKeyStatus.Active &&
-                    validationResult.Status != LicenseKeyStatus.ValidationPending)
-                {
-                    throw new Exceptions.LicenseRequiredException(
-                        validationResult.Status switch
-                        {
-                            LicenseKeyStatus.Expired => Exceptions.TrialExpirationReason.LicenseExpired,
-                            LicenseKeyStatus.Revoked => Exceptions.TrialExpirationReason.LicenseInvalid,
-                            LicenseKeyStatus.SeatLimitReached => Exceptions.TrialExpirationReason.SeatLimitReached,
-                            _ => Exceptions.TrialExpirationReason.LicenseInvalid
-                        });
-                }
+            // Licensed user — always validate through LicenseValidator
+            // This ensures env/file keys are also validated, not just keys with a ServerUrl
+            var effectiveLicenseKey = _licenseKey ?? new AiDotNetLicenseKey(resolvedKey);
+            var validator = new LicenseValidator(effectiveLicenseKey);
+            var validationResult = validator.Validate();
 
-                decryptionToken = validationResult.DecryptionToken;
+            if (validationResult.Status != LicenseKeyStatus.Active &&
+                validationResult.Status != LicenseKeyStatus.ValidationPending)
+            {
+                throw new Exceptions.LicenseRequiredException(
+                    validationResult.Status switch
+                    {
+                        LicenseKeyStatus.Expired => Exceptions.TrialExpirationReason.LicenseExpired,
+                        LicenseKeyStatus.Revoked => Exceptions.TrialExpirationReason.LicenseInvalid,
+                        LicenseKeyStatus.SeatLimitReached => Exceptions.TrialExpirationReason.SeatLimitReached,
+                        _ => Exceptions.TrialExpirationReason.LicenseInvalid
+                    });
             }
+
+            decryptionToken = validationResult.DecryptionToken;
         }
         else
         {
@@ -3399,8 +3400,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             resolvedKey = GenerateTrialEncryptionKey();
         }
 
-        ModelLoader.SaveEncrypted(serializer, filePath, resolvedKey, inputShape, outputShape,
-            decryptionToken: decryptionToken);
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            ModelLoader.SaveEncrypted(serializer, filePath, resolvedKey, inputShape, outputShape,
+                decryptionToken: decryptionToken);
+        }
     }
 
     /// <summary>
@@ -3458,25 +3462,26 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         if (resolvedKey is not null)
         {
-            // Licensed user — validate license status
-            if (_licenseKey is not null && !string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
-            {
-                var validationResult = ValidateLicense();
-                if (validationResult.Status != LicenseKeyStatus.Active &&
-                    validationResult.Status != LicenseKeyStatus.ValidationPending)
-                {
-                    throw new Exceptions.LicenseRequiredException(
-                        validationResult.Status switch
-                        {
-                            LicenseKeyStatus.Expired => Exceptions.TrialExpirationReason.LicenseExpired,
-                            LicenseKeyStatus.Revoked => Exceptions.TrialExpirationReason.LicenseInvalid,
-                            LicenseKeyStatus.SeatLimitReached => Exceptions.TrialExpirationReason.SeatLimitReached,
-                            _ => Exceptions.TrialExpirationReason.LicenseInvalid
-                        });
-                }
+            // Licensed user — always validate through LicenseValidator
+            // This ensures env/file keys are also validated, not just keys with a ServerUrl
+            var effectiveLicenseKey = _licenseKey ?? new AiDotNetLicenseKey(resolvedKey);
+            var validator = new LicenseValidator(effectiveLicenseKey);
+            var validationResult = validator.Validate();
 
-                decryptionToken = validationResult.DecryptionToken;
+            if (validationResult.Status != LicenseKeyStatus.Active &&
+                validationResult.Status != LicenseKeyStatus.ValidationPending)
+            {
+                throw new Exceptions.LicenseRequiredException(
+                    validationResult.Status switch
+                    {
+                        LicenseKeyStatus.Expired => Exceptions.TrialExpirationReason.LicenseExpired,
+                        LicenseKeyStatus.Revoked => Exceptions.TrialExpirationReason.LicenseInvalid,
+                        LicenseKeyStatus.SeatLimitReached => Exceptions.TrialExpirationReason.SeatLimitReached,
+                        _ => Exceptions.TrialExpirationReason.LicenseInvalid
+                    });
             }
+
+            decryptionToken = validationResult.DecryptionToken;
         }
         else
         {
@@ -3498,7 +3503,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
 
         byte[] data = File.ReadAllBytes(filePath);
-        var model = ModelLoader.LoadFromBytes<T>(data, resolvedKey, decryptionToken);
+        IModelSerializer model;
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            try
+            {
+                model = ModelLoader.LoadFromBytes<T>(data, resolvedKey, decryptionToken);
+            }
+            catch (System.Security.Cryptography.CryptographicException) when (resolvedKey is not null)
+            {
+                // If decryption fails with the license key, try the trial key as fallback.
+                // This handles the migration case where a user saved during trial and later upgraded.
+                string trialKey = GenerateTrialEncryptionKey();
+                if (trialKey != resolvedKey)
+                {
+                    model = ModelLoader.LoadFromBytes<T>(data, trialKey);
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
 
         if (model is Interfaces.IFullModel<T, TInput, TOutput> fullModel)
         {
@@ -3563,6 +3589,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public byte[] SerializeModel(AiModelResult<T, TInput, TOutput> modelResult)
     {
+        if (modelResult is null)
+            throw new ArgumentNullException(nameof(modelResult));
+
         ModelPersistenceGuard.EnforceBeforeSave();
         using (ModelPersistenceGuard.InternalOperation())
         {
@@ -3584,6 +3613,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public AiModelResult<T, TInput, TOutput> DeserializeModel(byte[] modelData)
     {
+        if (modelData is null)
+            throw new ArgumentNullException(nameof(modelData));
+        if (modelData.Length == 0)
+            throw new ArgumentException("Model data cannot be empty.", nameof(modelData));
+
         ModelPersistenceGuard.EnforceBeforeLoad();
         var result = new AiModelResult<T, TInput, TOutput>();
         using (ModelPersistenceGuard.InternalOperation())

@@ -33,6 +33,12 @@ internal sealed class TrialStateManager
     /// </summary>
     internal const int TrialOperationLimit = 10;
 
+    /// <summary>
+    /// Optional callback invoked with trial status messages instead of writing to Console.
+    /// Set to null (default) to use Console.Error.WriteLine.
+    /// </summary>
+    internal static Action<string>? TrialMessageHandler { get; set; }
+
     private static readonly object FileLock = new();
 
     private readonly string _trialFilePath;
@@ -58,8 +64,8 @@ internal sealed class TrialStateManager
     /// <summary>
     /// Checks whether the trial is still active and records an operation.
     /// If the trial has expired, throws <see cref="LicenseRequiredException"/>.
-    /// If the trial is active, increments the operation counter and writes a
-    /// console info message.
+    /// If the trial is active, increments the operation counter and emits a trial notice
+    /// via <see cref="TrialMessageHandler"/> (or stderr if no handler is set).
     /// </summary>
     /// <exception cref="LicenseRequiredException">
     /// Thrown when the free trial has expired (either by time or operation count).
@@ -70,9 +76,9 @@ internal sealed class TrialStateManager
         {
             var state = LoadOrCreateState();
 
-            // Check time expiration
+            // Check time expiration (>= gives exactly TrialDurationDays full days)
             int daysElapsed = (int)(DateTimeOffset.UtcNow - state.FirstUseUtc).TotalDays;
-            if (daysElapsed > TrialDurationDays)
+            if (daysElapsed >= TrialDurationDays)
             {
                 throw new LicenseRequiredException(
                     TrialExpirationReason.TimeExpired,
@@ -92,12 +98,23 @@ internal sealed class TrialStateManager
             // Trial is active — increment counter and persist
             state.OperationCount++;
             state.LastOperationUtc = DateTimeOffset.UtcNow;
-            SaveState(state);
 
-            // Console info message during trial
+            try
+            {
+                SaveState(state);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Cannot persist trial state (read-only filesystem, permissions issue).
+                // Allow the operation but log a warning — the state will be re-read next time.
+                EmitTrialMessage(
+                    $"AiDotNet: Warning — unable to persist trial state: {ex.Message}");
+            }
+
+            // Trial notice via configurable handler (defaults to stderr to avoid polluting stdout)
             int daysRemaining = TrialDurationDays - daysElapsed;
             int opsRemaining = TrialOperationLimit - state.OperationCount;
-            Console.WriteLine(
+            EmitTrialMessage(
                 $"AiDotNet Community — {daysRemaining} day(s) and {opsRemaining} operation(s) remaining in free trial. " +
                 "Register for a free license at https://aidotnet.dev");
         }
@@ -114,7 +131,7 @@ internal sealed class TrialStateManager
             var state = LoadOrCreateState();
             int daysElapsed = (int)(DateTimeOffset.UtcNow - state.FirstUseUtc).TotalDays;
 
-            bool timeExpired = daysElapsed > TrialDurationDays;
+            bool timeExpired = daysElapsed >= TrialDurationDays;
             bool opsExpired = state.OperationCount >= TrialOperationLimit;
 
             return new LicenseTrialStatus(
@@ -152,7 +169,17 @@ internal sealed class TrialStateManager
                 LastOperationUtc = DateTimeOffset.UtcNow,
                 MachineId = MachineFingerprint.GetMachineId()
             };
-            SaveState(newState);
+
+            try
+            {
+                SaveState(newState);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Cannot create trial file (read-only FS, permissions). Allow first use
+                // but state won't persist — next call will create a new trial.
+            }
+
             return newState;
         }
 
@@ -192,6 +219,18 @@ internal sealed class TrialStateManager
 
             return state;
         }
+        catch (UnauthorizedAccessException)
+        {
+            // Permission error — distinct from tampering. Allow a fresh trial rather
+            // than locking out users who can't read their own home directory.
+            return new TrialState
+            {
+                FirstUseUtc = DateTimeOffset.UtcNow,
+                OperationCount = 0,
+                LastOperationUtc = DateTimeOffset.UtcNow,
+                MachineId = MachineFingerprint.GetMachineId()
+            };
+        }
         catch (Exception ex) when (ex is JsonException or FormatException or IOException)
         {
             // Corrupted or unreadable — treat as expired
@@ -222,6 +261,18 @@ internal sealed class TrialStateManager
         }
 
         File.WriteAllText(_trialFilePath, envelopeJson, Encoding.UTF8);
+    }
+
+    private static void EmitTrialMessage(string message)
+    {
+        if (TrialMessageHandler is not null)
+        {
+            TrialMessageHandler(message);
+        }
+        else
+        {
+            Console.Error.WriteLine(message);
+        }
     }
 
     /// <summary>

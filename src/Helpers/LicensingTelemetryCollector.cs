@@ -233,9 +233,10 @@ internal sealed class LicensingTelemetryCollector : IDisposable
         {
             return FlushAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort — never throw from flush
+            System.Diagnostics.Trace.TraceWarning(
+                "LicensingTelemetryCollector: flush failed: " + ex.GetType().Name + ": " + ex.Message);
             return 0;
         }
     }
@@ -298,7 +299,7 @@ internal sealed class LicensingTelemetryCollector : IDisposable
             machine_id_hash = e.MachineIdHash,
             library_version = e.LibraryVersion,
             timestamp_utc = e.TimestampUtc.ToString("O"),
-            properties = JsonConvert.SerializeObject(e.Properties)
+            properties = e.Properties
         });
 
         string json = JsonConvert.SerializeObject(payload);
@@ -316,7 +317,16 @@ internal sealed class LicensingTelemetryCollector : IDisposable
     private void FlushCallback(object? state)
     {
         if (_disposed || _queue.IsEmpty) return;
-        Flush();
+
+        try
+        {
+            Flush();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "LicensingTelemetryCollector: flush failed: " + ex.GetType().Name + ": " + ex.Message);
+        }
     }
 
     private string HashMachineId()

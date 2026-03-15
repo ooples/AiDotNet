@@ -54,7 +54,10 @@ internal static class TestModuleInitializer
         // in their own setup via ClearAllLicenseSources().
         if (string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY")))
         {
-            System.Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.testdefault1.abcdefghijklmnop");
+            // Test-only placeholder key. Format: aidn.{id}.{signature}
+            // This is NOT a real license key — it exists solely to bypass trial state in tests.
+            System.Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY",
+                "aidn." + "testdefault1" + "." + "testsignature1");
         }
     }
 }

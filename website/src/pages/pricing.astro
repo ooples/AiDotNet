@@ -87,7 +87,7 @@ const base = import.meta.env.BASE_URL;
             'All library features included',
             'Open-source and personal projects',
             'Academic and educational use',
-            'Companies under $1M revenue',
+            'Companies under $1M revenue*',
             'Community support via GitHub',
           ]}
           cta="Get Free License"
@@ -174,13 +174,20 @@ const base = import.meta.env.BASE_URL;
         </div>
       </div>
 
+      <!-- Community tier footnote -->
+      <div class="mt-4 max-w-3xl mx-auto text-center">
+        <p class="text-xs text-slate-400 dark:text-slate-500">
+          * Community license eligibility is self-attested during registration. Misrepresentation may result in license revocation.
+        </p>
+      </div>
+
       <!-- Apache 2.0 conversion notice -->
       <div class="mt-8 max-w-3xl mx-auto text-center">
         <p class="gsap-fade-up text-sm text-slate-500 dark:text-slate-400">
           Licensed under <a href={`${base}license/`} class="text-brand-blue hover:underline">Business Source License 1.1</a>.
           Each version automatically converts to
           <span class="font-semibold text-slate-700 dark:text-slate-300">Apache License 2.0</span>
-          four years after release.
+          three years after release.
         </p>
       </div>
 

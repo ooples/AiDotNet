@@ -39,8 +39,9 @@ public class BuildKeyAndEncryptionTests
         var key1 = BuildKeyProvider.GetBuildKey();
         var key2 = BuildKeyProvider.GetBuildKey();
 
-        // Both should be empty in dev builds, but the results should be consistent
+        // Both calls must return identical content (length AND bytes)
         Assert.Equal(key1.Length, key2.Length);
+        Assert.Equal(key1, key2);
     }
 
     [Fact]
@@ -49,11 +50,21 @@ public class BuildKeyAndEncryptionTests
         var key1 = BuildKeyProvider.GetBuildKey();
         var key2 = BuildKeyProvider.GetBuildKey();
 
-        // Even if empty, these should be separate array instances
-        // (if there were a key, mutating one shouldn't affect the other)
         if (key1.Length > 0)
         {
+            // Must be separate array instances (defensive copy)
             Assert.False(ReferenceEquals(key1, key2));
+
+            // Mutating one must not affect the other
+            var originalFirstByte = key1[0];
+            key1[0] = (byte)(originalFirstByte ^ 0xFF);
+            Assert.Equal(originalFirstByte, key2[0]);
+        }
+        else
+        {
+            // Dev build: key is empty, just verify both return empty arrays
+            Assert.Empty(key1);
+            Assert.Empty(key2);
         }
     }
 

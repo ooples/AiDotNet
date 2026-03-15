@@ -385,15 +385,23 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void SaveModel(string filepath)
     {
-        var data = Serialize();
-        System.IO.File.WriteAllBytes(filepath, data);
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            var data = Serialize();
+            System.IO.File.WriteAllBytes(filepath, data);
+        }
     }
 
     /// <inheritdoc/>
     public override void LoadModel(string filepath)
     {
-        var data = System.IO.File.ReadAllBytes(filepath);
-        Deserialize(data);
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            var data = System.IO.File.ReadAllBytes(filepath);
+            Deserialize(data);
+        }
     }
 }
 
@@ -692,7 +700,6 @@ internal class DuelingNetwork<T>
 
     public byte[] Serialize()
     {
-        ModelPersistenceGuard.EnforceBeforeSerialize();
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
 
@@ -736,7 +743,6 @@ internal class DuelingNetwork<T>
 
     public void Deserialize(byte[] data)
     {
-        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
             throw new ArgumentNullException(nameof(data));

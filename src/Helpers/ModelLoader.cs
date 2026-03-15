@@ -94,6 +94,8 @@ public static class ModelLoader
             throw new ArgumentNullException(nameof(data));
         }
 
+        ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (!ModelFileHeader.HasHeader(data))
         {
             throw new InvalidOperationException(
@@ -212,6 +214,8 @@ public static class ModelLoader
 
         inputShape ??= Array.Empty<int>();
         outputShape ??= Array.Empty<int>();
+
+        ModelPersistenceGuard.EnforceBeforeSave();
 
         // Serialize the model — wrap in InternalOperation so that Serialize()
         // guard does not double-count (SaveEncrypted is already a guarded path)

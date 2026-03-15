@@ -5009,7 +5009,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public void SaveModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();
-        File.WriteAllBytes(filePath, Serialize());
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
     }
 
     /// <summary>
@@ -5042,8 +5045,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public void LoadFromFile(string filePath)
     {
-        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
@@ -5054,8 +5055,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new FileNotFoundException($"Model file not found at path: {filePath}", filePath);
         }
 
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         var data = File.ReadAllBytes(filePath);
-        Deserialize(data);
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(data);
+        }
     }
 
     /// <summary>

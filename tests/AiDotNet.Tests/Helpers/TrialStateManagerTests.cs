@@ -34,12 +34,6 @@ public class TrialStateManagerTests : IDisposable
         }
     }
 
-    private static void DeleteDirectoryRecursively(string path)
-    {
-        if (Directory.Exists(path))
-            Directory.Delete(path, recursive: true);
-    }
-
     [Fact]
     public void FirstUse_CreatesTrialFile()
     {
@@ -270,7 +264,7 @@ public class TrialStateManagerTests : IDisposable
     }
 
     [Fact]
-    public void ExpirationReason_TimeExpired_SetCorrectly()
+    public void ExpirationReason_OperationLimitReached_SetCorrectly()
     {
         var manager = new TrialStateManager(_trialFilePath);
         manager.RecordOperationOrThrow();

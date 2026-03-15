@@ -277,15 +277,17 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
-        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
-
         // Only rank 0 saves to avoid conflicts
         if (Rank == 0)
         {
-            var data = Serialize();
-            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
-            File.WriteAllBytes(filePath, envelopedData);
+            Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
+            {
+                var data = Serialize();
+                byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                    data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+                File.WriteAllBytes(filePath, envelopedData);
+            }
         }
 
         // Wait for rank 0 to finish writing
@@ -303,7 +305,10 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         // Extract payload from AIMF envelope
         data = ModelFileHeader.ExtractPayload(data);
 
-        Deserialize(data);
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(data);
+        }
 
         // Ensure all processes finish loading
         Config.CommunicationBackend.Barrier();

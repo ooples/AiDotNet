@@ -290,12 +290,12 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
-        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
-
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
+
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
 
         var fullPath = Path.GetFullPath(filePath);
         var directory = Path.GetDirectoryName(fullPath);
@@ -304,18 +304,21 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             Directory.CreateDirectory(directory);
         }
 
-        File.WriteAllBytes(fullPath, Serialize());
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            File.WriteAllBytes(fullPath, Serialize());
+        }
     }
 
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
-        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
+
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
 
         var fullPath = Path.GetFullPath(filePath);
         if (!File.Exists(fullPath))
@@ -323,7 +326,10 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             throw new FileNotFoundException("Model file not found.", fullPath);
         }
 
-        Deserialize(File.ReadAllBytes(fullPath));
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(File.ReadAllBytes(fullPath));
+        }
     }
 
     private Func<Vector<T>, Vector<T>, double> TrainRewardModel(AlignmentFeedbackData<T> feedbackData)

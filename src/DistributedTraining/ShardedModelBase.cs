@@ -382,29 +382,32 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
-        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
-
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
 
         string fullPath = Path.GetFullPath(filePath);
         string? directory = Path.GetDirectoryName(fullPath);
         if (directory is not null && !Directory.Exists(directory))
             Directory.CreateDirectory(directory);
 
-        byte[] data = Serialize();
-        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
-        File.WriteAllBytes(fullPath, envelopedData);
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] data = Serialize();
+            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            File.WriteAllBytes(fullPath, envelopedData);
+        }
     }
 
     /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
     {
-        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
 
         string fullPath = Path.GetFullPath(filePath);
         if (!File.Exists(fullPath))
@@ -415,7 +418,10 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
         // Extract payload from AIMF envelope
         data = ModelFileHeader.ExtractPayload(data);
 
-        Deserialize(data);
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(data);
+        }
     }
 
     /// <inheritdoc/>

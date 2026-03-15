@@ -223,15 +223,35 @@ internal sealed class LicenseValidator
 
     /// <summary>
     /// Validates that the license key has the expected format: aidn.{id}.{signature}
-    /// where both id and signature are non-empty alphanumeric strings.
+    /// where id is at least 1 character and signature is at least 1 character,
+    /// and both parts contain only alphanumeric characters.
     /// </summary>
-    private static bool ValidateKeyFormat(string key)
+    internal static bool ValidateKeyFormat(string key)
     {
         var parts = key.Split('.');
-        return parts.Length == 3 &&
-               parts[0] == "aidn" &&
-               parts[1].Length > 0 &&
-               parts[2].Length > 0;
+        if (parts.Length != 3 || parts[0] != "aidn" || parts[1].Length == 0 || parts[2].Length == 0)
+        {
+            return false;
+        }
+
+        // Verify both id and signature contain only alphanumeric characters
+        for (int i = 0; i < parts[1].Length; i++)
+        {
+            if (!char.IsLetterOrDigit(parts[1][i]))
+            {
+                return false;
+            }
+        }
+
+        for (int i = 0; i < parts[2].Length; i++)
+        {
+            if (!char.IsLetterOrDigit(parts[2][i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -271,7 +291,7 @@ internal sealed class LicenseValidator
     /// Builds the request body for the license validation endpoint.
     /// Includes machine_id_hash (always) and optional hostname/os_description (when telemetry is enabled).
     /// </summary>
-    private Dictionary<string, string?> BuildRequestBody()
+    internal Dictionary<string, string?> BuildRequestBody()
     {
         var body = new Dictionary<string, string?>
         {
@@ -281,12 +301,20 @@ internal sealed class LicenseValidator
 
         if (_licenseKey.EnableTelemetry)
         {
-            try { body["hostname"] = System.Environment.MachineName; } catch { /* best effort */ }
+            try { body["hostname"] = System.Environment.MachineName; }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning("LicenseValidator: unable to read MachineName: " + ex.Message);
+            }
+
             try
             {
                 body["os_description"] = System.Runtime.InteropServices.RuntimeInformation.OSDescription;
             }
-            catch { /* best effort */ }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning("LicenseValidator: unable to read OSDescription: " + ex.Message);
+            }
         }
 
         return body;
@@ -296,7 +324,7 @@ internal sealed class LicenseValidator
     /// Generates a one-way SHA-256 hash of the machine fingerprint for license activation tracking.
     /// Uses a different salt than telemetry to prevent correlation between the two systems.
     /// </summary>
-    private static string GetMachineIdHash()
+    internal static string GetMachineIdHash()
     {
         string rawId = MachineFingerprint.GetMachineId();
         byte[] bytes = Encoding.UTF8.GetBytes("license-validation:" + rawId);
@@ -425,7 +453,7 @@ internal sealed class LicenseValidator
     /// The response schema is: { valid: bool, tier?: string, error?: string, message?: string,
     /// license_id?: string, activation_id?: string, current_activations?: int, max_activations?: int }
     /// </summary>
-    private static LicenseValidationResult ParseResponse(string responseJson, int httpStatusCode)
+    internal static LicenseValidationResult ParseResponse(string responseJson, int httpStatusCode)
     {
         var obj = JsonConvert.DeserializeAnonymousType(responseJson, new
         {

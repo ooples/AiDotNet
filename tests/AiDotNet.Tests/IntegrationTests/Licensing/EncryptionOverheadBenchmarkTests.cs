@@ -102,10 +102,9 @@ public class EncryptionOverheadBenchmarkTests
         Assert.Equal(payload.Length, decrypted.Length);
         Assert.Equal(payload, decrypted);
 
-        // Verify encryption overhead is bounded:
-        // Even for 10 MB, encrypt+decrypt should be < 5000 ms on any modern hardware
-        Assert.True(totalCryptoMs < 5000,
-            $"Encryption overhead for {label} is too high: {totalCryptoMs:F1} ms (limit: 5000 ms)");
+        // Log encryption overhead for diagnostic purposes.
+        // We don't assert a hard time limit since CI environments vary widely in performance.
+        _output.WriteLine($"[{label}] Total crypto time: {totalCryptoMs:F1} ms ({measureIterations} iterations)");
     }
 
     [Fact]

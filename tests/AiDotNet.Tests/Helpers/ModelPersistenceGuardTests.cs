@@ -77,11 +77,12 @@ public class ModelPersistenceGuardTests : IDisposable
     }
 
     /// <summary>
-    /// Resets the default trial file to allow fresh trial counting.
+    /// Resets the trial file to allow fresh trial counting.
+    /// Uses the isolated temp path to avoid modifying real user trial state.
     /// </summary>
     private void ResetDefaultTrial()
     {
-        var manager = new TrialStateManager();
+        var manager = new TrialStateManager(_trialFilePath);
         manager.Reset();
     }
 
@@ -127,10 +128,10 @@ public class ModelPersistenceGuardTests : IDisposable
         // First call should succeed (trial is fresh)
         ModelPersistenceGuard.EnforceBeforeSave();
 
-        // Verify trial counter was incremented
-        var manager = new TrialStateManager();
+        // Verify trial counter was incremented to exactly 1
+        var manager = new TrialStateManager(_trialFilePath);
         var status = manager.GetStatus();
-        Assert.True(status.OperationsUsed >= 1);
+        Assert.Equal(1, status.OperationsUsed);
     }
 
     [Fact]
@@ -141,9 +142,9 @@ public class ModelPersistenceGuardTests : IDisposable
 
         ModelPersistenceGuard.EnforceBeforeLoad();
 
-        var manager = new TrialStateManager();
+        var manager = new TrialStateManager(_trialFilePath);
         var status = manager.GetStatus();
-        Assert.True(status.OperationsUsed >= 1);
+        Assert.Equal(1, status.OperationsUsed);
     }
 
     [Fact]
@@ -406,7 +407,7 @@ public class ModelPersistenceGuardTests : IDisposable
 
         int operationsBefore;
         {
-            var manager = new TrialStateManager();
+            var manager = new TrialStateManager(_trialFilePath);
             operationsBefore = manager.GetStatus().OperationsUsed;
         }
 
@@ -414,9 +415,9 @@ public class ModelPersistenceGuardTests : IDisposable
         ModelPersistenceGuard.EnforceBeforeSerialize();
 
         {
-            var manager = new TrialStateManager();
+            var manager = new TrialStateManager(_trialFilePath);
             int operationsAfter = manager.GetStatus().OperationsUsed;
-            Assert.True(operationsAfter > operationsBefore, "EnforceBeforeSerialize should count operations outside InternalOperation scope");
+            Assert.Equal(operationsBefore + 1, operationsAfter);
         }
     }
 

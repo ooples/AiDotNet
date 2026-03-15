@@ -2608,11 +2608,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
 
-        byte[] serializedData = Serialize();
-        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary,
-            GetDynamicShapeInfo());
-        File.WriteAllBytes(filePath, envelopedData);
+        ModelPersistenceGuard.EnforceBeforeSave();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] serializedData = Serialize();
+            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                serializedData, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary,
+                GetDynamicShapeInfo());
+            File.WriteAllBytes(filePath, envelopedData);
+        }
     }
 
     /// <summary>
@@ -2640,12 +2644,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new FileNotFoundException($"Model file not found: {filePath}", filePath);
         }
 
-        byte[] data = File.ReadAllBytes(filePath);
+        ModelPersistenceGuard.EnforceBeforeLoad();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] data = File.ReadAllBytes(filePath);
 
-        // Extract payload from AIMF envelope
-        data = ModelFileHeader.ExtractPayload(data);
+            // Extract payload from AIMF envelope
+            data = ModelFileHeader.ExtractPayload(data);
 
-        Deserialize(data);
+            Deserialize(data);
+        }
     }
 
     private const int SerializationMagic = 0x4E444941; // "AIDN" (little-endian int)
@@ -2737,6 +2745,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="data">The byte array containing the serialized neural network data.</param>
     public virtual void Deserialize(byte[] data)
     {
+        if (data is null)
+            throw new ArgumentNullException(nameof(data));
+        if (data.Length == 0)
+            throw new ArgumentException("Serialized data cannot be empty.", nameof(data));
+
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);

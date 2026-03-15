@@ -112,10 +112,22 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
 
       if (loadingEl) loadingEl.classList.add('hidden');
 
-      if (error || !licenses || licenses.length === 0) {
+      if (error) {
+        console.error('Failed to load licenses:', error);
+        if (noLicensesEl) {
+          noLicensesEl.innerHTML = '<p class="text-red-500">Failed to load licenses. Please try again later.</p>';
+          noLicensesEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (!licenses || licenses.length === 0) {
         if (noLicensesEl) noLicensesEl.classList.remove('hidden');
         return;
       }
+
+      // Store licenses for secure key lookup (copy button handler)
+      loadedLicenses = licenses.map(l => ({ id: l.id, license_key: l.license_key }));
 
       if (containerEl) containerEl.classList.remove('hidden');
       if (setupEl) setupEl.classList.remove('hidden');
@@ -197,7 +209,7 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
               ${tierBadge(license.tier)}
               ${statusBadge(license.status)}
             </div>
-            <button class="copy-key-btn text-xs font-medium text-brand-blue hover:underline" data-key="${escapeHtml(license.license_key)}">
+            <button class="copy-key-btn text-xs font-medium text-brand-blue hover:underline" data-key-id="${license.id}">
               Copy Key
             </button>
           </div>
@@ -232,15 +244,24 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
       return div.innerHTML;
     }
 
+    // Store loaded licenses for secure key lookup (avoids exposing keys in DOM)
+    let loadedLicenses: Array<{ id: string; license_key: string }> = [];
+
     // Copy key handler
     document.addEventListener('click', async (e) => {
       const target = e.target as HTMLElement;
       if (target.classList.contains('copy-key-btn')) {
-        const key = target.dataset.key;
-        if (key) {
-          await navigator.clipboard.writeText(key);
-          target.textContent = 'Copied!';
-          setTimeout(() => { target.textContent = 'Copy Key'; }, 2000);
+        const keyId = target.dataset.keyId;
+        const license = loadedLicenses.find(l => l.id === keyId);
+        if (license) {
+          try {
+            await navigator.clipboard.writeText(license.license_key);
+            target.textContent = 'Copied!';
+            setTimeout(() => { target.textContent = 'Copy Key'; }, 2000);
+          } catch {
+            target.textContent = 'Copy failed';
+            setTimeout(() => { target.textContent = 'Copy Key'; }, 2000);
+          }
         }
       }
     });

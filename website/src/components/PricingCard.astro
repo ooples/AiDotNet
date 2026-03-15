@@ -23,6 +23,9 @@ const yearlyPrices: Record<string, string> = {
   pro: '$290',
   enterprise: '$990',
 };
+if (stripeTier && stripeTier !== 'community' && !yearlyPrices[stripeTier]) {
+  throw new Error(`[PricingCard] Unknown paid tier "${stripeTier}". Add its yearly price to yearlyPrices.`);
+}
 const yearlyPrice = stripeTier ? yearlyPrices[stripeTier] || price : price;
 const isPaid = stripeTier && stripeTier !== 'community';
 ---

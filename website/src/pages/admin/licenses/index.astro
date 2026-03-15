@@ -206,26 +206,39 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
     let allLicenses: LicenseKey[] = [];
     let filteredLicenses: LicenseKey[] = [];
 
+    async function fetchAllPaginated<T>(table: string, select: string, orderCol: string): Promise<T[]> {
+      const pageSize = 1000;
+      let allData: T[] = [];
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error } = await supabase
+          .from(table)
+          .select(select)
+          .order(orderCol, { ascending: false })
+          .range(from, to);
+        if (error || !data) break;
+        allData = allData.concat(data as T[]);
+        hasMore = data.length === pageSize;
+        page++;
+      }
+      return allData;
+    }
+
     async function loadLicenses() {
       // Load profiles for name lookup
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .range(0, 999);
+      const profiles = await fetchAllPaginated<{ id: string; full_name: string }>('profiles', 'id, full_name', 'id');
 
       const nameMap = new Map<string, string>();
-      if (profiles) {
-        for (const p of profiles) {
-          nameMap.set(p.id, p.full_name || 'Unknown');
-        }
+      for (const p of profiles) {
+        nameMap.set(p.id, p.full_name || 'Unknown');
       }
 
       // Load all license keys
-      const { data: licenses, error } = await supabase
-        .from('license_keys')
-        .select('id, user_id, license_key, tier, status, max_activations, organization_name, notes, stripe_subscription_id, issued_at, expires_at, created_at')
-        .order('created_at', { ascending: false })
-        .range(0, 999);
+      const licenses = await fetchAllPaginated<LicenseKey>('license_keys', 'id, user_id, license_key, tier, status, max_activations, organization_name, notes, stripe_subscription_id, issued_at, expires_at, created_at', 'created_at');
+      const error = licenses.length === 0 ? null : null; // pagination handles errors internally
 
       if (error || !licenses) {
         const loading = document.getElementById('licenses-loading');

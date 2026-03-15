@@ -14,6 +14,13 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 
+-- NOTE: license_key is stored in plaintext. A future enhancement could store
+-- a hash (e.g., SHA-256) for lookups and only display a masked prefix to users.
+-- For v1, plaintext storage is acceptable because:
+-- 1. RLS prevents unauthorized reads (only the key owner and admins can SELECT)
+-- 2. The key is needed for exact-match lookups in the validation function
+-- 3. Users need to see the full key once for initial setup
+-- A hash-based scheme would require an API to return the key only at creation time.
 create table if not exists public.license_keys (
     id uuid primary key default gen_random_uuid(),
     user_id uuid not null references auth.users(id) on delete cascade,
@@ -32,9 +39,8 @@ create table if not exists public.license_keys (
     updated_at timestamptz not null default now()
 );
 
--- Index for license key lookups (the primary validation path)
-create unique index if not exists idx_license_keys_key
-    on public.license_keys (license_key);
+-- Note: license_key already has a UNIQUE constraint which creates an implicit unique index.
+-- No additional index needed for license_key lookups.
 
 -- Index for user lookups (dashboard, account management)
 create index if not exists idx_license_keys_user_id
@@ -67,12 +73,12 @@ create trigger license_keys_updated_at
 -- RLS
 alter table public.license_keys enable row level security;
 
--- Users can view their own license keys
+-- Users can view their own license keys; admins can view all
 create policy "license_keys_select_own"
     on public.license_keys
     for select
     to authenticated
-    using (auth.uid() = user_id);
+    using (auth.uid() = user_id or public.is_admin());
 
 -- Only admins can insert/update/delete license keys
 create policy "license_keys_insert_admin"

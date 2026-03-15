@@ -22,20 +22,21 @@ namespace AiDotNet.Helpers;
 internal static class ModelPersistenceGuard
 {
     /// <summary>
-    /// Thread-static flag indicating that the current call is part of an internal
-    /// persistence pipeline (e.g., ModelLoader encrypting/decrypting). When set,
-    /// <see cref="EnforceBeforeSerialize"/> and <see cref="EnforceBeforeDeserialize"/>
-    /// are no-ops to avoid double-counting operations.
+    /// Thread-static nesting counter for internal persistence operations.
+    /// When greater than zero, <see cref="EnforceBeforeSerialize"/> and
+    /// <see cref="EnforceBeforeDeserialize"/> are no-ops to avoid double-counting.
+    /// Uses a counter instead of a boolean to support nested InternalOperation scopes.
     /// </summary>
     [ThreadStatic]
-    private static bool _isInternalOperation;
+    private static int _internalOperationDepth;
 
     /// <summary>
     /// Marks the current thread as executing an internal persistence operation.
     /// While the returned scope is active, <see cref="EnforceBeforeSerialize"/> and
     /// <see cref="EnforceBeforeDeserialize"/> will not count operations.
+    /// Supports nesting — only the outermost scope's disposal re-enables enforcement.
     /// </summary>
-    /// <returns>An <see cref="IDisposable"/> that resets the flag when disposed.</returns>
+    /// <returns>An <see cref="IDisposable"/> that decrements the depth counter when disposed.</returns>
     /// <example>
     /// <code>
     /// using (ModelPersistenceGuard.InternalOperation())
@@ -46,7 +47,7 @@ internal static class ModelPersistenceGuard
     /// </example>
     internal static IDisposable InternalOperation()
     {
-        _isInternalOperation = true;
+        _internalOperationDepth++;
         return new InternalOperationScope();
     }
 
@@ -84,7 +85,7 @@ internal static class ModelPersistenceGuard
     /// </exception>
     internal static void EnforceBeforeSerialize()
     {
-        if (_isInternalOperation) return;
+        if (_internalOperationDepth > 0) return;
         EnforceCore();
     }
 
@@ -98,7 +99,7 @@ internal static class ModelPersistenceGuard
     /// </exception>
     internal static void EnforceBeforeDeserialize()
     {
-        if (_isInternalOperation) return;
+        if (_internalOperationDepth > 0) return;
         EnforceCore();
     }
 
@@ -117,12 +118,11 @@ internal static class ModelPersistenceGuard
     private static void EnforceCore()
     {
         // Check if a license key is available (via env var or file)
-        string? licenseKey = LicenseKeyResolver.Resolve(null);
-        if (!string.IsNullOrWhiteSpace(licenseKey))
+        string? resolvedKey = LicenseKeyResolver.Resolve(null);
+        if (resolvedKey is not null && resolvedKey.Trim().Length > 0)
         {
-            // Validate the license key against the server (with caching)
-            string resolvedKey = licenseKey ?? string.Empty; // guaranteed non-null by IsNullOrWhiteSpace check
-            var result = ValidateLicenseKey(resolvedKey);
+            string licenseKey = resolvedKey.Trim();
+            var result = ValidateLicenseKey(licenseKey);
 
             switch (result.Status)
             {
@@ -226,7 +226,10 @@ internal static class ModelPersistenceGuard
     {
         public void Dispose()
         {
-            _isInternalOperation = false;
+            if (_internalOperationDepth > 0)
+            {
+                _internalOperationDepth--;
+            }
         }
     }
 }

@@ -27,8 +27,12 @@ create index if not exists idx_telemetry_events_machine
 -- RLS: Enable row-level security
 alter table public.telemetry_events enable row level security;
 
--- RLS Policy: Anyone can INSERT (anon key), but only admins can SELECT
--- The library uses the anon key with INSERT-only permission
+-- RLS Policy: Anyone can INSERT (anon key), but only admins can SELECT.
+-- This is intentional: the NuGet library sends anonymous telemetry using the
+-- Supabase anon key. The with check (true) allows unrestricted inserts from
+-- any client with the anon key. No PII is collected — only event type, version,
+-- and machine_id_hash. The risk of spam is accepted as telemetry is append-only
+-- and low-value to attackers.
 create policy "telemetry_events_insert_anon"
     on public.telemetry_events
     for insert

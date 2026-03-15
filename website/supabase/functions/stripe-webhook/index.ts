@@ -2,12 +2,17 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
+const stripeSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+const endpointSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
+
+if (!stripeSecretKey || !endpointSecret) {
+  throw new Error("Missing required environment variables: STRIPE_SECRET_KEY or STRIPE_WEBHOOK_SECRET");
+}
+
+const stripe = new Stripe(stripeSecretKey, {
   apiVersion: "2023-10-16",
   httpClient: Stripe.createFetchHttpClient(),
 });
-
-const endpointSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
 
 serve(async (req: Request) => {
   if (req.method !== "POST") {
@@ -88,11 +93,14 @@ async function handleCheckoutCompleted(
 ) {
   const userId = session.client_reference_id;
   if (!userId) {
-    console.error("checkout.session.completed: missing client_reference_id");
-    return;
+    throw new Error("checkout.session.completed: missing client_reference_id — cannot create license without a user ID");
   }
 
-  const tier = session.metadata?.tier || "professional";
+  const tier = session.metadata?.tier;
+  if (!tier || !["professional", "enterprise"].includes(tier)) {
+    throw new Error(`checkout.session.completed: invalid or missing tier '${tier}' in session metadata`);
+  }
+
   const maxActivations = tier === "enterprise" ? 10 : 5;
 
   // Update user profile with Stripe customer ID and subscription tier
@@ -213,12 +221,11 @@ async function handleSubscriptionUpdated(
     tier = subscription.items.data[0].price.metadata.tier;
   }
 
-  const updateData: Record<string, string> = { status: licenseStatus };
+  const updateData: Record<string, string | number> = { status: licenseStatus };
   if (tier) {
     updateData.tier = tier;
     // Update max_activations based on tier
-    const maxActivations = tier === "enterprise" ? 10 : 5;
-    (updateData as Record<string, string | number>).max_activations = maxActivations;
+    updateData.max_activations = tier === "enterprise" ? 10 : 5;
   }
 
   const { error } = await client

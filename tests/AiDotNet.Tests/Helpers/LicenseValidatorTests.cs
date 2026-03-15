@@ -15,10 +15,15 @@ namespace AiDotNet.Tests.Helpers;
 [Collection("LicensingTests")]
 public class LicenseValidatorTests
 {
+    // Valid format: aidn.{alphanumeric-id}.{alphanumeric-signature}
+    private const string ValidTestKey = "aidn.abc123def456.sig789xyz012abc";
+    private const string ValidTestKey2 = "aidn.cached12key3.sig456cached78";
+    private const string ValidTestKey3 = "aidn.grace12test3.sig789grace012";
+
     [Fact]
     public void OfflineMode_ValidKey_ReturnsActive()
     {
-        var key = new AiDotNetLicenseKey("test-key-12345")
+        var key = new AiDotNetLicenseKey(ValidTestKey)
         {
             ServerUrl = string.Empty // explicit empty = offline-only
         };
@@ -33,7 +38,7 @@ public class LicenseValidatorTests
     [Fact]
     public void OfflineMode_CachesResult()
     {
-        var key = new AiDotNetLicenseKey("test-key-cached")
+        var key = new AiDotNetLicenseKey(ValidTestKey2)
         {
             ServerUrl = string.Empty
         };
@@ -56,34 +61,28 @@ public class LicenseValidatorTests
     }
 
     [Fact]
-    public void OnlineMode_ValidResponse_ReturnsActive()
+    public void OnlineMode_ValidResponse_ServerUnreachable_ReturnsPending()
     {
-        var handler = new FakeHttpMessageHandler
+        // Cannot inject HttpClient into LicenseValidator (uses shared static client).
+        // Instead, verify the flow: with a fake server URL, the validator should
+        // return ValidationPending since the server is unreachable and there's no cache.
+        var key = new AiDotNetLicenseKey("aidn.onlinetest123.sigonlinetest456")
         {
-            ResponseJson = "{\"valid\":true,\"tier\":\"professional\",\"message\":\"License validated.\",\"license_id\":\"abc-123\"}",
-            ResponseStatusCode = HttpStatusCode.OK
-        };
-        var httpClient = new HttpClient(handler);
-
-        var key = new AiDotNetLicenseKey("test-key-online")
-        {
-            ServerUrl = "https://fake-server.test/validate-license"
+            ServerUrl = "https://nonexistent.test/validate-license"
         };
 
         var validator = new LicenseValidator(key);
+        var result = validator.Validate();
 
-        // Use reflection to set the shared HTTP client, or use the online validation directly
-        // For now, test via the sync path — the validator uses SharedHttpClient which we can't inject.
-        // Instead, test ParseResponse indirectly by verifying the flow with a valid cached result.
-        var result = validator.CachedResult;
-        Assert.Null(result); // no cached result initially
+        // The validator should gracefully handle network failure
+        Assert.Equal(LicenseKeyStatus.ValidationPending, result.Status);
+        Assert.Contains("unreachable", result.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void OnlineMode_ServerReturnsInvalidKey_ReturnsInvalid()
     {
-        // This test verifies the parsing logic by checking error mapping
-        var key = new AiDotNetLicenseKey("bad-key")
+        var key = new AiDotNetLicenseKey("aidn.badkey12test3.sigbadkey456abc")
         {
             ServerUrl = "https://nonexistent.test/validate" // will fail with network error
         };
@@ -100,7 +99,7 @@ public class LicenseValidatorTests
     [Fact]
     public void OnlineMode_ServerUnreachable_NoCachedResult_ReturnsPending()
     {
-        var key = new AiDotNetLicenseKey("test-key-unreachable")
+        var key = new AiDotNetLicenseKey("aidn.unreachtest12.sigunreachtest34")
         {
             ServerUrl = "https://192.0.2.1:1/validate" // RFC 5737 TEST-NET address, will timeout
         };
@@ -115,7 +114,7 @@ public class LicenseValidatorTests
     [Fact]
     public void OnlineMode_CachedActiveResult_WithinGracePeriod_ReturnsCached()
     {
-        var key = new AiDotNetLicenseKey("test-key-grace")
+        var key = new AiDotNetLicenseKey(ValidTestKey3)
         {
             ServerUrl = string.Empty, // start offline to prime cache
             OfflineGracePeriod = TimeSpan.FromHours(1)
@@ -136,7 +135,6 @@ public class LicenseValidatorTests
     [Fact]
     public void ValidationResult_ContainsTier()
     {
-        // Test that LicenseValidationResult properly stores tier information
         var result = new LicenseValidationResult(
             LicenseKeyStatus.Active,
             tier: "enterprise",
@@ -225,36 +223,38 @@ public class LicenseValidatorTests
     [Fact]
     public void AiDotNetLicenseKey_Constructor_SetsKey()
     {
-        var key = new AiDotNetLicenseKey("my-license-key");
-        Assert.Equal("my-license-key", key.Key);
+        var key = new AiDotNetLicenseKey(ValidTestKey);
+        Assert.Equal(ValidTestKey, key.Key);
     }
 
     [Fact]
     public void AiDotNetLicenseKey_ServerUrl_DefaultNull()
     {
-        var key = new AiDotNetLicenseKey("my-license-key");
+        var key = new AiDotNetLicenseKey(ValidTestKey);
         Assert.Null(key.ServerUrl);
     }
 
     [Fact]
     public void AiDotNetLicenseKey_OfflineGracePeriod_Default7Days()
     {
-        var key = new AiDotNetLicenseKey("my-license-key");
+        var key = new AiDotNetLicenseKey(ValidTestKey);
         Assert.Equal(TimeSpan.FromDays(7), key.OfflineGracePeriod);
     }
 
     [Fact]
     public void AiDotNetLicenseKey_EnableTelemetry_DefaultTrue()
     {
-        var key = new AiDotNetLicenseKey("my-license-key");
+        var key = new AiDotNetLicenseKey(ValidTestKey);
         Assert.True(key.EnableTelemetry);
     }
 
+#nullable disable
     [Fact]
     public void AiDotNetLicenseKey_NullKey_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new AiDotNetLicenseKey(null!));
+        Assert.Throws<ArgumentNullException>(() => new AiDotNetLicenseKey(null));
     }
+#nullable restore
 
     [Fact]
     public void AiDotNetLicenseKey_EmptyKey_Throws()
@@ -266,30 +266,5 @@ public class LicenseValidatorTests
     public void AiDotNetLicenseKey_WhitespaceKey_Throws()
     {
         Assert.Throws<ArgumentException>(() => new AiDotNetLicenseKey("   "));
-    }
-
-    /// <summary>
-    /// A fake HTTP handler for testing without real network calls.
-    /// </summary>
-    private sealed class FakeHttpMessageHandler : HttpMessageHandler
-    {
-        public string ResponseJson { get; set; } = "{}";
-        public HttpStatusCode ResponseStatusCode { get; set; } = HttpStatusCode.OK;
-        public int RequestCount { get; private set; }
-        public HttpRequestMessage? LastRequest { get; private set; }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            RequestCount++;
-            LastRequest = request;
-
-            var response = new HttpResponseMessage(ResponseStatusCode)
-            {
-                Content = new StringContent(ResponseJson, Encoding.UTF8, "application/json")
-            };
-
-            return Task.FromResult(response);
-        }
     }
 }

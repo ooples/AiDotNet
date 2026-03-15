@@ -123,8 +123,6 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// <inheritdoc/>
     public virtual void SaveModel(string filePath)
     {
-        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
-
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
@@ -137,6 +135,8 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
             throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filePath));
         }
 
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         var fullPath = Path.GetFullPath(filePath);
 
         // Ensure parent directory exists
@@ -146,11 +146,14 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
             Directory.CreateDirectory(directory);
         }
 
-        var data = Serialize();
-        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json,
-            dynamicShapeInfo: GetDynamicShapeInfo());
-        File.WriteAllBytes(fullPath, envelopedData);
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            var data = Serialize();
+            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Json,
+                dynamicShapeInfo: GetDynamicShapeInfo());
+            File.WriteAllBytes(fullPath, envelopedData);
+        }
     }
 
     /// <summary>
@@ -183,8 +186,6 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// <inheritdoc/>
     public virtual void LoadModel(string filePath)
     {
-        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
@@ -196,6 +197,8 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
         {
             throw new ArgumentException("File path cannot contain directory traversal sequences.", nameof(filePath));
         }
+
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
 
         var fullPath = Path.GetFullPath(filePath);
 
@@ -209,7 +212,10 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
         // Extract payload from AIMF envelope
         data = ModelFileHeader.ExtractPayload(data);
 
-        Deserialize(data);
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(data);
+        }
     }
 
     /// <summary>
