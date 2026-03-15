@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.TimeSeries;
 
@@ -418,6 +419,27 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// - The data meets any model-specific requirements
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Guards a prediction value against NaN, Infinity, and extreme overflow.
+    /// Returns a clamped finite value. All time series models should call this
+    /// before storing predictions to prevent cascading numerical instability
+    /// in recursive/autoregressive forecasting loops.
+    /// </summary>
+    /// <param name="value">The raw prediction value.</param>
+    /// <param name="maxAbsValue">Maximum allowed absolute value (default 1e15).</param>
+    /// <returns>A finite, clamped value.</returns>
+    protected T GuardPrediction(T value, double maxAbsValue = 1e15)
+    {
+        var d = NumOps.ToDouble(value);
+        if (double.IsNaN(d) || double.IsInfinity(d) || Math.Abs(d) > maxAbsValue)
+        {
+            var safe = double.IsNaN(d) ? 0.0 : d;
+            var clamped = MathPolyfill.Clamp(safe, -maxAbsValue, maxAbsValue);
+            return NumOps.FromDouble(clamped);
+        }
+        return value;
+    }
+
     protected virtual void ValidatePredictionInput(Matrix<T> input)
     {
         if (input == null)

@@ -216,6 +216,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
                 prediction = NumOps.Add(prediction, Engine.DotProduct(_maCoefficients, lastErrors));
             }
 
+            // Guard against numerical overflow in AR feedback loop (issue #991)
+            prediction = GuardPrediction(prediction);
+
             predictions[i] = prediction;
 
             // VECTORIZED: Shift last observed values using slice and copy
@@ -597,6 +600,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
             }
 
             // MA component is assumed zero for future predictions (no actual errors available)
+
+            // Guard against numerical overflow in AR feedback loop (issue #991)
+            prediction = GuardPrediction(prediction);
 
             diffForecasts[step] = prediction;
             extendedDiffHistory.Add(prediction);

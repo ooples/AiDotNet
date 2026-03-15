@@ -69,7 +69,40 @@ public static class TimeSeriesHelper<T>
             Y[i - p] = y[i];
         }
 
-        return MatrixSolutionHelper.SolveLinearSystem(X, Y, decompositionType);
+        var coefficients = MatrixSolutionHelper.SolveLinearSystem(X, Y, decompositionType);
+
+        // Enforce stationarity: if the sum of absolute AR coefficients >= 1, the model
+        // is unstable and predictions will diverge exponentially. This is a necessary
+        // (though not sufficient) condition for stationarity. When violated, scale
+        // coefficients down to ensure stability. See: https://github.com/ooples/AiDotNet/issues/991
+        double absSum = 0;
+        for (int i = 0; i < coefficients.Length; i++)
+        {
+            var val = _numOps.ToDouble(coefficients[i]);
+            if (double.IsNaN(val) || double.IsInfinity(val))
+            {
+                // NaN/Infinity coefficient — replace with zero (model failed to fit)
+                coefficients[i] = _numOps.Zero;
+            }
+            else
+            {
+                absSum += Math.Abs(val);
+            }
+        }
+
+        // If sum of absolute coefficients >= 0.99, scale down to enforce stability
+        // This prevents the autoregressive feedback loop from diverging
+        if (absSum >= 0.99 && absSum > 0)
+        {
+            double scaleFactor = 0.95 / absSum; // Scale to 0.95 to leave stability margin
+            for (int i = 0; i < coefficients.Length; i++)
+            {
+                var val = _numOps.ToDouble(coefficients[i]);
+                coefficients[i] = _numOps.FromDouble(val * scaleFactor);
+            }
+        }
+
+        return coefficients;
     }
 
     /// <summary>
@@ -120,6 +153,33 @@ public static class TimeSeriesHelper<T>
         for (int i = 0; i < q; i++)
         {
             maCoefficients[i] = CalculateAutoCorrelation(residuals, i + 1);
+        }
+
+        // Enforce invertibility: MA coefficients should also satisfy |sum| < 1
+        // for the model to be invertible (well-defined AR(infinity) representation).
+        // See: https://github.com/ooples/AiDotNet/issues/991
+        double absSum = 0;
+        for (int i = 0; i < maCoefficients.Length; i++)
+        {
+            var val = _numOps.ToDouble(maCoefficients[i]);
+            if (double.IsNaN(val) || double.IsInfinity(val))
+            {
+                maCoefficients[i] = _numOps.Zero;
+            }
+            else
+            {
+                absSum += Math.Abs(val);
+            }
+        }
+
+        if (absSum >= 0.99 && absSum > 0)
+        {
+            double scaleFactor = 0.95 / absSum;
+            for (int i = 0; i < maCoefficients.Length; i++)
+            {
+                var val = _numOps.ToDouble(maCoefficients[i]);
+                maCoefficients[i] = _numOps.FromDouble(val * scaleFactor);
+            }
         }
 
         return maCoefficients;

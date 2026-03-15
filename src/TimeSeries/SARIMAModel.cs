@@ -488,6 +488,9 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
                 prediction = NumOps.Add(prediction, Engine.DotProduct(_smaCoefficients, smaValues));
             }
 
+            // Guard against numerical overflow in AR feedback loop (issue #991)
+            prediction = GuardPrediction(prediction);
+
             predictions[i] = prediction;
 
             // Update last observed values and errors for next prediction
