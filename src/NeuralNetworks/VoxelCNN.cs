@@ -28,6 +28,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Understanding room layouts from depth sensors
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new VoxelCNNOptions { InputChannels = 1, GridSize = 32, NumClasses = 40 };
+/// var model = new VoxelCNN&lt;float&gt;(options);
+/// var voxels = Tensor&lt;float&gt;.Random(new[] { 1, 1, 32, 32, 32 });
+/// var output = model.Predict(voxels);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]

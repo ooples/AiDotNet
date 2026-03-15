@@ -34,6 +34,14 @@ namespace AiDotNet.NeuralNetworks
     /// recognition or "find similar" search systems.
     /// </para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new SiameseNeuralNetworkOptions { InputSize = 784, EmbeddingSize = 128 };
+    /// var model = new SiameseNeuralNetwork&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.General)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.EmbeddingModel)]

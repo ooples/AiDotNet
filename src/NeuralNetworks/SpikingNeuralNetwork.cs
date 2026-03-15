@@ -15,6 +15,14 @@ namespace AiDotNet.NeuralNetworks;
 /// This temporal coding makes SNNs extremely energy-efficient on neuromorphic hardware and
 /// naturally suited for processing time-varying signals like sensor data and event cameras.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SpikingNeuralNetworkOptions { InputSize = 784, HiddenSize = 500, TimeSteps = 100 };
+/// var model = new SpikingNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Science)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

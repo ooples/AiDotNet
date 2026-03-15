@@ -35,6 +35,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Pruned networks from neural architecture search
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SparseNeuralNetworkOptions { InputSize = 784, HiddenSize = 1024, Sparsity = 0.9 };
+/// var model = new SparseNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]

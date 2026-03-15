@@ -29,6 +29,14 @@ namespace AiDotNet.NeuralNetworks;
 /// like describing a video, generating images from text, or answering questions about audio
 /// clips.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new UnifiedMultimodalOptions { ImageSize = 224, EmbeddingDim = 768 };
+/// var model = new UnifiedMultimodalNetwork&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Audio)]

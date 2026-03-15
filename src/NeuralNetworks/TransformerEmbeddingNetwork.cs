@@ -33,6 +33,14 @@ namespace AiDotNet.NeuralNetworks
     /// thoughts into a final list of numbers (the embedding).
     /// </para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new TransformerEmbeddingOptions { EmbeddingDim = 768, NumLayers = 12, NumHeads = 12 };
+    /// var model = new TransformerEmbeddingNetwork&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Language)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Transformer)]

@@ -32,6 +32,14 @@ namespace AiDotNet.NeuralNetworks;
 /// The "U" shape comes from the symmetric encoder-decoder design with skip connections.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new UNet3DOptions { InputChannels = 1, OutputChannels = 4, BaseChannels = 32 };
+/// var model = new UNet3D&lt;float&gt;(options);
+/// var volume = Tensor&lt;float&gt;.Random(new[] { 1, 1, 64, 64, 64 });
+/// var segmented = model.Predict(volume);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

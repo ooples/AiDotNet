@@ -31,6 +31,14 @@ namespace AiDotNet.NeuralNetworks;
 /// especially when trained on large datasets.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new VisionTransformerOptions { ImageSize = 224, PatchSize = 16, HiddenSize = 768, NumLayers = 12 };
+/// var model = new VisionTransformer&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
