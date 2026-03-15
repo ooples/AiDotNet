@@ -33,7 +33,10 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     private const int CatGAN = 4;
     private const int CatDiffusion = 5;
     private const int CatTransformer = 6;
+    private const int CatReinforcementLearningAgent = 7;
+    private const int CatGaussianProcess = 8;
     private const int CatEnsemble = 9;
+    private const int CatBayesian = 10;
     private const int CatSurvivalModel = 11;
     private const int CatTimeSeriesModel = 13;
     private const int CatAutoencoder = 14;
@@ -481,7 +484,9 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add(LossMSE);
                     lossFunctions.Add(LossBCE);
                     lossFunctions.Add(LossKLDivergence);
-                    AddAllGradientOptimizers(catOptimizers);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
                     preprocessors.Add(PrepMinMaxScaler);
                     break;
 
@@ -510,7 +515,12 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add(LossMSE);
                     lossFunctions.Add(LossCrossEntropy);
                     lossFunctions.Add(LossMAE);
-                    AddAllGradientOptimizers(catOptimizers);
+                    // Modern neural networks use adaptive optimizers. SGD is rarely the
+                    // correct default and causes conflicts with Transformer/GAN/Diffusion
+                    // categories. Models that specifically need SGD can override.
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
                     preprocessors.Add(PrepStandardScaler);
                     break;
 
@@ -519,6 +529,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add(LossMSE);
                     catOptimizers.Add(OptAdam);
                     catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
                     preprocessors.Add(PrepGraphNormalizer);
                     preprocessors.Add(PrepStandardScaler);
                     break;
@@ -527,6 +538,8 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     lossFunctions.Add(LossMSE);
                     lossFunctions.Add(LossKLDivergence);
                     catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
                     preprocessors.Add(PrepMinMaxScaler);
                     break;
 
@@ -555,6 +568,17 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     catOptimizers.Add(OptBuiltIn);
                     preprocessors.Add(PrepStandardScaler);
                     preprocessors.Add(PrepMinMaxScaler);
+                    break;
+
+                case CatGaussianProcess:
+                case CatBayesian:
+                    // Gaussian processes and Bayesian models use built-in solvers or Adam
+                    lossFunctions.Add(LossMSE);
+                    lossFunctions.Add(LossMAE);
+                    catOptimizers.Add(OptBuiltIn);
+                    catOptimizers.Add(OptAdam);
+                    catOptimizers.Add(OptLBFGS);
+                    preprocessors.Add(PrepStandardScaler);
                     break;
 
                 case CatFoundationModel:
@@ -593,13 +617,15 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
                     preprocessors.Add(PrepStandardScaler);
                     break;
 
+                case CatReinforcementLearningAgent:
                 case CatMetaLearning:
                 case CatAgent:
-                    // Meta-learning and agents use Adam
+                    // RL agents, meta-learning, and autonomous agents use adaptive optimizers
                     lossFunctions.Add(LossMSE);
                     lossFunctions.Add(LossCrossEntropy);
                     catOptimizers.Add(OptAdam);
                     catOptimizers.Add(OptAdamW);
+                    catOptimizers.Add(OptRMSProp);
                     preprocessors.Add(PrepStandardScaler);
                     break;
 
