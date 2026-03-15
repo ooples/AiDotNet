@@ -556,6 +556,21 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <inheritdoc/>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        // Aggregate active features from all trees in the ensemble
+        var activeFeatures = new HashSet<int>();
+        foreach (var tree in _trees)
+        {
+            foreach (var idx in tree.GetActiveFeatureIndices())
+            {
+                activeFeatures.Add(idx);
+            }
+        }
+        return activeFeatures;
+    }
+
+    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (GradientBoostingRegression<T>)base.Clone();

@@ -160,6 +160,37 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     protected override void OptimizeModel(Matrix<T> X, Vector<T> y)
     {
         int n = X.Rows;
+
+        // Auto-tune Gamma if using the default value and RBF/Laplacian kernel.
+        // The default Gamma=1.0 is too large for features with range >> 1, causing
+        // the kernel matrix to collapse to near-identity. Use 1/(n_features * Var(X))
+        // following the scikit-learn "scale" convention.
+        if (Options.KernelType is KernelType.RBF or KernelType.Laplacian && Math.Abs(Options.Gamma - 1.0) < 1e-12)
+        {
+            double totalVariance = 0;
+            for (int j = 0; j < X.Columns; j++)
+            {
+                double mean = 0;
+                for (int i = 0; i < n; i++)
+                    mean += Convert.ToDouble(X[i, j]);
+                mean /= n;
+
+                double variance = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    double diff = Convert.ToDouble(X[i, j]) - mean;
+                    variance += diff * diff;
+                }
+                variance /= n;
+                totalVariance += variance;
+            }
+
+            if (totalVariance > 1e-10)
+            {
+                Options.Gamma = 1.0 / totalVariance;
+            }
+        }
+
         _gramMatrix = new Matrix<T>(n, n);
 
         // Compute the Gram matrix
