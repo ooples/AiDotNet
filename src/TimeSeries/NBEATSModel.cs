@@ -422,7 +422,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         // Forward pass through all blocks
         for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
         {
-            var (backcast, forecast) = _blocks[blockIdx].Forward(residual);
+            var (backcast, forecast) = _blocks[blockIdx].ForwardInternal(residual);
 
             // Update residual for next block - vectorized with Engine.Subtract
             residual = (Vector<T>)Engine.Subtract(residual, backcast);
@@ -463,7 +463,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         // Forward pass through all blocks
         for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
         {
-            var (backcast, forecast) = _blocks[blockIdx].Forward(residual);
+            var (backcast, forecast) = _blocks[blockIdx].ForwardInternal(residual);
 
             // Update residual for next block - vectorized with Engine.Subtract
             residual = (Vector<T>)Engine.Subtract(residual, backcast);
