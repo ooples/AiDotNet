@@ -390,6 +390,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
                 for (int idx = batchStart; idx < batchEnd; idx++)
                 {
+                    if (idx % 20 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
                     int i = shuffled[idx];
 
                     // Extract lookback window from y

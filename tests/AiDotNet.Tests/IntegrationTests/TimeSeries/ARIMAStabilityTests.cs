@@ -237,17 +237,33 @@ public class ARIMAStabilityTests
         // Act
         var metrics = model.EvaluateModel(testX, testY);
 
-        // Assert — all metrics must be finite
+        // Assert — all numeric metrics must be finite
+        int metricsChecked = 0;
         foreach (var kvp in metrics)
         {
-            if (kvp.Value != null && double.TryParse(kvp.Value.ToString(), out var val))
+            if (kvp.Value is double dval)
+            {
+                Assert.False(double.IsNaN(dval),
+                    $"ARIMA({p},{d},{q}): Metric '{kvp.Key}' is NaN");
+                Assert.False(double.IsInfinity(dval),
+                    $"ARIMA({p},{d},{q}): Metric '{kvp.Key}' is Infinity ({dval})");
+                metricsChecked++;
+            }
+            else if (kvp.Value != null &&
+                     double.TryParse(kvp.Value.ToString(),
+                         System.Globalization.NumberStyles.Float,
+                         System.Globalization.CultureInfo.InvariantCulture,
+                         out var val))
             {
                 Assert.False(double.IsNaN(val),
                     $"ARIMA({p},{d},{q}): Metric '{kvp.Key}' is NaN");
                 Assert.False(double.IsInfinity(val),
                     $"ARIMA({p},{d},{q}): Metric '{kvp.Key}' is Infinity ({val})");
+                metricsChecked++;
             }
         }
+        Assert.True(metricsChecked > 0,
+            $"ARIMA({p},{d},{q}): No numeric metrics returned by EvaluateModel");
     }
 
     #endregion

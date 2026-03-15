@@ -345,17 +345,14 @@ public class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             _weightGradients.Insert(0, layerWGrad);
             _biasGradients.Insert(0, reluGrad.Clone());
 
-            // dL/d_input = W^T * reluGrad
-            if (layer > 0)
+            // dL/d_input = W^T * reluGrad (always compute, including layer 0)
+            currentGrad = new Vector<T>(w.Columns);
+            for (int j = 0; j < w.Columns; j++)
             {
-                currentGrad = new Vector<T>(w.Columns);
-                for (int j = 0; j < w.Columns; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int i = 0; i < w.Rows; i++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(w[i, j], reluGrad[i]));
-                    currentGrad[j] = sum;
-                }
+                T sum = NumOps.Zero;
+                for (int i = 0; i < w.Rows; i++)
+                    sum = NumOps.Add(sum, NumOps.Multiply(w[i, j], reluGrad[i]));
+                currentGrad[j] = sum;
             }
         }
 
