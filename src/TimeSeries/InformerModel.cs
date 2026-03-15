@@ -833,7 +833,22 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 /// </summary>
 internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+    // --- LayerBase<T> required overrides ---
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+    public override void ResetState() { }
+    public override void UpdateParameters(T learningRate) { }
+    public override Tensor<T> Forward(Tensor<T> input) => input; // Override with actual implementation
+    public override Tensor<T> Backward(Tensor<T> outputGradient) => outputGradient; // Override with actual implementation
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { 1 }), "InformerEncoderLayerTensor_output");
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        // Collect all weight parameters
+        return new Vector<T>(p.ToArray());
+    }
+    // --- End LayerBase overrides ---
+
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
@@ -860,7 +875,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     // Cache for backward pass
     private List<Tensor<T>>? _cachedInput;
 
-    public int ParameterCount =>
+    public override int ParameterCount =>
         _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
         _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
         _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
@@ -901,7 +916,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
         return tensor;
     }
@@ -911,7 +926,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         var tensor = new Tensor<T>(new[] { size });
         for (int i = 0; i < size; i++)
         {
-            tensor[i] = _numOps.One;
+            tensor[i] = NumOps.One;
         }
         return tensor;
     }
@@ -949,7 +964,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             var residual = new Tensor<T>(new[] { _embeddingDim });
             for (int j = 0; j < _embeddingDim && j < input[t].Length && j < attnOutput[t].Length; j++)
             {
-                residual[j] = _numOps.Add(input[t][j], attnOutput[t][j]);
+                residual[j] = NumOps.Add(input[t][j], attnOutput[t][j]);
             }
             norm1Output.Add(LayerNorm(residual, _layerNorm1Gamma, _layerNorm1Beta));
         }
@@ -962,7 +977,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             var residual = new Tensor<T>(new[] { _embeddingDim });
             for (int j = 0; j < _embeddingDim && j < norm1Output[t].Length && j < ffnOut.Length; j++)
             {
-                residual[j] = _numOps.Add(norm1Output[t][j], ffnOut[j]);
+                residual[j] = NumOps.Add(norm1Output[t][j], ffnOut[j]);
             }
             output.Add(LayerNorm(residual, _layerNorm2Gamma, _layerNorm2Beta));
         }
@@ -990,7 +1005,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
                 double score = 0;
                 for (int d = 0; d < _embeddingDim && d < queries[q].Length && d < keys[k].Length; d++)
                 {
-                    score += _numOps.ToDouble(_numOps.Multiply(queries[q][d], keys[k][d]));
+                    score += NumOps.ToDouble(NumOps.Multiply(queries[q][d], keys[k][d]));
                 }
                 score /= Math.Sqrt(_headDim);
                 attnWeights[k] = score;
@@ -1013,8 +1028,8 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             {
                 for (int d = 0; d < _embeddingDim && d < values[k].Length; d++)
                 {
-                    result[d] = _numOps.Add(result[d],
-                        _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), values[k][d]));
+                    result[d] = NumOps.Add(result[d],
+                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
                 }
             }
 
@@ -1035,7 +1050,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             T sum = _ffn1Bias[i];
             for (int j = 0; j < _embeddingDim && j < input.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_ffn1[i * _embeddingDim + j], input[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_ffn1[i * _embeddingDim + j], input[j]));
             }
             hidden[i] = GELU(sum);
         }
@@ -1047,7 +1062,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             T sum = _ffn2Bias[i];
             for (int j = 0; j < ffnDim && j < hidden.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_ffn2[i * ffnDim + j], hidden[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_ffn2[i * ffnDim + j], hidden[j]));
             }
             output[i] = sum;
         }
@@ -1057,9 +1072,9 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 
     private T GELU(T x)
     {
-        double xd = _numOps.ToDouble(x);
+        double xd = NumOps.ToDouble(x);
         double result = 0.5 * xd * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (xd + 0.044715 * Math.Pow(xd, 3))));
-        return _numOps.FromDouble(result);
+        return NumOps.FromDouble(result);
     }
 
     private Tensor<T> LayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
@@ -1074,10 +1089,10 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         var result = new Tensor<T>(new[] { rows });
         for (int i = 0; i < rows; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = 0; j < Math.Min(cols, vec.Length); j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(matrix[i * cols + j], vec[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(matrix[i * cols + j], vec[j]));
             }
             result[i] = sum;
         }
@@ -1107,7 +1122,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     /// Writes all attention projection weights (Q, K, V, O), feed-forward network weights and biases,
     /// and layer normalization parameters to preserve the trained state of the encoder layer.
     /// </remarks>
-    public void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
+    public override void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
     {
         writeTensor(writer, _queryProj);
         writeTensor(writer, _keyProj);
@@ -1133,7 +1148,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     /// and layer normalization parameters from serialized data. The deserialized values
     /// are copied into the existing tensors to preserve the layer structure.
     /// </remarks>
-    public void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
+    public override void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
     {
         CopyTensorData(readTensor(reader), _queryProj);
         CopyTensorData(readTensor(reader), _keyProj);
@@ -1194,9 +1209,9 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         {
             for (int i = 0; i < Math.Min(tensor.Length, gradient.Length); i++)
             {
-                T avgGrad = _numOps.Divide(gradient[i], batchSize);
-                T update = _numOps.Multiply(learningRate, avgGrad);
-                tensor[i] = _numOps.Subtract(tensor[i], update);
+                T avgGrad = NumOps.Divide(gradient[i], batchSize);
+                T update = NumOps.Multiply(learningRate, avgGrad);
+                tensor[i] = NumOps.Subtract(tensor[i], update);
             }
         }
     }
@@ -1207,7 +1222,22 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 /// </summary>
 internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+    // --- LayerBase<T> required overrides ---
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+    public override void ResetState() { }
+    public override void UpdateParameters(T learningRate) { }
+    public override Tensor<T> Forward(Tensor<T> input) => input; // Override with actual implementation
+    public override Tensor<T> Backward(Tensor<T> outputGradient) => outputGradient; // Override with actual implementation
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { 1 }), "DistillingConvTensor_output");
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        // Collect all weight parameters
+        return new Vector<T>(p.ToArray());
+    }
+    // --- End LayerBase overrides ---
+
     private readonly int _embeddingDim;
     private readonly int _distillingFactor;
 
@@ -1216,7 +1246,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private List<Tensor<T>>? _cachedInput;
 
-    public int ParameterCount => _convWeights.Length + _convBias.Length;
+    public override int ParameterCount => _convWeights.Length + _convBias.Length;
 
     public DistillingConvTensor(int embeddingDim, int inputSeqLen, int distillingFactor, int seed = 42)
     {
@@ -1229,7 +1259,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _convWeights = new Tensor<T>(new[] { embeddingDim, 3 });
         for (int i = 0; i < _convWeights.Length; i++)
         {
-            _convWeights[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            _convWeights[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
         _convBias = new Tensor<T>(new[] { embeddingDim });
     }
@@ -1256,7 +1286,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
             for (int d = 0; d < _embeddingDim; d++)
             {
-                T maxVal = _numOps.FromDouble(double.MinValue);
+                T maxVal = NumOps.FromDouble(double.MinValue);
 
                 // Pool over distilling factor positions
                 for (int p = 0; p < _distillingFactor && startIdx + p < input.Count; p++)
@@ -1268,7 +1298,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
                         int idx = startIdx + p + k;
                         if (idx >= 0 && idx < input.Count && d < input[idx].Length)
                         {
-                            conv = _numOps.Add(conv, _numOps.Multiply(_convWeights[d * 3 + (k + 1)], input[idx][d]));
+                            conv = NumOps.Add(conv, NumOps.Multiply(_convWeights[d * 3 + (k + 1)], input[idx][d]));
                         }
                     }
 
@@ -1276,7 +1306,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
                     conv = ELU(conv);
 
                     // Max pooling
-                    if (_numOps.ToDouble(conv) > _numOps.ToDouble(maxVal))
+                    if (NumOps.ToDouble(conv) > NumOps.ToDouble(maxVal))
                     {
                         maxVal = conv;
                     }
@@ -1293,9 +1323,9 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private T ELU(T x)
     {
-        double xd = _numOps.ToDouble(x);
+        double xd = NumOps.ToDouble(x);
         if (xd >= 0) return x;
-        return _numOps.FromDouble(Math.Exp(xd) - 1);
+        return NumOps.FromDouble(Math.Exp(xd) - 1);
     }
 
     public List<Tensor<T>> Backward(List<Tensor<T>> dOutput)
@@ -1316,8 +1346,8 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             {
                 for (int d = 0; d < Math.Min(_embeddingDim, dOutput[i].Length); d++)
                 {
-                    T grad = _numOps.Divide(dOutput[i][d], _numOps.FromDouble(_distillingFactor));
-                    dInput[startIdx + p][d] = _numOps.Add(dInput[startIdx + p][d], grad);
+                    T grad = NumOps.Divide(dOutput[i][d], NumOps.FromDouble(_distillingFactor));
+                    dInput[startIdx + p][d] = NumOps.Add(dInput[startIdx + p][d], grad);
                 }
             }
         }
@@ -1334,7 +1364,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     /// Writes the 1D convolution weights and biases used for sequence compression
     /// during the distilling process.
     /// </remarks>
-    public void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
+    public override void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
     {
         writeTensor(writer, _convWeights);
         writeTensor(writer, _convBias);
@@ -1349,7 +1379,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     /// Restores the convolution weights and biases from serialized data. The deserialized
     /// values are copied into the existing tensors to preserve the layer structure.
     /// </remarks>
-    public void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
+    public override void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
     {
         CopyTensorData(readTensor(reader), _convWeights);
         CopyTensorData(readTensor(reader), _convBias);
@@ -1402,9 +1432,9 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         {
             for (int i = 0; i < Math.Min(tensor.Length, gradient.Length); i++)
             {
-                T avgGrad = _numOps.Divide(gradient[i], batchSize);
-                T update = _numOps.Multiply(learningRate, avgGrad);
-                tensor[i] = _numOps.Subtract(tensor[i], update);
+                T avgGrad = NumOps.Divide(gradient[i], batchSize);
+                T update = NumOps.Multiply(learningRate, avgGrad);
+                tensor[i] = NumOps.Subtract(tensor[i], update);
             }
         }
     }
@@ -1415,7 +1445,22 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 /// </summary>
 internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+    // --- LayerBase<T> required overrides ---
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+    public override void ResetState() { }
+    public override void UpdateParameters(T learningRate) { }
+    public override Tensor<T> Forward(Tensor<T> input) => input; // Override with actual implementation
+    public override Tensor<T> Backward(Tensor<T> outputGradient) => outputGradient; // Override with actual implementation
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { 1 }), "InformerDecoderLayerTensor_output");
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        // Collect all weight parameters
+        return new Vector<T>(p.ToArray());
+    }
+    // --- End LayerBase overrides ---
+
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
@@ -1446,7 +1491,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private readonly Tensor<T> _layerNorm3Gamma;
     private readonly Tensor<T> _layerNorm3Beta;
 
-    public int ParameterCount =>
+    public override int ParameterCount =>
         _selfQueryProj.Length + _selfKeyProj.Length + _selfValueProj.Length + _selfOutputProj.Length +
         _crossQueryProj.Length + _crossKeyProj.Length + _crossValueProj.Length + _crossOutputProj.Length +
         _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
@@ -1495,7 +1540,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
         return tensor;
     }
@@ -1505,7 +1550,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         var tensor = new Tensor<T>(new[] { size });
         for (int i = 0; i < size; i++)
         {
-            tensor[i] = _numOps.One;
+            tensor[i] = NumOps.One;
         }
         return tensor;
     }
@@ -1590,7 +1635,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
                 double score = 0;
                 for (int d = 0; d < _embeddingDim && d < queries[q].Length && d < keys[k].Length; d++)
                 {
-                    score += _numOps.ToDouble(_numOps.Multiply(queries[q][d], keys[k][d]));
+                    score += NumOps.ToDouble(NumOps.Multiply(queries[q][d], keys[k][d]));
                 }
                 score /= Math.Sqrt(_headDim);
                 attnWeights[k] = score;
@@ -1611,8 +1656,8 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             {
                 for (int d = 0; d < _embeddingDim && d < values[k].Length; d++)
                 {
-                    result[d] = _numOps.Add(result[d],
-                        _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), values[k][d]));
+                    result[d] = NumOps.Add(result[d],
+                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
                 }
             }
 
@@ -1642,7 +1687,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
                 double score = 0;
                 for (int d = 0; d < _embeddingDim && d < query.Length && d < keys[k].Length; d++)
                 {
-                    score += _numOps.ToDouble(_numOps.Multiply(query[d], keys[k][d]));
+                    score += NumOps.ToDouble(NumOps.Multiply(query[d], keys[k][d]));
                 }
                 score /= Math.Sqrt(_headDim);
                 attnWeights[k] = score;
@@ -1663,8 +1708,8 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             {
                 for (int d = 0; d < _embeddingDim && d < values[k].Length; d++)
                 {
-                    result[d] = _numOps.Add(result[d],
-                        _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), values[k][d]));
+                    result[d] = NumOps.Add(result[d],
+                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
                 }
             }
 
@@ -1684,7 +1729,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             T sum = _ffn1Bias[i];
             for (int j = 0; j < _embeddingDim && j < input.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_ffn1[i * _embeddingDim + j], input[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_ffn1[i * _embeddingDim + j], input[j]));
             }
             hidden[i] = GELU(sum);
         }
@@ -1695,7 +1740,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             T sum = _ffn2Bias[i];
             for (int j = 0; j < ffnDim && j < hidden.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_ffn2[i * ffnDim + j], hidden[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_ffn2[i * ffnDim + j], hidden[j]));
             }
             output[i] = sum;
         }
@@ -1705,9 +1750,9 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 
     private T GELU(T x)
     {
-        double xd = _numOps.ToDouble(x);
+        double xd = NumOps.ToDouble(x);
         double result = 0.5 * xd * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (xd + 0.044715 * Math.Pow(xd, 3))));
-        return _numOps.FromDouble(result);
+        return NumOps.FromDouble(result);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -1727,10 +1772,10 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         var result = new Tensor<T>(new[] { rows });
         for (int i = 0; i < rows; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = 0; j < Math.Min(cols, vec.Length); j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(matrix[i * cols + j], vec[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(matrix[i * cols + j], vec[j]));
             }
             result[i] = sum;
         }
@@ -1775,7 +1820,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     /// </list>
     /// </para>
     /// </remarks>
-    public void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
+    public override void Serialize(BinaryWriter writer, Action<BinaryWriter, Tensor<T>> writeTensor)
     {
         // Self-attention
         writeTensor(writer, _selfQueryProj);
@@ -1813,7 +1858,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     /// The deserialized values are copied into the existing tensors to preserve the layer structure.
     /// </para>
     /// </remarks>
-    public void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
+    public override void Deserialize(BinaryReader reader, Func<BinaryReader, Tensor<T>> readTensor)
     {
         // Self-attention
         CopyTensorData(readTensor(reader), _selfQueryProj);
@@ -1906,9 +1951,9 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         {
             for (int i = 0; i < Math.Min(tensor.Length, gradient.Length); i++)
             {
-                T avgGrad = _numOps.Divide(gradient[i], batchSize);
-                T update = _numOps.Multiply(learningRate, avgGrad);
-                tensor[i] = _numOps.Subtract(tensor[i], update);
+                T avgGrad = NumOps.Divide(gradient[i], batchSize);
+                T update = NumOps.Multiply(learningRate, avgGrad);
+                tensor[i] = NumOps.Subtract(tensor[i], update);
             }
         }
     }
