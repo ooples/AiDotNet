@@ -36,6 +36,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Finding novel solutions that a human designer might not think of
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new NEATOptions { InputSize = 4, OutputSize = 2, PopulationSize = 150 };
+/// var model = new NEAT&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

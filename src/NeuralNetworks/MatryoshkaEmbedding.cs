@@ -35,6 +35,14 @@ namespace AiDotNet.NeuralNetworks
     /// you need total accuracy.
     /// </para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new MatryoshkaEmbeddingOptions { EmbeddingDim = 768, Dimensions = new[] { 768, 512, 256, 128, 64 } };
+    /// var model = new MatryoshkaEmbedding&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Language)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Transformer)]

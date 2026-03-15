@@ -34,6 +34,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Tasks where information needs to be remembered and used later
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MemoryNetworkOptions { InputSize = 50, MemorySize = 128, EmbeddingSize = 64 };
+/// var model = new MemoryNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 50 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Language)]

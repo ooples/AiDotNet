@@ -38,6 +38,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Reference: "MeshCNN: A Network with an Edge" by Hanocka et al., SIGGRAPH 2019
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MeshCNNOptions { InputEdgeFeatures = 5, HiddenSize = 64, NumLayers = 4 };
+/// var model = new MeshCNN&lt;float&gt;(options);
+/// var edgeFeatures = Tensor&lt;float&gt;.Random(new[] { 1, 500, 5 });
+/// var output = model.Predict(edgeFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]

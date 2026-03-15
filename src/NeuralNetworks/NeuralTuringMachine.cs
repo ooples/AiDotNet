@@ -30,6 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// partial results and carry digits, similar to how humans solve addition problems.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new NeuralTuringMachineOptions { InputSize = 8, MemorySize = 128, MemoryWordSize = 20 };
+/// var model = new NeuralTuringMachine&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10, 8 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]

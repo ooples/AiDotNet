@@ -49,6 +49,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MixtureOfExpertsOptions { InputSize = 64, NumExperts = 8, TopK = 2, HiddenSize = 256 };
+/// var model = new MixtureOfExpertsNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 64 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Ensemble)]
