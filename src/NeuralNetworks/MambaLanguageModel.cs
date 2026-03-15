@@ -21,6 +21,14 @@ namespace AiDotNet.NeuralNetworks;
 /// while maintaining competitive quality.</para>
 /// <para><b>Reference:</b> Gu and Dao, "Mamba: Linear-Time Sequence Modeling with Selective State Spaces", 2024.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MambaOptions { VocabSize = 50280, ModelDim = 2560, NumLayers = 64 };
+/// var model = new MambaLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
