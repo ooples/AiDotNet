@@ -507,8 +507,9 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
 /// Tensor-based 1D convolutional layer for DeepANT.
 /// </summary>
 /// <remarks>
-/// <para>This layer uses fixed random weights (Random Features approach) which has been shown
-/// to be effective for time series feature extraction while being computationally efficient.</para>
+/// <para>Implements a 1D convolution with ReLU activation and global average pooling.
+/// Supports training via analytical Backward pass with stored kernel/bias gradients.
+/// Weights are initialized using Xavier/Glorot initialization.</para>
 /// </remarks>
 internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {

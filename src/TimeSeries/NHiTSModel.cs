@@ -562,6 +562,28 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return new Vector<T>(allParams.ToArray());
     }
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int idx = 0;
+        foreach (var w in _weights)
+        {
+            for (int i = 0; i < w.Length; i++)
+                w[i] = parameters[idx++];
+        }
+        foreach (var b in _biases)
+        {
+            for (int i = 0; i < b.Length; i++)
+                b[i] = parameters[idx++];
+        }
+    }
+
     public NHiTSStackTensor(int inputLength, int outputLength, int hiddenSize, int numLayers, int numBlocks, int poolingSize, int seed = 42)
         : base(new[] { inputLength }, new[] { outputLength })
     {
