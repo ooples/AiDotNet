@@ -439,58 +439,135 @@ public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
     /// </remarks>
     private void UpdateVariationalCovariance(Matrix<T> Kuf, T noisePrecision)
     {
-        // Compute S^(-1) = Kuu^(-1) + (1/σ²) * Kuf * Kuf^T
-        var KufKuf = Kuf.Multiply(Kuf.Transpose());
+        // Numerically stable computation of S = (Kuu^{-1} + σ^{-2} Kuf Kuf^T)^{-1}
+        //
+        // Instead of explicitly computing SInv then inverting (which amplifies numerical error),
+        // we use the Cholesky of Kuu and work in a transformed space:
+        //   Let Luu = chol(Kuu), so Kuu = Luu Luu^T
+        //   Define A = Luu^{-1} Kuf / σ  (scaled, whitened cross-covariance)
+        //   Then SInv = Kuu^{-1} + σ^{-2} Kuf Kuf^T
+        //             = Luu^{-T} (I + A A^T) Luu^{-1}
+        //   So S = Luu (I + A A^T)^{-1} Luu^T
+        //   And chol(S) = Luu * chol((I + A A^T)^{-1})
+        //
+        // The matrix (I + A A^T) is better conditioned than SInv because its eigenvalues
+        // are ≥ 1, avoiding the large condition numbers from noisePrecision * Kuf * Kuf^T.
 
-        // Compute the full Kuu^(-1) by solving Kuu * X = I
-        var eye = CreateIdentityMatrix(_Kuu.Rows);
-        var KuuInv = new Matrix<T>(_Kuu.Rows, _Kuu.Columns);
-        for (int k = 0; k < _Kuu.Columns; k++)
-        {
-            var col = eye.GetColumn(k);
-            var solved = MatrixSolutionHelper.SolveLinearSystem(_Kuu, col, _decompositionType);
-            KuuInv.SetColumn(k, solved);
-        }
+        int m = _Kuu.Rows;
+        int n = Kuf.Columns;
 
-        // S^(-1) = Kuu^(-1) + noisePrecision * Kuf * Kuf^T
-        var SInv = new Matrix<T>(_Kuu.Rows, _Kuu.Columns);
-        for (int i = 0; i < _Kuu.Rows; i++)
+        // Compute A = Luu^{-1} Kuf / σ  (forward-solve each column)
+        double sqrtPrecision = Math.Sqrt(Math.Max(_numOps.ToDouble(noisePrecision), 0.0));
+        var A = new Matrix<T>(m, n);
+        for (int j = 0; j < n; j++)
         {
-            for (int j = 0; j < _Kuu.Columns; j++)
+            var col = Kuf.GetColumn(j);
+            // Forward-solve: Luu * x = col  =>  x = Luu^{-1} * col
+            var solved = MatrixSolutionHelper.SolveLinearSystem(_LKuu.Multiply(_LKuu.Transpose()), col, _decompositionType);
+            // Apply Luu^{-1}: since Kuu = Luu Luu^T, Kuu^{-1} col = Luu^{-T} Luu^{-1} col
+            // We need Luu^{-1} col, so solve Luu * x = col using forward substitution
+            // Approximate: use _LKuu to forward-solve
+            var whitened = ForwardSolve(_LKuu, col);
+            for (int i = 0; i < m; i++)
             {
-                T scaledKufKuf = _numOps.Multiply(noisePrecision, KufKuf[i, j]);
-                SInv[i, j] = _numOps.Add(KuuInv[i, j], scaledKufKuf);
+                A[i, j] = _numOps.Multiply(_numOps.FromDouble(sqrtPrecision), whitened[i]);
             }
         }
 
-        // Add jitter for numerical stability
-        AddJitter(SInv);
+        // Compute B = I + A A^T (m×m, well-conditioned)
+        var AAT = A.Multiply(A.Transpose());
+        var B = CreateIdentityMatrix(m);
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < m; j++)
+            {
+                B[i, j] = _numOps.Add(B[i, j], AAT[i, j]);
+            }
+        }
 
-        // Compute S = SInv^(-1) using Cholesky
+        // Compute S_white = B^{-1} (in whitened space)
+        AddJitter(B);
         try
         {
-            var choleskySInv = new CholeskyDecomposition<T>(SInv);
-            var identity = CreateIdentityMatrix(SInv.Rows);
-            var S = new Matrix<T>(SInv.Rows, SInv.Columns);
+            var choleskyB = new CholeskyDecomposition<T>(B);
 
-            for (int j = 0; j < SInv.Columns; j++)
+            // S_white = B^{-1}, compute its Cholesky: chol(B^{-1})
+            // Since B = chol_B * chol_B^T, B^{-1} = chol_B^{-T} * chol_B^{-1}
+            // So chol(B^{-1}) = chol_B^{-T} (the inverse-transpose of the Cholesky factor)
+            // We can get this by solving chol_B^T * L_inv = I column by column
+            var identity = CreateIdentityMatrix(m);
+            var L_B = choleskyB.L;
+            var L_BInvT = new Matrix<T>(m, m);
+            for (int j = 0; j < m; j++)
             {
-                var col = identity.GetColumn(j);
-                var solved = choleskySInv.Solve(col);
-                S.SetColumn(j, solved);
+                // Solve L_B^T * x = e_j (back-substitution)
+                var ej = identity.GetColumn(j);
+                var solved = BackSolve(L_B.Transpose(), ej);
+                L_BInvT.SetColumn(j, solved);
             }
 
-            // Compute Cholesky of S
-            AddJitter(S);
-            var choleskyS = new CholeskyDecomposition<T>(S);
-            _variationalCovCholesky = choleskyS.L;
+            // chol(S) = Luu * L_BInvT
+            _variationalCovCholesky = _LKuu.Multiply(L_BInvT);
         }
-        catch (ArgumentException ex)
+        catch (ArgumentException)
         {
-            // If decomposition fails, keep identity covariance
-            // This can happen when S is not positive definite due to numerical issues
-            System.Diagnostics.Debug.WriteLine($"Variational covariance update failed: {ex.Message}. Using identity covariance.");
+            // Fallback: if B is not positive definite (shouldn't happen since eigenvalues ≥ 1),
+            // use a scaled identity covariance
+            _variationalCovCholesky = CreateIdentityMatrix(m);
+            for (int i = 0; i < m; i++)
+            {
+                _variationalCovCholesky[i, i] = _numOps.FromDouble(0.01);
+            }
         }
+    }
+
+    /// <summary>
+    /// Forward-solves L * x = b for lower-triangular L.
+    /// </summary>
+    private Vector<T> ForwardSolve(Matrix<T> L, Vector<T> b)
+    {
+        int n = b.Length;
+        var x = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            T sum = b[i];
+            for (int j = 0; j < i; j++)
+            {
+                sum = _numOps.Subtract(sum, _numOps.Multiply(L[i, j], x[j]));
+            }
+            T diag = L[i, i];
+            // Guard against zero diagonal
+            if (_numOps.ToDouble(diag) == 0.0)
+            {
+                diag = _numOps.FromDouble(1e-10);
+            }
+            x[i] = _numOps.Divide(sum, diag);
+        }
+        return x;
+    }
+
+    /// <summary>
+    /// Back-solves U * x = b for upper-triangular U.
+    /// </summary>
+    private Vector<T> BackSolve(Matrix<T> U, Vector<T> b)
+    {
+        int n = b.Length;
+        var x = new Vector<T>(n);
+        for (int i = n - 1; i >= 0; i--)
+        {
+            T sum = b[i];
+            for (int j = i + 1; j < n; j++)
+            {
+                sum = _numOps.Subtract(sum, _numOps.Multiply(U[i, j], x[j]));
+            }
+            T diag = U[i, i];
+            if (_numOps.ToDouble(diag) == 0.0)
+            {
+                diag = _numOps.FromDouble(1e-10);
+            }
+            x[i] = _numOps.Divide(sum, diag);
+        }
+        return x;
     }
 
     /// <summary>

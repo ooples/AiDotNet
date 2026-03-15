@@ -213,7 +213,124 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
+        // Two-pass batch training:
+        // Pass 1: Feed all data to establish accurate Min/Max ranges for all features.
+        //         This prevents the bin drift problem where early samples get incorrect
+        //         bin assignments because the range hasn't stabilized yet.
+        // Pass 2: Reset statistics and re-feed data with the correct, stable bin ranges.
+        //         Then force splits using greedy criterion (no Hoeffding bound needed
+        //         since we've seen all the data).
+
+        // Pass 1: Establish ranges
         PartialFit(x, y);
+
+        // Pass 2: Reset and re-fit with stable ranges (preserve the established Min/Max)
+        if (_root != null && _root.FeatureStatistics != null)
+        {
+            // Save the established ranges
+            var savedRanges = new (double Min, double Max)[NumFeatures];
+            for (int f = 0; f < NumFeatures; f++)
+            {
+                var stats = _root.FeatureStatistics[f];
+                savedRanges[f] = (stats.Min, stats.Max);
+            }
+
+            // Reset the tree but keep known classes
+            var savedClasses = new List<T>(_knownClasses);
+            _root = CreateLeaf(0);
+            SamplesSeen = 0;
+
+            // Re-initialize with saved ranges
+            InitializeFeatureStats(_root, NumFeatures);
+            for (int f = 0; f < NumFeatures; f++)
+            {
+                var stats = _root.FeatureStatistics![f];
+                stats.Min = savedRanges[f].Min;
+                stats.Max = savedRanges[f].Max;
+                stats.BinMin = savedRanges[f].Min;
+                stats.BinMax = savedRanges[f].Max;
+            }
+
+            // Restore known classes
+            _knownClasses.Clear();
+            _knownClasses.AddRange(savedClasses);
+            NumClasses = _knownClasses.Count;
+            ClassLabels = new Vector<T>(_knownClasses.ToArray());
+
+            // Re-feed all data with stable bin ranges
+            PartialFit(x, y);
+        }
+
+        // Force splits on all leaves using greedy criterion
+        ForceLeafSplits(_root);
+    }
+
+    /// <summary>
+    /// Recursively attempts splits on all leaf nodes using a greedy criterion
+    /// (best split with positive information gain), bypassing the Hoeffding bound.
+    /// Called after batch training when no more data is expected. The Hoeffding bound
+    /// provides statistical guarantees for streaming, but after batch training the
+    /// entire dataset has been seen and the best split IS the best split — no need
+    /// to wait for more evidence.
+    /// </summary>
+    private void ForceLeafSplits(HoeffdingNode? node)
+    {
+        if (node is null) return;
+
+        if (node.IsLeaf && node.TotalCount > 0)
+        {
+            ForceBestSplit(node);
+            if (!node.IsLeaf)
+            {
+                ForceLeafSplits(node.Left);
+                ForceLeafSplits(node.Right);
+            }
+        }
+        else
+        {
+            ForceLeafSplits(node.Left);
+            ForceLeafSplits(node.Right);
+        }
+    }
+
+    /// <summary>
+    /// Performs the best split on a leaf node if it has positive information gain,
+    /// without requiring the Hoeffding bound to be satisfied.
+    /// </summary>
+    private void ForceBestSplit(HoeffdingNode leaf)
+    {
+        if (_options.MaxDepth > 0 && leaf.Depth >= _options.MaxDepth)
+            return;
+
+        if (leaf.FeatureStatistics is null || NumFeatures == 0)
+            return;
+
+        var splitCandidates = new List<(int Feature, double Threshold, double Gain)>();
+        double currentEntropy = CalculateEntropy(leaf.ClassCounts, leaf.TotalCount);
+
+        for (int f = 0; f < NumFeatures; f++)
+        {
+            var stats = leaf.FeatureStatistics[f];
+            if (Math.Abs(stats.Max - stats.Min) < 1e-10) continue;
+
+            for (int b = 1; b < _options.NumBins; b++)
+            {
+                double threshold = stats.Min + (stats.Max - stats.Min) * b / _options.NumBins;
+                double gain = CalculateInformationGain(leaf, f, threshold, currentEntropy);
+                splitCandidates.Add((f, threshold, gain));
+            }
+        }
+
+        if (splitCandidates.Count == 0) return;
+
+        splitCandidates.Sort((a, b) => b.Gain.CompareTo(a.Gain));
+        var best = splitCandidates[0];
+
+        // Split if the best candidate has positive information gain
+        if (best.Gain > 1e-10)
+        {
+            PerformSplit(leaf, best.Feature, best.Threshold);
+        }
     }
 
     /// <inheritdoc />
