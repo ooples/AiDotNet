@@ -378,6 +378,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
             var shuffled = sampleIndices.OrderBy(_ => _random.Next()).ToList();
 
             for (int batchStart = 0; batchStart < shuffled.Count; batchStart += _options.BatchSize)
@@ -389,6 +390,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
                 for (int idx = batchStart; idx < batchEnd; idx++)
                 {
+                    if (idx % 20 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
                     int i = shuffled[idx];
 
                     // Extract lookback window from y
@@ -1152,9 +1154,9 @@ internal class AutoformerCache<T>
 /// <summary>
 /// Autoformer encoder layer with series decomposition and auto-correlation.
 /// </summary>
-internal class AutoformerEncoderLayer<T>
+internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _movingAvgKernel;
@@ -1179,8 +1181,98 @@ internal class AutoformerEncoderLayer<T>
     private Tensor<T> _layerNorm2Gamma;
     private Tensor<T> _layerNorm2Beta;
 
+    private int _topK = 3;  // Cached from last Forward call
+
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+    public override void ResetState() { }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        // Gradients applied externally by model training loop
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        // Input: [embeddingDim * 2] = [trend | seasonal] concatenated
+        var input = Autodiff.TensorOperations<T>.Variable(
+            new Tensor<T>(new[] { _embeddingDim * 2 }), "af_enc_input", requiresGradient: false);
+        nodes.Add(input);
+
+        // Extract seasonal component (first half) for attention
+        var seasonal = Autodiff.TensorOperations<T>.Slice(input, 0, _embeddingDim);
+
+        // Self-attention on seasonal component
+        var attnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
+            seasonal, _queryProj, _keyProj, _valueProj, _outputProj, "af_enc_attn");
+        var residual1 = Autodiff.TensorOperations<T>.Add(seasonal, attnOut);
+        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual1, _layerNorm1Gamma, _layerNorm1Beta, "af_enc_ln1");
+
+        // FFN
+        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
+            norm1, _ff1Weight, _ff1Bias, _ff2Weight, _ff2Bias, "af_enc_ffn");
+        var residual2 = Autodiff.TensorOperations<T>.Add(norm1, ffnOut);
+        var norm2 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual2, _layerNorm2Gamma, _layerNorm2Beta, "af_enc_ln2");
+
+        // Extract trend (second half) and concatenate back
+        var trend = Autodiff.TensorOperations<T>.Slice(input, _embeddingDim, _embeddingDim);
+        return Autodiff.TensorOperations<T>.Concat(
+            new List<Autodiff.ComputationNode<T>> { norm2, trend });
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        foreach (var t in new[] { _queryProj, _keyProj, _valueProj, _outputProj, _ff1Weight, _ff1Bias, _ff2Weight, _ff2Bias, _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta })
+            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    /// <summary>
+    /// LayerBase single-tensor Forward: input is trend data, processes with auto-correlation.
+    /// </summary>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        // For single input, treat as trend with zero seasonal
+        var seasonal = new Tensor<T>(input.Shape);
+        var (outTrend, outSeasonal) = Forward(input, seasonal, _topK);
+        // Concatenate trend + seasonal into single output
+        var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
+        for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
+        for (int i = 0; i < outSeasonal.Length; i++) output[outTrend.Length + i] = outSeasonal[i];
+        return output;
+    }
+
+    /// <summary>
+    /// Multi-tensor Forward: inputs[0] = trend, inputs[1] = seasonal.
+    /// </summary>
+    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length >= 2)
+        {
+            var (outTrend, outSeasonal) = Forward(inputs[0], inputs[1], _topK);
+            var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
+            for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
+            for (int i = 0; i < outSeasonal.Length; i++) output[outTrend.Length + i] = outSeasonal[i];
+            return output;
+        }
+        return Forward(inputs[0]);
+    }
+
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        // Return gradient w.r.t. trend input (first half of concatenated gradient)
+        var dTrend = new Tensor<T>(new[] { _embeddingDim });
+        for (int i = 0; i < _embeddingDim && i < outputGradient.Length; i++)
+            dTrend[i] = outputGradient[i];
+        return dTrend;
+    }
+
     public AutoformerEncoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
+        : base(new[] { embeddingDim }, new[] { embeddingDim * 2 })
     {
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
@@ -1211,8 +1303,8 @@ internal class AutoformerEncoderLayer<T>
         _layerNorm2Beta = new Tensor<T>(new[] { embeddingDim });
         for (int i = 0; i < embeddingDim; i++)
         {
-            _layerNorm1Gamma[i] = _numOps.One;
-            _layerNorm2Gamma[i] = _numOps.One;
+            _layerNorm1Gamma[i] = NumOps.One;
+            _layerNorm2Gamma[i] = NumOps.One;
         }
     }
 
@@ -1221,7 +1313,7 @@ internal class AutoformerEncoderLayer<T>
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
         return tensor;
     }
@@ -1238,7 +1330,7 @@ internal class AutoformerEncoderLayer<T>
         // Add & Norm
         for (int i = 0; i < acOutput.Length; i++)
         {
-            acOutput[i] = _numOps.Add(acOutput[i], seasonal[i]);
+            acOutput[i] = NumOps.Add(acOutput[i], seasonal[i]);
         }
         acOutput = LayerNorm(acOutput, _layerNorm1Gamma, _layerNorm1Beta);
 
@@ -1248,7 +1340,7 @@ internal class AutoformerEncoderLayer<T>
         // Accumulate trend
         for (int i = 0; i < trend.Length && i < newTrend.Length; i++)
         {
-            trend[i] = _numOps.Add(trend[i], newTrend[i]);
+            trend[i] = NumOps.Add(trend[i], newTrend[i]);
         }
 
         // Feed-forward on seasonal
@@ -1257,7 +1349,7 @@ internal class AutoformerEncoderLayer<T>
         // Add & Norm
         for (int i = 0; i < ffOutput.Length; i++)
         {
-            ffOutput[i] = _numOps.Add(ffOutput[i], newSeasonal[i]);
+            ffOutput[i] = NumOps.Add(ffOutput[i], newSeasonal[i]);
         }
         ffOutput = LayerNorm(ffOutput, _layerNorm2Gamma, _layerNorm2Beta);
 
@@ -1265,7 +1357,7 @@ internal class AutoformerEncoderLayer<T>
         var (finalTrend, finalSeasonal) = SeriesDecomposition(ffOutput);
         for (int i = 0; i < trend.Length && i < finalTrend.Length; i++)
         {
-            trend[i] = _numOps.Add(trend[i], finalTrend[i]);
+            trend[i] = NumOps.Add(trend[i], finalTrend[i]);
         }
 
         return (trend, finalSeasonal);
@@ -1292,7 +1384,7 @@ internal class AutoformerEncoderLayer<T>
             var series = new double[seqLen];
             for (int t = 0; t < seqLen; t++)
             {
-                series[t] = _numOps.ToDouble(x[t * embDim + d]);
+                series[t] = NumOps.ToDouble(x[t * embDim + d]);
             }
 
             // Compute auto-correlation via FFT (simplified version without Complex type)
@@ -1351,7 +1443,7 @@ internal class AutoformerEncoderLayer<T>
                     weightSum += weights[k] * 0.5;
                 }
 
-                output[t * embDim + d] = _numOps.FromDouble(aggregatedValue / weightSum);
+                output[t * embDim + d] = NumOps.FromDouble(aggregatedValue / weightSum);
             }
         }
 
@@ -1375,13 +1467,13 @@ internal class AutoformerEncoderLayer<T>
 
             for (int d = 0; d < embDim; d++)
             {
-                var sum = _numOps.Zero;
+                var sum = NumOps.Zero;
                 for (int k = start; k <= end; k++)
                 {
-                    sum = _numOps.Add(sum, input[k * embDim + d]);
+                    sum = NumOps.Add(sum, input[k * embDim + d]);
                 }
-                trend[t * embDim + d] = _numOps.Divide(sum, _numOps.FromDouble(count));
-                seasonal[t * embDim + d] = _numOps.Subtract(input[t * embDim + d], trend[t * embDim + d]);
+                trend[t * embDim + d] = NumOps.Divide(sum, NumOps.FromDouble(count));
+                seasonal[t * embDim + d] = NumOps.Subtract(input[t * embDim + d], trend[t * embDim + d]);
             }
         }
 
@@ -1410,11 +1502,11 @@ internal class AutoformerEncoderLayer<T>
                 hidden[h] = _ff1Bias[h];
                 for (int d = 0; d < embDim; d++)
                 {
-                    hidden[h] = _numOps.Add(hidden[h], _numOps.Multiply(_ff1Weight[h * embDim + d], x[t * embDim + d]));
+                    hidden[h] = NumOps.Add(hidden[h], NumOps.Multiply(_ff1Weight[h * embDim + d], x[t * embDim + d]));
                 }
                 // GELU approximation
-                double hVal = _numOps.ToDouble(hidden[h]);
-                hidden[h] = _numOps.FromDouble(0.5 * hVal * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (hVal + 0.044715 * Math.Pow(hVal, 3)))));
+                double hVal = NumOps.ToDouble(hidden[h]);
+                hidden[h] = NumOps.FromDouble(0.5 * hVal * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (hVal + 0.044715 * Math.Pow(hVal, 3)))));
             }
 
             // Second linear layer
@@ -1423,7 +1515,7 @@ internal class AutoformerEncoderLayer<T>
                 output[t * embDim + d] = _ff2Bias[d];
                 for (int h = 0; h < ffDim; h++)
                 {
-                    output[t * embDim + d] = _numOps.Add(output[t * embDim + d], _numOps.Multiply(_ff2Weight[d * ffDim + h], hidden[h]));
+                    output[t * embDim + d] = NumOps.Add(output[t * embDim + d], NumOps.Multiply(_ff2Weight[d * ffDim + h], hidden[h]));
                 }
             }
         }
@@ -1493,8 +1585,8 @@ internal class AutoformerEncoderLayer<T>
             {
                 var currentValue = param.Shape.Length > 1 ? param[i, j] : param[i];
                 var gradValue = gradient.Shape.Length > 1 ? gradient[i, j] : gradient[i];
-                var update = _numOps.Multiply(scale, gradValue);
-                var newValue = _numOps.Subtract(currentValue, update);
+                var update = NumOps.Multiply(scale, gradValue);
+                var newValue = NumOps.Subtract(currentValue, update);
 
                 if (param.Shape.Length > 1)
                     param[i, j] = newValue;
@@ -1504,7 +1596,7 @@ internal class AutoformerEncoderLayer<T>
         }
     }
 
-    public void Serialize(BinaryWriter writer)
+    public override void Serialize(BinaryWriter writer)
     {
         WriteTensor(writer, _queryProj);
         WriteTensor(writer, _keyProj);
@@ -1520,7 +1612,7 @@ internal class AutoformerEncoderLayer<T>
         WriteTensor(writer, _layerNorm2Beta);
     }
 
-    public void Deserialize(BinaryReader reader)
+    public override void Deserialize(BinaryReader reader)
     {
         _queryProj = ReadTensor(reader);
         _keyProj = ReadTensor(reader);
@@ -1545,7 +1637,7 @@ internal class AutoformerEncoderLayer<T>
         }
         for (int i = 0; i < tensor.Length; i++)
         {
-            writer.Write(_numOps.ToDouble(tensor[i]));
+            writer.Write(NumOps.ToDouble(tensor[i]));
         }
     }
 
@@ -1560,7 +1652,7 @@ internal class AutoformerEncoderLayer<T>
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
         }
         return tensor;
     }
@@ -1569,9 +1661,9 @@ internal class AutoformerEncoderLayer<T>
 /// <summary>
 /// Autoformer decoder layer with cross-attention and series decomposition.
 /// </summary>
-internal class AutoformerDecoderLayer<T>
+internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _movingAvgKernel;
@@ -1604,8 +1696,68 @@ internal class AutoformerDecoderLayer<T>
     private Tensor<T> _layerNorm3Gamma;
     private Tensor<T> _layerNorm3Beta;
 
+    private int _topK = 3;
+    private Tensor<T>? _lastEncoderOutput;
+
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+    public override void ResetState() { _lastEncoderOutput = null; }
+
+    public override void UpdateParameters(T learningRate) { }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _embeddingDim * 2 }), "autoformer_decoder_output");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        foreach (var t in new[] { _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj,
+            _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj,
+            _ff1Weight, _ff1Bias, _ff2Weight, _ff2Bias,
+            _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta, _layerNorm3Gamma, _layerNorm3Beta })
+            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        var seasonal = new Tensor<T>(input.Shape);
+        var encTrend = _lastEncoderOutput ?? input;
+        var encSeasonal = new Tensor<T>(input.Shape);
+        var (outTrend, outSeasonal) = Forward(input, seasonal, encTrend, encSeasonal, _topK);
+        var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
+        for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
+        for (int i = 0; i < outSeasonal.Length; i++) output[outTrend.Length + i] = outSeasonal[i];
+        return output;
+    }
+
+    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length >= 4)
+        {
+            _lastEncoderOutput = inputs[2];
+            var (outTrend, outSeasonal) = Forward(inputs[0], inputs[1], inputs[2], inputs[3], _topK);
+            var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
+            for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
+            for (int i = 0; i < outSeasonal.Length; i++) output[outTrend.Length + i] = outSeasonal[i];
+            return output;
+        }
+        return Forward(inputs[0]);
+    }
+
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        var dTrend = new Tensor<T>(new[] { _embeddingDim });
+        for (int i = 0; i < _embeddingDim && i < outputGradient.Length; i++)
+            dTrend[i] = outputGradient[i];
+        return dTrend;
+    }
+
     public AutoformerDecoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
+        : base(new int[][] { new[] { embeddingDim }, new[] { embeddingDim }, new[] { embeddingDim } }, new[] { embeddingDim * 2 })
     {
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
@@ -1644,9 +1796,9 @@ internal class AutoformerDecoderLayer<T>
         _layerNorm3Beta = new Tensor<T>(new[] { embeddingDim });
         for (int i = 0; i < embeddingDim; i++)
         {
-            _layerNorm1Gamma[i] = _numOps.One;
-            _layerNorm2Gamma[i] = _numOps.One;
-            _layerNorm3Gamma[i] = _numOps.One;
+            _layerNorm1Gamma[i] = NumOps.One;
+            _layerNorm2Gamma[i] = NumOps.One;
+            _layerNorm3Gamma[i] = NumOps.One;
         }
     }
 
@@ -1655,7 +1807,7 @@ internal class AutoformerDecoderLayer<T>
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
         return tensor;
     }
@@ -1676,7 +1828,7 @@ internal class AutoformerDecoderLayer<T>
         var (selfTrend, selfSeasonal) = SeriesDecomposition(normalized1);
         for (int i = 0; i < decoderTrend.Length && i < selfTrend.Length; i++)
         {
-            decoderTrend[i] = _numOps.Add(decoderTrend[i], selfTrend[i]);
+            decoderTrend[i] = NumOps.Add(decoderTrend[i], selfTrend[i]);
         }
 
         // 2. Cross auto-correlation with encoder outputs
@@ -1690,7 +1842,7 @@ internal class AutoformerDecoderLayer<T>
         var (crossTrend, crossSeasonal) = SeriesDecomposition(normalized2);
         for (int i = 0; i < decoderTrend.Length && i < crossTrend.Length; i++)
         {
-            decoderTrend[i] = _numOps.Add(decoderTrend[i], crossTrend[i]);
+            decoderTrend[i] = NumOps.Add(decoderTrend[i], crossTrend[i]);
         }
 
         // 3. Feed-forward network
@@ -1704,7 +1856,7 @@ internal class AutoformerDecoderLayer<T>
         var (finalTrend, finalSeasonal) = SeriesDecomposition(normalized3);
         for (int i = 0; i < decoderTrend.Length && i < finalTrend.Length; i++)
         {
-            decoderTrend[i] = _numOps.Add(decoderTrend[i], finalTrend[i]);
+            decoderTrend[i] = NumOps.Add(decoderTrend[i], finalTrend[i]);
         }
 
         return (decoderTrend, finalSeasonal);
@@ -1762,10 +1914,10 @@ internal class AutoformerDecoderLayer<T>
         {
             for (int o = 0; o < outDim; o++)
             {
-                var sum = _numOps.Zero;
+                var sum = NumOps.Zero;
                 for (int i = 0; i < inDim; i++)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(x[t * inDim + i], weight[o * inDim + i]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(x[t * inDim + i], weight[o * inDim + i]));
                 }
                 result[t * outDim + o] = sum;
             }
@@ -1782,7 +1934,7 @@ internal class AutoformerDecoderLayer<T>
         var correlations = new T[seqLen];
         for (int lag = 0; lag < seqLen; lag++)
         {
-            var corr = _numOps.Zero;
+            var corr = NumOps.Zero;
             int count = 0;
             for (int t = 0; t < seqLen - lag; t++)
             {
@@ -1790,34 +1942,34 @@ internal class AutoformerDecoderLayer<T>
                 {
                     var q = query[t * embDim + d];
                     var k = key[(t + lag) * embDim + d];
-                    corr = _numOps.Add(corr, _numOps.Multiply(q, k));
+                    corr = NumOps.Add(corr, NumOps.Multiply(q, k));
                     count++;
                 }
             }
-            correlations[lag] = count > 0 ? _numOps.Divide(corr, _numOps.FromDouble(count)) : _numOps.Zero;
+            correlations[lag] = count > 0 ? NumOps.Divide(corr, NumOps.FromDouble(count)) : NumOps.Zero;
         }
 
         // Find top-k correlations and apply softmax
         var indices = Enumerable.Range(0, seqLen)
-            .OrderByDescending(i => _numOps.ToDouble(correlations[i]))
+            .OrderByDescending(i => NumOps.ToDouble(correlations[i]))
             .Take(topK)
             .ToArray();
 
         var weights = new T[topK];
-        var maxCorr = indices.Length > 0 ? _numOps.ToDouble(correlations[indices[0]]) : 0.0;
-        var expSum = _numOps.Zero;
+        var maxCorr = indices.Length > 0 ? NumOps.ToDouble(correlations[indices[0]]) : 0.0;
+        var expSum = NumOps.Zero;
 
         for (int i = 0; i < topK && i < indices.Length; i++)
         {
-            weights[i] = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(correlations[indices[i]]) - maxCorr));
-            expSum = _numOps.Add(expSum, weights[i]);
+            weights[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(correlations[indices[i]]) - maxCorr));
+            expSum = NumOps.Add(expSum, weights[i]);
         }
 
-        if (_numOps.ToDouble(expSum) > 1e-10)
+        if (NumOps.ToDouble(expSum) > 1e-10)
         {
             for (int i = 0; i < weights.Length; i++)
             {
-                weights[i] = _numOps.Divide(weights[i], expSum);
+                weights[i] = NumOps.Divide(weights[i], expSum);
             }
         }
 
@@ -1834,38 +1986,38 @@ internal class AutoformerDecoderLayer<T>
         var scores = new T[keyLen];
         for (int k = 0; k < keyLen; k++)
         {
-            var score = _numOps.Zero;
+            var score = NumOps.Zero;
             for (int q = 0; q < queryLen; q++)
             {
                 for (int d = 0; d < embDim; d++)
                 {
-                    score = _numOps.Add(score, _numOps.Multiply(query[q * embDim + d], key[k * embDim + d]));
+                    score = NumOps.Add(score, NumOps.Multiply(query[q * embDim + d], key[k * embDim + d]));
                 }
             }
-            scores[k] = _numOps.Divide(score, _numOps.FromDouble(Math.Sqrt(embDim)));
+            scores[k] = NumOps.Divide(score, NumOps.FromDouble(Math.Sqrt(embDim)));
         }
 
         // Top-k softmax
         var indices = Enumerable.Range(0, keyLen)
-            .OrderByDescending(i => _numOps.ToDouble(scores[i]))
+            .OrderByDescending(i => NumOps.ToDouble(scores[i]))
             .Take(topK)
             .ToArray();
 
         var weights = new T[topK];
-        var maxScore = indices.Length > 0 ? _numOps.ToDouble(scores[indices[0]]) : 0.0;
-        var expSum = _numOps.Zero;
+        var maxScore = indices.Length > 0 ? NumOps.ToDouble(scores[indices[0]]) : 0.0;
+        var expSum = NumOps.Zero;
 
         for (int i = 0; i < topK && i < indices.Length; i++)
         {
-            weights[i] = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(scores[indices[i]]) - maxScore));
-            expSum = _numOps.Add(expSum, weights[i]);
+            weights[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(scores[indices[i]]) - maxScore));
+            expSum = NumOps.Add(expSum, weights[i]);
         }
 
-        if (_numOps.ToDouble(expSum) > 1e-10)
+        if (NumOps.ToDouble(expSum) > 1e-10)
         {
             for (int i = 0; i < weights.Length; i++)
             {
-                weights[i] = _numOps.Divide(weights[i], expSum);
+                weights[i] = NumOps.Divide(weights[i], expSum);
             }
         }
 
@@ -1882,11 +2034,11 @@ internal class AutoformerDecoderLayer<T>
         {
             for (int d = 0; d < embDim; d++)
             {
-                var sum = _numOps.Zero;
+                var sum = NumOps.Zero;
                 for (int k = 0; k < topK && k < weights.Length; k++)
                 {
                     int srcIdx = (t + k) % seqLen;
-                    sum = _numOps.Add(sum, _numOps.Multiply(weights[k], value[srcIdx * embDim + d]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(weights[k], value[srcIdx * embDim + d]));
                 }
                 output[t * embDim + d] = sum;
             }
@@ -1904,11 +2056,11 @@ internal class AutoformerDecoderLayer<T>
         {
             for (int d = 0; d < embDim; d++)
             {
-                var sum = _numOps.Zero;
+                var sum = NumOps.Zero;
                 for (int k = 0; k < topK && k < weights.Length; k++)
                 {
                     int srcIdx = Math.Min(k, seqLen - 1);
-                    sum = _numOps.Add(sum, _numOps.Multiply(weights[k], value[srcIdx * embDim + d]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(weights[k], value[srcIdx * embDim + d]));
                 }
                 output[t * embDim + d] = sum;
             }
@@ -1933,13 +2085,13 @@ internal class AutoformerDecoderLayer<T>
 
             for (int d = 0; d < embDim; d++)
             {
-                var sum = _numOps.Zero;
+                var sum = NumOps.Zero;
                 for (int k = start; k <= end; k++)
                 {
-                    sum = _numOps.Add(sum, input[k * embDim + d]);
+                    sum = NumOps.Add(sum, input[k * embDim + d]);
                 }
-                trend[t * embDim + d] = _numOps.Divide(sum, _numOps.FromDouble(count));
-                seasonal[t * embDim + d] = _numOps.Subtract(input[t * embDim + d], trend[t * embDim + d]);
+                trend[t * embDim + d] = NumOps.Divide(sum, NumOps.FromDouble(count));
+                seasonal[t * embDim + d] = NumOps.Subtract(input[t * embDim + d], trend[t * embDim + d]);
             }
         }
 
@@ -1954,26 +2106,26 @@ internal class AutoformerDecoderLayer<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            var mean = _numOps.Zero;
+            var mean = NumOps.Zero;
             for (int d = 0; d < embDim; d++)
             {
-                mean = _numOps.Add(mean, x[t * embDim + d]);
+                mean = NumOps.Add(mean, x[t * embDim + d]);
             }
-            mean = _numOps.Divide(mean, _numOps.FromDouble(embDim));
+            mean = NumOps.Divide(mean, NumOps.FromDouble(embDim));
 
-            var variance = _numOps.Zero;
+            var variance = NumOps.Zero;
             for (int d = 0; d < embDim; d++)
             {
-                var diff = _numOps.Subtract(x[t * embDim + d], mean);
-                variance = _numOps.Add(variance, _numOps.Multiply(diff, diff));
+                var diff = NumOps.Subtract(x[t * embDim + d], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            variance = _numOps.Divide(variance, _numOps.FromDouble(embDim));
-            var std = _numOps.Sqrt(_numOps.Add(variance, _numOps.FromDouble(1e-6)));
+            variance = NumOps.Divide(variance, NumOps.FromDouble(embDim));
+            var std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-6)));
 
             for (int d = 0; d < embDim; d++)
             {
-                var normalized = _numOps.Divide(_numOps.Subtract(x[t * embDim + d], mean), std);
-                output[t * embDim + d] = _numOps.Add(_numOps.Multiply(gamma[d], normalized), beta[d]);
+                var normalized = NumOps.Divide(NumOps.Subtract(x[t * embDim + d], mean), std);
+                output[t * embDim + d] = NumOps.Add(NumOps.Multiply(gamma[d], normalized), beta[d]);
             }
         }
 
@@ -1996,10 +2148,10 @@ internal class AutoformerDecoderLayer<T>
                 hidden[h] = _ff1Bias[h];
                 for (int d = 0; d < embDim; d++)
                 {
-                    hidden[h] = _numOps.Add(hidden[h], _numOps.Multiply(_ff1Weight[h * embDim + d], x[t * embDim + d]));
+                    hidden[h] = NumOps.Add(hidden[h], NumOps.Multiply(_ff1Weight[h * embDim + d], x[t * embDim + d]));
                 }
-                double hVal = _numOps.ToDouble(hidden[h]);
-                hidden[h] = _numOps.FromDouble(0.5 * hVal * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (hVal + 0.044715 * Math.Pow(hVal, 3)))));
+                double hVal = NumOps.ToDouble(hidden[h]);
+                hidden[h] = NumOps.FromDouble(0.5 * hVal * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (hVal + 0.044715 * Math.Pow(hVal, 3)))));
             }
 
             for (int d = 0; d < embDim; d++)
@@ -2007,7 +2159,7 @@ internal class AutoformerDecoderLayer<T>
                 output[t * embDim + d] = _ff2Bias[d];
                 for (int h = 0; h < ffDim; h++)
                 {
-                    output[t * embDim + d] = _numOps.Add(output[t * embDim + d], _numOps.Multiply(_ff2Weight[d * ffDim + h], hidden[h]));
+                    output[t * embDim + d] = NumOps.Add(output[t * embDim + d], NumOps.Multiply(_ff2Weight[d * ffDim + h], hidden[h]));
                 }
             }
         }
@@ -2095,8 +2247,8 @@ internal class AutoformerDecoderLayer<T>
             {
                 var currentValue = param.Shape.Length > 1 ? param[i, j] : param[i];
                 var gradValue = gradient.Shape.Length > 1 ? gradient[i, j] : gradient[i];
-                var update = _numOps.Multiply(scale, gradValue);
-                var newValue = _numOps.Subtract(currentValue, update);
+                var update = NumOps.Multiply(scale, gradValue);
+                var newValue = NumOps.Subtract(currentValue, update);
 
                 if (param.Shape.Length > 1)
                     param[i, j] = newValue;
@@ -2106,7 +2258,7 @@ internal class AutoformerDecoderLayer<T>
         }
     }
 
-    public void Serialize(BinaryWriter writer)
+    public override void Serialize(BinaryWriter writer)
     {
         WriteTensor(writer, _selfQueryProj);
         WriteTensor(writer, _selfKeyProj);
@@ -2128,7 +2280,7 @@ internal class AutoformerDecoderLayer<T>
         WriteTensor(writer, _layerNorm3Beta);
     }
 
-    public void Deserialize(BinaryReader reader)
+    public override void Deserialize(BinaryReader reader)
     {
         _selfQueryProj = ReadTensor(reader);
         _selfKeyProj = ReadTensor(reader);
@@ -2159,7 +2311,7 @@ internal class AutoformerDecoderLayer<T>
         }
         for (int i = 0; i < tensor.Length; i++)
         {
-            writer.Write(_numOps.ToDouble(tensor[i]));
+            writer.Write(NumOps.ToDouble(tensor[i]));
         }
     }
 
@@ -2174,7 +2326,7 @@ internal class AutoformerDecoderLayer<T>
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = _numOps.FromDouble(reader.ReadDouble());
+            tensor[i] = NumOps.FromDouble(reader.ReadDouble());
         }
         return tensor;
     }

@@ -100,8 +100,8 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
         _influenceSpaces = new HashSet<int>[n];
         for (int i = 0; i < n; i++)
         {
-            _influenceSpaces[i] = new HashSet<int>(_knnLists![i]);
-            foreach (int rknnIdx in _rknnLists![i])
+            _influenceSpaces[i] = new HashSet<int>((_knnLists ?? throw new InvalidOperationException("KNN lists not computed."))[i]);
+            foreach (int rknnIdx in (_rknnLists ?? throw new InvalidOperationException("RKNN lists not computed."))[i])
             {
                 _influenceSpaces[i].Add(rknnIdx);
             }
@@ -250,7 +250,7 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            densities[i] = ComputeLocalDensityForPoint(X, i, _knnLists![i]);
+            densities[i] = ComputeLocalDensityForPoint(X, i, (_knnLists ?? throw new InvalidOperationException("KNN lists not computed."))[i]);
         }
 
         return densities;

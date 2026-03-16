@@ -252,12 +252,15 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
         if (_inputBuffer is null || _outputBuffer is null)
             ResetState();
 
+        var inputBuf = _inputBuffer ?? throw new InvalidOperationException("Input buffer not initialized.");
+        var outputBuf = _outputBuffer ?? throw new InvalidOperationException("Output buffer not initialized.");
+
         var output = new T[chunk.Length];
         int outputPos = 0;
 
         for (int i = 0; i < chunk.Length; i++)
         {
-            _inputBuffer![_bufferPosition] = chunk[i];
+            inputBuf[_bufferPosition] = chunk[i];
             _bufferPosition++;
 
             if (_bufferPosition >= _hopSize)
@@ -267,7 +270,7 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
                 for (int j = 0; j < _fftSize; j++)
                 {
                     int idx = (j + _bufferPosition - _hopSize) % _fftSize;
-                    frameData[j] = NumOps.Multiply(_inputBuffer[idx], _window[j]);
+                    frameData[j] = NumOps.Multiply(inputBuf[idx], _window[j]);
                 }
 
                 var (magnitudes, phases) = ComputeFFT(frameData);
@@ -278,18 +281,18 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
                 for (int j = 0; j < _fftSize; j++)
                 {
                     var windowed = NumOps.Multiply(enhanced[j], _window[j]);
-                    _outputBuffer![j] = NumOps.Add(_outputBuffer[j], windowed);
+                    outputBuf[j] = NumOps.Add(outputBuf[j], windowed);
                 }
 
                 // Output hop samples
                 for (int j = 0; j < _hopSize && outputPos < output.Length; j++)
                 {
-                    output[outputPos++] = _outputBuffer![j];
+                    output[outputPos++] = outputBuf[j];
                 }
 
                 // Shift output buffer
-                Array.Copy(_outputBuffer!, _hopSize, _outputBuffer!, 0, _fftSize - _hopSize);
-                Array.Clear(_outputBuffer!, _fftSize - _hopSize, _hopSize);
+                Array.Copy(outputBuf, _hopSize, outputBuf, 0, _fftSize - _hopSize);
+                Array.Clear(outputBuf, _fftSize - _hopSize, _hopSize);
 
                 _bufferPosition = 0;
             }

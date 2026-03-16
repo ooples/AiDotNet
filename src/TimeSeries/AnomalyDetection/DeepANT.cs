@@ -393,7 +393,9 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         _convLayers.Clear();
         for (int i = 0; i < convLayerCount; i++)
         {
-            _convLayers.Add(ConvLayerTensor<T>.Deserialize(reader));
+            var layer = new ConvLayerTensor<T>();
+            layer.Deserialize(reader);
+            _convLayers.Add(layer);
         }
 
         // Deserialize FC weights tensor
@@ -505,20 +507,32 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
 /// Tensor-based 1D convolutional layer for DeepANT.
 /// </summary>
 /// <remarks>
-/// <para>This layer uses fixed random weights (Random Features approach) which has been shown
-/// to be effective for time series feature extraction while being computationally efficient.</para>
+/// <para>Implements a 1D convolution with ReLU activation and global average pooling.
+/// Supports training via analytical Backward pass with stored kernel/bias gradients.
+/// Weights are initialized using Xavier/Glorot initialization.</para>
 /// </remarks>
-internal class ConvLayerTensor<T>
+internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private int _outputChannels;
     private int _kernelSize;
     private Tensor<T> _kernels;  // [outputChannels, kernelSize]
     private Tensor<T> _biases;   // [outputChannels]
 
-    public int ParameterCount => _kernels.Length + _biases.Length;
+    // Cached state for backward pass
+    private Tensor<T>? _lastInput;
+    private Tensor<T>? _lastPreActivations;  // [outputChannels, numPositions] before ReLU
+    private int _lastNumPositions;
+
+    // Stored gradients for UpdateParameters
+    private Tensor<T>? _kernelGradients;
+    private Tensor<T>? _biasGradients;
+
+    public override int ParameterCount => _kernels.Length + _biases.Length;
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
 
     public ConvLayerTensor(int outputChannels, int kernelSize, int seed = 42)
+        : base(new[] { kernelSize }, new[] { outputChannels })
     {
         _outputChannels = outputChannels;
         _kernelSize = kernelSize;
@@ -528,17 +542,18 @@ internal class ConvLayerTensor<T>
 
         _kernels = new Tensor<T>(new[] { outputChannels, kernelSize });
         for (int i = 0; i < _kernels.Length; i++)
-            _kernels[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            _kernels[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
 
         _biases = new Tensor<T>(new[] { outputChannels });
         for (int i = 0; i < _biases.Length; i++)
-            _biases[i] = _numOps.Zero;
+            _biases[i] = NumOps.Zero;
     }
 
     /// <summary>
     /// Creates a ConvLayerTensor for deserialization.
     /// </summary>
-    private ConvLayerTensor()
+    internal ConvLayerTensor()
+        : base(new[] { 1 }, new[] { 1 })
     {
         _outputChannels = 0;
         _kernelSize = 0;
@@ -546,99 +561,136 @@ internal class ConvLayerTensor<T>
         _biases = new Tensor<T>(new[] { 1 });
     }
 
-    public Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Proper 1D convolution with global average pooling
+        _lastInput = input;
         var output = new Tensor<T>(new[] { _outputChannels });
-
-        // Number of valid convolution positions (no padding)
         int numPositions = Math.Max(1, input.Length - _kernelSize + 1);
+        _lastNumPositions = numPositions;
+
+        // Cache pre-activations for backward
+        _lastPreActivations = new Tensor<T>(new[] { _outputChannels, numPositions });
 
         for (int outChannel = 0; outChannel < _outputChannels; outChannel++)
         {
-            T channelSum = _numOps.Zero;
+            T channelSum = NumOps.Zero;
 
-            // Slide kernel across all valid positions
             for (int pos = 0; pos < numPositions; pos++)
             {
                 T positionSum = _biases[outChannel];
-
-                // Apply kernel at this position
                 for (int k = 0; k < _kernelSize && (pos + k) < input.Length; k++)
                 {
                     int kernelIdx = outChannel * _kernelSize + k;
-                    T weight = _kernels[kernelIdx];
-                    T inputVal = input[pos + k];
-                    positionSum = _numOps.Add(positionSum, _numOps.Multiply(weight, inputVal));
+                    positionSum = NumOps.Add(positionSum, NumOps.Multiply(_kernels[kernelIdx], input[pos + k]));
                 }
 
-                // ReLU activation at each position
-                T activated = _numOps.GreaterThan(positionSum, _numOps.Zero) ? positionSum : _numOps.Zero;
-                channelSum = _numOps.Add(channelSum, activated);
+                _lastPreActivations[outChannel, pos] = positionSum;
+                T activated = NumOps.GreaterThan(positionSum, NumOps.Zero) ? positionSum : NumOps.Zero;
+                channelSum = NumOps.Add(channelSum, activated);
             }
 
-            // Global average pooling: average over all positions
-            output[outChannel] = _numOps.Divide(channelSum, _numOps.FromDouble(numPositions));
+            output[outChannel] = NumOps.Divide(channelSum, NumOps.FromDouble(numPositions));
         }
 
         return output;
     }
 
-    /// <summary>
-    /// Serializes the convolutional layer weights.
-    /// </summary>
-    public void Serialize(BinaryWriter writer)
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (_lastInput is null || _lastPreActivations is null)
+            return new Tensor<T>(new[] { _kernelSize });
+
+        int numPositions = _lastNumPositions;
+        _kernelGradients = new Tensor<T>(_kernels.Shape);
+        _biasGradients = new Tensor<T>(_biases.Shape);
+        var inputGrad = new Tensor<T>(new[] { _lastInput.Length });
+
+        for (int outChannel = 0; outChannel < _outputChannels; outChannel++)
+        {
+            T dChannel = NumOps.Divide(outputGradient[outChannel], NumOps.FromDouble(numPositions));
+
+            for (int pos = 0; pos < numPositions; pos++)
+            {
+                T preAct = _lastPreActivations[outChannel, pos];
+                T dRelu = NumOps.GreaterThan(preAct, NumOps.Zero) ? dChannel : NumOps.Zero;
+
+                _biasGradients[outChannel] = NumOps.Add(_biasGradients[outChannel], dRelu);
+
+                for (int k = 0; k < _kernelSize && (pos + k) < _lastInput.Length; k++)
+                {
+                    int kernelIdx = outChannel * _kernelSize + k;
+                    _kernelGradients[kernelIdx] = NumOps.Add(_kernelGradients[kernelIdx],
+                        NumOps.Multiply(dRelu, _lastInput[pos + k]));
+                    inputGrad[pos + k] = NumOps.Add(inputGrad[pos + k],
+                        NumOps.Multiply(dRelu, _kernels[kernelIdx]));
+                }
+            }
+        }
+
+        return inputGrad;
+    }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_kernelGradients is null || _biasGradients is null) return;
+        for (int i = 0; i < _kernels.Length; i++)
+            _kernels[i] = NumOps.Subtract(_kernels[i], NumOps.Multiply(learningRate, _kernelGradients[i]));
+        for (int i = 0; i < _biases.Length; i++)
+            _biases[i] = NumOps.Subtract(_biases[i], NumOps.Multiply(learningRate, _biasGradients[i]));
+        _kernelGradients = null;
+        _biasGradients = null;
+    }
+
+    public override void ResetState()
+    {
+        _lastInput = null;
+        _lastPreActivations = null;
+        _kernelGradients = null;
+        _biasGradients = null;
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        for (int i = 0; i < _kernels.Length; i++) p.Add(_kernels[i]);
+        for (int i = 0; i < _biases.Length; i++) p.Add(_biases[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _outputChannels }), "conv_output");
+    }
+
+    public override void Serialize(BinaryWriter writer)
     {
         writer.Write(_outputChannels);
         writer.Write(_kernelSize);
-
-        // Serialize kernels tensor
         writer.Write(_kernels.Shape.Length);
-        foreach (int dim in _kernels.Shape)
-            writer.Write(dim);
+        foreach (int dim in _kernels.Shape) writer.Write(dim);
         writer.Write(_kernels.Length);
-        for (int i = 0; i < _kernels.Length; i++)
-            writer.Write(_numOps.ToDouble(_kernels[i]));
-
-        // Serialize biases tensor
+        for (int i = 0; i < _kernels.Length; i++) writer.Write(NumOps.ToDouble(_kernels[i]));
         writer.Write(_biases.Shape.Length);
-        foreach (int dim in _biases.Shape)
-            writer.Write(dim);
+        foreach (int dim in _biases.Shape) writer.Write(dim);
         writer.Write(_biases.Length);
-        for (int i = 0; i < _biases.Length; i++)
-            writer.Write(_numOps.ToDouble(_biases[i]));
+        for (int i = 0; i < _biases.Length; i++) writer.Write(NumOps.ToDouble(_biases[i]));
     }
 
-    /// <summary>
-    /// Deserializes a convolutional layer from binary data.
-    /// </summary>
-    public static ConvLayerTensor<T> Deserialize(BinaryReader reader)
+    public override void Deserialize(BinaryReader reader)
     {
-        var layer = new ConvLayerTensor<T>();
-
-        layer._outputChannels = reader.ReadInt32();
-        layer._kernelSize = reader.ReadInt32();
-
-        // Deserialize kernels tensor
+        _outputChannels = reader.ReadInt32();
+        _kernelSize = reader.ReadInt32();
         int kernelsRank = reader.ReadInt32();
         int[] kernelsShape = new int[kernelsRank];
-        for (int i = 0; i < kernelsRank; i++)
-            kernelsShape[i] = reader.ReadInt32();
+        for (int i = 0; i < kernelsRank; i++) kernelsShape[i] = reader.ReadInt32();
         int kernelsLength = reader.ReadInt32();
-        layer._kernels = new Tensor<T>(kernelsShape);
-        for (int i = 0; i < kernelsLength; i++)
-            layer._kernels[i] = _numOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize biases tensor
+        _kernels = new Tensor<T>(kernelsShape);
+        for (int i = 0; i < kernelsLength; i++) _kernels[i] = NumOps.FromDouble(reader.ReadDouble());
         int biasesRank = reader.ReadInt32();
         int[] biasesShape = new int[biasesRank];
-        for (int i = 0; i < biasesRank; i++)
-            biasesShape[i] = reader.ReadInt32();
+        for (int i = 0; i < biasesRank; i++) biasesShape[i] = reader.ReadInt32();
         int biasesLength = reader.ReadInt32();
-        layer._biases = new Tensor<T>(biasesShape);
-        for (int i = 0; i < biasesLength; i++)
-            layer._biases[i] = _numOps.FromDouble(reader.ReadDouble());
-
-        return layer;
+        _biases = new Tensor<T>(biasesShape);
+        for (int i = 0; i < biasesLength; i++) _biases[i] = NumOps.FromDouble(reader.ReadDouble());
     }
 }

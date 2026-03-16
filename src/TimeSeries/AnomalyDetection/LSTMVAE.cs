@@ -355,9 +355,9 @@ public class LSTMVAEOptions<T> : TimeSeriesRegressionOptions<T>
 /// <summary>
 /// Tensor-based LSTM Encoder for VAE with proper backpropagation.
 /// </summary>
-internal class LSTMEncoderTensor<T>
+internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
     private readonly int _inputSize;
     private readonly int _latentDim;
     private readonly int _hiddenSize;
@@ -382,11 +382,73 @@ internal class LSTMEncoderTensor<T>
     private Tensor<T> _logVarWeightsGrad;
     private Tensor<T> _logVarBiasGrad;
 
-    public int ParameterCount => _weights.Length + _bias.Length +
+    public override int ParameterCount => _weights.Length + _bias.Length +
                                   _meanWeights.Length + _meanBias.Length +
                                   _logVarWeights.Length + _logVarBias.Length;
 
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+
+    public override void ResetState() { ResetGradients(); }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        ApplyGradients(learningRate, 1);
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _latentDim * 2 }), "lstm_encoder_output");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        foreach (var t in new[] { _weights, _bias, _meanWeights, _meanBias, _logVarWeights, _logVarBias })
+            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    /// <summary>
+    /// Forward pass: takes input tensor, runs through LSTM + VAE projections.
+    /// Output is [mean | logVar] concatenated (2 * latentDim).
+    /// </summary>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        var vec = input.ToVector();
+        var (mean, logVar) = Encode(vec);
+        var output = new Tensor<T>(new[] { _latentDim * 2 });
+        for (int i = 0; i < _latentDim; i++)
+        {
+            output[i] = mean[i];
+            output[_latentDim + i] = logVar[i];
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Backward pass: dOutput is gradient w.r.t. [mean | logVar].
+    /// Delegates to existing BackwardInternal with split gradients.
+    /// </summary>
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        var dMean = new Tensor<T>(new[] { _latentDim });
+        var dLogVar = new Tensor<T>(new[] { _latentDim });
+        for (int i = 0; i < _latentDim && i < outputGradient.Length; i++)
+        {
+            dMean[i] = outputGradient[i];
+            if (i + _latentDim < outputGradient.Length)
+                dLogVar[i] = outputGradient[_latentDim + i];
+        }
+        // Use zero hidden and input for gradient computation
+        var hidden = new Tensor<T>(new[] { _hiddenSize });
+        var input = new Vector<T>(_inputSize);
+        Backward(dMean, dLogVar, hidden, input);
+        return new Tensor<T>(new[] { _inputSize });
+    }
+
     public LSTMEncoderTensor(int inputSize, int latentDim, int hiddenSize)
+        : base(new[] { inputSize }, new[] { latentDim * 2 })
     {
         _inputSize = inputSize;
         _latentDim = latentDim;
@@ -417,7 +479,7 @@ internal class LSTMEncoderTensor<T>
     {
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         return tensor;
     }
 
@@ -437,7 +499,7 @@ internal class LSTMEncoderTensor<T>
             for (int j = 0; j < Math.Min(input.Length, _inputSize); j++)
             {
                 int idx = i * _inputSize + j;
-                sum = _numOps.Add(sum, _numOps.Multiply(_weights[idx], input[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_weights[idx], input[j]));
             }
             hidden[i] = MathHelper.Tanh(sum);
         }
@@ -450,7 +512,7 @@ internal class LSTMEncoderTensor<T>
             for (int j = 0; j < _hiddenSize; j++)
             {
                 int idx = i * _hiddenSize + j;
-                sum = _numOps.Add(sum, _numOps.Multiply(_meanWeights[idx], hidden[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_meanWeights[idx], hidden[j]));
             }
             mean[i] = sum;
         }
@@ -463,7 +525,7 @@ internal class LSTMEncoderTensor<T>
             for (int j = 0; j < _hiddenSize; j++)
             {
                 int idx = i * _hiddenSize + j;
-                sum = _numOps.Add(sum, _numOps.Multiply(_logVarWeights[idx], hidden[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_logVarWeights[idx], hidden[j]));
             }
             logVar[i] = sum;
         }
@@ -476,24 +538,24 @@ internal class LSTMEncoderTensor<T>
         // Gradients for mean projection: dMeanWeights = dMean * hidden^T, dMeanBias = dMean
         for (int i = 0; i < _latentDim; i++)
         {
-            _meanBiasGrad[i] = _numOps.Add(_meanBiasGrad[i], dMean[i]);
+            _meanBiasGrad[i] = NumOps.Add(_meanBiasGrad[i], dMean[i]);
             for (int j = 0; j < _hiddenSize; j++)
             {
                 int idx = i * _hiddenSize + j;
-                T grad = _numOps.Multiply(dMean[i], hidden[j]);
-                _meanWeightsGrad[idx] = _numOps.Add(_meanWeightsGrad[idx], grad);
+                T grad = NumOps.Multiply(dMean[i], hidden[j]);
+                _meanWeightsGrad[idx] = NumOps.Add(_meanWeightsGrad[idx], grad);
             }
         }
 
         // Gradients for logVar projection
         for (int i = 0; i < _latentDim; i++)
         {
-            _logVarBiasGrad[i] = _numOps.Add(_logVarBiasGrad[i], dLogVar[i]);
+            _logVarBiasGrad[i] = NumOps.Add(_logVarBiasGrad[i], dLogVar[i]);
             for (int j = 0; j < _hiddenSize; j++)
             {
                 int idx = i * _hiddenSize + j;
-                T grad = _numOps.Multiply(dLogVar[i], hidden[j]);
-                _logVarWeightsGrad[idx] = _numOps.Add(_logVarWeightsGrad[idx], grad);
+                T grad = NumOps.Multiply(dLogVar[i], hidden[j]);
+                _logVarWeightsGrad[idx] = NumOps.Add(_logVarWeightsGrad[idx], grad);
             }
         }
 
@@ -501,12 +563,12 @@ internal class LSTMEncoderTensor<T>
         var dHidden = new Tensor<T>(new[] { _hiddenSize });
         for (int j = 0; j < _hiddenSize; j++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int i = 0; i < _latentDim; i++)
             {
                 int idx = i * _hiddenSize + j;
-                sum = _numOps.Add(sum, _numOps.Multiply(_meanWeights[idx], dMean[i]));
-                sum = _numOps.Add(sum, _numOps.Multiply(_logVarWeights[idx], dLogVar[i]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_meanWeights[idx], dMean[i]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_logVarWeights[idx], dLogVar[i]));
             }
             dHidden[j] = sum;
         }
@@ -515,36 +577,36 @@ internal class LSTMEncoderTensor<T>
         for (int i = 0; i < _hiddenSize; i++)
         {
             T h = hidden[i];
-            T tanhDeriv = _numOps.Subtract(_numOps.One, _numOps.Multiply(h, h));
-            dHidden[i] = _numOps.Multiply(dHidden[i], tanhDeriv);
+            T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(h, h));
+            dHidden[i] = NumOps.Multiply(dHidden[i], tanhDeriv);
         }
 
         // Gradients for encoder weights: dWeights = dHidden * input^T, dBias = dHidden
         for (int i = 0; i < _hiddenSize; i++)
         {
-            _biasGrad[i] = _numOps.Add(_biasGrad[i], dHidden[i]);
+            _biasGrad[i] = NumOps.Add(_biasGrad[i], dHidden[i]);
             for (int j = 0; j < Math.Min(input.Length, _inputSize); j++)
             {
                 int idx = i * _inputSize + j;
-                T grad = _numOps.Multiply(dHidden[i], input[j]);
-                _weightsGrad[idx] = _numOps.Add(_weightsGrad[idx], grad);
+                T grad = NumOps.Multiply(dHidden[i], input[j]);
+                _weightsGrad[idx] = NumOps.Add(_weightsGrad[idx], grad);
             }
         }
     }
 
     public void ResetGradients()
     {
-        for (int i = 0; i < _weightsGrad.Length; i++) _weightsGrad[i] = _numOps.Zero;
-        for (int i = 0; i < _biasGrad.Length; i++) _biasGrad[i] = _numOps.Zero;
-        for (int i = 0; i < _meanWeightsGrad.Length; i++) _meanWeightsGrad[i] = _numOps.Zero;
-        for (int i = 0; i < _meanBiasGrad.Length; i++) _meanBiasGrad[i] = _numOps.Zero;
-        for (int i = 0; i < _logVarWeightsGrad.Length; i++) _logVarWeightsGrad[i] = _numOps.Zero;
-        for (int i = 0; i < _logVarBiasGrad.Length; i++) _logVarBiasGrad[i] = _numOps.Zero;
+        for (int i = 0; i < _weightsGrad.Length; i++) _weightsGrad[i] = NumOps.Zero;
+        for (int i = 0; i < _biasGrad.Length; i++) _biasGrad[i] = NumOps.Zero;
+        for (int i = 0; i < _meanWeightsGrad.Length; i++) _meanWeightsGrad[i] = NumOps.Zero;
+        for (int i = 0; i < _meanBiasGrad.Length; i++) _meanBiasGrad[i] = NumOps.Zero;
+        for (int i = 0; i < _logVarWeightsGrad.Length; i++) _logVarWeightsGrad[i] = NumOps.Zero;
+        for (int i = 0; i < _logVarBiasGrad.Length; i++) _logVarBiasGrad[i] = NumOps.Zero;
     }
 
     public void ApplyGradients(T learningRate, int batchSize)
     {
-        T batchSizeT = _numOps.FromDouble(batchSize);
+        T batchSizeT = NumOps.FromDouble(batchSize);
 
         ApplyGradientToTensor(_weights, _weightsGrad, learningRate, batchSizeT);
         ApplyGradientToTensor(_bias, _biasGrad, learningRate, batchSizeT);
@@ -558,13 +620,13 @@ internal class LSTMEncoderTensor<T>
     {
         for (int i = 0; i < tensor.Length; i++)
         {
-            T avgGrad = _numOps.Divide(grad[i], batchSize);
-            T update = _numOps.Multiply(learningRate, avgGrad);
-            tensor[i] = _numOps.Subtract(tensor[i], update);
+            T avgGrad = NumOps.Divide(grad[i], batchSize);
+            T update = NumOps.Multiply(learningRate, avgGrad);
+            tensor[i] = NumOps.Subtract(tensor[i], update);
         }
     }
 
-    public void Serialize(BinaryWriter writer)
+    public override void Serialize(BinaryWriter writer)
     {
         WriteTensor(writer, _weights);
         WriteTensor(writer, _bias);
@@ -574,7 +636,7 @@ internal class LSTMEncoderTensor<T>
         WriteTensor(writer, _logVarBias);
     }
 
-    public void Deserialize(BinaryReader reader)
+    public override void Deserialize(BinaryReader reader)
     {
         _weights = ReadTensor(reader);
         _bias = ReadTensor(reader);
@@ -599,7 +661,7 @@ internal class LSTMEncoderTensor<T>
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)
-            writer.Write(_numOps.ToDouble(tensor[i]));
+            writer.Write(NumOps.ToDouble(tensor[i]));
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -615,7 +677,7 @@ internal class LSTMEncoderTensor<T>
         {
             double v = reader.ReadDouble();
             if (i < tensor.Length)
-                tensor[i] = _numOps.FromDouble(v);
+                tensor[i] = NumOps.FromDouble(v);
         }
         return tensor;
     }
@@ -624,9 +686,9 @@ internal class LSTMEncoderTensor<T>
 /// <summary>
 /// Tensor-based LSTM Decoder for VAE with proper backpropagation.
 /// </summary>
-internal class LSTMDecoderTensor<T>
+internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
     private readonly int _latentDim;
     private readonly int _outputSize;
     private readonly int _hiddenSize;
@@ -645,10 +707,52 @@ internal class LSTMDecoderTensor<T>
     private Tensor<T> _outputWeightsGrad;
     private Tensor<T> _outputBiasGrad;
 
-    public int ParameterCount => _weights.Length + _bias.Length +
+    public override int ParameterCount => _weights.Length + _bias.Length +
                                   _outputWeights.Length + _outputBias.Length;
 
+    private Tensor<T>? _lastLatent;
+    private Tensor<T>? _lastHidden;
+
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+
+    public override void ResetState() { ResetGradients(); _lastLatent = null; _lastHidden = null; }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        ApplyGradients(learningRate, 1);
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _outputSize }), "lstm_decoder_output");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        foreach (var t in new[] { _weights, _bias, _outputWeights, _outputBias })
+            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        _lastLatent = input;
+        var (output, hidden) = DecodeWithCache(input);
+        _lastHidden = hidden;
+        return output;
+    }
+
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        var hidden = _lastHidden ?? new Tensor<T>(new[] { _hiddenSize });
+        var latent = _lastLatent ?? new Tensor<T>(new[] { _latentDim });
+        return Backward(outputGradient, hidden, latent);
+    }
+
     public LSTMDecoderTensor(int latentDim, int outputSize, int hiddenSize)
+        : base(new[] { latentDim }, new[] { outputSize })
     {
         _latentDim = latentDim;
         _outputSize = outputSize;
@@ -675,7 +779,7 @@ internal class LSTMDecoderTensor<T>
     {
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         return tensor;
     }
 
@@ -695,7 +799,7 @@ internal class LSTMDecoderTensor<T>
             for (int j = 0; j < Math.Min(latent.Length, _latentDim); j++)
             {
                 int idx = i * _latentDim + j;
-                sum = _numOps.Add(sum, _numOps.Multiply(_weights[idx], latent[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_weights[idx], latent[j]));
             }
             hidden[i] = MathHelper.Tanh(sum);
         }
@@ -708,7 +812,7 @@ internal class LSTMDecoderTensor<T>
             for (int j = 0; j < _hiddenSize; j++)
             {
                 int idx = i * _hiddenSize + j;
-                sum = _numOps.Add(sum, _numOps.Multiply(_outputWeights[idx], hidden[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_outputWeights[idx], hidden[j]));
             }
             output[i] = sum;
         }
@@ -721,12 +825,12 @@ internal class LSTMDecoderTensor<T>
         // Gradients for output projection: dOutputWeights = dOutput * hidden^T, dOutputBias = dOutput
         for (int i = 0; i < _outputSize; i++)
         {
-            _outputBiasGrad[i] = _numOps.Add(_outputBiasGrad[i], dOutput[i]);
+            _outputBiasGrad[i] = NumOps.Add(_outputBiasGrad[i], dOutput[i]);
             for (int j = 0; j < _hiddenSize; j++)
             {
                 int idx = i * _hiddenSize + j;
-                T grad = _numOps.Multiply(dOutput[i], hidden[j]);
-                _outputWeightsGrad[idx] = _numOps.Add(_outputWeightsGrad[idx], grad);
+                T grad = NumOps.Multiply(dOutput[i], hidden[j]);
+                _outputWeightsGrad[idx] = NumOps.Add(_outputWeightsGrad[idx], grad);
             }
         }
 
@@ -734,11 +838,11 @@ internal class LSTMDecoderTensor<T>
         var dHidden = new Tensor<T>(new[] { _hiddenSize });
         for (int j = 0; j < _hiddenSize; j++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int i = 0; i < _outputSize; i++)
             {
                 int idx = i * _hiddenSize + j;
-                sum = _numOps.Add(sum, _numOps.Multiply(_outputWeights[idx], dOutput[i]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_outputWeights[idx], dOutput[i]));
             }
             dHidden[j] = sum;
         }
@@ -747,19 +851,19 @@ internal class LSTMDecoderTensor<T>
         for (int i = 0; i < _hiddenSize; i++)
         {
             T h = hidden[i];
-            T tanhDeriv = _numOps.Subtract(_numOps.One, _numOps.Multiply(h, h));
-            dHidden[i] = _numOps.Multiply(dHidden[i], tanhDeriv);
+            T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(h, h));
+            dHidden[i] = NumOps.Multiply(dHidden[i], tanhDeriv);
         }
 
         // Gradients for decoder weights: dWeights = dHidden * latent^T, dBias = dHidden
         for (int i = 0; i < _hiddenSize; i++)
         {
-            _biasGrad[i] = _numOps.Add(_biasGrad[i], dHidden[i]);
+            _biasGrad[i] = NumOps.Add(_biasGrad[i], dHidden[i]);
             for (int j = 0; j < Math.Min(latent.Length, _latentDim); j++)
             {
                 int idx = i * _latentDim + j;
-                T grad = _numOps.Multiply(dHidden[i], latent[j]);
-                _weightsGrad[idx] = _numOps.Add(_weightsGrad[idx], grad);
+                T grad = NumOps.Multiply(dHidden[i], latent[j]);
+                _weightsGrad[idx] = NumOps.Add(_weightsGrad[idx], grad);
             }
         }
 
@@ -767,11 +871,11 @@ internal class LSTMDecoderTensor<T>
         var dLatent = new Tensor<T>(new[] { _latentDim });
         for (int j = 0; j < _latentDim; j++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int i = 0; i < _hiddenSize; i++)
             {
                 int idx = i * _latentDim + j;
-                sum = _numOps.Add(sum, _numOps.Multiply(_weights[idx], dHidden[i]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_weights[idx], dHidden[i]));
             }
             dLatent[j] = sum;
         }
@@ -781,15 +885,15 @@ internal class LSTMDecoderTensor<T>
 
     public void ResetGradients()
     {
-        for (int i = 0; i < _weightsGrad.Length; i++) _weightsGrad[i] = _numOps.Zero;
-        for (int i = 0; i < _biasGrad.Length; i++) _biasGrad[i] = _numOps.Zero;
-        for (int i = 0; i < _outputWeightsGrad.Length; i++) _outputWeightsGrad[i] = _numOps.Zero;
-        for (int i = 0; i < _outputBiasGrad.Length; i++) _outputBiasGrad[i] = _numOps.Zero;
+        for (int i = 0; i < _weightsGrad.Length; i++) _weightsGrad[i] = NumOps.Zero;
+        for (int i = 0; i < _biasGrad.Length; i++) _biasGrad[i] = NumOps.Zero;
+        for (int i = 0; i < _outputWeightsGrad.Length; i++) _outputWeightsGrad[i] = NumOps.Zero;
+        for (int i = 0; i < _outputBiasGrad.Length; i++) _outputBiasGrad[i] = NumOps.Zero;
     }
 
     public void ApplyGradients(T learningRate, int batchSize)
     {
-        T batchSizeT = _numOps.FromDouble(batchSize);
+        T batchSizeT = NumOps.FromDouble(batchSize);
 
         ApplyGradientToTensor(_weights, _weightsGrad, learningRate, batchSizeT);
         ApplyGradientToTensor(_bias, _biasGrad, learningRate, batchSizeT);
@@ -801,13 +905,13 @@ internal class LSTMDecoderTensor<T>
     {
         for (int i = 0; i < tensor.Length; i++)
         {
-            T avgGrad = _numOps.Divide(grad[i], batchSize);
-            T update = _numOps.Multiply(learningRate, avgGrad);
-            tensor[i] = _numOps.Subtract(tensor[i], update);
+            T avgGrad = NumOps.Divide(grad[i], batchSize);
+            T update = NumOps.Multiply(learningRate, avgGrad);
+            tensor[i] = NumOps.Subtract(tensor[i], update);
         }
     }
 
-    public void Serialize(BinaryWriter writer)
+    public override void Serialize(BinaryWriter writer)
     {
         WriteTensor(writer, _weights);
         WriteTensor(writer, _bias);
@@ -815,7 +919,7 @@ internal class LSTMDecoderTensor<T>
         WriteTensor(writer, _outputBias);
     }
 
-    public void Deserialize(BinaryReader reader)
+    public override void Deserialize(BinaryReader reader)
     {
         _weights = ReadTensor(reader);
         _bias = ReadTensor(reader);
@@ -836,7 +940,7 @@ internal class LSTMDecoderTensor<T>
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)
-            writer.Write(_numOps.ToDouble(tensor[i]));
+            writer.Write(NumOps.ToDouble(tensor[i]));
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -852,7 +956,7 @@ internal class LSTMDecoderTensor<T>
         {
             double v = reader.ReadDouble();
             if (i < tensor.Length)
-                tensor[i] = _numOps.FromDouble(v);
+                tensor[i] = NumOps.FromDouble(v);
         }
         return tensor;
     }

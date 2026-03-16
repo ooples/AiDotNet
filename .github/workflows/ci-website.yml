@@ -1,0 +1,55 @@
+name: CI Website
+
+on:
+  pull_request:
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+      - '.github/workflows/ci-website.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-website-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build website
+        run: npx astro build
+        env:
+          VERCEL: '1'
+
+      - name: Verify build output
+        run: |
+          if [ ! -f dist/index.html ]; then
+            echo "::error::Build output missing dist/index.html"
+            exit 1
+          fi
+          PAGE_COUNT=$(find dist -name '*.html' | wc -l)
+          echo "Built $PAGE_COUNT pages"
+          if [ "$PAGE_COUNT" -lt 10 ]; then
+            echo "::error::Suspiciously low page count ($PAGE_COUNT). Expected at least 10."
+            exit 1
+          fi
+          echo "## Website Build" >> $GITHUB_STEP_SUMMARY
+          echo "- Pages built: $PAGE_COUNT" >> $GITHUB_STEP_SUMMARY

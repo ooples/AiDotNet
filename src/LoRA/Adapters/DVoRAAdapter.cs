@@ -559,7 +559,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
 
         // VeRA forward: (B * A * input) with scaling vectors
         // Compute: input * A (shared, frozen) → [batchSize, rank]
-        Matrix<T> afterA = inputMatrix.Multiply(_sharedMatrixA!);
+        Matrix<T> afterA = inputMatrix.Multiply((_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized.")));
 
         // Apply scaling vector b element-wise: afterA * diag(b) → [batchSize, rank]
         Matrix<T> afterB = new Matrix<T>(batchSize, rank);
@@ -572,7 +572,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute: afterB * B (shared, frozen) → [batchSize, outputSize]
-        Matrix<T> afterSharedB = afterB.Multiply(_sharedMatrixB!);
+        Matrix<T> afterSharedB = afterB.Multiply((_sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized.")));
         _lastIntermediate = afterSharedB.Clone();
 
         // Apply scaling vector d element-wise: afterSharedB * diag(d) → [batchSize, outputSize]
@@ -597,12 +597,12 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         {
             for (int j = 0; j < rank; j++)
             {
-                aScaled[i, j] = NumOps.Multiply(_sharedMatrixA![i, j], _scalingVectorB[j]);
+                aScaled[i, j] = NumOps.Multiply((_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized."))[i, j], _scalingVectorB[j]);
             }
         }
 
         // Compute intermediate = A_scaled * B → [inputSize, outputSize]
-        Matrix<T> intermediate = aScaled.Multiply(_sharedMatrixB!);
+        Matrix<T> intermediate = aScaled.Multiply((_sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized.")));
 
         // Apply d scaling and transpose to get weight delta [outputSize, inputSize]
         Matrix<T> veraWeightDelta = new Matrix<T>(outputSize, inputSize);
@@ -773,7 +773,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Propagate through shared B
-        Matrix<T> gradAfterB = gradAfterSharedB.Multiply(_sharedMatrixB!.Transpose());
+        Matrix<T> gradAfterB = gradAfterSharedB.Multiply((_sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized.")).Transpose());
 
         // Convert input to matrix for gradient computation
         Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
@@ -786,7 +786,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute intermediate: input * A
-        Matrix<T> afterA = inputMatrix.Multiply(_sharedMatrixA!);
+        Matrix<T> afterA = inputMatrix.Multiply((_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized.")));
 
         // Compute gradient for scaling vector b (VeRA component)
         _scalingVectorBGradient = new Vector<T>(rank);
@@ -812,7 +812,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Propagate through shared A
-        Matrix<T> veraInputGrad = gradAfterA.Multiply(_sharedMatrixA!.Transpose());
+        Matrix<T> veraInputGrad = gradAfterA.Multiply((_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized.")).Transpose());
 
         // Backward through base layer (if not frozen)
         Tensor<T> baseInputGrad;

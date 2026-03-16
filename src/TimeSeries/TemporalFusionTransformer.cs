@@ -184,6 +184,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
             var indices = Enumerable.Range(0, numSamples).OrderBy(_ => _random.Next()).ToList();
 
             for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)

@@ -125,4 +125,57 @@ public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public ILossFunction<T>? LossFunction { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the maximum absolute value allowed for predictions.
+    /// </summary>
+    /// <value>
+    /// A positive value to clamp predictions, or <c>null</c> (default) to auto-scale
+    /// based on training data range (1000x the maximum observed absolute value).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// This guards against numerical overflow in recursive/autoregressive forecasting loops
+    /// where unstable coefficients can cause predictions to diverge exponentially.
+    /// </para>
+    /// <para>
+    /// Priority chain:
+    /// <list type="number">
+    /// <item>User-specified value (this property) — for domain-specific bounds</item>
+    /// <item>Auto-scaled from training data (1000x max |y|) — adapts to dataset scale</item>
+    /// <item>Fallback to 1e15 — when no training data is available</item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> Leave this as null (the default) and the model will
+    /// automatically determine a reasonable limit based on your training data. Only set
+    /// this if you know your predictions should stay within specific bounds (e.g., set to
+    /// 100 for percentage data that should never exceed 100).</para>
+    /// </remarks>
+    public double? MaxPredictionAbsValue { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the maximum wall-clock training time in seconds.
+    /// </summary>
+    /// <value>Maximum training time in seconds, defaulting to 0 (no limit).</value>
+    /// <remarks>
+    /// <para>
+    /// When set to a positive value, this provides a safety net to prevent runaway training.
+    /// If training exceeds this time, a <see cref="OperationCanceledException"/> is thrown.
+    /// This composes with any <see cref="CancellationToken"/> passed by the caller — whichever fires first wins.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is an optional safety limit on how long training can take.
+    /// The default is 0, meaning no time limit. Set to a positive value (e.g., 300 for 5 minutes)
+    /// if you want to prevent training from running indefinitely. This is useful for large datasets
+    /// or complex models where training might hang.</para>
+    /// </remarks>
+    private int _maxTrainingTimeSeconds;
+
+    public int MaxTrainingTimeSeconds
+    {
+        get => _maxTrainingTimeSeconds;
+        set => _maxTrainingTimeSeconds = value < 0
+            ? throw new ArgumentOutOfRangeException(nameof(MaxTrainingTimeSeconds),
+                value, "MaxTrainingTimeSeconds cannot be negative. Use 0 for no limit.")
+            : value;
+    }
 }

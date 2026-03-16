@@ -194,7 +194,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
             }
 
-            _featureScores![j] = chiSq;
+            (_featureScores ?? throw new InvalidOperationException("Feature scores not computed."))[j] = chiSq;
         }
     }
 
@@ -224,7 +224,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 syy += yDiff * yDiff;
             }
 
-            _featureScores![j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+            (_featureScores ?? throw new InvalidOperationException("Feature scores not computed."))[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
         }
     }
 

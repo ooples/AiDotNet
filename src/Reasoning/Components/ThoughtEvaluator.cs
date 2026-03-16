@@ -116,9 +116,10 @@ Evaluate the thought:";
             string jsonContent = ExtractJsonFromResponse(response);
             var root = JObject.Parse(jsonContent);
 
-            if (root["score"] != null)
+            var scoreToken = root["score"];
+            if (scoreToken != null)
             {
-                double score = root["score"]!.Value<double>();
+                double score = scoreToken.Value<double>();
                 return MathHelper.Clamp(score, 0.0, 1.0);
             }
         }

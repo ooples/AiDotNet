@@ -232,7 +232,7 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double sum = 0;
                 for (int f = 0; f < p; f++)
                 {
-                    sum += _components![i, f] * _components[j, f];
+                    sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[i, f] * _components[j, f];
                 }
                 gram[i, j] = sum;
                 if (i == j)
@@ -254,7 +254,7 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double sum = 0;
                 for (int j = 0; j < p; j++)
                 {
-                    sum += data[i, j] * _components![c, j];
+                    sum += data[i, j] * (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j];
                 }
                 dataProj[i, c] = sum;
             }
@@ -291,7 +291,7 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     {
                         if (cc != c)
                         {
-                            residual[i, j] -= codes[i, cc] * _components![cc, j];
+                            residual[i, j] -= codes[i, cc] * (_components ?? throw new InvalidOperationException("Components not initialized."))[cc, j];
                         }
                     }
                 }
@@ -320,14 +320,14 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
                 // Soft thresholding
                 double newValue = SoftThreshold(correlation / codesSquared, _alpha / codesSquared);
-                _components![c, j] = newValue;
+                (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] = newValue;
             }
 
             // Normalize component
             double norm = 0;
             for (int j = 0; j < p; j++)
             {
-                norm += _components![c, j] * _components[c, j];
+                norm += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * _components[c, j];
             }
             norm = Math.Sqrt(norm);
 
@@ -335,7 +335,7 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             {
                 for (int j = 0; j < p; j++)
                 {
-                    _components![c, j] /= norm;
+                    (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] /= norm;
                 }
             }
         }
@@ -367,7 +367,7 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double reconstructed = 0;
                 for (int c = 0; c < k; c++)
                 {
-                    reconstructed += codes[i, c] * _components![c, j];
+                    reconstructed += codes[i, c] * (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j];
                 }
                 double diff = data[i, j] - reconstructed;
                 error += diff * diff;

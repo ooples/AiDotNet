@@ -162,7 +162,7 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 selected.Add(bestFeature);
                 available.Remove(bestFeature);
                 currentScore = bestScore;
-                _wrapperScores![bestFeature] = bestScore;
+                (_wrapperScores ?? throw new InvalidOperationException("Wrapper scores not computed."))[bestFeature] = bestScore;
             }
             else
             {
@@ -208,7 +208,7 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         foreach (int j in selected)
-            _wrapperScores![j] = _filterScores![j];
+            (_wrapperScores ?? throw new InvalidOperationException("Wrapper scores not computed."))[j] = (_filterScores ?? throw new InvalidOperationException("Filter scores not computed."))[j];
 
         return selected;
     }
@@ -237,7 +237,7 @@ public class FilterWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Use sum of correlations as proxy for R²
         double score = 0;
         foreach (int j in subset)
-            score += _filterScores![j];
+            score += (_filterScores ?? throw new InvalidOperationException("Filter scores not computed."))[j];
 
         return score / subset.Count;
     }

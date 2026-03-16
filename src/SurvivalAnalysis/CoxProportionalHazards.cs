@@ -58,7 +58,7 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
     /// <summary>
     /// The estimated coefficients (log hazard ratios).
     /// </summary>
-    private Vector<T>? _coefficients;
+    private Vector<T> _coefficients = new Vector<T>(0);
 
     /// <summary>
     /// The learning rate for gradient descent.
@@ -238,7 +238,7 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
             double linearPred = 0;
             for (int j = 0; j < p; j++)
             {
-                linearPred += NumOps.ToDouble(_coefficients![j]) * NumOps.ToDouble(x[i, j]);
+                linearPred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(x[i, j]);
             }
             riskScores[i] = Math.Exp(Math.Min(linearPred, 700)); // Prevent overflow
         }
@@ -261,7 +261,7 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
                 double linearPred = 0;
                 for (int j = 0; j < p; j++)
                 {
-                    linearPred += NumOps.ToDouble(_coefficients![j]) * NumOps.ToDouble(x[i, j]);
+                    linearPred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(x[i, j]);
                 }
                 logLik += linearPred - Math.Log(sumRisk);
 
@@ -299,7 +299,7 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
             double linearPred = 0;
             for (int j = 0; j < x.Columns; j++)
             {
-                linearPred += NumOps.ToDouble(_coefficients![j]) * NumOps.ToDouble(x[i, j]);
+                linearPred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(x[i, j]);
             }
             riskScores[i] = Math.Exp(Math.Min(linearPred, 700));
         }
@@ -404,7 +404,7 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
             double linearPred = 0;
             for (int j = 0; j < x.Columns; j++)
             {
-                linearPred += NumOps.ToDouble(_coefficients![j]) * NumOps.ToDouble(x[i, j]);
+                linearPred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(x[i, j]);
             }
             result[i] = NumOps.FromDouble(Math.Exp(Math.Min(linearPred, 700)));
         }

@@ -97,7 +97,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
         for (int i = 0; i < _options.NumStacks; i++)
         {
-            int poolingSize = _options.PoolingKernelSizes![i];
+            int poolingSize = _options.PoolingKernelSizes[i];
             int downsampledLength = _options.LookbackWindow / poolingSize;
 
             var stack = new NHiTSStackTensor<T>(
@@ -124,6 +124,8 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+
             // Shuffle training order for each epoch
             var indices = Enumerable.Range(0, numSamples).OrderBy(_ => _random.Next()).ToList();
 
@@ -137,6 +139,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
                 for (int bi = 0; bi < batchSize; bi++)
                 {
+                    if (bi % 8 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
                     int i = indices[batchStart + bi];
                     var input = ConvertRowToTensor(x, i);
                     T target = y[i];
@@ -176,7 +179,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         foreach (var stack in _stacks)
         {
             var pooledInput = ApplyPoolingTensor(input, stack.PoolingSize);
-            var stackOutput = stack.Forward(pooledInput);
+            var stackOutput = stack.ForwardInternal(pooledInput);
             predictions.Add(stackOutput);
         }
 
@@ -381,7 +384,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         {
             var stack = _stacks[stackIdx];
             var pooledInput = ApplyPoolingTensor(inputTensor, stack.PoolingSize);
-            var stackForecast = stack.Forward(pooledInput);
+            var stackForecast = stack.ForwardInternal(pooledInput);
             var interpolatedForecast = ApplyInterpolationTensor(stackForecast, _options.ForecastHorizon);
 
             for (int i = 0; i < _options.ForecastHorizon; i++)
@@ -468,9 +471,8 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 /// <summary>
 /// Represents a single stack in the N-HiTS architecture using Tensor operations.
 /// </summary>
-internal class NHiTSStackTensor<T>
+internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly int _inputLength;
     private readonly int _outputLength;
     private readonly int _hiddenSize;
@@ -487,7 +489,7 @@ internal class NHiTSStackTensor<T>
 
     public int PoolingSize { get; }
 
-    public int ParameterCount
+    public override int ParameterCount
     {
         get
         {
@@ -500,9 +502,91 @@ internal class NHiTSStackTensor<T>
         }
     }
 
-    public NHiTSStackTensor(int inputLength, int outputLength, int hiddenSize, int numLayers, int numBlocks, int poolingSize, int seed = 42)
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => _weights.Count > 0;
+    public override void ResetState() { _layerInputs.Clear(); _layerOutputs.Clear(); _lastForwardInput = null; }
+    public override void UpdateParameters(T learningRate) { /* handled by ApplyGradients */ }
+
+    /// <summary>
+    /// Exports the NHiTS stack as a computation graph for JIT compilation.
+    /// The graph represents the MLP forward pass: input -> [W*x+b -> ReLU]* -> W*x+b -> output.
+    /// </summary>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        if (_weights.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Cannot export computation graph: NHiTS stack weights are not initialized.");
+        }
+
+        // Create input node
+        var inputNode = Autodiff.TensorOperations<T>.Variable(
+            new Tensor<T>(new[] { _inputLength }), "nhits_input", requiresGradient: false);
+        nodes.Add(inputNode);
+
+        var x = inputNode;
+
+        for (int layer = 0; layer < _weights.Count; layer++)
+        {
+            // Weights and biases as constant nodes (cloned to decouple from mutable state)
+            var weightNode = Autodiff.TensorOperations<T>.Constant(
+                _weights[layer].Clone(), $"nhits_fc{layer}_weight");
+            var biasNode = Autodiff.TensorOperations<T>.Constant(
+                _biases[layer].Clone(), $"nhits_fc{layer}_bias");
+
+            // Linear transformation: y = W*x + b
+            var linear = Autodiff.TensorOperations<T>.MatrixVectorMultiply(weightNode, x);
+            linear = Autodiff.TensorOperations<T>.Add(linear, biasNode);
+
+            // ReLU activation for all layers except the output layer
+            if (layer < _weights.Count - 1)
+            {
+                x = Autodiff.TensorOperations<T>.ReLU(linear);
+            }
+            else
+            {
+                x = linear;
+            }
+        }
+
+        return x;
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var allParams = new List<T>();
+        foreach (var w in _weights)
+            for (int i = 0; i < w.Length; i++) allParams.Add(w[i]);
+        foreach (var b in _biases)
+            for (int i = 0; i < b.Length; i++) allParams.Add(b[i]);
+        return new Vector<T>(allParams.ToArray());
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int idx = 0;
+        foreach (var w in _weights)
+        {
+            for (int i = 0; i < w.Length; i++)
+                w[i] = parameters[idx++];
+        }
+        foreach (var b in _biases)
+        {
+            for (int i = 0; i < b.Length; i++)
+                b[i] = parameters[idx++];
+        }
+    }
+
+    public NHiTSStackTensor(int inputLength, int outputLength, int hiddenSize, int numLayers, int numBlocks, int poolingSize, int seed = 42)
+        : base(new[] { inputLength }, new[] { outputLength })
+    {
         _inputLength = inputLength;
         _outputLength = outputLength;
         _hiddenSize = hiddenSize;
@@ -545,12 +629,20 @@ internal class NHiTSStackTensor<T>
         int total = tensor.Length;
         for (int i = 0; i < total; i++)
         {
-            tensor[i] = _numOps.FromDouble((_random.NextDouble() * 2 - 1) * stddev);
+            tensor[i] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * stddev);
         }
         return tensor;
     }
 
-    public Tensor<T> Forward(Tensor<T> input)
+    private Tensor<T>? _lastForwardInput;
+
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        _lastForwardInput = input;
+        return ForwardInternal(input);
+    }
+
+    public Tensor<T> ForwardInternal(Tensor<T> input)
     {
         _layerInputs.Clear();
         _layerOutputs.Clear();
@@ -587,7 +679,7 @@ internal class NHiTSStackTensor<T>
                 T sum = bias[i];
                 for (int j = 0; j < Math.Min(x.Shape[0], inSize); j++)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(weight[i, j], x[j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(weight[i, j], x[j]));
                 }
                 output[i] = sum;
             }
@@ -598,7 +690,7 @@ internal class NHiTSStackTensor<T>
                 var activated = new Tensor<T>([outSize]);
                 for (int i = 0; i < outSize; i++)
                 {
-                    activated[i] = _numOps.GreaterThan(output[i], _numOps.Zero) ? output[i] : _numOps.Zero;
+                    activated[i] = NumOps.GreaterThan(output[i], NumOps.Zero) ? output[i] : NumOps.Zero;
                 }
                 _layerOutputs.Add(output.Clone()); // Store pre-activation for backprop
                 x = activated;
@@ -618,6 +710,18 @@ internal class NHiTSStackTensor<T>
     /// </summary>
     /// <param name="outputGradient">Tensor of gradients for each output (multi-horizon forecast).</param>
     /// <param name="originalInput">The original input tensor (unused but kept for API consistency).</param>
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        var input = _lastForwardInput ?? new Tensor<T>(new[] { _inputLength });
+        var gradients = Backward(outputGradient, input);
+
+        // Return the input gradient computed by the internal backward pass
+        if (gradients.TryGetValue("input_gradient", out var inputGrad))
+            return inputGrad;
+
+        return new Tensor<T>(new[] { _inputLength });
+    }
+
     public Dictionary<string, Tensor<T>> Backward(Tensor<T> outputGradient, Tensor<T> originalInput)
     {
         var gradients = new Dictionary<string, Tensor<T>>();
@@ -650,9 +754,9 @@ internal class NHiTSStackTensor<T>
             {
                 for (int i = 0; i < delta.Shape[0] && i < layerOutput.Shape[0]; i++)
                 {
-                    if (!_numOps.GreaterThan(layerOutput[i], _numOps.Zero))
+                    if (!NumOps.GreaterThan(layerOutput[i], NumOps.Zero))
                     {
-                        delta[i] = _numOps.Zero;
+                        delta[i] = NumOps.Zero;
                     }
                 }
             }
@@ -663,7 +767,7 @@ internal class NHiTSStackTensor<T>
             {
                 for (int j = 0; j < inSize && j < layerInput.Shape[0]; j++)
                 {
-                    weightGrad[i, j] = _numOps.Multiply(delta[i], layerInput[j]);
+                    weightGrad[i, j] = NumOps.Multiply(delta[i], layerInput[j]);
                 }
             }
             gradients[$"weight_{layer}"] = weightGrad;
@@ -676,27 +780,33 @@ internal class NHiTSStackTensor<T>
             }
             gradients[$"bias_{layer}"] = biasGrad;
 
-            // Compute input gradient for next layer: weight^T * delta
+            // Compute input gradient: weight^T * delta
+            var newDelta = new Tensor<T>([inSize]);
+            for (int j = 0; j < inSize; j++)
+            {
+                T sum = NumOps.Zero;
+                for (int i = 0; i < outSize && i < delta.Shape[0]; i++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(weight[i, j], delta[i]));
+                }
+                newDelta[j] = sum;
+            }
+
             if (layer > 0)
             {
-                var newDelta = new Tensor<T>([inSize]);
-                for (int j = 0; j < inSize; j++)
-                {
-                    T sum = _numOps.Zero;
-                    for (int i = 0; i < outSize && i < delta.Shape[0]; i++)
-                    {
-                        sum = _numOps.Add(sum, _numOps.Multiply(weight[i, j], delta[i]));
-                    }
-                    newDelta[j] = sum;
-                }
                 delta = newDelta;
+            }
+            else
+            {
+                // Store the input gradient for the Backward(Tensor<T>) override
+                gradients["input_gradient"] = newDelta;
             }
         }
 
         return gradients;
     }
 
-    public IEnumerable<string> GetParameterNames()
+    public override IEnumerable<string> GetParameterNames()
     {
         for (int i = 0; i < _weights.Count; i++)
         {
@@ -715,7 +825,7 @@ internal class NHiTSStackTensor<T>
                 var weight = _weights[idx];
                 for (int i = 0; i < weight.Length && i < gradient.Length; i++)
                 {
-                    weight[i] = _numOps.Subtract(weight[i], gradient[i]);
+                    weight[i] = NumOps.Subtract(weight[i], gradient[i]);
                 }
             }
         }
@@ -727,13 +837,13 @@ internal class NHiTSStackTensor<T>
                 var bias = _biases[idx];
                 for (int i = 0; i < bias.Length && i < gradient.Length; i++)
                 {
-                    bias[i] = _numOps.Subtract(bias[i], gradient[i]);
+                    bias[i] = NumOps.Subtract(bias[i], gradient[i]);
                 }
             }
         }
     }
 
-    public void Serialize(BinaryWriter writer)
+    public override void Serialize(BinaryWriter writer)
     {
         writer.Write(_inputLength);
         writer.Write(_outputLength);
@@ -762,7 +872,7 @@ internal class NHiTSStackTensor<T>
         }
     }
 
-    public void Deserialize(BinaryReader reader)
+    public override void Deserialize(BinaryReader reader)
     {
         // Skip reading dimensions as they should match constructor
         reader.ReadInt32(); // inputLength
@@ -785,7 +895,7 @@ internal class NHiTSStackTensor<T>
             {
                 double v = reader.ReadDouble();
                 if (w < _weights.Count && i < _weights[w].Length)
-                    _weights[w][i] = _numOps.FromDouble(v);
+                    _weights[w][i] = NumOps.FromDouble(v);
             }
         }
 
@@ -803,7 +913,7 @@ internal class NHiTSStackTensor<T>
             {
                 double v = reader.ReadDouble();
                 if (b < _biases.Count && i < _biases[b].Length)
-                    _biases[b][i] = _numOps.FromDouble(v);
+                    _biases[b][i] = NumOps.FromDouble(v);
             }
         }
     }

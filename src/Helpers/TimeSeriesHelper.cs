@@ -69,7 +69,13 @@ public static class TimeSeriesHelper<T>
             Y[i - p] = y[i];
         }
 
-        return MatrixSolutionHelper.SolveLinearSystem(X, Y, decompositionType);
+        var coefficients = MatrixSolutionHelper.SolveLinearSystem(X, Y, decompositionType);
+
+        // Enforce stationarity: |a1| + |a2| + ... + |ap| < 1 is sufficient
+        // (though not necessary) for stationarity. See: #991
+        EnforceCoefficientStability(coefficients);
+
+        return coefficients;
     }
 
     /// <summary>
@@ -121,6 +127,10 @@ public static class TimeSeriesHelper<T>
         {
             maCoefficients[i] = CalculateAutoCorrelation(residuals, i + 1);
         }
+
+        // Enforce invertibility: |sum| < 1 for well-defined AR(infinity) representation.
+        // See: #991
+        EnforceCoefficientStability(maCoefficients);
 
         return maCoefficients;
     }
@@ -184,5 +194,53 @@ public static class TimeSeriesHelper<T>
         }
 
         return _numOps.Divide(sum, sumSquared);
+    }
+
+    /// <summary>
+    /// Enforces coefficient stability by sanitizing NaN/Infinity values and scaling
+    /// coefficients when their absolute sum approaches or exceeds 1.
+    /// </summary>
+    /// <param name="coefficients">The coefficient vector to stabilize (modified in-place).</param>
+    /// <param name="triggerThreshold">Absolute sum threshold that triggers scaling (default 0.99).</param>
+    /// <param name="targetSum">Target absolute sum after scaling (default 0.95, providing a stability margin).</param>
+    /// <remarks>
+    /// <para>
+    /// The condition |c1| + |c2| + ... + |cp| &lt; 1 is a sufficient (though not necessary)
+    /// condition for both AR stationarity and MA invertibility. When the sum approaches 1,
+    /// the model becomes unstable and predictions diverge exponentially.
+    /// </para>
+    /// <para>
+    /// This method first replaces NaN/Infinity coefficients with zero, then scales all
+    /// coefficients proportionally if their absolute sum exceeds <paramref name="triggerThreshold"/>.
+    /// </para>
+    /// </remarks>
+    private static void EnforceCoefficientStability(
+        Vector<T> coefficients,
+        double triggerThreshold = 0.99,
+        double targetSum = 0.95)
+    {
+        double absSum = 0;
+        for (int i = 0; i < coefficients.Length; i++)
+        {
+            var val = _numOps.ToDouble(coefficients[i]);
+            if (double.IsNaN(val) || double.IsInfinity(val))
+            {
+                coefficients[i] = _numOps.Zero;
+            }
+            else
+            {
+                absSum += Math.Abs(val);
+            }
+        }
+
+        if (absSum >= triggerThreshold && absSum > 0)
+        {
+            double scaleFactor = targetSum / absSum;
+            for (int i = 0; i < coefficients.Length; i++)
+            {
+                var val = _numOps.ToDouble(coefficients[i]);
+                coefficients[i] = _numOps.FromDouble(val * scaleFactor);
+            }
+        }
     }
 }

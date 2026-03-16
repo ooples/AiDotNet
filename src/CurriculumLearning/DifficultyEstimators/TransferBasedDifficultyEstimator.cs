@@ -129,7 +129,7 @@ public class TransferBasedDifficultyEstimator<T, TInput, TOutput> : DifficultyEs
         TOutput expectedOutput,
         IFullModel<T, TInput, TOutput> studentModel)
     {
-        var teacherPrediction = _teacherModel!.Predict(input);
+        var teacherPrediction = (_teacherModel ?? throw new InvalidOperationException("Teacher model not set.")).Predict(input);
         var studentPrediction = studentModel.Predict(input);
 
         // Convert to vectors for loss calculation
@@ -157,7 +157,7 @@ public class TransferBasedDifficultyEstimator<T, TInput, TOutput> : DifficultyEs
     /// </summary>
     private T CalculateTeacherLossDifficulty(TInput input, TOutput expectedOutput)
     {
-        var teacherPrediction = _teacherModel!.Predict(input);
+        var teacherPrediction = (_teacherModel ?? throw new InvalidOperationException("Teacher model not set.")).Predict(input);
         var expectedVector = ConversionsHelper.ConvertToVector<T, TOutput>(expectedOutput);
         var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(teacherPrediction);
         return _teacherModel.DefaultLossFunction.CalculateLoss(predictionVector, expectedVector);
@@ -171,7 +171,7 @@ public class TransferBasedDifficultyEstimator<T, TInput, TOutput> : DifficultyEs
         TOutput expectedOutput,
         IFullModel<T, TInput, TOutput> studentModel)
     {
-        var teacherConfidence = GetModelConfidence(_teacherModel!, input);
+        var teacherConfidence = GetModelConfidence((_teacherModel ?? throw new InvalidOperationException("Teacher model not set.")), input);
         var studentConfidence = GetModelConfidence(studentModel, input);
 
         // Higher teacher confidence + lower student confidence = learnable sample

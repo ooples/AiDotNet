@@ -560,6 +560,18 @@ public class CodeGenerator
         return method;
     }
 
+    private static MethodInfo GetRequiredMethod(Type type, string methodName)
+    {
+        return type.GetMethod(methodName)
+            ?? throw new InvalidOperationException($"Method '{methodName}' not found on type '{type.Name}'.");
+    }
+
+    private static PropertyInfo GetRequiredProperty(Type type, string propertyName)
+    {
+        return type.GetProperty(propertyName)
+            ?? throw new InvalidOperationException($"Property '{propertyName}' not found on type '{type.Name}'.");
+    }
+
     // ========== Backward Operation Code Generators ==========
 
     /// <summary>
@@ -567,7 +579,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradAccumulateOp<T>(ParameterExpression[] inputs)
     {
-        var method = typeof(GradientOps).GetMethod("AccumulateGrad")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "AccumulateGrad").MakeGenericMethod(typeof(T));
         var inputArray = Expression.NewArrayInit(typeof(Tensor<T>), inputs);
         return Expression.Call(method, inputArray);
     }
@@ -577,7 +589,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradAddOp<T>(ParameterExpression[] inputs, int inputIndex)
     {
-        var method = typeof(GradientOps).GetMethod("GradAdd")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradAdd").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], Expression.Constant(inputIndex));
     }
 
@@ -586,7 +598,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradSubtractOp<T>(ParameterExpression[] inputs, int inputIndex)
     {
-        var method = typeof(GradientOps).GetMethod("GradSubtract")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradSubtract").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], Expression.Constant(inputIndex));
     }
 
@@ -595,7 +607,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradElementwiseMultiplyOp<T>(ParameterExpression[] inputs, int inputIndex)
     {
-        var method = typeof(GradientOps).GetMethod("GradElementwiseMultiply")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradElementwiseMultiply").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1], Expression.Constant(inputIndex));
     }
 
@@ -604,7 +616,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradMatMulLeftOp<T>(ParameterExpression[] inputs)
     {
-        var method = typeof(GradientOps).GetMethod("GradMatMulLeft")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradMatMulLeft").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1]);
     }
 
@@ -613,7 +625,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradMatMulRightOp<T>(ParameterExpression[] inputs)
     {
-        var method = typeof(GradientOps).GetMethod("GradMatMulRight")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradMatMulRight").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1]);
     }
 
@@ -622,7 +634,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradReLUOp<T>(ParameterExpression[] inputs)
     {
-        var method = typeof(GradientOps).GetMethod("GradReLU")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradReLU").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1]);
     }
 
@@ -631,7 +643,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradSigmoidOp<T>(ParameterExpression[] inputs)
     {
-        var method = typeof(GradientOps).GetMethod("GradSigmoid")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradSigmoid").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1]);
     }
 
@@ -640,7 +652,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradTanhOp<T>(ParameterExpression[] inputs)
     {
-        var method = typeof(GradientOps).GetMethod("GradTanh")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradTanh").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1]);
     }
 
@@ -649,7 +661,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradExpOp<T>(ParameterExpression[] inputs)
     {
-        var method = typeof(GradientOps).GetMethod("GradExp")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradExp").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1]);
     }
 
@@ -658,7 +670,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradLogOp<T>(ParameterExpression[] inputs)
     {
-        var method = typeof(GradientOps).GetMethod("GradLog")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradLog").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1]);
     }
 
@@ -667,7 +679,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradSoftmaxOp<T>(ParameterExpression[] inputs, int axis)
     {
-        var method = typeof(GradientOps).GetMethod("GradSoftmax")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradSoftmax").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1], Expression.Constant(axis));
     }
 
@@ -676,7 +688,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradConv2DOp<T>(ParameterExpression[] inputs, Operations.GradConv2DOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradConv2D")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradConv2D").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0], // gradOutput
             inputs[1], // input or filters depending on InputIndex
@@ -690,7 +702,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradMaxPool2DOp<T>(ParameterExpression[] inputs, Operations.GradMaxPool2DOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradMaxPool2D")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradMaxPool2D").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0], // gradOutput
             inputs[1], // forward input
@@ -703,7 +715,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradAvgPool2DOp<T>(ParameterExpression[] inputs, Operations.GradAvgPool2DOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradAvgPool2D")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradAvgPool2D").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0], // gradOutput
             Expression.Constant(op.PoolSize),
@@ -716,7 +728,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradBatchNormOp<T>(ParameterExpression[] inputs, Operations.GradBatchNormOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradBatchNorm")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradBatchNorm").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0], // gradOutput
             inputs[1], // normalized input or gamma/beta
@@ -733,7 +745,7 @@ public class CodeGenerator
     /// </remarks>
     private Expression GenerateGRUCellOp<T>(ParameterExpression[] inputs, GRUCellOp op)
     {
-        var method = typeof(RecurrentOps).GetMethod("GRUCell")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(RecurrentOps), "GRUCell").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0], // x (input)
             inputs[1], // h (hidden state)
@@ -753,7 +765,7 @@ public class CodeGenerator
     /// </remarks>
     private Expression GenerateLSTMCellOp<T>(ParameterExpression[] inputs, LSTMCellOp op)
     {
-        var method = typeof(RecurrentOps).GetMethod("LSTMCell")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(RecurrentOps), "LSTMCell").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0], // x (input)
             inputs[1], // h (hidden state)
@@ -772,7 +784,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradLayerNormOp<T>(ParameterExpression[] inputs, Operations.GradLayerNormOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradLayerNorm")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradLayerNorm").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0], // gradOutput
             inputs[1], // saved tensor
@@ -786,7 +798,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradReshapeOp<T>(ParameterExpression[] inputs, Operations.GradReshapeOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradReshape")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradReshape").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], Expression.Constant(op.OriginalShape));
     }
 
@@ -795,7 +807,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradTransposeOp<T>(ParameterExpression[] inputs, Operations.GradTransposeOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradTranspose")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradTranspose").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], Expression.Constant(op.Axes, typeof(int[])));
     }
 
@@ -804,7 +816,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradConcatOp<T>(ParameterExpression[] inputs, Operations.GradConcatOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradConcat")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradConcat").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0],
             Expression.Constant(op.Axis),
@@ -817,7 +829,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradSplitOp<T>(ParameterExpression[] inputs, Operations.GradSplitOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradSplit")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradSplit").MakeGenericMethod(typeof(T));
         var inputArray = Expression.NewArrayInit(typeof(Tensor<T>), inputs);
         return Expression.Call(method, inputArray, Expression.Constant(op.Axis));
     }
@@ -830,13 +842,13 @@ public class CodeGenerator
         if (op.InputIndex == 0)
         {
             // Gradient for numerator
-            var method = typeof(GradientOps).GetMethod("GradDivideNumerator")!.MakeGenericMethod(typeof(T));
+            var method = GetRequiredMethod(typeof(GradientOps), "GradDivideNumerator").MakeGenericMethod(typeof(T));
             return Expression.Call(method, inputs[0], inputs[1]);
         }
         else
         {
             // Gradient for denominator
-            var method = typeof(GradientOps).GetMethod("GradDivideDenominator")!.MakeGenericMethod(typeof(T));
+            var method = GetRequiredMethod(typeof(GradientOps), "GradDivideDenominator").MakeGenericMethod(typeof(T));
             return Expression.Call(method, inputs[0], inputs[1], inputs[2]);
         }
     }
@@ -846,7 +858,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradPowerOp<T>(ParameterExpression[] inputs, Operations.GradPowerOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradPower")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradPower").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1], Expression.Constant(op.Exponent));
     }
 
@@ -855,7 +867,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradSqrtOp<T>(ParameterExpression[] inputs)
     {
-        var method = typeof(GradientOps).GetMethod("GradSqrt")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradSqrt").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1]);
     }
 
@@ -864,7 +876,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradSumOp<T>(ParameterExpression[] inputs, Operations.GradSumOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradSum")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradSum").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0],
             Expression.Constant(op.OriginalShape),
@@ -876,7 +888,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradMeanOp<T>(ParameterExpression[] inputs, Operations.GradMeanOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradMean")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradMean").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0],
             Expression.Constant(op.OriginalShape),
@@ -888,7 +900,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradSliceOp<T>(ParameterExpression[] inputs, Operations.GradSliceOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradSlice")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradSlice").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0],
             Expression.Constant(op.OriginalShape),
@@ -900,7 +912,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradPadOp<T>(ParameterExpression[] inputs, Operations.GradPadOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradPad")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradPad").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], Expression.Constant(op.Padding));
     }
 
@@ -909,7 +921,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradDropoutOp<T>(ParameterExpression[] inputs, Operations.GradDropoutOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradDropout")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradDropout").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1], Expression.Constant(op.Probability));
     }
 
@@ -918,7 +930,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradEmbeddingOp<T>(ParameterExpression[] inputs, Operations.GradEmbeddingOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradEmbedding")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradEmbedding").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1], Expression.Constant(op.EmbeddingShape));
     }
 
@@ -927,7 +939,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradGatherOp<T>(ParameterExpression[] inputs, Operations.GradGatherOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradGather")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradGather").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0],
             inputs[1],
@@ -940,7 +952,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradLeakyReLUOp<T>(ParameterExpression[] inputs, Operations.GradLeakyReLUOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradLeakyReLU")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradLeakyReLU").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1], Expression.Constant(op.Alpha));
     }
 
@@ -949,7 +961,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradGELUOp<T>(ParameterExpression[] inputs, Operations.GradGELUOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradGELU")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradGELU").MakeGenericMethod(typeof(T));
         return Expression.Call(method, inputs[0], inputs[1], Expression.Constant(op.Approximate));
     }
 
@@ -958,7 +970,7 @@ public class CodeGenerator
     /// </summary>
     private Expression GenerateGradBroadcastOp<T>(ParameterExpression[] inputs, Operations.GradBroadcastOp op)
     {
-        var method = typeof(GradientOps).GetMethod("GradBroadcast")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(GradientOps), "GradBroadcast").MakeGenericMethod(typeof(T));
         return Expression.Call(method,
             inputs[0],
             Expression.Constant(op.OriginalShape),
@@ -978,17 +990,18 @@ public class CodeGenerator
     /// </remarks>
     private Expression GenerateUnrolledSequenceOp<T>(ParameterExpression[] inputs, Operations.UnrolledSequenceOp op)
     {
-        var method = typeof(UnrolledOps).GetMethod("ExecuteUnrolledSequence")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(UnrolledOps), "ExecuteUnrolledSequence").MakeGenericMethod(typeof(T));
         var operationsArray = Expression.Constant(op.Operations.ToArray());
         // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
-        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var valueProperty = GetRequiredProperty(typeof(ComputationNode<T>), "Value");
         var inputValue = Expression.Property(inputs[0], valueProperty);
         var tensorResult = Expression.Call(method,
             inputValue,
             operationsArray,
             Expression.Constant(op.UnrollFactor));
         // Wrap the Tensor<T> result back into ComputationNode<T>
-        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        var variableMethod = (typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })
+            ?? throw new InvalidOperationException("Method 'Variable' not found on TensorOperations."));
         return Expression.Call(variableMethod, tensorResult, Expression.Constant("unrolled_seq"), Expression.Constant(false));
     }
 
@@ -1003,9 +1016,9 @@ public class CodeGenerator
     /// </remarks>
     private Expression GenerateUnrolledElementwiseOp<T>(ParameterExpression[] inputs, Operations.UnrolledElementwiseOp op)
     {
-        var method = typeof(UnrolledOps).GetMethod("ExecuteUnrolledElementwise")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(UnrolledOps), "ExecuteUnrolledElementwise").MakeGenericMethod(typeof(T));
         // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
-        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var valueProperty = GetRequiredProperty(typeof(ComputationNode<T>), "Value");
         var inputValue = Expression.Property(inputs[0], valueProperty);
         var tensorResult = Expression.Call(method,
             inputValue,
@@ -1013,7 +1026,8 @@ public class CodeGenerator
             Expression.Constant(op.UnrollFactor),
             Expression.Constant(op.TotalElements));
         // Wrap the Tensor<T> result back into ComputationNode<T>
-        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        var variableMethod = (typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })
+            ?? throw new InvalidOperationException("Method 'Variable' not found on TensorOperations."));
         return Expression.Call(variableMethod, tensorResult, Expression.Constant("unrolled_elem"), Expression.Constant(false));
     }
 
@@ -1028,16 +1042,17 @@ public class CodeGenerator
     /// </remarks>
     private Expression GenerateUnrolledReductionOp<T>(ParameterExpression[] inputs, Operations.UnrolledReductionOp op)
     {
-        var method = typeof(UnrolledOps).GetMethod("ExecuteUnrolledReduction")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(UnrolledOps), "ExecuteUnrolledReduction").MakeGenericMethod(typeof(T));
         // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
-        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var valueProperty = GetRequiredProperty(typeof(ComputationNode<T>), "Value");
         var inputValue = Expression.Property(inputs[0], valueProperty);
         var tensorResult = Expression.Call(method,
             inputValue,
             Expression.Constant(op.ReductionType),
             Expression.Constant(op.UnrollFactor));
         // Wrap the Tensor<T> result back into ComputationNode<T>
-        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        var variableMethod = (typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })
+            ?? throw new InvalidOperationException("Method 'Variable' not found on TensorOperations."));
         return Expression.Call(variableMethod, tensorResult, Expression.Constant("unrolled_red"), Expression.Constant(false));
     }
 
@@ -1060,7 +1075,7 @@ public class CodeGenerator
             .First(m => m.Name == "ExecuteVectorizedBinary" && m.GetParameters()[2].ParameterType == typeof(string))
             .MakeGenericMethod(typeof(T));
         // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
-        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var valueProperty = GetRequiredProperty(typeof(ComputationNode<T>), "Value");
         var leftValue = Expression.Property(inputs[0], valueProperty);
         var rightValue = Expression.Property(inputs[1], valueProperty);
         var tensorResult = Expression.Call(method,
@@ -1071,7 +1086,8 @@ public class CodeGenerator
             Expression.Constant(op.NumVectors),
             Expression.Constant(op.Remainder));
         // Wrap the Tensor<T> result back into ComputationNode<T>
-        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        var variableMethod = (typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })
+            ?? throw new InvalidOperationException("Method 'Variable' not found on TensorOperations."));
         return Expression.Call(variableMethod, tensorResult, Expression.Constant("vec_binary"), Expression.Constant(false));
     }
 
@@ -1092,7 +1108,7 @@ public class CodeGenerator
             .First(m => m.Name == "ExecuteVectorizedUnary" && m.GetParameters()[1].ParameterType == typeof(string))
             .MakeGenericMethod(typeof(T));
         // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
-        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var valueProperty = GetRequiredProperty(typeof(ComputationNode<T>), "Value");
         var inputValue = Expression.Property(inputs[0], valueProperty);
         var tensorResult = Expression.Call(method,
             inputValue,
@@ -1101,7 +1117,8 @@ public class CodeGenerator
             Expression.Constant(op.NumVectors),
             Expression.Constant(op.Remainder));
         // Wrap the Tensor<T> result back into ComputationNode<T>
-        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        var variableMethod = (typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })
+            ?? throw new InvalidOperationException("Method 'Variable' not found on TensorOperations."));
         return Expression.Call(variableMethod, tensorResult, Expression.Constant("vec_unary"), Expression.Constant(false));
     }
 
@@ -1122,7 +1139,7 @@ public class CodeGenerator
             .First(m => m.Name == "ExecuteVectorizedReduction" && m.GetParameters()[1].ParameterType == typeof(string))
             .MakeGenericMethod(typeof(T));
         // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
-        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var valueProperty = GetRequiredProperty(typeof(ComputationNode<T>), "Value");
         var inputValue = Expression.Property(inputs[0], valueProperty);
         var tensorResult = Expression.Call(method,
             inputValue,
@@ -1131,7 +1148,8 @@ public class CodeGenerator
             Expression.Constant(op.Axes, typeof(int[])),
             Expression.Constant(op.KeepDims));
         // Wrap the Tensor<T> result back into ComputationNode<T>
-        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        var variableMethod = (typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })
+            ?? throw new InvalidOperationException("Method 'Variable' not found on TensorOperations."));
         return Expression.Call(variableMethod, tensorResult, Expression.Constant("vec_reduce"), Expression.Constant(false));
     }
 
@@ -1146,9 +1164,9 @@ public class CodeGenerator
     /// </remarks>
     private Expression GenerateVectorizedMatMulOp<T>(ParameterExpression[] inputs, Operations.VectorizedMatMulOp op)
     {
-        var method = typeof(VectorizedOps).GetMethod("ExecuteVectorizedMatMul")!.MakeGenericMethod(typeof(T));
+        var method = GetRequiredMethod(typeof(VectorizedOps), "ExecuteVectorizedMatMul").MakeGenericMethod(typeof(T));
         // Extract Tensor<T> from ComputationNode<T>.Value for runtime operations
-        var valueProperty = typeof(ComputationNode<T>).GetProperty("Value")!;
+        var valueProperty = GetRequiredProperty(typeof(ComputationNode<T>), "Value");
         var leftValue = Expression.Property(inputs[0], valueProperty);
         var rightValue = Expression.Property(inputs[1], valueProperty);
         var tensorResult = Expression.Call(method,
@@ -1157,7 +1175,8 @@ public class CodeGenerator
             Expression.Constant(op.VectorWidth),
             Expression.Constant(op.TileSize));
         // Wrap the Tensor<T> result back into ComputationNode<T>
-        var variableMethod = typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })!;
+        var variableMethod = (typeof(TensorOperations<T>).GetMethod("Variable", new[] { typeof(Tensor<T>), typeof(string), typeof(bool) })
+            ?? throw new InvalidOperationException("Method 'Variable' not found on TensorOperations."));
         return Expression.Call(variableMethod, tensorResult, Expression.Constant("vec_matmul"), Expression.Constant(false));
     }
 
