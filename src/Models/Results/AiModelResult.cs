@@ -4867,6 +4867,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public void Deserialize(byte[] data)
     {
+        if (data is null || data.Length == 0)
+            throw new ArgumentException("Deserialization data cannot be null or empty.", nameof(data));
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         try
         {
