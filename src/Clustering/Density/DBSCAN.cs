@@ -205,7 +205,7 @@ public class DBSCAN<T> : ClusteringBase<T>
         Matrix<T> x,
         int seedIndex,
         List<int>[] neighbors,
-        Vector<double> labels,
+        int[] labels,
         int clusterId,
         T epsilon,
         object neighborFinder)
@@ -237,7 +237,7 @@ public class DBSCAN<T> : ClusteringBase<T>
         }
     }
 
-    private void ComputeClusterCenters(Matrix<T> x, Vector<double> labels, int numClusters)
+    private void ComputeClusterCenters(Matrix<T> x, int[] labels, int numClusters)
     {
         ClusterCenters = new Matrix<T>(numClusters, x.Columns);
         var counts = new int[numClusters];
