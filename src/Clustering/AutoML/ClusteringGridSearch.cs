@@ -30,8 +30,12 @@ namespace AiDotNet.Clustering.AutoML;
 /// </remarks>
 /// <example>
 /// <code>
-/// var clusteringGridSearch = new ClusteringGridSearch&lt;double&gt;();
-/// var result = clusteringGridSearch.Search(dataMatrix, minK: 2, maxK: 10);
+/// var gridSearch = new ClusteringGridSearch&lt;double&gt;();
+/// var paramGrid = new Dictionary&lt;string, object[]&gt;
+/// {
+///     { "NumClusters", new object[] { 2, 3, 4, 5 } }
+/// };
+/// var result = gridSearch.Search(dataMatrix, p =&gt; new KMeans&lt;double&gt;(), paramGrid);
 /// </code>
 /// </example>
 public class ClusteringGridSearch<T>

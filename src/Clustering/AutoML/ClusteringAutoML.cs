@@ -38,10 +38,10 @@ namespace AiDotNet.Clustering.AutoML;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new ClusteringAutoMLOptions&lt;double&gt;();
+/// var options = new ClusteringAutoMLOptions();
 /// var clusteringAutoML = new ClusteringAutoML&lt;double&gt;(options);
-/// clusteringAutoML.Fit(dataMatrix);
-/// int[] labels = clusteringAutoML.Labels;
+/// var result = clusteringAutoML.Fit(dataMatrix);
+/// var bestModel = result.BestResult;
 /// </code>
 /// </example>
 public class ClusteringAutoML<T>
