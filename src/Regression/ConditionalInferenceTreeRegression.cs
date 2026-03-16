@@ -303,7 +303,9 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
 
         var results = await ParallelProcessingHelper.ProcessTasksInParallel(tasks, _options.MaxDegreeOfParallelism);
         return results.Where(r => r.HasValue)
-                      .OrderBy(r => r.GetValueOrDefault().PValue)
+                      .Cast<(int Feature, T Threshold, T PValue)>()
+                      .OrderBy(r => r.PValue)
+                      .Cast<(int Feature, T Threshold, T PValue)?>()
                       .FirstOrDefault();
     }
 
