@@ -265,8 +265,14 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     public byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
-        var json = JsonConvert.SerializeObject(_options, Formatting.None);
-        return Encoding.UTF8.GetBytes(json);
+        var state = new Newtonsoft.Json.Linq.JObject
+        {
+            ["options"] = Newtonsoft.Json.Linq.JToken.FromObject(_options),
+            ["adversarialRatio"] = _adversarialRatio,
+            ["perturbationBudget"] = _perturbationBudget,
+            ["adversarialSteps"] = _adversarialSteps
+        };
+        return Encoding.UTF8.GetBytes(state.ToString(Formatting.None));
     }
 
     /// <inheritdoc/>
@@ -275,12 +281,23 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null) throw new ArgumentNullException(nameof(data));
         var json = Encoding.UTF8.GetString(data);
-        _options = JsonConvert.DeserializeObject<AlignmentMethodOptions<T>>(json) ?? new AlignmentMethodOptions<T>();
+        try
+        {
+            var state = Newtonsoft.Json.Linq.JObject.Parse(json);
+            if (state["options"] is { } optionsToken)
+                _options = optionsToken.ToObject<AlignmentMethodOptions<T>>() ?? new AlignmentMethodOptions<T>();
+        }
+        catch (JsonException)
+        {
+            _options = JsonConvert.DeserializeObject<AlignmentMethodOptions<T>>(json) ?? new AlignmentMethodOptions<T>();
+        }
     }
 
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         using (Helpers.ModelPersistenceGuard.InternalOperation())
         {
@@ -291,6 +308,8 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
         using (Helpers.ModelPersistenceGuard.InternalOperation())
         {
