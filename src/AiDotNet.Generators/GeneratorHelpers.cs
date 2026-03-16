@@ -132,7 +132,7 @@ internal static class GeneratorHelpers
         if (items.Count == 0)
             return string.Empty;
 
-        return string.Join(", ", items.Select(v => $"\"{v}\""));
+        return string.Join(", ", items.Select(v => $"\"{EscapeString(v)}\""));
     }
 
     /// <summary>
