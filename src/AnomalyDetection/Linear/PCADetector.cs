@@ -176,7 +176,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             var centered = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                centered[j] = NumOps.Subtract(X[i, j], _mean![j]);
+                centered[j] = NumOps.Subtract(X[i, j], (_mean ?? throw new InvalidOperationException("Mean not computed."))[j]);
             }
 
             // Project onto components
@@ -217,7 +217,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             double mahalanobis = 0;
             for (int c = 0; c < _fittedComponents; c++)
             {
-                double eigenvalue = NumOps.ToDouble(_explainedVariance![c]);
+                double eigenvalue = NumOps.ToDouble((_explainedVariance ?? throw new InvalidOperationException("Explained variance not computed."))[c]);
                 if (eigenvalue > EigenvalueFloor)
                 {
                     double proj = NumOps.ToDouble(projected[c]);
