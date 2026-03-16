@@ -655,7 +655,8 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        int numParams = NumFeatures + NumClasses - 1;
+        int numParams = NumFeatures + Math.Max(0, NumClasses - 1);
+        if (numParams <= 0) return new Vector<T>(0);
         var parameters = new Vector<T>(numParams);
 
         // Add coefficients

@@ -176,8 +176,11 @@ public abstract class ClassificationModelTestBase
         var model1 = CreateModel();
         var model2 = CreateModel();
 
-        var (trainX_real, trainY) = GenerateData(TrainSamples, 2, NumClasses, rng1);
-        var (testX_real, testY) = GenerateData(TestSamples, 2, NumClasses, rng2);
+        // Use Features-1 for clean data, then add 1 noise feature to get Features total.
+        // This respects models that need a minimum feature count (e.g., Rocket needs 50+).
+        int cleanFeatures = Math.Max(2, Features - 1);
+        var (trainX_real, trainY) = GenerateData(TrainSamples, cleanFeatures, NumClasses, rng1);
+        var (testX_real, testY) = GenerateData(TestSamples, cleanFeatures, NumClasses, rng2);
 
         var rngNoise = ModelTestHelpers.CreateSeededRandom(77);
         var trainX_noisy = ModelTestHelpers.AddNoiseFeature(trainX_real, rngNoise);

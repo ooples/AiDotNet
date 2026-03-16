@@ -139,7 +139,7 @@ public class DBSCAN<T> : ClusteringBase<T>
         ValidateInputData(x);
 
         int n = x.Rows;
-        var labels = new int[n];
+        var labels = new Vector<double>(n);
         _corePointMask = new bool[n];
 
         // Initialize all points as undefined
@@ -244,7 +244,7 @@ public class DBSCAN<T> : ClusteringBase<T>
 
         for (int i = 0; i < x.Rows; i++)
         {
-            int cluster = labels[i];
+            int cluster = (int)labels[i];
             if (cluster >= 0 && cluster < numClusters)
             {
                 counts[cluster]++;
