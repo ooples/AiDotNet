@@ -44,16 +44,19 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// var classifier = new ComplementNaiveBayes&lt;double&gt;(options);
 ///
 /// // Prepare word count features (term-frequency vectors)
-/// var features = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
-///     3, 0, 1,  2, 0, 2,  // Class 0: high word1 counts
-///     0, 3, 1,  0, 2, 2 });  // Class 1: high word2 counts
+/// var features = new Matrix&lt;double&gt;(4, 3);
+/// features[0, 0] = 3; features[0, 1] = 0; features[0, 2] = 1; // Class 0
+/// features[1, 0] = 2; features[1, 1] = 0; features[1, 2] = 2; // Class 0
+/// features[2, 0] = 0; features[2, 1] = 3; features[2, 2] = 1; // Class 1
+/// features[3, 0] = 0; features[3, 1] = 2; features[3, 2] = 2; // Class 1
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
 ///
 /// // Train using complement class statistics to handle imbalance
 /// classifier.Train(features, labels);
 ///
 /// // Predict class using complement likelihood ratio
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 3, 0, 1 });
+/// var newSample = new Matrix&lt;double&gt;(1, 3);
+/// newSample[0, 0] = 3; newSample[0, 1] = 0; newSample[0, 2] = 1;
 /// var prediction = classifier.Predict(newSample);
 /// Console.WriteLine($"Predicted class: {prediction[0]}");
 /// </code>

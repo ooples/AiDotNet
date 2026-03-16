@@ -122,6 +122,13 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
         int? seed = null)
         : base()
     {
+        if (maxIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxIterations), "Must be >= 1.");
+        if (!double.IsFinite(tolerance) || tolerance <= 0)
+            throw new ArgumentOutOfRangeException(nameof(tolerance), "Must be a positive finite number.");
+        if (!double.IsFinite(regularization) || regularization < 0)
+            throw new ArgumentOutOfRangeException(nameof(regularization), "Must be a non-negative finite number.");
+
         _maxIterations = maxIterations;
         _tolerance = tolerance;
         _regularizationStrength = regularization;
@@ -646,38 +653,38 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                 probs[k] = Math.Max(probs[k], 1e-15);
             }
 
-            // Compute gradients for coefficients
+            // Compute gradients for coefficients (NLL gradient, same sign as Train())
             for (int p = 0; p < P; p++)
             {
                 double xi = NumOps.ToDouble(input[i, p]);
 
                 if (yi == 0)
                 {
-                    gradCoef[p] += xi * (cumProbs[0] - 1);
+                    gradCoef[p] -= xi * (cumProbs[0] - 1);
                 }
                 else if (yi == K - 1)
                 {
-                    gradCoef[p] += xi * cumProbs[K - 2];
+                    gradCoef[p] -= xi * cumProbs[K - 2];
                 }
                 else
                 {
                     double term = cumProbs[yi] * (1 - cumProbs[yi]) - cumProbs[yi - 1] * (1 - cumProbs[yi - 1]);
-                    gradCoef[p] += xi * term / probs[yi];
+                    gradCoef[p] -= xi * term / probs[yi];
                 }
             }
 
-            // Compute gradients for thresholds
+            // Compute gradients for thresholds (consistent with Train())
             for (int k = 0; k < K - 1; k++)
             {
                 double gamma_k = cumProbs[k] * (1 - cumProbs[k]);
 
                 if (yi == k)
                 {
-                    gradThresh[k] += gamma_k / probs[yi];
+                    gradThresh[k] -= gamma_k / probs[yi];
                 }
                 else if (yi == k + 1)
                 {
-                    gradThresh[k] += -gamma_k / probs[yi];
+                    gradThresh[k] += gamma_k / probs[yi];
                 }
             }
         }
