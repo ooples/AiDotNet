@@ -72,8 +72,10 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                 ZtLogVar[i, k] = NumOps.FromDouble(-4);
             }
 
-        // KL weight for variational regularization (warm up to prevent posterior collapse)
-        double klWeight = 0.01;
+        // KL weight for variational regularization — linearly warm up from 0 to target
+        // over first 20% of epochs to prevent posterior collapse
+        const double klWeightTarget = 0.01;
+        int warmupEpochs = Math.Max(1, MaxEpochs / 5);
 
         T lr = NumOps.FromDouble(LearningRate);
         T alpha = NumOps.Zero;
@@ -82,6 +84,11 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
+            // Linear KL warm-up: ramp from 0 to klWeightTarget over warmupEpochs
+            double klWeight = epoch < warmupEpochs
+                ? klWeightTarget * (epoch + 1.0) / warmupEpochs
+                : klWeightTarget;
+
             // Sample embeddings via reparameterization
             var Zs = new Matrix<T>(d, embDim);
             var Zt = new Matrix<T>(d, embDim);
