@@ -264,6 +264,8 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
 
             // Each rank loads its own shard
             string rankPath = $"{normalizedPath}.rank{Rank}";
+            if (!File.Exists(rankPath))
+                throw new FileNotFoundException($"Checkpoint file not found for rank {Rank}.", rankPath);
             Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
             var data = File.ReadAllBytes(rankPath);
             using (Helpers.ModelPersistenceGuard.InternalOperation())

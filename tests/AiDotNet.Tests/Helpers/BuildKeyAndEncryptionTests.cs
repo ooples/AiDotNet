@@ -92,7 +92,7 @@ public class BuildKeyAndEncryptionTests
     public void Encrypt_Decrypt_RoundTrip_WithLicenseKey()
     {
         var payload = Encoding.UTF8.GetBytes("test model weights payload data here");
-        var licenseKey = "aidn.test12345678.abcdefghijklmnop";
+        var licenseKey = "aidn.FAKEFAKE1234.FAKEFAKEFAKEFAKE";
         var aad = ModelPayloadEncryption.BuildAad("TestModel", [10], [1]);
 
         var encrypted = ModelPayloadEncryption.Encrypt(payload, licenseKey, aad);
@@ -135,7 +135,7 @@ public class BuildKeyAndEncryptionTests
     public void Decrypt_WithWrongAad_ThrowsCryptographicException()
     {
         var payload = Encoding.UTF8.GetBytes("secret model data");
-        var licenseKey = "aidn.test12345678.abcdefghijklmnop";
+        var licenseKey = "aidn.FAKEFAKE1234.FAKEFAKEFAKEFAKE";
         var correctAad = ModelPayloadEncryption.BuildAad("ModelA", [10], [1]);
         var wrongAad = ModelPayloadEncryption.BuildAad("ModelB", [20], [5]);
 

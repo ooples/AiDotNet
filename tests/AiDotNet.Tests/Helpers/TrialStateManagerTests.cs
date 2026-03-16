@@ -283,8 +283,8 @@ public class TrialStateManagerTests : IDisposable
 
         var ex = Assert.Throws<LicenseRequiredException>(() => manager.RecordOperationOrThrow());
         Assert.Equal(TrialExpirationReason.OperationLimitReached, ex.ExpirationReason);
-        Assert.NotNull(ex.OperationsPerformed);
-        Assert.NotNull(ex.TrialDaysElapsed);
+        Assert.Equal(TrialStateManager.TrialOperationLimit, ex.OperationsPerformed);
+        Assert.True(ex.TrialDaysElapsed >= 0, "TrialDaysElapsed should be non-negative");
     }
 
     [Fact]

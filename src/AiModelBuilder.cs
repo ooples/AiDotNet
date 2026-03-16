@@ -3356,6 +3356,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Resolve encryption key: license key > build key > trial key
         string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
         byte[]? decryptionToken = null;
+        bool isTrialOperation = false;
 
         if (_licenseKey is not null && resolvedKey is null)
         {
@@ -3390,10 +3391,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
         else
         {
-            // No license key — enforce trial limits
+            // No license key — this is a trial save
+            isTrialOperation = true;
             // Use a deterministic trial encryption key derived from the machine fingerprint.
-            // This ensures trial-saved models can be loaded on the same machine during the trial,
-            // but cannot be loaded on other machines or after the trial expires without a license.
             resolvedKey = GenerateTrialEncryptionKey();
         }
 
@@ -3403,8 +3403,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 decryptionToken: decryptionToken);
         }
 
-        // Record trial operation only after save succeeded (not before, to avoid counting failed saves)
-        if (resolvedKey is not null && !LicenseEnforcer.Instance.HasValidLicense)
+        // Record trial operation only after save succeeded
+        if (isTrialOperation)
         {
             var trialManager = new TrialStateManager();
             trialManager.RecordOperationOrThrow();
@@ -3456,6 +3456,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Resolve encryption key and validate license/trial
         string? resolvedKey = LicenseKeyResolver.Resolve(_licenseKey);
         byte[]? decryptionToken = null;
+        bool isTrialLoad = false;
 
         if (_licenseKey is not null && resolvedKey is null)
         {
@@ -3489,8 +3490,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
         else
         {
-            // No license key — use trial encryption key for models saved during trial
-            // Trial operation recording is deferred until after successful load
+            // No license key — this is a trial load
+            isTrialLoad = true;
             resolvedKey = GenerateTrialEncryptionKey();
         }
 
@@ -3530,7 +3531,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         if (model is Interfaces.IFullModel<T, TInput, TOutput> fullModel)
         {
             // Record trial operation only after successful load
-            if (resolvedKey is not null && !LicenseEnforcer.Instance.HasValidLicense)
+            if (isTrialLoad)
             {
                 var trialManager = new TrialStateManager();
                 trialManager.RecordOperationOrThrow();
