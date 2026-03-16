@@ -71,7 +71,7 @@ namespace AiDotNet.Audio.Emotion;
 ///
 /// // Classify emotions from audio
 /// var result = recognizer.RecognizeEmotion(audioTensor);
-/// // result.PredictedEmotion: "Happy", "Sad", "Angry", etc.
+/// // result.Emotion: "Happy", "Sad", "Angry", etc.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
