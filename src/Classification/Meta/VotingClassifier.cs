@@ -204,7 +204,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
                 // Find which class
                 for (int c = 0; c < NumClasses; c++)
                 {
-                    if (NumOps.Compare(pred[0], ClassLabels![c]) == 0)
+                    if (NumOps.Compare(pred[0], (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c]) == 0)
                     {
                         votes[c] += _weights[e];
                         break;
@@ -224,7 +224,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels![bestClass];
+            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
         }
 
         return predictions;
@@ -259,7 +259,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
                 {
                     for (int c = 0; c < NumClasses; c++)
                     {
-                        if (NumOps.Compare(preds[i], ClassLabels![c]) == 0)
+                        if (NumOps.Compare(preds[i], (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c]) == 0)
                         {
                             estProbs[i, c] = NumOps.One;
                         }

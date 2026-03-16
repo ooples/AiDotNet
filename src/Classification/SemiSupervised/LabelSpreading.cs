@@ -615,7 +615,8 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
                 }
             }
 
-            PseudoLabels[i] = ClassLabels![bestClass];
+            var classLabels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+            PseudoLabels[i] = classLabels[bestClass];
             PseudoLabelConfidences[i] = bestProb;
         }
     }
@@ -718,7 +719,8 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
             }
         }
 
-        return ClassLabels![bestClass];
+        var classLabels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+        return classLabels[bestClass];
     }
 
     /// <summary>

@@ -355,7 +355,8 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
                 {
                     for (int c = 0; c < NumClasses; c++)
                     {
-                        if (NumOps.Compare(preds[i], ClassLabels![c]) == 0)
+                        var classLabels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+                        if (NumOps.Compare(preds[i], classLabels[c]) == 0)
                         {
                             estProbs[i, c] = NumOps.One;
                         }

@@ -227,7 +227,7 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
                     bestClass = kv.Key;
                 }
             }
-            predictions[i] = ClassLabels![bestClass];
+            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
         }
 
         return predictions;
@@ -636,7 +636,7 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
         return new DecisionTreeNode
         {
             IsLeaf = true,
-            PredictedClass = ClassLabels![majorityClass],
+            PredictedClass = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[majorityClass],
             ClassProbabilities = probs
         };
     }

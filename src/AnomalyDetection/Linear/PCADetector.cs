@@ -186,7 +186,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 T dot = NumOps.Zero;
                 for (int j = 0; j < d; j++)
                 {
-                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], _components![c, j]));
+                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], (_components ?? throw new InvalidOperationException("Components not computed."))[c, j]));
                 }
                 projected[c] = dot;
             }
@@ -198,7 +198,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 T sum = NumOps.Zero;
                 for (int c = 0; c < _fittedComponents; c++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(projected[c], _components![c, j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(projected[c], (_components ?? throw new InvalidOperationException("Components not computed."))[c, j]));
                 }
                 reconstructed[j] = sum;
             }

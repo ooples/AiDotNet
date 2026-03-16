@@ -140,7 +140,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 
         for (int c = 0; c < NumClasses; c++)
         {
-            T classLabel = ClassLabels![c];
+            T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
             int count = 0;
 
             for (int i = 0; i < x.Rows; i++)
@@ -178,7 +178,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 
         for (int c = 0; c < NumClasses; c++)
         {
-            T classLabel = ClassLabels![c];
+            T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
             int count = 0;
 
             for (int i = 0; i < n; i++)
@@ -201,7 +201,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     private Matrix<T> ComputeClassCovariance(Matrix<T> x, Vector<T> y, int classIndex)
     {
         var covariance = new Matrix<T>(NumFeatures, NumFeatures);
-        T classLabel = ClassLabels![classIndex];
+        T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[classIndex];
         int count = 0;
 
         // Get class mean
@@ -444,7 +444,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels![bestClass];
+            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
         }
 
         return predictions;

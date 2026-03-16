@@ -514,7 +514,8 @@ public class OrdinalRegression<T> : ClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels![maxClass];
+            var labels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+            predictions[i] = labels[maxClass];
         }
 
         return predictions;

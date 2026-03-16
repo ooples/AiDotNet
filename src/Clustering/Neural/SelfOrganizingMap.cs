@@ -221,7 +221,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                 T dist = NumOps.Zero;
                 for (int j = 0; j < d; j++)
                 {
-                    T diff = NumOps.Subtract(sample[j], _weights![r, c][j]);
+                    T diff = NumOps.Subtract(sample[j], (_weights ?? throw new InvalidOperationException("Weights not initialized."))[r, c][j]);
                     dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
                 }
 
@@ -291,7 +291,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         {
             for (int c = 0; c < width; c++)
             {
-                neuronWeights[r * width + c] = _weights![r, c];
+                neuronWeights[r * width + c] = (_weights ?? throw new InvalidOperationException("Weights not initialized."))[r, c];
             }
         }
 
@@ -449,7 +449,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                         T distSq = NumOps.Zero;
                         for (int j = 0; j < d; j++)
                         {
-                            T diff = NumOps.Subtract(_weights![r, c][j], _weights[nr, nc][j]);
+                            T diff = NumOps.Subtract((_weights ?? throw new InvalidOperationException("Weights not initialized."))[r, c][j], _weights[nr, nc][j]);
                             distSq = NumOps.Add(distSq, NumOps.Multiply(diff, diff));
                         }
 
