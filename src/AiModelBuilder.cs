@@ -5387,7 +5387,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 }
             }
 
-            // Step 5: Define forward and backward functions
+            // Step 5: Validate that student supports gradient backpropagation
+            if (studentModel is not INeuralNetwork<T>)
+            {
+                throw new InvalidOperationException(
+                    $"Knowledge distillation requires a neural network (INeuralNetwork<T>) for gradient backpropagation. " +
+                    $"Current model type: {studentModel.GetType().Name}. Use a neural network model as the student.");
+            }
+
+            // Step 6: Define forward and backward functions
             // Storage for per-sample inputs to enable forward pass replay during backprop
             // Use a queue to match forward inputs with backward gradients in FIFO order
             var inputQueue = new Queue<Vector<T>>();
