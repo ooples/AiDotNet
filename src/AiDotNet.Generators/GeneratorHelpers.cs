@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace AiDotNet.Generators;
 
@@ -140,5 +141,30 @@ internal static class GeneratorHelpers
             .Replace("\"", "\\\"")
             .Replace("\n", "\\n")
             .Replace("\r", "\\r");
+    }
+
+    /// <summary>
+    /// Extracts XML documentation from syntax tree trivia as a fallback when
+    /// GetDocumentationCommentXml() returns empty (common on CI/net471).
+    /// </summary>
+    internal static string? ExtractXmlDocFromSyntax(INamedTypeSymbol modelClass)
+    {
+        foreach (var syntaxRef in modelClass.DeclaringSyntaxReferences)
+        {
+            var syntaxNode = syntaxRef.GetSyntax();
+            if (syntaxNode is not ClassDeclarationSyntax classDecl)
+                continue;
+
+            foreach (var trivia in classDecl.GetLeadingTrivia())
+            {
+                if (trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SingleLineDocumentationCommentTrivia) ||
+                    trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.MultiLineDocumentationCommentTrivia))
+                {
+                    return trivia.ToFullString();
+                }
+            }
+        }
+
+        return null;
     }
 }

@@ -207,8 +207,12 @@ public class DocumentationGenerator : IIncrementalGenerator
             }
         }
 
-        // Extract XML docs
+        // Extract XML docs (with syntax tree fallback for CI/net471)
         var xmlDoc = modelClass.GetDocumentationCommentXml();
+        if (string.IsNullOrWhiteSpace(xmlDoc))
+        {
+            xmlDoc = GeneratorHelpers.ExtractXmlDocFromSyntax(modelClass);
+        }
         if (!string.IsNullOrWhiteSpace(xmlDoc))
         {
             entry.Summary = ExtractXmlElement(xmlDoc, "summary");
