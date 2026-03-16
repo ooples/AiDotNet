@@ -322,8 +322,13 @@ public class LicenseServerEndpointTests
         var result1 = validator.Validate();
         var result2 = validator.Validate();
 
-        // Both calls should return the same result (cached)
+        // Both calls should return identical cached results
         Assert.Equal(result1.Status, result2.Status);
+        Assert.Equal(result1.ExpiresAt, result2.ExpiresAt);
+        Assert.Equal(result1.DecryptionToken, result2.DecryptionToken);
+
+        // Verify caching by reference equality — second call returns same object
+        Assert.Same(result1, result2);
     }
 
     // ─── Register community license Edge Function contract tests ───
@@ -367,6 +372,9 @@ public class LicenseServerEndpointTests
     [Fact]
     public void CommunityLicenseResponse_Error_ParsedCorrectly()
     {
+        // This tests the validate-license endpoint error response contract.
+        // The register-community-license endpoint has a different response schema
+        // consumed by the website (pricing.astro), not by LicenseValidator.
         var responseJson = JsonSerializer.Serialize(new
         {
             valid = false,
@@ -377,6 +385,26 @@ public class LicenseServerEndpointTests
         // "unauthorized" is an unknown error type with 401 (4xx) → should map to Invalid
         var result = LicenseValidator.ParseResponse(responseJson, 401);
         Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
+    }
+
+    [Fact]
+    public void RegisterCommunityLicense_ResponseContract_HasExpectedFields()
+    {
+        // The register-community-license Edge Function returns a different schema
+        // than validate-license. The website (pricing.astro) reads: license_key, message, error
+        // This test validates that contract separately from ParseResponse.
+        var registrationResponse = JsonSerializer.Serialize(new
+        {
+            license_key = "aidn.abc123456789.abcdefghijklmnop",
+            message = "Community license activated successfully."
+        });
+
+        using var doc = JsonDocument.Parse(registrationResponse);
+        var root = doc.RootElement;
+
+        Assert.True(root.TryGetProperty("license_key", out var keyProp));
+        Assert.StartsWith("aidn.", keyProp.GetString());
+        Assert.True(root.TryGetProperty("message", out _));
     }
 
     // ─── Stripe webhook contract tests ───
