@@ -387,7 +387,8 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
 
                 lock (_connectionLock)
                 {
-                    _tcpConnections![targetRank] = client;
+                    var connections = _tcpConnections ?? throw new InvalidOperationException("TCP connections not initialized.");
+                    connections[targetRank] = client;
                 }
                 return;
             }
@@ -426,7 +427,8 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
 
         lock (_connectionLock)
         {
-            _tcpConnections![receivedRank] = client;
+            var connections = _tcpConnections ?? throw new InvalidOperationException("TCP connections not initialized.");
+            connections[receivedRank] = client;
         }
     }
 

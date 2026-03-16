@@ -294,7 +294,9 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         for (int i = 0; i < _trainingData.Rows; i++)
         {
             // Get gradient for this training sample
-            var trainGradient = new Vector<T>(_cachedTrainingGradients!.Columns);
+            var cachedGrads = _cachedTrainingGradients
+                ?? throw new InvalidOperationException("Training gradients not computed.");
+            var trainGradient = new Vector<T>(cachedGrads.Columns);
             for (int j = 0; j < trainGradient.Length; j++)
             {
                 trainGradient[j] = _cachedTrainingGradients[i, j];
@@ -710,7 +712,9 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     {
         EnsureTrainingGradientsComputed();
 
-        int n = _cachedTrainingGradients!.Columns;
+        var cachedGrads = _cachedTrainingGradients
+            ?? throw new InvalidOperationException("Training gradients not computed.");
+        int n = cachedGrads.Columns;
         var avg = new Vector<T>(n);
 
         for (int i = 0; i < _trainingData.Rows; i++)

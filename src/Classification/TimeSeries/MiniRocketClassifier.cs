@@ -196,8 +196,8 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
                 // Binary classification
                 T score = ComputeScore(input, i, _weights);
                 predictions[i] = !NumOps.LessThan(score, NumOps.Zero)
-                    ? ClassLabels![1]
-                    : ClassLabels![0];
+                    ? (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[1]
+                    : (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[0];
             }
             else
             {
@@ -224,7 +224,7 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
                     }
                 }
 
-                predictions[i] = ClassLabels![bestClass];
+                predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
             }
         }
 
@@ -632,7 +632,7 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
 
         for (int c = 0; c < NumClasses; c++)
         {
-            var classLabel = ClassLabels![c];
+            var classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
             var binaryLabels = new Vector<T>(y.Length);
 
             for (int i = 0; i < y.Length; i++)

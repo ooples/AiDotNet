@@ -68,7 +68,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// The base estimators.
     /// </summary>
-    private List<IClassifier<T>>? _estimators;
+    private List<IClassifier<T>> _estimators = new();
 
     /// <summary>
     /// The meta-classifier (final estimator).
@@ -173,7 +173,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
     {
         int n = x.Rows;
         int numFolds = Options.CrossValidationFolds;
-        int numEstimators = _estimators!.Count;
+        int numEstimators = _estimators.Count;
         int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
 
         var random = Options.Seed.HasValue
@@ -301,7 +301,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
     private void CreateSimpleMetaFeatures(Matrix<T> x, Vector<T> y, Matrix<T> metaFeatures)
     {
         int n = x.Rows;
-        int numEstimators = _estimators!.Count;
+        int numEstimators = _estimators.Count;
         int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
 
         // Train each estimator and get predictions
@@ -350,7 +350,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
     private Matrix<T> CreatePredictionMetaFeatures(Matrix<T> input)
     {
         int n = input.Rows;
-        int numEstimators = _estimators!.Count;
+        int numEstimators = _estimators.Count;
         int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
         int totalMetaFeatures = numEstimators * metaFeaturesPerEstimator;
 
@@ -436,7 +436,8 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
         {
             for (int c = 0; c < NumClasses; c++)
             {
-                if (NumOps.Compare(preds[i], ClassLabels![c]) == 0)
+                var classLabels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+                if (NumOps.Compare(preds[i], classLabels[c]) == 0)
                 {
                     probs[i, c] = NumOps.One;
                 }

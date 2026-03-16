@@ -64,13 +64,13 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// <summary>
     /// Feature coefficients (β). Shared across all thresholds (proportional odds assumption).
     /// </summary>
-    private Vector<T>? _coefficients;
+    private Vector<T> _coefficients = new Vector<T>(0);
 
     /// <summary>
     /// Threshold parameters (α_1, α_2, ..., α_{K-1}) where K is the number of classes.
     /// These are in increasing order: α_1 < α_2 < ... < α_{K-1}.
     /// </summary>
-    private Vector<T>? _thresholds;
+    private Vector<T> _thresholds = new Vector<T>(0);
 
     /// <summary>
     /// Gets the feature coefficients.
@@ -288,7 +288,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
             T sum = NumOps.Zero;
             for (int j = 0; j < NumFeatures; j++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(_coefficients![j], x[i, j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_coefficients[j], x[i, j]));
             }
             eta[i] = sum;
         }
@@ -302,7 +302,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
             var cumProbs = new double[NumClasses - 1];
             for (int k = 0; k < NumClasses - 1; k++)
             {
-                double alpha_k = NumOps.ToDouble(_thresholds![k]);
+                double alpha_k = NumOps.ToDouble(_thresholds[k]);
                 cumProbs[k] = ApplyLink(alpha_k - NumOps.ToDouble(eta[i]));
             }
 
@@ -490,7 +490,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (_coefficients == null || _thresholds == null)
+        if (_coefficients.Length == 0 || _thresholds.Length == 0)
         {
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
@@ -514,7 +514,8 @@ public class OrdinalRegression<T> : ClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels![maxClass];
+            var labels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+            predictions[i] = labels[maxClass];
         }
 
         return predictions;
@@ -542,7 +543,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
         T etaT = NumOps.Zero;
         for (int j = 0; j < NumFeatures; j++)
         {
-            etaT = NumOps.Add(etaT, NumOps.Multiply(_coefficients![j], x[sampleIndex, j]));
+            etaT = NumOps.Add(etaT, NumOps.Multiply(_coefficients[j], x[sampleIndex, j]));
         }
         double eta = NumOps.ToDouble(etaT);
 
@@ -550,7 +551,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
         var cumProbs = new double[NumClasses - 1];
         for (int k = 0; k < NumClasses - 1; k++)
         {
-            double alpha_k = NumOps.ToDouble(_thresholds![k]);
+            double alpha_k = NumOps.ToDouble(_thresholds[k]);
             cumProbs[k] = ApplyLink(alpha_k - eta);
         }
 
@@ -595,7 +596,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_coefficients == null || _thresholds == null)
+        if (_coefficients.Length == 0 || _thresholds.Length == 0)
         {
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
@@ -781,7 +782,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        if (_coefficients == null || _thresholds == null)
+        if (_coefficients.Length == 0 || _thresholds.Length == 0)
         {
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
@@ -854,7 +855,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        if (_coefficients == null || _thresholds == null)
+        if (_coefficients.Length == 0 || _thresholds.Length == 0)
         {
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }

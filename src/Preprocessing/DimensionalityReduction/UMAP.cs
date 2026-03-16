@@ -355,12 +355,12 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             if (localConnFrac < 1e-5 || localConnIdx >= _nNeighbors - 1)
             {
-                rhos[i] = _knnDistances![i, localConnIdx];
+                rhos[i] = (_knnDistances ?? throw new InvalidOperationException("KNN distances not computed."))[i, localConnIdx];
             }
             else
             {
                 // Interpolate between neighbors
-                rhos[i] = (1 - localConnFrac) * _knnDistances![i, localConnIdx]
+                rhos[i] = (1 - localConnFrac) * (_knnDistances ?? throw new InvalidOperationException("KNN distances not computed."))[i, localConnIdx]
                         + localConnFrac * _knnDistances[i, localConnIdx + 1];
             }
 
@@ -420,8 +420,8 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             for (int k = 0; k < _nNeighbors; k++)
             {
-                int j = _knnIndices![i, k];
-                double d = _knnDistances![i, k] - rhos[i];
+                int j = (_knnIndices ?? throw new InvalidOperationException("KNN indices not computed."))[i, k];
+                double d = (_knnDistances ?? throw new InvalidOperationException("KNN distances not computed."))[i, k] - rhos[i];
                 double weight = d > 0 ? Math.Exp(-d / sigmas[i]) : 1.0;
                 graph[i, j] = weight;
             }
@@ -692,7 +692,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 var trainPoint = new double[p];
                 for (int k = 0; k < p; k++)
                 {
-                    trainPoint[k] = _trainingData![j, k];
+                    trainPoint[k] = (_trainingData ?? throw new InvalidOperationException("Training data not set."))[j, k];
                 }
                 // Use the same distance metric as during training
                 double dist = ComputeDistance(newPoint, trainPoint);
@@ -713,7 +713,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
                 for (int d = 0; d < _nComponents; d++)
                 {
-                    embeddingSum[d] += weight * _embedding![idx, d];
+                    embeddingSum[d] += weight * (_embedding ?? throw new InvalidOperationException("Embedding not computed."))[idx, d];
                 }
             }
 

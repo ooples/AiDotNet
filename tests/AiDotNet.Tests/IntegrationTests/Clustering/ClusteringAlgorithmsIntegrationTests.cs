@@ -361,10 +361,10 @@ public class PartitioningClusteringIntegrationTests
 
         var memberships = ClusteringTestHelpers.RequireNotNull(fcm.MembershipMatrix, "MembershipMatrix");
 
-        for (int i = 0; i < memberships.GetLength(0); i++)
+        for (int i = 0; i < memberships.Rows; i++)
         {
             double sum = 0;
-            for (int j = 0; j < memberships.GetLength(1); j++)
+            for (int j = 0; j < memberships.Columns; j++)
             {
                 sum += memberships[i, j];
             }

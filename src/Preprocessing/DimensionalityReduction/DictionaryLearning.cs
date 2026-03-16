@@ -290,7 +290,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             double sum = 0;
             for (int j = 0; j < p; j++)
             {
-                sum += _components![c, j] * x[j];
+                sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * x[j];
             }
             Dtx[c] = sum;
         }
@@ -313,7 +313,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double correlation = 0;
                 for (int j = 0; j < p; j++)
                 {
-                    correlation += _components![c, j] * residual[j];
+                    correlation += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * residual[j];
                 }
 
                 if (Math.Abs(correlation) > Math.Abs(bestCorrelation))
@@ -344,7 +344,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     double sum = 0;
                     for (int f = 0; f < p; f++)
                     {
-                        sum += _components![selectedAtoms[i], f] * _components[selectedAtoms[j], f];
+                        sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[selectedAtoms[i], f] * _components[selectedAtoms[j], f];
                     }
                     DtD[i, j] = sum;
                 }
@@ -367,7 +367,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 residual[j] = x[j];
                 for (int i = 0; i < numSelected; i++)
                 {
-                    residual[j] -= coefficients[i] * _components![selectedAtoms[i], j];
+                    residual[j] -= coefficients[i] * (_components ?? throw new InvalidOperationException("Components not initialized."))[selectedAtoms[i], j];
                 }
             }
 
@@ -473,7 +473,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double sum = 0;
                 for (int f = 0; f < p; f++)
                 {
-                    sum += _components![i, f] * _components[j, f];
+                    sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[i, f] * _components[j, f];
                 }
                 DtD[i, j] = sum;
             }
@@ -486,7 +486,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             double sum = 0;
             for (int j = 0; j < p; j++)
             {
-                sum += _components![i, j] * x[j];
+                sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[i, j] * x[j];
             }
             Dtx[i] = sum;
         }
@@ -552,7 +552,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     {
                         if (cc != c)
                         {
-                            residual[i, j] -= codes[i, cc] * _components![cc, j];
+                            residual[i, j] -= codes[i, cc] * (_components ?? throw new InvalidOperationException("Components not initialized."))[cc, j];
                         }
                     }
                 }
@@ -577,14 +577,14 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 {
                     sum += codes[i, c] * residual[i, j];
                 }
-                _components![c, j] = sum / codesSquared;
+                (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] = sum / codesSquared;
             }
 
             // Normalize atom
             double norm = 0;
             for (int j = 0; j < p; j++)
             {
-                norm += _components![c, j] * _components[c, j];
+                norm += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * _components[c, j];
             }
             norm = Math.Sqrt(norm);
 
@@ -592,7 +592,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             {
                 for (int j = 0; j < p; j++)
                 {
-                    _components![c, j] /= norm;
+                    (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] /= norm;
                 }
             }
         }
@@ -645,14 +645,14 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 {
                     sum += XtA[j, l] * AtAInv[l, c];
                 }
-                _components![c, j] = sum;
+                (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] = sum;
             }
 
             // Normalize atom
             double norm = 0;
             for (int j = 0; j < p; j++)
             {
-                norm += _components![c, j] * _components[c, j];
+                norm += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * _components[c, j];
             }
             norm = Math.Sqrt(norm);
 
@@ -660,7 +660,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             {
                 for (int j = 0; j < p; j++)
                 {
-                    _components![c, j] /= norm;
+                    (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] /= norm;
                 }
             }
         }

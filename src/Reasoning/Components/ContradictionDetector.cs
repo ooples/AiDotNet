@@ -340,11 +340,12 @@ Analyze:";
 
             contradiction.Explanation = root["explanation"]?.Value<string>() ?? response;
 
-            if (root["severity"] != null)
+            var severityToken = root["severity"];
+            if (severityToken != null)
             {
                 try
                 {
-                    contradiction.Severity = MathHelper.Clamp(root["severity"]!.Value<double>(), 0.0, 1.0);
+                    contradiction.Severity = MathHelper.Clamp(severityToken.Value<double>(), 0.0, 1.0);
                 }
                 catch (FormatException)
                 {

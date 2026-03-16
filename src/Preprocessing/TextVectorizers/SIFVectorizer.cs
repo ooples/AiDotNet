@@ -121,7 +121,7 @@ public class SIFVectorizer<T> : TextVectorizerBase<T>
             _wordFrequencies[key] /= totalWords;
         }
 
-        _vocabulary = _wordVectors!.Keys
+        _vocabulary = (_wordVectors ?? throw new InvalidOperationException("Word vectors not loaded.")).Keys
             .Where(k => _wordFrequencies.ContainsKey(k))
             .Select((k, i) => (k, i))
             .ToDictionary(x => x.k, x => x.i);
@@ -151,8 +151,8 @@ public class SIFVectorizer<T> : TextVectorizerBase<T>
             int count = 0;
             foreach (string token in tokens)
             {
-                if (!_wordVectors!.TryGetValue(token, out var wordVec)) continue;
-                if (!_wordFrequencies!.TryGetValue(token, out double freq)) continue;
+                if (!(_wordVectors ?? throw new InvalidOperationException("Word vectors not loaded.")).TryGetValue(token, out var wordVec)) continue;
+                if (!(_wordFrequencies ?? throw new InvalidOperationException("Word frequencies not computed.")).TryGetValue(token, out double freq)) continue;
 
                 double weight = _alpha / (_alpha + freq);
 
