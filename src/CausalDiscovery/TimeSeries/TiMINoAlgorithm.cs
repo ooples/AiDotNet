@@ -47,9 +47,10 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     /// <summary>
-    /// HSIC threshold below which residuals are considered independent of the cause.
+    /// Squared correlation threshold below which residuals are considered independent of the cause.
+    /// Uses squared Pearson correlation as a computationally efficient proxy for HSIC.
     /// </summary>
-    private const double HsicIndependenceThreshold = 0.1;
+    private const double IndependenceThreshold = 0.1;
 
     /// <summary>
     /// Minimum absolute coefficient magnitude for an edge to be included.
@@ -98,7 +99,7 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
                 var (hsicJI, _) = FitAndComputeHSIC(data, j, i, n);
 
                 // Lower HSIC = more independent residuals = correct causal direction
-                if (hsicIJ < hsicJI && hsicIJ < HsicIndependenceThreshold)
+                if (hsicIJ < hsicJI && hsicIJ < IndependenceThreshold)
                 {
                     // Use the fitted lag coefficient as the edge weight
                     if (Math.Abs(betaIJ) > EdgeCoefficientThreshold)
