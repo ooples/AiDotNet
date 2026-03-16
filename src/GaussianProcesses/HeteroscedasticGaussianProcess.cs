@@ -260,18 +260,27 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
         _noiseVariances = new Vector<T>(n);
         UpdateNoiseVariances();
 
-        // EM-style optimization
+        // Phase 1: Fit initial mean GP with constant small noise to get good residuals.
+        // This breaks the EM feedback loop where high initial noise → under-fit mean GP →
+        // large residuals → noise GP estimates even higher noise.
+        for (int i = 0; i < n; i++)
+        {
+            _noiseVariances[i] = _numOps.FromDouble(_jitter);
+        }
+        FitMeanGP();
+
+        // Phase 2: Initialize noise from actual residuals
+        UpdateNoiseLatentValues();
+        UpdateNoiseVariances();
+
+        // Phase 3: EM refinement with properly initialized noise
         double prevLoss = double.MaxValue;
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // M-step: Update mean GP with current noise estimates
             FitMeanGP();
-
-            // E-step: Update noise estimates given current mean GP
             UpdateNoiseLatentValues();
             UpdateNoiseVariances();
 
-            // Check convergence
             double loss = ComputeNegativeLogLikelihood();
             if (Math.Abs(prevLoss - loss) < _tolerance)
             {
@@ -434,8 +443,10 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
                 double kval = _numOps.ToDouble(_noiseKernel.Calculate(xi, xj));
                 newLatent += kval * _numOps.ToDouble(alpha_noise[j]);
             }
-            // Blend with prior for regularization (mild damping to prevent noise collapse)
-            newLatent = 0.9 * newLatent + 0.1 * _noisePriorMean;
+            // Clamp to prevent extreme values but don't blend with prior
+            // (prior blending prevents convergence to the true noise level)
+            newLatent = Math.Max(newLatent, _noisePriorMean - 10);
+            newLatent = Math.Min(newLatent, _noisePriorMean + 10);
             _noiseLatentValues[i] = _numOps.FromDouble(newLatent);
         }
     }
