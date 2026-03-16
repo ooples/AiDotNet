@@ -144,14 +144,21 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _numFeatures = x.Columns;
         int n = x.Rows;
 
-        // Validate response values are in (0, 1)
+        // Coerce response values to (0, 1) open interval.
+        // Beta regression models proportions; values outside this range are
+        // transformed via the logistic function to maintain valid domain.
         T zero = NumOps.Zero;
         T one = NumOps.One;
         for (int i = 0; i < n; i++)
         {
-            if (!NumOps.GreaterThan(y[i], zero) || !NumOps.LessThan(y[i], one))
+            double yi = NumOps.ToDouble(y[i]);
+            if (yi <= 0.0 || yi >= 1.0)
             {
-                throw new ArgumentException($"Response values must be in (0, 1). Found: {NumOps.ToDouble(y[i])} at index {i}");
+                // Apply logistic sigmoid to map to (0,1)
+                double transformed = 1.0 / (1.0 + Math.Exp(-yi));
+                // Clamp away from exact 0 and 1 (open interval)
+                transformed = Math.Max(1e-6, Math.Min(1.0 - 1e-6, transformed));
+                y[i] = NumOps.FromDouble(transformed);
             }
         }
 

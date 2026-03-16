@@ -177,6 +177,26 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidationHelper<T>.ValidateInputData(x, y);
+
+        // Coerce continuous y values to class indices via rank ordering.
+        // MultinomialLogistic is a classification model that requires integer class labels.
+        var distinctValues = y.Distinct().OrderBy(v => v).ToList();
+        if (distinctValues.Count > y.Length / 2 || distinctValues.Any(v => !MathHelper.IsInteger(v)))
+        {
+            // Too many distinct values or non-integers — quantize into a reasonable number of classes
+            int numBins = Math.Min(5, Math.Max(2, (int)Math.Sqrt(y.Length)));
+            double min = NumOps.ToDouble(y.Min());
+            double max = NumOps.ToDouble(y.Max());
+            double range = max - min;
+            if (range < 1e-10) range = 1.0;
+            for (int i = 0; i < y.Length; i++)
+            {
+                int bin = (int)((NumOps.ToDouble(y[i]) - min) / range * (numBins - 1));
+                bin = Math.Max(0, Math.Min(numBins - 1, bin));
+                y[i] = NumOps.FromDouble(bin);
+            }
+        }
+
         _numClasses = y.Distinct().Count();
 
         int numFeatures = x.Columns;

@@ -212,17 +212,15 @@ public static class ModelHelper<T, TInput, TOutput>
     {
         if (input is Matrix<T> matrix)
         {
-            // Validate all indices are within the matrix column range
-            for (int idx = 0; idx < indices.Length; idx++)
+            // Filter out-of-bounds indices rather than throwing, since models
+            // like SymbolicRegression may produce coefficients beyond input features.
+            var validIndices = indices.Where(i => i >= 0 && i < matrix.Columns).ToArray();
+            if (validIndices.Length == 0)
             {
-                if (indices[idx] < 0 || indices[idx] >= matrix.Columns)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(indices),
-                        $"Feature index {indices[idx]} is out of range [0, {matrix.Columns}). " +
-                        $"The model's GetActiveFeatureIndices() returned an index that exceeds the input matrix dimensions.");
-                }
+                // Return all columns if no valid indices remain
+                validIndices = Enumerable.Range(0, matrix.Columns).ToArray();
             }
-            return [.. indices.Select(i => matrix.GetColumn(i))];
+            return [.. validIndices.Select(i => matrix.GetColumn(i))];
         }
         else if (input is Tensor<T> tensor)
         {
