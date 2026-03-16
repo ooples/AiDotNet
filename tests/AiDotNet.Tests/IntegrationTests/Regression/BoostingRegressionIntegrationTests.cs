@@ -1,4 +1,4 @@
-using AiDotNet.Models;
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
@@ -303,26 +303,42 @@ public class BoostingRegressionIntegrationTests
 
     #endregion
 
-    #region Cross-cutting invariants
+    #region Cross-cutting: all boosting models produce finite predictions
 
-    [Theory]
-    [InlineData(typeof(AdaBoostR2Regression<double>))]
-    [InlineData(typeof(DARTRegression<double>))]
-    [InlineData(typeof(GradientBoostingRegression<double>))]
-    [InlineData(typeof(HistGradientBoostingRegression<double>))]
-    [InlineData(typeof(NGBoostRegression<double>))]
-    [InlineData(typeof(ExplainableBoostingMachineRegression<double>))]
-    public void BoostingModel_PredictionsAreFinite(Type modelType)
+    private void AssertModelProducesFinitePredictions(Interfaces.IFullModel<double, Matrix<double>, Vector<double>> model, string modelName)
     {
         var (x, y) = CreateLinearData(60, new[] { 1.0, -0.5 }, intercept: 2.0, noise: 0.5, seed: 42);
 
-        var model = (ModelBase<double, Matrix<double>, Vector<double>>)Activator.CreateInstance(modelType)!;
         model.Train(x, y);
         var predictions = model.Predict(x);
 
         Assert.Equal(x.Rows, predictions.Length);
-        Assert.True(AllFinite(predictions), $"{modelType.Name} produced NaN/Infinity predictions");
+        Assert.True(AllFinite(predictions), $"{modelName} produced NaN/Infinity predictions");
     }
+
+    [Fact]
+    public void AdaBoostR2_PredictionsAreFinite()
+        => AssertModelProducesFinitePredictions(new AdaBoostR2Regression<double>(), "AdaBoostR2");
+
+    [Fact]
+    public void DART_PredictionsAreFinite()
+        => AssertModelProducesFinitePredictions(new DARTRegression<double>(), "DART");
+
+    [Fact]
+    public void GradientBoosting_PredictionsAreFinite()
+        => AssertModelProducesFinitePredictions(new GradientBoostingRegression<double>(), "GradientBoosting");
+
+    [Fact]
+    public void HistGradientBoosting_PredictionsAreFinite()
+        => AssertModelProducesFinitePredictions(new HistGradientBoostingRegression<double>(), "HistGradientBoosting");
+
+    [Fact]
+    public void NGBoost_PredictionsAreFinite()
+        => AssertModelProducesFinitePredictions(new NGBoostRegression<double>(), "NGBoost");
+
+    [Fact]
+    public void EBM_PredictionsAreFinite()
+        => AssertModelProducesFinitePredictions(new ExplainableBoostingMachineRegression<double>(), "EBM");
 
     #endregion
 }

@@ -1,4 +1,4 @@
-using AiDotNet.Models;
+using AiDotNet.Interfaces;
 using AiDotNet.Regression;
 using AiDotNet.Regression.MixedEffects;
 using Xunit;
@@ -286,25 +286,37 @@ public class AdvancedRegressionIntegrationTests
 
     #region Cross-cutting: All models produce correct output length
 
-    [Theory]
-    [InlineData(typeof(M5ModelTree<double>))]
-    [InlineData(typeof(SuperLearner<double>))]
-    [InlineData(typeof(GeneralizedAdditiveModel<double>))]
-    [InlineData(typeof(DeepHit<double>))]
-    [InlineData(typeof(DeepSurv<double>))]
-    public void AdvancedModel_OutputLengthMatchesInput(Type modelType)
+    private void AssertOutputLengthAndFinite(IFullModel<double, Matrix<double>, Vector<double>> model, string name)
     {
         var (x, y) = CreateLinearData(40, new[] { 1.0, -0.5 }, intercept: 2.0, noise: 0.3, seed: 42);
-        // Make y positive for survival models
         for (int i = 0; i < y.Length; i++) y[i] = Math.Abs(y[i]) + 0.1;
 
-        var model = (ModelBase<double, Matrix<double>, Vector<double>>)Activator.CreateInstance(modelType)!;
         model.Train(x, y);
         var predictions = model.Predict(x);
 
         Assert.Equal(x.Rows, predictions.Length);
-        Assert.True(AllFinite(predictions), $"{modelType.Name} produced NaN/Infinity predictions");
+        Assert.True(AllFinite(predictions), $"{name} produced NaN/Infinity predictions");
     }
+
+    [Fact]
+    public void M5ModelTree_OutputLengthMatchesInput()
+        => AssertOutputLengthAndFinite(new M5ModelTree<double>(), "M5ModelTree");
+
+    [Fact]
+    public void SuperLearner_CrossCutting_FinitePredictions()
+        => AssertOutputLengthAndFinite(new SuperLearner<double>(), "SuperLearner");
+
+    [Fact]
+    public void GAM_OutputLengthMatchesInput()
+        => AssertOutputLengthAndFinite(new GeneralizedAdditiveModel<double>(), "GAM");
+
+    [Fact]
+    public void DeepHit_OutputLengthMatchesInput()
+        => AssertOutputLengthAndFinite(new DeepHit<double>(), "DeepHit");
+
+    [Fact]
+    public void DeepSurv_OutputLengthMatchesInput()
+        => AssertOutputLengthAndFinite(new DeepSurv<double>(), "DeepSurv");
 
     #endregion
 }
