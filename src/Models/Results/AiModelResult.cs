@@ -5010,6 +5010,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         using (Helpers.ModelPersistenceGuard.InternalOperation())
         {
