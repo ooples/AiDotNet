@@ -105,6 +105,23 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
             throw new InvalidOperationException("ClassLabels must be set before computing class parameters.");
         }
 
+        // Complement Naive Bayes requires non-negative feature values (counts/frequencies).
+        // Negative values cause Log(negative) = NaN, silently corrupting the model.
+        for (int i = 0; i < x.Rows; i++)
+        {
+            for (int f = 0; f < x.Columns; f++)
+            {
+                if (NumOps.LessThan(x[i, f], NumOps.Zero))
+                {
+                    throw new ArgumentException(
+                        $"ComplementNaiveBayes requires non-negative feature values, " +
+                        $"but found {NumOps.ToDouble(x[i, f]):F4} at row {i}, column {f}. " +
+                        "Use GaussianNaiveBayes for continuous features that may be negative.",
+                        nameof(x));
+                }
+            }
+        }
+
         // Initialize complement log probabilities
         _complementLogProbs = new Matrix<T>(NumClasses, NumFeatures);
 

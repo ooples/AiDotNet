@@ -260,26 +260,30 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                 // Accumulate loss
                 loss -= Math.Log(probs[yi]);
 
-                // Compute gradients for coefficients
+                // Compute gradients for coefficients w.r.t. negative log-likelihood.
+                // The sign is negative because ∂η/∂β = x but ∂(α-η)/∂β = -x,
+                // so the chain rule introduces a sign flip: ∂NLL/∂β = -∂NLL/∂η * x.
                 for (int p = 0; p < P; p++)
                 {
                     double xi = NumOps.ToDouble(x[i, p]);
 
                     if (yi == 0)
                     {
-                        // First class
-                        gradCoef[p] += xi * (cumProbs[0] - 1);
+                        // First class: dP(Y=0)/dη = -σ'(α₀-η) = -(cumProbs[0])(1-cumProbs[0])
+                        // dNLL/dβ = -(dP/dη / P) * x = (σ'(α₀-η) / P) * x
+                        gradCoef[p] -= xi * (cumProbs[0] - 1);
                     }
                     else if (yi == K - 1)
                     {
-                        // Last class
-                        gradCoef[p] += xi * cumProbs[K - 2];
+                        // Last class: dP(Y=K-1)/dη = σ'(α_{K-2}-η)
+                        // dNLL/dβ = -(dP/dη / P) * x
+                        gradCoef[p] -= xi * cumProbs[K - 2];
                     }
                     else
                     {
                         // Middle classes
                         double term = cumProbs[yi] * (1 - cumProbs[yi]) - cumProbs[yi - 1] * (1 - cumProbs[yi - 1]);
-                        gradCoef[p] += xi * term / probs[yi];
+                        gradCoef[p] -= xi * term / probs[yi];
                     }
                 }
 
