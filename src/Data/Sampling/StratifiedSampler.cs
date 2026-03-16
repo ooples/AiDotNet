@@ -105,7 +105,7 @@ public class StratifiedSampler : DataSamplerBase, IStratifiedSampler
 
         // Shuffle indices within each class
         var shuffledClassIndices = new Dictionary<int, int[]>();
-        foreach (var kvp in _classIndices!)
+        foreach (var kvp in _classIndices ?? throw new InvalidOperationException("Class indices not built."))
         {
             int classLabel = kvp.Key;
             List<int> indices = kvp.Value;
@@ -293,7 +293,7 @@ public class StratifiedBatchSampler : DataSamplerBase, IBatchSampler, IStratifie
 
         // Shuffle indices within each class
         var shuffledQueues = new Dictionary<int, Queue<int>>();
-        foreach (var kvp in _classIndices!)
+        foreach (var kvp in _classIndices ?? throw new InvalidOperationException("Class indices not built."))
         {
             int classLabel = kvp.Key;
             List<int> indices = kvp.Value;

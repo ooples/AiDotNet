@@ -56,7 +56,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     private Matrix<T> _means = new Matrix<T>(0, 0);
     private Tensor<T> _covariances = new Tensor<T>(new[] { 0, 0, 0 });
     private Matrix<T> _responsibilities = new Matrix<T>(0, 0);
-    private T _lowerBound = default(T) ?? MathHelper.GetNumericOperations<T>().Zero;
+    private T _lowerBound = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Initializes a new GaussianMixtureModel instance.
@@ -127,6 +127,16 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         if (n < k)
         {
             throw new ArgumentException($"Number of samples ({n}) must be >= number of components ({k}).");
+        }
+
+        if (_options.NumInitializations < 1)
+        {
+            throw new ArgumentException("NumInitializations must be >= 1.", nameof(_options.NumInitializations));
+        }
+
+        if (_options.MaxIterations < 1)
+        {
+            throw new ArgumentException("MaxIterations must be >= 1.", nameof(_options.MaxIterations));
         }
 
         T bestLowerBound = NumOps.MinValue;
