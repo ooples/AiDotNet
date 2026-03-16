@@ -252,6 +252,15 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         Matrix<T> penaltyMatrix = CreatePenaltyMatrix();
         Matrix<T> xTx = _basisFunctions.Transpose().Multiply(_basisFunctions);
         Matrix<T> regularizedXTX = Regularization.Regularize(xTx);
+
+        // Add explicit ridge penalty for numerical stability with spline basis functions
+        // Cubic splines can produce large values causing ill-conditioned X'X
+        T ridgePenalty = NumOps.FromDouble(0.01);
+        for (int i = 0; i < regularizedXTX.Rows; i++)
+        {
+            regularizedXTX[i, i] = NumOps.Add(regularizedXTX[i, i], ridgePenalty);
+        }
+
         Vector<T> xTy = _basisFunctions.Transpose().Multiply(y);
 
         _coefficients = SolveSystem(regularizedXTX, xTy);

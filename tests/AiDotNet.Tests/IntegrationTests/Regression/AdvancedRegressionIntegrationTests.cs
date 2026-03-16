@@ -196,10 +196,11 @@ public class AdvancedRegressionIntegrationTests
     [Fact]
     public void LinearMixedModel_FitsData_PredictionsFinite()
     {
-        // Simple data with fixed effects — mixed model should handle it
+        // Simple data with fixed effects — mixed model needs at least one random effect
         var (x, y) = CreateLinearData(60, new[] { 2.0, -1.0 }, intercept: 3.0, noise: 0.5, seed: 42);
 
         var model = new LinearMixedModel<double>();
+        model.AddRandomIntercept("group", 3); // Required by LinearMixedModel
         model.Train(x, y);
         var predictions = model.Predict(x);
 
