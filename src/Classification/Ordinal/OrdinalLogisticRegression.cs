@@ -129,10 +129,13 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
         _random = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
-        // Default to Adam optimizer — industry standard with adaptive learning rates
-        // that don't require manual tuning. This replaces the hand-rolled gradient descent
-        // that used a fixed learning rate of 0.01 which was too small for convergence.
-        _paramOptimizer = optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(null);
+        // Default to Adam optimizer with learning rate 0.01, which is appropriate for
+        // logistic regression models with a small number of parameters. The default Adam
+        // LR of 0.001 (designed for neural networks with millions of params) is too small
+        // for models with O(features) parameters.
+        _paramOptimizer = optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(
+            null,
+            new AdamOptimizerOptions<T, Matrix<T>, Vector<T>> { InitialLearningRate = 0.01 });
     }
 
     /// <summary>
@@ -321,20 +324,22 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                 loss += 0.5 * _regularizationStrength * NumOps.ToDouble(_coefficients[p]) * NumOps.ToDouble(_coefficients[p]);
             }
 
-            // Pack coefficients + thresholds into a single parameter vector for the optimizer
-            double invN = 1.0 / x.Rows;
+            // Pack coefficients + thresholds into a single parameter vector for the optimizer.
+            // Pass the raw (summed) gradient — the optimizer's adaptive learning rate (Adam's v_t)
+            // naturally scales with gradient magnitude, so pre-averaging by N is redundant and
+            // causes underflow when combined with the optimizer's own learning rate.
             var paramVec = new Vector<T>(P + K - 1);
             var gradVec = new Vector<T>(P + K - 1);
 
             for (int p = 0; p < P; p++)
             {
                 paramVec[p] = _coefficients[p];
-                gradVec[p] = NumOps.FromDouble(gradCoef[p] * invN);
+                gradVec[p] = NumOps.FromDouble(gradCoef[p]);
             }
             for (int k = 0; k < K - 1; k++)
             {
                 paramVec[P + k] = _thresholds[k];
-                gradVec[P + k] = NumOps.FromDouble(gradThresh[k] * invN);
+                gradVec[P + k] = NumOps.FromDouble(gradThresh[k]);
             }
 
             // Let the optimizer (Adam by default) handle the update with adaptive learning rates
