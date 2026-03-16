@@ -938,7 +938,19 @@ public static class DeserializationHelper
 
         try
         {
-            var instance = Activator.CreateInstance(type);
+            object? instance;
+            try
+            {
+                instance = Activator.CreateInstance(type);
+            }
+            catch (MissingMethodException)
+            {
+                // Fall back to constructors with all-optional parameters
+                var ctor = type.GetConstructors()
+                    .FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
+                instance = ctor?.Invoke(ctor.GetParameters().Select(p => p.DefaultValue).ToArray());
+            }
+
             if (instance == null)
             {
                 return null;

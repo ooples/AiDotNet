@@ -286,6 +286,48 @@ internal static class ModelTestHelpers
     }
 
     /// <summary>
+    /// Generates classification data with non-negative integer count features.
+    /// Suitable for MultinomialNB, ComplementNB, and other count-based models.
+    /// Each class has a distinct Poisson-like distribution over features.
+    /// </summary>
+    public static (Matrix<double> X, Vector<double> Y) GenerateCountClassificationData(
+        int samples, int features, int nClasses, Random rng)
+    {
+        var x = new Matrix<double>(samples, features);
+        var y = new Vector<double>(samples);
+
+        int samplesPerClass = samples / nClasses;
+
+        for (int c = 0; c < nClasses; c++)
+        {
+            // Each class has different feature rates (Poisson-like)
+            var rates = new double[features];
+            for (int j = 0; j < features; j++)
+            {
+                // Class c has high rate for feature (c + j) % features, low for others
+                rates[j] = ((c + j) % nClasses == c) ? 8.0 + c * 3.0 : 1.0;
+            }
+
+            int startIdx = c * samplesPerClass;
+            int endIdx = c == nClasses - 1 ? samples : startIdx + samplesPerClass;
+
+            for (int i = startIdx; i < endIdx; i++)
+            {
+                for (int j = 0; j < features; j++)
+                {
+                    // Poisson-distributed counts (approximate with rounded exponential)
+                    double u = rng.NextDouble();
+                    x[i, j] = Math.Max(0, Math.Round(-rates[j] * Math.Log(1.0 - u + 1e-15)));
+                }
+                y[i] = c;
+            }
+        }
+
+        ShuffleRows(x, y, rng);
+        return (x, y);
+    }
+
+    /// <summary>
     /// Computes the range (max - min) of a vector.
     /// </summary>
     public static double ComputeRange(Vector<double> v)

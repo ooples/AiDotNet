@@ -17,6 +17,13 @@ public abstract class ClassificationModelTestBase
     protected virtual int Features => 3;
     protected virtual int NumClasses => 2;
 
+    /// <summary>
+    /// Generates training/test data. Override for models requiring specific data distributions
+    /// (e.g., non-negative counts for MultinomialNB).
+    /// </summary>
+    protected virtual (Matrix<double> X, Vector<double> Y) GenerateData(int samples, int features, int nClasses, Random rng)
+        => ModelTestHelpers.GenerateClassificationData(samples, features, nClasses, rng);
+
     // =====================================================
     // MATHEMATICAL INVARIANT: Predictions Are Valid Class Labels
     // Every prediction must be in {0, 1, ..., K-1}. No floats, no negatives,
@@ -28,8 +35,8 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
-        var (testX, _) = ModelTestHelpers.GenerateClassificationData(TestSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         var predictions = model.Predict(testX);
@@ -58,8 +65,8 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
-        var (testX, testY) = ModelTestHelpers.GenerateClassificationData(TestSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         var predictions = model.Predict(testX);
@@ -81,8 +88,8 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
-        var (testX, testY) = ModelTestHelpers.GenerateClassificationData(TestSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         var predictions = model.Predict(testX);
@@ -103,8 +110,8 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
-        var (testX, testY) = ModelTestHelpers.GenerateClassificationData(TestSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         var trainPred = model.Predict(trainX);
@@ -128,14 +135,14 @@ public abstract class ClassificationModelTestBase
     {
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
-        var (trainX1, trainY1) = ModelTestHelpers.GenerateClassificationData(30, Features, NumClasses, rng1);
+        var (trainX1, trainY1) = GenerateData(30, Features, NumClasses, rng1);
 
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model2 = CreateModel();
-        var (trainX2, trainY2) = ModelTestHelpers.GenerateClassificationData(150, Features, NumClasses, rng2);
+        var (trainX2, trainY2) = GenerateData(150, Features, NumClasses, rng2);
 
         var rngTest = ModelTestHelpers.CreateSeededRandom(99);
-        var (testX, testY) = ModelTestHelpers.GenerateClassificationData(50, Features, NumClasses, rngTest);
+        var (testX, testY) = GenerateData(50, Features, NumClasses, rngTest);
 
         model1.Train(trainX1, trainY1);
         model2.Train(trainX2, trainY2);
@@ -163,8 +170,8 @@ public abstract class ClassificationModelTestBase
         var model1 = CreateModel();
         var model2 = CreateModel();
 
-        var (trainX_real, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, 2, NumClasses, rng1);
-        var (testX_real, testY) = ModelTestHelpers.GenerateClassificationData(TestSamples, 2, NumClasses, rng2);
+        var (trainX_real, trainY) = GenerateData(TrainSamples, 2, NumClasses, rng1);
+        var (testX_real, testY) = GenerateData(TestSamples, 2, NumClasses, rng2);
 
         var rngNoise = ModelTestHelpers.CreateSeededRandom(77);
         var trainX_noisy = ModelTestHelpers.AddNoiseFeature(trainX_real, rngNoise);
@@ -196,8 +203,8 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
-        var (testX, _) = ModelTestHelpers.GenerateClassificationData(60, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, _) = GenerateData(60, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         var predictions = model.Predict(testX);
@@ -222,8 +229,8 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
-        var (testX, testY) = ModelTestHelpers.GenerateClassificationData(60, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, testY) = GenerateData(60, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         var predictions = model.Predict(testX);
@@ -264,8 +271,8 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
-        var (testX, _) = ModelTestHelpers.GenerateClassificationData(TestSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         var pred1 = model.Predict(testX);
@@ -280,8 +287,8 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
-        var (testX, _) = ModelTestHelpers.GenerateClassificationData(TestSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         Assert.Equal(TestSamples, model.Predict(testX).Length);
@@ -292,8 +299,8 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
-        var (testX, _) = ModelTestHelpers.GenerateClassificationData(TestSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, _) = GenerateData(TestSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         var cloned = model.Clone();
@@ -309,7 +316,7 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         Assert.NotNull(model.GetModelMetadata());
@@ -320,7 +327,7 @@ public abstract class ClassificationModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
 
         model.Train(trainX, trainY);
         Assert.True(model.GetParameters().Length > 0, "Trained classifier should have learnable parameters.");
@@ -334,7 +341,7 @@ public abstract class ClassificationModelTestBase
     public void Builder_ShouldProduceResult()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
 
         var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()
@@ -351,8 +358,8 @@ public abstract class ClassificationModelTestBase
     public void Builder_AccuracyShouldBeatChance()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClassificationData(TrainSamples, Features, NumClasses, rng);
-        var (testX, testY) = ModelTestHelpers.GenerateClassificationData(TestSamples, Features, NumClasses, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
+        var (testX, testY) = GenerateData(TestSamples, Features, NumClasses, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
 
         var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()

@@ -3,6 +3,8 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -74,70 +76,71 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     private Vector<T>? _coefficients;
 
     /// <summary>
-    /// Learning rate for gradient descent.
+    /// The gradient-based optimizer for parameter updates.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The learning rate controls how big steps the algorithm
-    /// takes when adjusting parameters. Smaller values are more precise but slower.</para>
-    /// </remarks>
-    private readonly double _learningRate;
+    private readonly IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> _paramOptimizer;
 
     /// <summary>
     /// Maximum iterations for optimization.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This limits how many times the algorithm updates its
-    /// parameters. More iterations can improve fit but take longer.</para>
-    /// </remarks>
     private readonly int _maxIterations;
 
     /// <summary>
     /// Convergence tolerance.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training stops early if improvements become smaller
-    /// than this value. This prevents wasted computation when the model is already good.</para>
-    /// </remarks>
     private readonly double _tolerance;
 
     /// <summary>
     /// L2 regularization strength.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Regularization prevents overfitting by penalizing large
-    /// coefficients. Higher values create simpler models that generalize better.</para>
-    /// </remarks>
     private readonly double _regularizationStrength;
 
     /// <summary>
     /// Random number generator for initialization.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Used to initialize coefficients with small random values.
-    /// Using a seed makes results reproducible.</para>
-    /// </remarks>
     private readonly Random _random;
+
+    /// <summary>
+    /// Legacy learning rate field — kept for backward compatibility with serialization/clone.
+    /// The optimizer handles learning rate internally.
+    /// </summary>
+    private readonly double _learningRate;
 
     /// <summary>
     /// Initializes a new instance of OrdinalLogisticRegression.
     /// </summary>
-    /// <param name="learningRate">Learning rate for gradient descent. Default is 0.01.</param>
+    /// <param name="optimizer">Gradient-based optimizer for training. Defaults to AdamOptimizer with industry-standard settings.</param>
     /// <param name="maxIterations">Maximum training iterations. Default is 1000.</param>
     /// <param name="tolerance">Convergence tolerance. Default is 1e-6.</param>
     /// <param name="regularization">L2 regularization strength. Default is 0.0.</param>
     /// <param name="seed">Random seed for reproducibility.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Parameters control training:
-    /// <list type="bullet">
-    /// <item><b>learningRate:</b> How big steps to take during training. Smaller = slower but more stable.</item>
-    /// <item><b>maxIterations:</b> Maximum training loops. More = better fit but slower.</item>
-    /// <item><b>tolerance:</b> Stop when improvement is below this. Prevents overfitting.</item>
-    /// <item><b>regularization:</b> Penalizes large coefficients. Prevents overfitting.</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
     public OrdinalLogisticRegression(
-        double learningRate = 0.01,
+        IGradientBasedOptimizer<T, Matrix<T>, Vector<T>>? optimizer = null,
+        int maxIterations = 1000,
+        double tolerance = 1e-6,
+        double regularization = 0.0,
+        int? seed = null)
+        : base()
+    {
+        _maxIterations = maxIterations;
+        _tolerance = tolerance;
+        _regularizationStrength = regularization;
+        _learningRate = 0.01; // Legacy field for serialization
+        _random = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
+        // Default to Adam optimizer — industry standard with adaptive learning rates
+        // that don't require manual tuning. This replaces the hand-rolled gradient descent
+        // that used a fixed learning rate of 0.01 which was too small for convergence.
+        _paramOptimizer = optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(null);
+    }
+
+    /// <summary>
+    /// Legacy constructor for backward compatibility with existing code and serialization.
+    /// The learningRate is passed to the Adam optimizer as its initial learning rate.
+    /// </summary>
+    public OrdinalLogisticRegression(
+        double learningRate,
         int maxIterations = 1000,
         double tolerance = 1e-6,
         double regularization = 0.0,
@@ -151,6 +154,12 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
         _random = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
+        // Use Adam optimizer with the user-specified learning rate
+        var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        {
+            InitialLearningRate = learningRate
+        };
+        _paramOptimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(null, adamOptions);
     }
 
     /// <summary>
@@ -214,8 +223,10 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
             yIndices[i] = GetClassIndex(y[i]);
         }
 
-        // Gradient descent optimization
+        // Optimization using the configured gradient-based optimizer (Adam by default).
+        // The optimizer handles adaptive learning rates, momentum, and step size internally.
         double prevLoss = double.MaxValue;
+
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             // Compute gradients
@@ -310,17 +321,33 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                 loss += 0.5 * _regularizationStrength * NumOps.ToDouble(_coefficients[p]) * NumOps.ToDouble(_coefficients[p]);
             }
 
-            // Update parameters
+            // Pack coefficients + thresholds into a single parameter vector for the optimizer
+            double invN = 1.0 / x.Rows;
+            var paramVec = new Vector<T>(P + K - 1);
+            var gradVec = new Vector<T>(P + K - 1);
+
             for (int p = 0; p < P; p++)
             {
-                double newVal = NumOps.ToDouble(_coefficients[p]) - _learningRate * gradCoef[p] / x.Rows;
-                _coefficients[p] = NumOps.FromDouble(newVal);
+                paramVec[p] = _coefficients[p];
+                gradVec[p] = NumOps.FromDouble(gradCoef[p] * invN);
             }
-
             for (int k = 0; k < K - 1; k++)
             {
-                double newVal = NumOps.ToDouble(_thresholds[k]) - _learningRate * gradThresh[k] / x.Rows;
-                _thresholds[k] = NumOps.FromDouble(newVal);
+                paramVec[P + k] = _thresholds[k];
+                gradVec[P + k] = NumOps.FromDouble(gradThresh[k] * invN);
+            }
+
+            // Let the optimizer (Adam by default) handle the update with adaptive learning rates
+            var updatedParams = _paramOptimizer.UpdateParameters(paramVec, gradVec);
+
+            // Unpack updated parameters back into coefficients and thresholds
+            for (int p = 0; p < P; p++)
+            {
+                _coefficients[p] = updatedParams[p];
+            }
+            for (int k = 0; k < K - 1; k++)
+            {
+                _thresholds[k] = updatedParams[P + k];
             }
 
             // Ensure thresholds are monotonically increasing

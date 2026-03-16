@@ -110,10 +110,34 @@ public static class ClassifierRegistry<T>
 
         if (type is not null)
         {
-            var instance = Activator.CreateInstance(type)
+            // Try parameterless constructor first, then fall back to constructors with all-optional parameters.
+            // Many classifiers have constructors like Ctor(Options? options = null) which Activator.CreateInstance(Type)
+            // doesn't recognize as parameterless, but CreateInstance(Type, object[]) can invoke with defaults.
+            object? instance;
+            try
+            {
+                instance = Activator.CreateInstance(type);
+            }
+            catch (MissingMethodException)
+            {
+                // Find a constructor where all parameters have defaults
+                var ctor = type.GetConstructors()
+                    .FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
+
+                if (ctor != null)
+                {
+                    var defaults = ctor.GetParameters().Select(p => p.DefaultValue).ToArray();
+                    instance = ctor.Invoke(defaults);
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            return (IClassifier<T>)(instance
                 ?? throw new InvalidOperationException(
-                    $"Failed to create instance of classifier type '{typeName}'. Activator.CreateInstance returned null.");
-            return (IClassifier<T>)instance;
+                    $"Failed to create instance of classifier type '{typeName}'."));
         }
 
         throw new InvalidOperationException(
