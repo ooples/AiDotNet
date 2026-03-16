@@ -54,7 +54,7 @@ namespace AiDotNet.CausalInference;
 /// <code>
 /// var dr = new DoublyRobustEstimator&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);
 /// dr.Fit(features, treatment, outcome);
-/// double ate = dr.EstimateAte();
+/// var (ate, se) = dr.EstimateATE(features, treatment, outcome);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
