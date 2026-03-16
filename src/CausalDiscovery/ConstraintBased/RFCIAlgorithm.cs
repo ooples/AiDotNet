@@ -189,16 +189,10 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
                 foreach (int v in GetAdjacencies(adj, b, c, d))
                 {
                     if (!oriented[v, c]) continue; // v must be a parent of c
-
-                    // Try to extend the path backward from v
-                    // Need to find a node 'a' not adjacent to c
-                    if (!adj[v, c])
-                    {
-                        // v itself can be 'a' if not adjacent to c — but v is oriented[v,c], so adj[v,c] is true
-                        continue;
-                    }
+                    if (!adj[b, v]) continue; // b must be adjacent to v for the path to exist
 
                     // Look for 'a' one more step back (path length 3: a → v → b → c)
+                    // For a discriminating path: a → v, v → c are oriented, and a is not adjacent to c
                     foreach (int a in GetAdjacencies(adj, v, b, d))
                     {
                         if (a == c || adj[a, c]) continue; // a must not be adjacent to c
@@ -207,6 +201,8 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
                         // Found discriminating path <a, v, b, c>
                         // v is a collider and parent of c ✓
                         // a is not adjacent to c ✓
+                        // Apply the first valid discriminating path result for (b,c)
+                        // to avoid conflicting mutations from iteration order
                         if (sepSets.TryGetValue((a, c), out var sepAC))
                         {
                             if (sepAC.Contains(b))
@@ -231,9 +227,11 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
                                     oriented[c, b] = true;
                                 }
                             }
+                            goto nextPair; // First valid path decides; avoid conflicting later paths
                         }
                     }
                 }
+                nextPair:;
             }
         }
 
