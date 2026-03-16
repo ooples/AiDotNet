@@ -64,7 +64,7 @@
 
     <!-- Code analysis (default version; source generators may override) -->
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.3" />
 
