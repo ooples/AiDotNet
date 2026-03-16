@@ -503,30 +503,41 @@ internal class DGPLayer<T>
         }
 
         // Compute predictive mean: Kxu * Kuu^(-1) * m
-        // Simplified: just use variational mean directly weighted by kernel
-        for (int i = 0; i < n; i++)
+        // First solve for Kuu^(-1) * m for each output dimension
+        int m_points = _inducingInputs.Rows;
+
+        // Build Kuu
+        var Kuu = new Matrix<T>(m_points, m_points);
+        for (int i = 0; i < m_points; i++)
         {
-            for (int d = 0; d < _outputDim; d++)
+            for (int j = i; j < m_points; j++)
+            {
+                var kval = _kernel.Calculate(_inducingInputs.GetRow(i), _inducingInputs.GetRow(j));
+                Kuu[i, j] = kval;
+                Kuu[j, i] = kval;
+            }
+            // Add jitter for numerical stability
+            Kuu[i, i] = _numOps.Add(Kuu[i, i], _numOps.FromDouble(1e-6));
+        }
+
+        // Solve Kuu * alpha_d = m_d for each output dimension
+        for (int d = 0; d < _outputDim; d++)
+        {
+            var m_d = new Vector<T>(m_points);
+            for (int j = 0; j < m_points; j++)
+                m_d[j] = _variationalMean[j, d];
+
+            var alpha_d = MatrixSolutionHelper.SolveLinearSystem(Kuu, m_d, MatrixDecompositionType.Cholesky);
+
+            // Predict: mean_d = Kxu * alpha_d
+            for (int i = 0; i < n; i++)
             {
                 T sum = _numOps.Zero;
-                T weightSum = _numOps.Zero;
-
-                for (int j = 0; j < _inducingInputs.Rows; j++)
+                for (int j = 0; j < m_points; j++)
                 {
-                    T weight = Kxu[i, j];
-                    sum = _numOps.Add(sum, _numOps.Multiply(weight, _variationalMean[j, d]));
-                    weightSum = _numOps.Add(weightSum, weight);
+                    sum = _numOps.Add(sum, _numOps.Multiply(Kxu[i, j], alpha_d[j]));
                 }
-
-                // Normalize and add noise for sampling
-                if (_numOps.ToDouble(weightSum) > 1e-10)
-                {
-                    sum = _numOps.Divide(sum, weightSum);
-                }
-
-                // Add small random noise for sampling
-                double noise = random.NextDouble() * 0.1 - 0.05;
-                output[i, d] = _numOps.Add(sum, _numOps.FromDouble(noise));
+                output[i, d] = sum;
             }
         }
 

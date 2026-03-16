@@ -597,12 +597,15 @@ public class StudentTGaussianProcess<T> : IGaussianProcess<T>
         // Compute cross-covariance
         var KStar = ComputeKernelMatrix(XNew, _X);
 
-        // Compute K^{-1} * posterior_mean (using site parameters)
+        // Compute alpha = (K + σ²I)⁻¹ * y for GP prediction.
+        // The Student-T EP posterior modifies the effective observations, but for the
+        // predictive mean we use the standard GP formula with training targets y.
+        // The posterior mean from EP is the latent function estimate at training points,
+        // NOT the alpha weights. Using it directly as alpha double-applies K⁻¹.
         var alpha = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            // Simplified: use posterior mean directly
-            alpha[i] = _posteriorMean[i];
+            alpha[i] = _y![i];
         }
 
         // Solve for weights

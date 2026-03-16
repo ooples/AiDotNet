@@ -234,11 +234,23 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
         _y = y;
         int n = X.Rows;
 
-        // Initialize noise latent values to prior mean
+        // Initialize noise latent values by estimating from data variance.
+        // Using the prior mean (log(0.1)) is too large for low-noise data and causes
+        // under-fitting in the first EM iteration that's hard to recover from.
+        // Instead, estimate initial noise from the target variance as a fraction.
+        double yMean = 0;
+        for (int i = 0; i < n; i++) yMean += _numOps.ToDouble(y[i]);
+        yMean /= n;
+        double yVar = 0;
+        for (int i = 0; i < n; i++) { double d = _numOps.ToDouble(y[i]) - yMean; yVar += d * d; }
+        yVar /= n;
+        // Start with noise = 1% of target variance (reasonable for many datasets)
+        double initialNoiseLog = Math.Log(Math.Max(yVar * 0.01, 1e-10));
+
         _noiseLatentValues = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            _noiseLatentValues[i] = _numOps.FromDouble(_noisePriorMean);
+            _noiseLatentValues[i] = _numOps.FromDouble(initialNoiseLog);
         }
 
         // Initialize noise variances
@@ -419,8 +431,8 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
                 double kval = _numOps.ToDouble(_noiseKernel.Calculate(xi, xj));
                 newLatent += kval * _numOps.ToDouble(alpha_noise[j]);
             }
-            // Blend with prior
-            newLatent = 0.7 * newLatent + 0.3 * _noisePriorMean;
+            // Blend with prior for regularization (mild damping to prevent noise collapse)
+            newLatent = 0.9 * newLatent + 0.1 * _noisePriorMean;
             _noiseLatentValues[i] = _numOps.FromDouble(newLatent);
         }
     }
