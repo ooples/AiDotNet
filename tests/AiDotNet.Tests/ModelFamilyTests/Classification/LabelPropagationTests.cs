@@ -9,4 +9,7 @@ public class LabelPropagationTests : ClassificationModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new LabelPropagation<double>();
+
+    // Semi-supervised graph-based model — stores label distributions, not flat parameters
+    protected override bool HasFlatParameters => false;
 }
