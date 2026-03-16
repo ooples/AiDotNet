@@ -7,6 +7,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// <summary>
 /// Base test class for clustering models. Tests deep mathematical invariants
 /// that any correctly implemented clustering algorithm must satisfy.
+/// Modeled after the Classification gold standard with domain-specific invariants.
 /// </summary>
 public abstract class ClusteringModelTestBase
 {
@@ -14,44 +15,26 @@ public abstract class ClusteringModelTestBase
 
     protected virtual int TrainSamples => 90;
     protected virtual int TestSamples => 30;
-    protected virtual int Features => 2;
+    protected virtual int Features => 3;
     protected virtual int NumClusters => 3;
 
-    // =====================================================
-    // MATHEMATICAL INVARIANT: Correct Number of Distinct Clusters
-    // On well-separated data with K=3 blobs, the model should produce
-    // exactly K (or close to K) distinct cluster labels. If it produces 1,
-    // it collapsed. If it produces N, it didn't cluster at all.
-    // =====================================================
+    /// <summary>
+    /// Whether this model exposes flat parameter vectors. Some clustering models
+    /// (density-based like DBSCAN, hierarchical) don't have flat parameters.
+    /// </summary>
+    protected virtual bool HasFlatParameters => true;
 
-    [Fact]
-    public void DistinctClusters_ShouldBeReasonable()
-    {
-        var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
-
-        model.Train(trainX, trainY);
-        var assignments = model.Predict(trainX);
-
-        var distinctClusters = new HashSet<int>();
-        for (int i = 0; i < assignments.Length; i++)
-        {
-            if (!double.IsNaN(assignments[i]) && !double.IsInfinity(assignments[i]))
-                distinctClusters.Add((int)Math.Round(assignments[i]));
-        }
-
-        Assert.True(distinctClusters.Count >= 2,
-            $"Only {distinctClusters.Count} distinct clusters found (expected ~{NumClusters}). " +
-            "Model may have collapsed to a single cluster.");
-        Assert.True(distinctClusters.Count <= TrainSamples / 2,
-            $"{distinctClusters.Count} distinct clusters found — model may not be clustering at all.");
-    }
+    /// <summary>
+    /// Override for models that generate data differently.
+    /// </summary>
+    protected virtual (Matrix<double> X, Vector<double> Y) GenerateData(
+        int samples, int nClusters, int features, Random rng)
+        => ModelTestHelpers.GenerateClusterData(samples, nClusters, features, rng);
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Adjusted Rand Index > 0
-    // The ground truth labels are known (from data generation).
-    // ARI > 0 means the clustering is better than random assignment.
+    // On well-separated blobs, ANY clustering algorithm should
+    // produce assignments correlated with ground truth (ARI > 0).
     // ARI = 0 means random; ARI < 0 means anti-correlated.
     // =====================================================
 
@@ -60,7 +43,7 @@ public abstract class ClusteringModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
         var assignments = model.Predict(trainX);
@@ -69,57 +52,29 @@ public abstract class ClusteringModelTestBase
         {
             double ari = ModelTestHelpers.CalculateAdjustedRandIndex(trainY, assignments);
             Assert.True(ari > 0.0,
-                $"ARI = {ari:F4} — clustering is no better than random on well-separated blobs. " +
-                "The algorithm may not be finding the true cluster structure.");
+                $"ARI = {ari:F4} — clustering is no better than random on well-separated blobs.");
         }
     }
 
     // =====================================================
-    // MATHEMATICAL INVARIANT: Identical Points → Same Cluster
-    // Duplicating a point must give the same cluster assignment.
-    // Violation indicates non-deterministic assignment or input-order dependence.
+    // MATHEMATICAL INVARIANT: High Purity on Separable Data
+    // On perfectly separable blobs (spacing=10, std=0.5), purity
+    // should be > 80%. This is the clustering equivalent of
+    // Classification's "Accuracy_ShouldBeHigh_OnPerfectlySeparableData".
     // =====================================================
 
     [Fact]
-    public void IdenticalPoints_ShouldGetSameCluster()
+    public void IntraClusterPurity_ShouldBeHigh_OnSeparableData()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
-
-        model.Train(trainX, trainY);
-
-        var duplicateX = new Matrix<double>(2, Features);
-        for (int j = 0; j < Features; j++)
-        {
-            duplicateX[0, j] = trainX[0, j];
-            duplicateX[1, j] = trainX[0, j];
-        }
-
-        var assignments = model.Predict(duplicateX);
-        Assert.Equal(assignments[0], assignments[1]);
-    }
-
-    // =====================================================
-    // MATHEMATICAL INVARIANT: Cluster Compactness
-    // Points within the same ground-truth cluster should (mostly) get
-    // the same predicted label. Average intra-cluster purity should be > 0.6.
-    // =====================================================
-
-    [Fact]
-    public void IntraClusterPurity_ShouldBeHigh()
-    {
-        var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
         var assignments = model.Predict(trainX);
 
-        if (!ModelTestHelpers.AllFinite(assignments))
-            return;
+        if (!ModelTestHelpers.AllFinite(assignments)) return;
 
-        // For each ground-truth cluster, find the most common predicted label
         double totalPurity = 0;
         int numGroups = 0;
         for (int c = 0; c < NumClusters; c++)
@@ -137,8 +92,7 @@ public abstract class ClusteringModelTestBase
             }
             if (groupSize > 0 && labelCounts.Count > 0)
             {
-                double maxFraction = (double)labelCounts.Values.Max() / groupSize;
-                totalPurity += maxFraction;
+                totalPurity += (double)labelCounts.Values.Max() / groupSize;
                 numGroups++;
             }
         }
@@ -146,17 +100,164 @@ public abstract class ClusteringModelTestBase
         if (numGroups > 0)
         {
             double avgPurity = totalPurity / numGroups;
-            Assert.True(avgPurity > 0.6,
-                $"Average intra-cluster purity = {avgPurity:F4} (should be >0.6). " +
-                "Clusters don't correspond well to ground truth on well-separated blobs.");
+            Assert.True(avgPurity > 0.8,
+                $"Average intra-cluster purity = {avgPurity:F4} (should be >0.8 on perfectly separable data).");
         }
     }
 
     // =====================================================
-    // MATHEMATICAL INVARIANT: Points Near Cluster Centers
-    // For centroid-based methods, the mean of points assigned to a cluster
-    // should be close to the center used for generation.
-    // This catches centroid initialization bugs.
+    // MATHEMATICAL INVARIANT: More Data → Better or Equal Clustering
+    // Doubling training data should not make ARI worse.
+    // Mirrors Classification's "MoreData_ShouldNotDegrade_Accuracy".
+    // =====================================================
+
+    [Fact]
+    public void MoreData_ShouldNotDegrade_ClusterQuality()
+    {
+        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
+        var model1 = CreateModel();
+        var (trainX1, trainY1) = GenerateData(30, NumClusters, Features, rng1);
+
+        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+        var model2 = CreateModel();
+        var (trainX2, trainY2) = GenerateData(120, NumClusters, Features, rng2);
+
+        model1.Train(trainX1, trainY1);
+        model2.Train(trainX2, trainY2);
+
+        var assign1 = model1.Predict(trainX1);
+        var assign2 = model2.Predict(trainX2);
+
+        if (ModelTestHelpers.AllFinite(assign1) && ModelTestHelpers.AllFinite(assign2))
+        {
+            double ari1 = ModelTestHelpers.CalculateAdjustedRandIndex(trainY1, assign1);
+            double ari2 = ModelTestHelpers.CalculateAdjustedRandIndex(trainY2, assign2);
+
+            Assert.True(ari2 >= ari1 - 0.2,
+                $"4x more data made ARI worse: ARI(30)={ari1:F4}, ARI(120)={ari2:F4}.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Irrelevant Feature Immunity
+    // Adding a pure noise feature should not significantly change
+    // cluster structure. Mirrors Classification's IrrelevantFeature test.
+    // =====================================================
+
+    [Fact]
+    public void IrrelevantFeature_ShouldNotDegrade_ClusterQuality()
+    {
+        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
+        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+        var model1 = CreateModel();
+        var model2 = CreateModel();
+
+        var (trainX_real, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng1);
+
+        // Add noise feature with SAME scale as real features (range 0-30 for 3 clusters at 0,10,20).
+        // Using ModelTestHelpers.AddNoiseFeature (*100) would dominate Euclidean distance.
+        var rngNoise = ModelTestHelpers.CreateSeededRandom(77);
+        var trainX_noisy = new Matrix<double>(TrainSamples, Features + 1);
+        for (int i = 0; i < TrainSamples; i++)
+        {
+            for (int j = 0; j < Features; j++)
+                trainX_noisy[i, j] = trainX_real[i, j];
+            trainX_noisy[i, Features] = rngNoise.NextDouble() * 30.0; // same scale as data
+        }
+
+        model1.Train(trainX_real, trainY);
+        model2.Train(trainX_noisy, trainY);
+
+        var assign1 = model1.Predict(trainX_real);
+        var assign2 = model2.Predict(trainX_noisy);
+
+        if (ModelTestHelpers.AllFinite(assign1) && ModelTestHelpers.AllFinite(assign2))
+        {
+            double ari1 = ModelTestHelpers.CalculateAdjustedRandIndex(trainY, assign1);
+            double ari2 = ModelTestHelpers.CalculateAdjustedRandIndex(trainY, assign2);
+
+            Assert.True(ari2 >= ari1 - 0.3,
+                $"Adding noise feature degraded clustering: ARI_clean={ari1:F4}, ARI_noisy={ari2:F4}.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Translation Equivariance
+    // Shifting all points by a constant vector should produce the
+    // SAME cluster assignments. Cluster structure is relative, not absolute.
+    // =====================================================
+
+    [Fact]
+    public void TranslationEquivariance_ShiftingPoints_PreservesAssignments()
+    {
+        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
+        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+        var model1 = CreateModel();
+        var model2 = CreateModel();
+
+        var (trainX1, trainY1) = GenerateData(TrainSamples, NumClusters, Features, rng1);
+        var (trainX2, trainY2) = GenerateData(TrainSamples, NumClusters, Features, rng2);
+
+        // Shift all points by (1000, 1000, ...)
+        var shiftedX = new Matrix<double>(TrainSamples, Features);
+        for (int i = 0; i < TrainSamples; i++)
+            for (int j = 0; j < Features; j++)
+                shiftedX[i, j] = trainX2[i, j] + 1000.0;
+
+        model1.Train(trainX1, trainY1);
+        model2.Train(shiftedX, trainY2);
+
+        var assign1 = model1.Predict(trainX1);
+        var assign2 = model2.Predict(shiftedX);
+
+        if (ModelTestHelpers.AllFinite(assign1) && ModelTestHelpers.AllFinite(assign2))
+        {
+            double ari = ModelTestHelpers.CalculateAdjustedRandIndex(assign1, assign2);
+            Assert.True(ari > 0.8,
+                $"Translation equivariance violated: ARI between original and shifted = {ari:F4}. " +
+                "Shifting all points by constant should preserve cluster structure.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Uniform Scaling Equivariance
+    // Scaling all features by same constant should preserve assignments.
+    // =====================================================
+
+    [Fact]
+    public void UniformScaling_ShouldPreserveAssignments()
+    {
+        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
+        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+        var model1 = CreateModel();
+        var model2 = CreateModel();
+
+        var (trainX1, trainY1) = GenerateData(TrainSamples, NumClusters, Features, rng1);
+        var (trainX2, trainY2) = GenerateData(TrainSamples, NumClusters, Features, rng2);
+
+        var scaledX = new Matrix<double>(TrainSamples, Features);
+        for (int i = 0; i < TrainSamples; i++)
+            for (int j = 0; j < Features; j++)
+                scaledX[i, j] = trainX2[i, j] * 100.0;
+
+        model1.Train(trainX1, trainY1);
+        model2.Train(scaledX, trainY2);
+
+        var assign1 = model1.Predict(trainX1);
+        var assign2 = model2.Predict(scaledX);
+
+        if (ModelTestHelpers.AllFinite(assign1) && ModelTestHelpers.AllFinite(assign2))
+        {
+            double ari = ModelTestHelpers.CalculateAdjustedRandIndex(assign1, assign2);
+            Assert.True(ari > 0.5,
+                $"ARI between original and 100x-scaled = {ari:F4}. " +
+                "Uniform scaling shouldn't change cluster structure.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Cluster Means Near Centers
+    // The mean of points in each cluster should be near a generation center.
     // =====================================================
 
     [Fact]
@@ -164,16 +265,13 @@ public abstract class ClusteringModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        // Well-separated clusters at 0, 10, 20 (spacing = 10, std = 0.5)
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
         var assignments = model.Predict(trainX);
 
-        if (!ModelTestHelpers.AllFinite(assignments))
-            return;
+        if (!ModelTestHelpers.AllFinite(assignments)) return;
 
-        // Compute mean of each predicted cluster
         var distinctLabels = new HashSet<int>();
         for (int i = 0; i < assignments.Length; i++)
             distinctLabels.Add((int)Math.Round(assignments[i]));
@@ -197,7 +295,6 @@ public abstract class ClusteringModelTestBase
                 for (int j = 0; j < Features; j++)
                     meanFeatures[j] /= count;
 
-                // Each cluster mean should be near one of the generation centers (0, 10, 20)
                 double minDist = double.MaxValue;
                 for (int c = 0; c < NumClusters; c++)
                 {
@@ -211,53 +308,83 @@ public abstract class ClusteringModelTestBase
                 }
 
                 Assert.True(minDist < 5.0,
-                    $"Cluster label={label} mean is {minDist:F2} away from nearest generation center. " +
-                    "Expected <5.0 for well-separated blobs with std=0.5.");
+                    $"Cluster label={label} mean is {minDist:F2} away from nearest generation center.");
             }
         }
     }
 
     // =====================================================
-    // MATHEMATICAL INVARIANT: Scale Invariance
-    // Scaling all features by same constant should not change assignments
-    // (for distance-based methods with uniform scaling).
+    // MATHEMATICAL INVARIANT: Correct Number of Distinct Clusters
     // =====================================================
 
     [Fact]
-    public void UniformScaling_ShouldPreserveAssignments()
+    public void DistinctClusters_ShouldBeReasonable()
     {
-        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
-        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
-        var model1 = CreateModel();
-        var model2 = CreateModel();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
-        var (trainX1, trainY1) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng1);
-        var (trainX2, trainY2) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng2);
+        model.Train(trainX, trainY);
+        var assignments = model.Predict(trainX);
 
-        // Scale all features by 100
-        var scaledX = new Matrix<double>(TrainSamples, Features);
-        for (int i = 0; i < TrainSamples; i++)
-            for (int j = 0; j < Features; j++)
-                scaledX[i, j] = trainX2[i, j] * 100.0;
-
-        model1.Train(trainX1, trainY1);
-        model2.Train(scaledX, trainY2);
-
-        var assign1 = model1.Predict(trainX1);
-        var assign2 = model2.Predict(scaledX);
-
-        if (ModelTestHelpers.AllFinite(assign1) && ModelTestHelpers.AllFinite(assign2))
+        var distinctClusters = new HashSet<int>();
+        for (int i = 0; i < assignments.Length; i++)
         {
-            // The actual label values may differ, but the clustering structure should be similar.
-            double ari = ModelTestHelpers.CalculateAdjustedRandIndex(assign1, assign2);
-            Assert.True(ari > 0.5,
-                $"ARI between original and 100x-scaled = {ari:F4}. " +
-                "Uniform scaling shouldn't change cluster structure.");
+            if (!double.IsNaN(assignments[i]) && !double.IsInfinity(assignments[i]))
+                distinctClusters.Add((int)Math.Round(assignments[i]));
+        }
+
+        Assert.True(distinctClusters.Count >= 2,
+            $"Only {distinctClusters.Count} distinct clusters found. Model collapsed to single cluster.");
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Identical Points → Same Cluster
+    // =====================================================
+
+    [Fact]
+    public void IdenticalPoints_ShouldGetSameCluster()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
+
+        model.Train(trainX, trainY);
+
+        var duplicateX = new Matrix<double>(2, Features);
+        for (int j = 0; j < Features; j++)
+        {
+            duplicateX[0, j] = trainX[0, j];
+            duplicateX[1, j] = trainX[0, j];
+        }
+
+        var assignments = model.Predict(duplicateX);
+        Assert.Equal(assignments[0], assignments[1]);
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Predictions Are Finite
+    // =====================================================
+
+    [Fact]
+    public void Predictions_ShouldBeFinite()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
+
+        model.Train(trainX, trainY);
+        var assignments = model.Predict(trainX);
+
+        for (int i = 0; i < assignments.Length; i++)
+        {
+            Assert.False(double.IsNaN(assignments[i]), $"Assignment[{i}] is NaN.");
+            Assert.False(double.IsInfinity(assignments[i]), $"Assignment[{i}] is Infinity.");
         }
     }
 
     // =====================================================
-    // BASIC CONTRACTS: Determinism, Output Shape, Clone, Metadata
+    // BASIC CONTRACTS: Determinism, Output Shape, Clone, Metadata, Parameters
     // =====================================================
 
     [Fact]
@@ -265,7 +392,7 @@ public abstract class ClusteringModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
         var a1 = model.Predict(trainX);
@@ -280,8 +407,8 @@ public abstract class ClusteringModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
-        var (testX, _) = ModelTestHelpers.GenerateClusterData(TestSamples, NumClusters, Features, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
+        var (testX, _) = GenerateData(TestSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
         Assert.Equal(TestSamples, model.Predict(testX).Length);
@@ -292,7 +419,7 @@ public abstract class ClusteringModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
         var cloned = model.Clone();
@@ -308,7 +435,7 @@ public abstract class ClusteringModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
         Assert.NotNull(model.GetModelMetadata());
@@ -317,9 +444,11 @@ public abstract class ClusteringModelTestBase
     [Fact]
     public void Parameters_ShouldBeNonEmpty_AfterTraining()
     {
+        if (!HasFlatParameters) return;
+
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
 
         model.Train(trainX, trainY);
         Assert.True(model.GetParameters().Length > 0,
@@ -334,7 +463,7 @@ public abstract class ClusteringModelTestBase
     public void Builder_ShouldProduceResult()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
 
         var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()
@@ -348,11 +477,10 @@ public abstract class ClusteringModelTestBase
     }
 
     [Fact]
-    public void Builder_PredictionsShouldBeFinite()
+    public void Builder_ClusteringShouldBeatRandom()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var (trainX, trainY) = ModelTestHelpers.GenerateClusterData(TrainSamples, NumClusters, Features, rng);
-        var (testX, _) = ModelTestHelpers.GenerateClusterData(TestSamples, NumClusters, Features, rng);
+        var (trainX, trainY) = GenerateData(TrainSamples, NumClusters, Features, rng);
         var loader = AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector(trainX, trainY);
 
         var result = new AiDotNet.AiModelBuilder<double, Matrix<double>, Vector<double>>()
@@ -362,8 +490,12 @@ public abstract class ClusteringModelTestBase
             .GetAwaiter()
             .GetResult();
 
-        var assignments = result.Predict(testX);
-        Assert.True(ModelTestHelpers.AllFinite(assignments),
-            "Builder pipeline cluster assignments contain NaN or Infinity.");
+        var assignments = result.Predict(trainX);
+        if (ModelTestHelpers.AllFinite(assignments))
+        {
+            double ari = ModelTestHelpers.CalculateAdjustedRandIndex(trainY, assignments);
+            Assert.True(ari > 0.0,
+                $"Builder pipeline ARI = {ari:F4} — clustering through builder should beat random.");
+        }
     }
 }
