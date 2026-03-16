@@ -181,8 +181,13 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     private Matrix<T> CreateBasisFunctions(Matrix<T> x)
     {
         int numFeatures = x.Columns;
-        int numBasisFunctions = _options.NumSplines * numFeatures;
+        // +1 for the intercept column
+        int numBasisFunctions = _options.NumSplines * numFeatures + 1;
         Matrix<T> basisFunctions = new Matrix<T>(x.Rows, numBasisFunctions);
+
+        // First column is the intercept (all 1s)
+        for (int i = 0; i < x.Rows; i++)
+            basisFunctions[i, 0] = NumOps.One;
 
         for (int i = 0; i < numFeatures; i++)
         {
@@ -192,7 +197,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
             for (int j = 0; j < _options.NumSplines; j++)
             {
                 Vector<T> spline = CreateSpline(feature, knots[j], _options.Degree);
-                basisFunctions.SetColumn(i * _options.NumSplines + j, spline);
+                basisFunctions.SetColumn(1 + i * _options.NumSplines + j, spline);
             }
         }
 
