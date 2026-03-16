@@ -387,8 +387,9 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
 
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();
 
-        string fullPath = Path.GetFullPath(filePath);
-        string? directory = Path.GetDirectoryName(fullPath);
+        // Each rank saves its own shard for correct distributed checkpoint round-trip
+        string rankPath = $"{Path.GetFullPath(filePath)}.rank{Rank}";
+        string? directory = Path.GetDirectoryName(rankPath);
         if (directory is not null && !Directory.Exists(directory))
             Directory.CreateDirectory(directory);
 
@@ -397,7 +398,7 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
             byte[] data = Serialize();
             byte[] envelopedData = ModelFileHeader.WrapWithHeader(
                 data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
-            File.WriteAllBytes(fullPath, envelopedData);
+            File.WriteAllBytes(rankPath, envelopedData);
         }
     }
 

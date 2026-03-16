@@ -1384,12 +1384,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         Config.CommunicationBackend.Barrier();
         try
         {
-            if (Rank == 0)
+            // Each rank saves its own shard for correct round-trip
             {
                 Helpers.ModelPersistenceGuard.EnforceBeforeSave();
                 using (Helpers.ModelPersistenceGuard.InternalOperation())
                 {
-                    File.WriteAllBytes(filePath, Serialize());
+                    File.WriteAllBytes($"{filePath}.rank{Rank}", Serialize());
                 }
             }
         }
@@ -1406,7 +1406,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         try
         {
             Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-            var data = File.ReadAllBytes(filePath);
+            var data = File.ReadAllBytes($"{filePath}.rank{Rank}");
             using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
                 Deserialize(data);

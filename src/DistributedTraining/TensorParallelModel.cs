@@ -448,12 +448,12 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         Config.CommunicationBackend.Barrier();
         try
         {
-            if (Rank == 0)
+            // Each rank saves its own shard for correct round-trip
             {
                 Helpers.ModelPersistenceGuard.EnforceBeforeSave();
                 using (Helpers.ModelPersistenceGuard.InternalOperation())
                 {
-                    File.WriteAllBytes(filePath, Serialize());
+                    File.WriteAllBytes($"{filePath}.rank{Rank}", Serialize());
                 }
             }
         }
@@ -470,7 +470,7 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         try
         {
             Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-            var data = File.ReadAllBytes(filePath);
+            var data = File.ReadAllBytes($"{filePath}.rank{Rank}");
             using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
                 Deserialize(data);
