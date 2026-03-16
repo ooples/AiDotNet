@@ -243,7 +243,7 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     public void Reset() { }
 
     /// <inheritdoc/>
-    internal byte[] Serialize()
+    public byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
         var state = new Newtonsoft.Json.Linq.JObject

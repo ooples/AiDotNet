@@ -240,7 +240,9 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
             using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
                 var data = Serialize();
-                File.WriteAllBytes(rankPath, data);
+                var envelopedData = ModelFileHeader.WrapWithHeader(
+                    data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+                File.WriteAllBytes(rankPath, envelopedData);
             }
         }
         finally
@@ -267,10 +269,14 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
             if (!File.Exists(rankPath))
                 throw new FileNotFoundException($"Checkpoint file not found for rank {Rank}.", rankPath);
             Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-            var data = File.ReadAllBytes(rankPath);
+            var fileData = File.ReadAllBytes(rankPath);
             using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
-                Deserialize(data);
+                // Extract from AIMF envelope, with legacy raw-bytes fallback
+                var payload = ModelFileHeader.HasHeader(fileData)
+                    ? ModelFileHeader.ExtractPayload(fileData)
+                    : fileData;
+                Deserialize(payload);
             }
         }
         finally
