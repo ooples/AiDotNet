@@ -268,6 +268,16 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     }
 
     /// <summary>
+    /// Forces greedy splits on all leaves in the tree. Called by ensemble methods
+    /// (AdaptiveRandomForest) after batch training to ensure trees that received
+    /// fewer than GracePeriod samples can still make informed predictions.
+    /// </summary>
+    public void ForceBatchSplits()
+    {
+        ForceLeafSplits(_root);
+    }
+
+    /// <summary>
     /// Recursively attempts splits on all leaf nodes using a greedy criterion
     /// (best split with positive information gain), bypassing the Hoeffding bound.
     /// Called after batch training when no more data is expected. The Hoeffding bound

@@ -300,12 +300,13 @@ internal static class ModelTestHelpers
 
         for (int c = 0; c < nClasses; c++)
         {
-            // Each class has different feature rates (Poisson-like)
+            // Each class has a distinct dominant feature with high count rate.
+            // Class 0 has high counts in feature 0, class 1 in feature 1, etc.
+            // This creates well-separated count distributions that NB can classify.
             var rates = new double[features];
             for (int j = 0; j < features; j++)
             {
-                // Class c has high rate for feature (c + j) % features, low for others
-                rates[j] = ((c + j) % nClasses == c) ? 8.0 + c * 3.0 : 1.0;
+                rates[j] = (j % nClasses == c) ? 15.0 : 1.0;
             }
 
             int startIdx = c * samplesPerClass;

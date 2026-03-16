@@ -292,6 +292,15 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         PartialFit(x, y);
+
+        // After batch training, force splits on all ensemble member trees.
+        // In streaming mode, trees split naturally as GracePeriod is reached.
+        // But in batch mode with fewer samples than GracePeriod, trees remain
+        // as single leaves predicting the majority class.
+        foreach (var member in _ensemble)
+        {
+            member.Tree?.ForceBatchSplits();
+        }
     }
 
     /// <inheritdoc />
