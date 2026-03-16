@@ -396,8 +396,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (idx < 0) continue;
             int afterMatch = idx + baseName.Length;
             if (afterMatch >= testName.Length) return true;
-            char nextChar = testName[afterMatch];
-            if (nextChar == 'T' || nextChar == '_' || !char.IsLetter(nextChar)) return true;
+            // Check what follows the model name in the test class name
+            string remainder = testName.Substring(afterMatch);
+            // Accept: "Tests", "Test", "_Tests", "_Test", non-letter separators
+            if (remainder.StartsWith("Tests", System.StringComparison.Ordinal) ||
+                remainder.StartsWith("Test", System.StringComparison.Ordinal) ||
+                remainder.StartsWith("_", System.StringComparison.Ordinal) ||
+                !char.IsLetter(remainder[0])) return true;
         }
 
         return false;
