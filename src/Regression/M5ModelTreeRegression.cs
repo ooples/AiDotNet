@@ -580,8 +580,10 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         {
             if (_options.UseLinearRegressionAtLeaves && node.LinearModel != null)
             {
-                // Convert the input vector to a single-column matrix using the new method
-                var inputMatrix = Matrix<T>.FromVector(input);
+                // Convert the input vector to a single-row matrix (1 sample, N features)
+                var inputMatrix = new Matrix<T>(1, input.Length);
+                for (int i = 0; i < input.Length; i++)
+                    inputMatrix[0, i] = input[i];
                 return node.LinearModel.Predict(inputMatrix)[0];
             }
             else

@@ -569,7 +569,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                         }
                         else
                         {
-                            inp = hiddenOutputs[layer - 1][i][k];
+                            inp = hiddenOutputs[layer][i][k];
                         }
                         wGrad = NumOps.Add(wGrad, NumOps.Multiply(currentGrad[i][j], inp));
                     }
@@ -597,7 +597,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                         }
 
                         // Activation derivative (stays double - special math functions)
-                        double actDeriv = ApplyActivationDerivative(NumOps.ToDouble(hiddenOutputs[layer - 1][i][k]));
+                        double actDeriv = ApplyActivationDerivative(NumOps.ToDouble(hiddenOutputs[layer][i][k]));
                         nextGrad[i][k] = NumOps.Multiply(sum, NumOps.FromDouble(actDeriv));
                     }
                 }
