@@ -489,6 +489,12 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <inheritdoc/>
     public virtual void SetParameters(Vector<T> parameters)
     {
+        // If NumFeatures wasn't set but NumClusters is known, derive from parameter vector
+        if (NumFeatures == 0 && NumClusters > 0 && parameters.Length > 0 && parameters.Length % NumClusters == 0)
+        {
+            NumFeatures = parameters.Length / NumClusters;
+        }
+
         if (parameters.Length != ExpectedParameterCount)
         {
             throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, got {parameters.Length}.");
