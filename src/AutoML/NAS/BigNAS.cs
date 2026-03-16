@@ -29,7 +29,7 @@ namespace AiDotNet.AutoML.NAS
     /// <code>
     /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
     /// var bignas = new BigNAS&lt;float&gt;(searchSpace, numNodes: 4);
-    /// var subNet = bignas.SampleSubNetwork(targetFlops: 300_000_000);
+    /// List&lt;BigNASConfig&gt; configs = bignas.SandwichSample();
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]

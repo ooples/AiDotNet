@@ -29,7 +29,7 @@ namespace AiDotNet.AutoML.NAS
     /// <code>
     /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
     /// var ofa = new OnceForAll&lt;float&gt;(searchSpace, numNodes: 4);
-    /// var subNet = ofa.SampleSubNetwork(targetDepth: 3, targetWidth: 0.75);
+    /// SubNetworkConfig subNet = ofa.SampleSubNetwork();
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]

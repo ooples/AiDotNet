@@ -96,7 +96,9 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
         {
-            return Task.FromResult(new Dictionary<string, object>());
+            throw new NotSupportedException(
+                "NAS models use SearchArchitecture() for architecture search, not trial-based suggestion. " +
+                "Call SearchAsync() instead of SuggestNextTrialAsync().");
         }
 
         /// <summary>
