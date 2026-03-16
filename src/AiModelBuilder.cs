@@ -6173,12 +6173,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <summary>
     /// Derives the open generic type definition from the actual model instance.
     /// </summary>
-    private static Type DeriveModelType(IFullModel<T, TInput, TOutput>? model)
+    private static Type? DeriveModelType(IFullModel<T, TInput, TOutput>? model)
     {
         if (model is null)
-        {
-            return typeof(IFullModel<,,>);
-        }
+            return null;
 
         var runtimeType = model.GetType();
         return runtimeType.IsGenericType ? runtimeType.GetGenericTypeDefinition() : runtimeType;
