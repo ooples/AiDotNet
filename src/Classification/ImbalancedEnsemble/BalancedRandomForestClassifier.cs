@@ -53,17 +53,17 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// var options = new BalancedRandomForestOptions&lt;double&gt;();
 /// var classifier = new BalancedRandomForestClassifier&lt;double&gt;(options);
 ///
-/// // Prepare imbalanced training data: 8 samples with 2 features
+/// // Prepare imbalanced training data: 8 samples, 6 majority (class 0), 2 minority (class 1)
 /// var features = new Matrix&lt;double&gt;(8, 2);
 /// features[0, 0] = 1.0; features[0, 1] = 1.1;
 /// features[1, 0] = 1.2; features[1, 1] = 0.9;
 /// features[2, 0] = 0.8; features[2, 1] = 1.0;
 /// features[3, 0] = 1.3; features[3, 1] = 0.7;
-/// features[4, 0] = 5.0; features[4, 1] = 5.1;
-/// features[5, 0] = 5.2; features[5, 1] = 4.9;
-/// features[6, 0] = 4.8; features[6, 1] = 5.0;
-/// features[7, 0] = 5.3; features[7, 1] = 4.7;
-/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 0, 1, 1, 1, 1 });
+/// features[4, 0] = 1.1; features[4, 1] = 0.8;
+/// features[5, 0] = 0.9; features[5, 1] = 1.2;
+/// features[6, 0] = 5.0; features[6, 1] = 5.1;
+/// features[7, 0] = 5.2; features[7, 1] = 4.9;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 0, 0, 0, 1, 1 });
 ///
 /// // Train trees on balanced bootstrap samples with random feature subsets
 /// classifier.Train(features, labels);
