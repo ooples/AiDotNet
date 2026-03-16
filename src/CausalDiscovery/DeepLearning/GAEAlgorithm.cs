@@ -89,17 +89,19 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                 ? klWeightTarget * (epoch + 1.0) / warmupEpochs
                 : klWeightTarget;
 
-            // Sample embeddings via reparameterization
+            // Sample embeddings via reparameterization: z = mu + sigma * epsilon
             var Zs = new Matrix<T>(d, embDim);
             var Zt = new Matrix<T>(d, embDim);
+            var epsilonS = new Matrix<T>(d, embDim);
+            var epsilonT = new Matrix<T>(d, embDim);
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
                 {
                     T stdS = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZsLogVar[i, k])));
-                    T noiseS = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-                    Zs[i, k] = NumOps.Add(ZsMu[i, k], NumOps.Multiply(stdS, noiseS));
+                    epsilonS[i, k] = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
+                    Zs[i, k] = NumOps.Add(ZsMu[i, k], NumOps.Multiply(stdS, epsilonS[i, k]));
                     T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[i, k])));
-                    T noiseT = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
+                    epsilonT[i, k] = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
                     Zt[i, k] = NumOps.Add(ZtMu[i, k], NumOps.Multiply(stdT, noiseT));
                 }
 
@@ -178,14 +180,15 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                         gradZtMu[j, k] = NumOps.Add(gradZtMu[j, k],
                             NumOps.Multiply(gradScale, Zs[i, k]));
 
-                        // Log-variance gradient via reparameterization: d/d(logvar) = gradScale * Zt_k * noise * 0.5 * exp(0.5*logvar)
+                        // Log-variance gradient via reparameterization:
+                        // dL/d(logvar_s) = dL/dz_s * epsilon_s * 0.5 * exp(0.5*logvar_s)
                         T stdS = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZsLogVar[i, k])));
                         gradZsLogVar[i, k] = NumOps.Add(gradZsLogVar[i, k],
-                            NumOps.Multiply(gradScale, NumOps.Multiply(Zt[j, k],
+                            NumOps.Multiply(gradScale, NumOps.Multiply(epsilonS[i, k],
                             NumOps.Multiply(NumOps.FromDouble(0.5), stdS))));
                         T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[j, k])));
                         gradZtLogVar[j, k] = NumOps.Add(gradZtLogVar[j, k],
-                            NumOps.Multiply(gradScale, NumOps.Multiply(Zs[i, k],
+                            NumOps.Multiply(gradScale, NumOps.Multiply(epsilonT[j, k],
                             NumOps.Multiply(NumOps.FromDouble(0.5), stdT))));
                     }
                 }
