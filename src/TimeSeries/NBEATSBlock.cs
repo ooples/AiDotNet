@@ -30,9 +30,8 @@ namespace AiDotNet.TimeSeries;
 /// Multiple blocks work together, with each one focusing on different aspects of the data.
 /// </para>
 /// </remarks>
-public class NBEATSBlock<T>
+internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly int _lookbackWindow;
     private readonly int _forecastHorizon;
     private readonly int _hiddenLayerSize;
@@ -46,7 +45,7 @@ public class NBEATSBlock<T>
     /// Initializes a new instance with default settings.
     /// </summary>
     public NBEATSBlock()
-        : this(lookbackWindow: 64, forecastHorizon: 16, hiddenLayerSize: 128, numHiddenLayers: 4, thetaSizeBackcast: 64, thetaSizeForecast: 16, useInterpretableBasis: false)
+        : this(64, 16, 128, 4, 64, 16, false)
     {
     }
 
@@ -63,7 +62,7 @@ public class NBEATSBlock<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the block.
     /// </summary>
-    public int ParameterCount
+    public override int ParameterCount
     {
         get
         {
@@ -109,6 +108,7 @@ public class NBEATSBlock<T>
         int thetaSizeForecast,
         bool useInterpretableBasis,
         int polynomialDegree = 3)
+        : base(new[] { lookbackWindow }, new[] { lookbackWindow + forecastHorizon })
     {
         if (lookbackWindow <= 0)
         {
@@ -127,7 +127,6 @@ public class NBEATSBlock<T>
             throw new ArgumentException("Number of hidden layers must be positive.", nameof(numHiddenLayers));
         }
 
-        _numOps = MathHelper.GetNumericOperations<T>();
         _lookbackWindow = lookbackWindow;
         _forecastHorizon = forecastHorizon;
         _hiddenLayerSize = hiddenLayerSize;
@@ -169,7 +168,7 @@ public class NBEATSBlock<T>
         {
             for (int j = 0; j < weight.Columns; j++)
             {
-                weight[i, j] = _numOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
+                weight[i, j] = NumOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
             }
         }
         _fcWeights.Add(weight);
@@ -184,7 +183,7 @@ public class NBEATSBlock<T>
             {
                 for (int j = 0; j < weight.Columns; j++)
                 {
-                    weight[i, j] = _numOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
+                    weight[i, j] = NumOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
                 }
             }
             _fcWeights.Add(weight);
@@ -198,7 +197,7 @@ public class NBEATSBlock<T>
         {
             for (int j = 0; j < weight.Columns; j++)
             {
-                weight[i, j] = _numOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
+                weight[i, j] = NumOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
             }
         }
         _fcWeights.Add(weight);
@@ -211,7 +210,7 @@ public class NBEATSBlock<T>
         {
             for (int j = 0; j < weight.Columns; j++)
             {
-                weight[i, j] = _numOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
+                weight[i, j] = NumOps.FromDouble(random.NextDouble() * stddev * 2 - stddev);
             }
         }
         _fcWeights.Add(weight);
@@ -237,7 +236,204 @@ public class NBEATSBlock<T>
     /// - Forecast: The block's prediction of future values
     /// </para>
     /// </remarks>
-    public (Vector<T> backcast, Vector<T> forecast) Forward(Vector<T> input)
+    /// <summary>
+    /// LayerBase Forward — converts Tensor to Vector, runs internal forward, returns concatenated result.
+    /// Output tensor layout: [backcast(lookbackWindow) | forecast(forecastHorizon)].
+    /// </summary>
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        var inputVec = input.ToVector();
+        var (backcast, forecast) = ForwardInternal(inputVec);
+        var output = new Tensor<T>(new[] { _lookbackWindow + _forecastHorizon });
+        for (int i = 0; i < backcast.Length; i++) output[i] = backcast[i];
+        for (int i = 0; i < forecast.Length; i++) output[_lookbackWindow + i] = forecast[i];
+        return output;
+    }
+
+    // Cached activations from forward pass for backward
+    private Vector<T>? _lastInput;
+    private List<Vector<T>> _preActivations = new();  // before ReLU
+    private List<Vector<T>> _postActivations = new(); // after ReLU (layer outputs)
+    private Vector<T>? _lastHiddenOutput; // output of last hidden layer (input to theta layers)
+
+    // Stored gradients for UpdateParameters
+    private List<Matrix<T>>? _weightGradients;
+    private List<Vector<T>>? _biasGradients;
+
+    /// <summary>
+    /// Full analytical backward pass through the FC layers using chain rule.
+    /// Computes dL/dInput and stores dL/dW, dL/db for UpdateParameters.
+    /// </summary>
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        if (_lastInput is null || _postActivations.Count == 0)
+            return new Tensor<T>(new[] { _lookbackWindow });
+
+        _weightGradients = new List<Matrix<T>>();
+        _biasGradients = new List<Vector<T>>();
+
+        // Output gradient layout: [dL/d_backcast(lookbackWindow) | dL/d_forecast(forecastHorizon)]
+        // Extract forecast output gradient
+        var dForecast = new Vector<T>(_forecastHorizon);
+        for (int i = 0; i < _forecastHorizon && i + _lookbackWindow < outputGradient.Length; i++)
+            dForecast[i] = outputGradient[_lookbackWindow + i];
+
+        // Extract backcast output gradient
+        var dBackcast = new Vector<T>(_lookbackWindow);
+        for (int i = 0; i < _lookbackWindow && i < outputGradient.Length; i++)
+            dBackcast[i] = outputGradient[i];
+
+        // Chain rule through basis expansion: output = BasisMatrix @ theta
+        // => dL/d_theta = BasisMatrix^T @ dL/d_output
+        var fcBasis = ComputeBasisMatrix(_thetaSizeForecast, _forecastHorizon);
+        var fcThetaGrad = new Vector<T>(_thetaSizeForecast);
+        for (int k = 0; k < _thetaSizeForecast; k++)
+        {
+            T sum = NumOps.Zero;
+            for (int t = 0; t < _forecastHorizon; t++)
+                sum = NumOps.Add(sum, NumOps.Multiply(fcBasis[t, k], dForecast[t]));
+            fcThetaGrad[k] = sum;
+        }
+
+        var bcBasis = ComputeBasisMatrix(_thetaSizeBackcast, _lookbackWindow);
+        var bcThetaGrad = new Vector<T>(_thetaSizeBackcast);
+        for (int k = 0; k < _thetaSizeBackcast; k++)
+        {
+            T sum = NumOps.Zero;
+            for (int t = 0; t < _lookbackWindow; t++)
+                sum = NumOps.Add(sum, NumOps.Multiply(bcBasis[t, k], dBackcast[t]));
+            bcThetaGrad[k] = sum;
+        }
+
+        // Backward through forecast theta layer using proper theta gradient
+        int fcLayerIdx = _numHiddenLayers + 1;
+        var fcW = _fcWeights[fcLayerIdx];
+        var hiddenOut = _lastHiddenOutput ?? new Vector<T>(fcW.Columns);
+
+        // dL/dW_forecast = dL/d_theta_forecast * hidden^T
+        var wGrad = new Matrix<T>(fcW.Rows, fcW.Columns);
+        for (int i = 0; i < fcW.Rows; i++)
+            for (int j = 0; j < fcW.Columns; j++)
+                wGrad[i, j] = NumOps.Multiply(fcThetaGrad[i], hiddenOut[j]);
+        _weightGradients.Insert(0, wGrad);
+        _biasGradients.Insert(0, fcThetaGrad.Clone());
+
+        // dL/d_hidden from forecast layer: W_forecast^T * dL/d_theta_forecast
+        var dHidden = new Vector<T>(fcW.Columns);
+        for (int j = 0; j < fcW.Columns; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < fcW.Rows; i++)
+                sum = NumOps.Add(sum, NumOps.Multiply(fcW[i, j], fcThetaGrad[i]));
+            dHidden[j] = sum;
+        }
+
+        // Backward through backcast theta layer using proper theta gradient
+        int bcLayerIdx = _numHiddenLayers;
+        var bcW = _fcWeights[bcLayerIdx];
+
+        var bcWGrad = new Matrix<T>(bcW.Rows, bcW.Columns);
+        for (int i = 0; i < bcW.Rows; i++)
+            for (int j = 0; j < bcW.Columns; j++)
+                bcWGrad[i, j] = NumOps.Multiply(bcThetaGrad[i], hiddenOut[j]);
+        _weightGradients.Insert(0, bcWGrad);
+        _biasGradients.Insert(0, bcThetaGrad.Clone());
+
+        // Add backcast contribution to dHidden: W_backcast^T * dL/d_theta_backcast
+        for (int j = 0; j < bcW.Columns; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < bcW.Rows; i++)
+                sum = NumOps.Add(sum, NumOps.Multiply(bcW[i, j], bcThetaGrad[i]));
+            dHidden[j] = NumOps.Add(dHidden[j], sum);
+        }
+
+        // Backward through hidden layers (reverse order)
+        var currentGrad = dHidden;
+        for (int layer = _numHiddenLayers - 1; layer >= 0; layer--)
+        {
+            var preAct = _preActivations[layer];
+            var w = _fcWeights[layer];
+
+            // ReLU derivative: gradient passes through where preActivation > 0
+            var reluGrad = new Vector<T>(currentGrad.Length);
+            for (int i = 0; i < reluGrad.Length; i++)
+                reluGrad[i] = NumOps.GreaterThan(preAct[i], NumOps.Zero) ? currentGrad[i] : NumOps.Zero;
+
+            // dL/dW = reluGrad * input^T
+            var layerInput = layer > 0 ? _postActivations[layer - 1] : _lastInput;
+            var layerWGrad = new Matrix<T>(w.Rows, w.Columns);
+            for (int i = 0; i < w.Rows; i++)
+                for (int j = 0; j < w.Columns && j < layerInput!.Length; j++)
+                    layerWGrad[i, j] = NumOps.Multiply(reluGrad[i], layerInput![j]);
+            _weightGradients.Insert(0, layerWGrad);
+            _biasGradients.Insert(0, reluGrad.Clone());
+
+            // dL/d_input = W^T * reluGrad (always compute, including layer 0)
+            currentGrad = new Vector<T>(w.Columns);
+            for (int j = 0; j < w.Columns; j++)
+            {
+                T sum = NumOps.Zero;
+                for (int i = 0; i < w.Rows; i++)
+                    sum = NumOps.Add(sum, NumOps.Multiply(w[i, j], reluGrad[i]));
+                currentGrad[j] = sum;
+            }
+        }
+
+        // Convert input gradient to Tensor
+        var inputGrad = new Tensor<T>(new[] { _lookbackWindow });
+        for (int i = 0; i < _lookbackWindow && i < currentGrad.Length; i++)
+            inputGrad[i] = currentGrad[i];
+        return inputGrad;
+    }
+
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+
+    public override void ResetState() { /* stateless layer — no recurrent state to reset */ }
+
+    private static Matrix<T> VectorToColumnMatrix(Vector<T> v)
+    {
+        var m = new Matrix<T>(v.Length, 1);
+        for (int i = 0; i < v.Length; i++) m[i, 0] = v[i];
+        return m;
+    }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        if (_weightGradients is null || _biasGradients is null) return;
+
+        for (int l = 0; l < _fcWeights.Count && l < _weightGradients.Count; l++)
+        {
+            var w = _fcWeights[l];
+            var wg = _weightGradients[l];
+            for (int i = 0; i < w.Rows; i++)
+                for (int j = 0; j < w.Columns; j++)
+                    w[i, j] = NumOps.Subtract(w[i, j], NumOps.Multiply(learningRate, wg[i, j]));
+        }
+        for (int l = 0; l < _fcBiases.Count && l < _biasGradients.Count; l++)
+        {
+            var b = _fcBiases[l];
+            var bg = _biasGradients[l];
+            for (int i = 0; i < b.Length && i < bg.Length; i++)
+                b[i] = NumOps.Subtract(b[i], NumOps.Multiply(learningRate, bg[i]));
+        }
+
+        _weightGradients = null;
+        _biasGradients = null;
+    }
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        if (nodes.Count > 0)
+        {
+            var (_, forecast) = ExportComputationGraph(nodes[0]);
+            return forecast;
+        }
+        return TensorOperations<T>.Variable(new Tensor<T>(new[] { _forecastHorizon }), "nbeats_output");
+    }
+
+    public (Vector<T> backcast, Vector<T> forecast) ForwardInternal(Vector<T> input)
     {
         if (input.Length != _lookbackWindow)
         {
@@ -247,42 +443,56 @@ public class NBEATSBlock<T>
         }
 
         // Pass through fully connected layers with ReLU activation
+        // Uses Engine from LayerBase for hardware-accelerated matrix-vector operations
+        // Caches pre/post activations for Backward pass
+        _lastInput = input.Clone();
+        _preActivations.Clear();
+        _postActivations.Clear();
         Vector<T> x = input.Clone();
 
         for (int layer = 0; layer < _numHiddenLayers; layer++)
         {
-            // VECTORIZED: Linear transformation y = Wx + b using dot product
+            // Accelerated linear transformation: y = Wx + b
+            var wxMatrix = (Matrix<T>)Engine.MatrixMultiply(
+                _fcWeights[layer],
+                VectorToColumnMatrix(x));
             Vector<T> linear = new Vector<T>(_fcWeights[layer].Rows);
-            for (int i = 0; i < _fcWeights[layer].Rows; i++)
+            for (int i = 0; i < linear.Length; i++)
             {
-                Vector<T> weightRow = _fcWeights[layer].GetRow(i);
-                linear[i] = _numOps.Add(_fcBiases[layer][i], weightRow.DotProduct(x));
+                linear[i] = NumOps.Add(_fcBiases[layer][i], wxMatrix[i, 0]);
             }
+            _preActivations.Add(linear.Clone());
 
             // ReLU activation
             x = new Vector<T>(linear.Length);
             for (int i = 0; i < linear.Length; i++)
             {
-                x[i] = _numOps.GreaterThan(linear[i], _numOps.Zero) ? linear[i] : _numOps.Zero;
+                x[i] = NumOps.GreaterThan(linear[i], NumOps.Zero) ? linear[i] : NumOps.Zero;
             }
+            _postActivations.Add(x.Clone());
         }
+        _lastHiddenOutput = x.Clone();
 
-        // VECTORIZED: Compute theta for backcast using dot product
-        Vector<T> thetaBackcast = new Vector<T>(_thetaSizeBackcast);
+        // Accelerated theta for backcast: theta = W_b * x + b_b
         int backcastLayerIdx = _numHiddenLayers;
-        for (int i = 0; i < _fcWeights[backcastLayerIdx].Rows; i++)
+        var bcWx = (Matrix<T>)Engine.MatrixMultiply(
+            _fcWeights[backcastLayerIdx],
+            VectorToColumnMatrix(x));
+        Vector<T> thetaBackcast = new Vector<T>(_thetaSizeBackcast);
+        for (int i = 0; i < _thetaSizeBackcast; i++)
         {
-            Vector<T> weightRow = _fcWeights[backcastLayerIdx].GetRow(i);
-            thetaBackcast[i] = _numOps.Add(_fcBiases[backcastLayerIdx][i], weightRow.DotProduct(x));
+            thetaBackcast[i] = NumOps.Add(_fcBiases[backcastLayerIdx][i], bcWx[i, 0]);
         }
 
-        // VECTORIZED: Compute theta for forecast using dot product
-        Vector<T> thetaForecast = new Vector<T>(_thetaSizeForecast);
+        // Accelerated theta for forecast: theta = W_f * x + b_f
         int forecastLayerIdx = _numHiddenLayers + 1;
-        for (int i = 0; i < _fcWeights[forecastLayerIdx].Rows; i++)
+        var fcWx = (Matrix<T>)Engine.MatrixMultiply(
+            _fcWeights[forecastLayerIdx],
+            VectorToColumnMatrix(x));
+        Vector<T> thetaForecast = new Vector<T>(_thetaSizeForecast);
+        for (int i = 0; i < _thetaSizeForecast; i++)
         {
-            Vector<T> weightRow = _fcWeights[forecastLayerIdx].GetRow(i);
-            thetaForecast[i] = _numOps.Add(_fcBiases[forecastLayerIdx][i], weightRow.DotProduct(x));
+            thetaForecast[i] = NumOps.Add(_fcBiases[forecastLayerIdx][i], fcWx[i, 0]);
         }
 
         // Apply basis expansion
@@ -311,6 +521,42 @@ public class NBEATSBlock<T>
     /// - Generic basis: Uses learned transformations that may be more flexible
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Computes the basis matrix B such that output = B @ theta.
+    /// Shape: [outputLength, thetaSize].
+    /// </summary>
+    private Matrix<T> ComputeBasisMatrix(int thetaSize, int outputLength)
+    {
+        var basis = new Matrix<T>(outputLength, thetaSize);
+
+        if (_useInterpretableBasis)
+        {
+            // Polynomial basis: B[t, p] = (t/outputLength)^p
+            for (int t = 0; t < outputLength; t++)
+            {
+                double tNormalized = (double)t / outputLength;
+                for (int p = 0; p < Math.Min(thetaSize, _polynomialDegree + 1); p++)
+                {
+                    basis[t, p] = NumOps.FromDouble(Math.Pow(tNormalized, p));
+                }
+            }
+        }
+        else
+        {
+            // Generic basis: B[t, k] = cos(2π * k * t / outputLength)
+            for (int t = 0; t < outputLength; t++)
+            {
+                for (int k = 0; k < thetaSize; k++)
+                {
+                    basis[t, k] = NumOps.FromDouble(
+                        Math.Cos(2.0 * Math.PI * k * t / outputLength));
+                }
+            }
+        }
+
+        return basis;
+    }
+
     private Vector<T> ApplyBasisExpansion(Vector<T> theta, int outputLength)
     {
         Vector<T> output = new Vector<T>(outputLength);
@@ -321,17 +567,17 @@ public class NBEATSBlock<T>
             // Each time step t gets a polynomial: theta_0 + theta_1*t + theta_2*t^2 + ...
             for (int t = 0; t < outputLength; t++)
             {
-                T value = _numOps.Zero;
-                T tNormalized = _numOps.FromDouble((double)t / outputLength);
+                T value = NumOps.Zero;
+                T tNormalized = NumOps.FromDouble((double)t / outputLength);
 
                 for (int p = 0; p < Math.Min(theta.Length, _polynomialDegree + 1); p++)
                 {
-                    T power = _numOps.One;
+                    T power = NumOps.One;
                     for (int k = 0; k < p; k++)
                     {
-                        power = _numOps.Multiply(power, tNormalized);
+                        power = NumOps.Multiply(power, tNormalized);
                     }
-                    value = _numOps.Add(value, _numOps.Multiply(theta[p], power));
+                    value = NumOps.Add(value, NumOps.Multiply(theta[p], power));
                 }
 
                 output[t] = value;
@@ -344,15 +590,15 @@ public class NBEATSBlock<T>
             // For now, we use a simple approach where theta directly maps to output
             for (int t = 0; t < outputLength; t++)
             {
-                T value = _numOps.Zero;
+                T value = NumOps.Zero;
                 for (int k = 0; k < theta.Length; k++)
                 {
                     // Use a simple projection where each theta contributes to each time step
-                    T contribution = _numOps.Multiply(
+                    T contribution = NumOps.Multiply(
                         theta[k],
-                        _numOps.FromDouble(Math.Cos(2.0 * Math.PI * k * t / outputLength))
+                        NumOps.FromDouble(Math.Cos(2.0 * Math.PI * k * t / outputLength))
                     );
-                    value = _numOps.Add(value, contribution);
+                    value = NumOps.Add(value, contribution);
                 }
                 output[t] = value;
             }
@@ -371,7 +617,7 @@ public class NBEATSBlock<T>
     /// certain optimization algorithms.
     /// </para>
     /// </remarks>
-    public Vector<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         var parameters = new List<T>();
 
@@ -404,7 +650,7 @@ public class NBEATSBlock<T>
     /// in the block. This is useful for loading a saved model.
     /// </para>
     /// </remarks>
-    public void SetParameters(Vector<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length != ParameterCount)
         {

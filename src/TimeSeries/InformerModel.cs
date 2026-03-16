@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
@@ -245,6 +246,8 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+
             var shuffled = validIndices.OrderBy(_ => _random.Next()).ToList();
             double epochLoss = 0;
             int sampleCount = 0;
@@ -829,9 +832,9 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
 /// <summary>
 /// Tensor-based encoder layer for Informer with ProbSparse attention.
 /// </summary>
-internal class InformerEncoderLayerTensor<T>
+internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
@@ -858,12 +861,63 @@ internal class InformerEncoderLayerTensor<T>
     // Cache for backward pass
     private List<Tensor<T>>? _cachedInput;
 
-    public int ParameterCount =>
+    public override int ParameterCount =>
         _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
         _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
         _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
 
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+    public override void ResetState() { }
+    public override void UpdateParameters(T learningRate) { }
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        // Input node
+        var input = TensorOperations<T>.Variable(
+            new Tensor<T>(new[] { _embeddingDim }), "enc_input", requiresGradient: false);
+        nodes.Add(input);
+
+        // Q/K/V/Output projection weights
+        var wQ = TensorOperations<T>.Constant(_queryProj.Clone(), "enc_wQ");
+        var wK = TensorOperations<T>.Constant(_keyProj.Clone(), "enc_wK");
+        var wV = TensorOperations<T>.Constant(_valueProj.Clone(), "enc_wV");
+        var wO = TensorOperations<T>.Constant(_outputProj.Clone(), "enc_wO");
+
+        // Self-attention: Q = W_q @ input, K = W_k @ input, V = W_v @ input
+        var q = TensorOperations<T>.MatrixVectorMultiply(wQ, input);
+        var k = TensorOperations<T>.MatrixVectorMultiply(wK, input);
+        var v = TensorOperations<T>.MatrixVectorMultiply(wV, input);
+
+        // Single-step self-attention: softmax([score]) = [1.0], output = W_out @ V
+        var attnOut = TensorOperations<T>.MatrixVectorMultiply(wO, v);
+
+        // Residual + LayerNorm 1
+        var residual1 = TensorOperations<T>.Add(input, attnOut);
+        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual1, _layerNorm1Gamma, _layerNorm1Beta, "enc_ln1");
+
+        // Feed-forward network: GELU(W1 @ x + b1) then W2 @ h + b2
+        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
+            norm1, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, "enc_ffn");
+
+        // Residual + LayerNorm 2
+        var residual2 = TensorOperations<T>.Add(norm1, ffnOut);
+        return TransformerGraphHelper<T>.LayerNormGraph(
+            residual2, _layerNorm2Gamma, _layerNorm2Beta, "enc_ln2");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        foreach (var t in new Tensor<T>[] { _queryProj, _keyProj, _valueProj, _outputProj, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta })
+            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
+        return new Vector<T>(p.ToArray());
+    }
+    public override Tensor<T> Forward(Tensor<T> input) { var seq = new List<Tensor<T>> { input }; var result = Forward(seq); return result.Count > 0 ? result[result.Count - 1] : input; }
+    public override Tensor<T> Backward(Tensor<T> outputGradient) { var dSeq = new List<Tensor<T>> { outputGradient }; var result = Backward(dSeq); return result.Count > 0 ? result[result.Count - 1] : outputGradient; }
+
     public InformerEncoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
+        : base(new[] { embeddingDim }, new[] { embeddingDim })
     {
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
@@ -899,7 +953,7 @@ internal class InformerEncoderLayerTensor<T>
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
         return tensor;
     }
@@ -909,7 +963,7 @@ internal class InformerEncoderLayerTensor<T>
         var tensor = new Tensor<T>(new[] { size });
         for (int i = 0; i < size; i++)
         {
-            tensor[i] = _numOps.One;
+            tensor[i] = NumOps.One;
         }
         return tensor;
     }
@@ -947,7 +1001,7 @@ internal class InformerEncoderLayerTensor<T>
             var residual = new Tensor<T>(new[] { _embeddingDim });
             for (int j = 0; j < _embeddingDim && j < input[t].Length && j < attnOutput[t].Length; j++)
             {
-                residual[j] = _numOps.Add(input[t][j], attnOutput[t][j]);
+                residual[j] = NumOps.Add(input[t][j], attnOutput[t][j]);
             }
             norm1Output.Add(LayerNorm(residual, _layerNorm1Gamma, _layerNorm1Beta));
         }
@@ -960,7 +1014,7 @@ internal class InformerEncoderLayerTensor<T>
             var residual = new Tensor<T>(new[] { _embeddingDim });
             for (int j = 0; j < _embeddingDim && j < norm1Output[t].Length && j < ffnOut.Length; j++)
             {
-                residual[j] = _numOps.Add(norm1Output[t][j], ffnOut[j]);
+                residual[j] = NumOps.Add(norm1Output[t][j], ffnOut[j]);
             }
             output.Add(LayerNorm(residual, _layerNorm2Gamma, _layerNorm2Beta));
         }
@@ -988,7 +1042,7 @@ internal class InformerEncoderLayerTensor<T>
                 double score = 0;
                 for (int d = 0; d < _embeddingDim && d < queries[q].Length && d < keys[k].Length; d++)
                 {
-                    score += _numOps.ToDouble(_numOps.Multiply(queries[q][d], keys[k][d]));
+                    score += NumOps.ToDouble(NumOps.Multiply(queries[q][d], keys[k][d]));
                 }
                 score /= Math.Sqrt(_headDim);
                 attnWeights[k] = score;
@@ -1011,8 +1065,8 @@ internal class InformerEncoderLayerTensor<T>
             {
                 for (int d = 0; d < _embeddingDim && d < values[k].Length; d++)
                 {
-                    result[d] = _numOps.Add(result[d],
-                        _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), values[k][d]));
+                    result[d] = NumOps.Add(result[d],
+                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
                 }
             }
 
@@ -1033,7 +1087,7 @@ internal class InformerEncoderLayerTensor<T>
             T sum = _ffn1Bias[i];
             for (int j = 0; j < _embeddingDim && j < input.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_ffn1[i * _embeddingDim + j], input[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_ffn1[i * _embeddingDim + j], input[j]));
             }
             hidden[i] = GELU(sum);
         }
@@ -1045,7 +1099,7 @@ internal class InformerEncoderLayerTensor<T>
             T sum = _ffn2Bias[i];
             for (int j = 0; j < ffnDim && j < hidden.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_ffn2[i * ffnDim + j], hidden[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_ffn2[i * ffnDim + j], hidden[j]));
             }
             output[i] = sum;
         }
@@ -1055,9 +1109,9 @@ internal class InformerEncoderLayerTensor<T>
 
     private T GELU(T x)
     {
-        double xd = _numOps.ToDouble(x);
+        double xd = NumOps.ToDouble(x);
         double result = 0.5 * xd * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (xd + 0.044715 * Math.Pow(xd, 3))));
-        return _numOps.FromDouble(result);
+        return NumOps.FromDouble(result);
     }
 
     private Tensor<T> LayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
@@ -1072,10 +1126,10 @@ internal class InformerEncoderLayerTensor<T>
         var result = new Tensor<T>(new[] { rows });
         for (int i = 0; i < rows; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = 0; j < Math.Min(cols, vec.Length); j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(matrix[i * cols + j], vec[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(matrix[i * cols + j], vec[j]));
             }
             result[i] = sum;
         }
@@ -1192,9 +1246,9 @@ internal class InformerEncoderLayerTensor<T>
         {
             for (int i = 0; i < Math.Min(tensor.Length, gradient.Length); i++)
             {
-                T avgGrad = _numOps.Divide(gradient[i], batchSize);
-                T update = _numOps.Multiply(learningRate, avgGrad);
-                tensor[i] = _numOps.Subtract(tensor[i], update);
+                T avgGrad = NumOps.Divide(gradient[i], batchSize);
+                T update = NumOps.Multiply(learningRate, avgGrad);
+                tensor[i] = NumOps.Subtract(tensor[i], update);
             }
         }
     }
@@ -1203,9 +1257,9 @@ internal class InformerEncoderLayerTensor<T>
 /// <summary>
 /// Tensor-based distilling convolution layer for sequence compression.
 /// </summary>
-internal class DistillingConvTensor<T>
+internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
     private readonly int _embeddingDim;
     private readonly int _distillingFactor;
 
@@ -1214,9 +1268,49 @@ internal class DistillingConvTensor<T>
 
     private List<Tensor<T>>? _cachedInput;
 
-    public int ParameterCount => _convWeights.Length + _convBias.Length;
+    public override int ParameterCount => _convWeights.Length + _convBias.Length;
+
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+    public override void ResetState() { }
+    public override void UpdateParameters(T learningRate) { }
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        // Input node
+        var input = TensorOperations<T>.Variable(
+            new Tensor<T>(new[] { _embeddingDim }), "distill_input", requiresGradient: false);
+        nodes.Add(input);
+
+        // For single-step: 1D conv with kernel size 3 uses only center weight (no neighbors)
+        // Extract center kernel weights as a diagonal-like projection
+        var centerWeights = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
+        for (int d = 0; d < _embeddingDim; d++)
+            centerWeights[d, d] = _convWeights[d * 3 + 1]; // center kernel (k=0 → index 1)
+        var wConv = TensorOperations<T>.Constant(centerWeights, "distill_conv_w");
+        var bConv = TensorOperations<T>.Constant(_convBias.Clone(), "distill_conv_b");
+
+        // Conv: W @ input + bias
+        var conv = TensorOperations<T>.Add(
+            TensorOperations<T>.MatrixVectorMultiply(wConv, input), bConv);
+
+        // ELU activation
+        var activated = TensorOperations<T>.ELU(conv);
+
+        // Max pooling over single element is identity
+        return activated;
+    }
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        for (int i = 0; i < _convWeights.Length; i++) p.Add(_convWeights[i]);
+        for (int i = 0; i < _convBias.Length; i++) p.Add(_convBias[i]);
+        return new Vector<T>(p.ToArray());
+    }
+    public override Tensor<T> Forward(Tensor<T> input) { var seq = new List<Tensor<T>> { input }; var result = Forward(seq); return result.Count > 0 ? result[result.Count - 1] : input; }
+    public override Tensor<T> Backward(Tensor<T> outputGradient) { var dSeq = new List<Tensor<T>> { outputGradient }; var result = Backward(dSeq); return result.Count > 0 ? result[result.Count - 1] : outputGradient; }
 
     public DistillingConvTensor(int embeddingDim, int inputSeqLen, int distillingFactor, int seed = 42)
+        : base(new[] { embeddingDim }, new[] { embeddingDim })
     {
         _embeddingDim = embeddingDim;
         _distillingFactor = distillingFactor;
@@ -1227,7 +1321,7 @@ internal class DistillingConvTensor<T>
         _convWeights = new Tensor<T>(new[] { embeddingDim, 3 });
         for (int i = 0; i < _convWeights.Length; i++)
         {
-            _convWeights[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            _convWeights[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
         _convBias = new Tensor<T>(new[] { embeddingDim });
     }
@@ -1254,7 +1348,7 @@ internal class DistillingConvTensor<T>
 
             for (int d = 0; d < _embeddingDim; d++)
             {
-                T maxVal = _numOps.FromDouble(double.MinValue);
+                T maxVal = NumOps.FromDouble(double.MinValue);
 
                 // Pool over distilling factor positions
                 for (int p = 0; p < _distillingFactor && startIdx + p < input.Count; p++)
@@ -1266,7 +1360,7 @@ internal class DistillingConvTensor<T>
                         int idx = startIdx + p + k;
                         if (idx >= 0 && idx < input.Count && d < input[idx].Length)
                         {
-                            conv = _numOps.Add(conv, _numOps.Multiply(_convWeights[d * 3 + (k + 1)], input[idx][d]));
+                            conv = NumOps.Add(conv, NumOps.Multiply(_convWeights[d * 3 + (k + 1)], input[idx][d]));
                         }
                     }
 
@@ -1274,7 +1368,7 @@ internal class DistillingConvTensor<T>
                     conv = ELU(conv);
 
                     // Max pooling
-                    if (_numOps.ToDouble(conv) > _numOps.ToDouble(maxVal))
+                    if (NumOps.ToDouble(conv) > NumOps.ToDouble(maxVal))
                     {
                         maxVal = conv;
                     }
@@ -1291,9 +1385,9 @@ internal class DistillingConvTensor<T>
 
     private T ELU(T x)
     {
-        double xd = _numOps.ToDouble(x);
+        double xd = NumOps.ToDouble(x);
         if (xd >= 0) return x;
-        return _numOps.FromDouble(Math.Exp(xd) - 1);
+        return NumOps.FromDouble(Math.Exp(xd) - 1);
     }
 
     public List<Tensor<T>> Backward(List<Tensor<T>> dOutput)
@@ -1314,8 +1408,8 @@ internal class DistillingConvTensor<T>
             {
                 for (int d = 0; d < Math.Min(_embeddingDim, dOutput[i].Length); d++)
                 {
-                    T grad = _numOps.Divide(dOutput[i][d], _numOps.FromDouble(_distillingFactor));
-                    dInput[startIdx + p][d] = _numOps.Add(dInput[startIdx + p][d], grad);
+                    T grad = NumOps.Divide(dOutput[i][d], NumOps.FromDouble(_distillingFactor));
+                    dInput[startIdx + p][d] = NumOps.Add(dInput[startIdx + p][d], grad);
                 }
             }
         }
@@ -1400,20 +1494,23 @@ internal class DistillingConvTensor<T>
         {
             for (int i = 0; i < Math.Min(tensor.Length, gradient.Length); i++)
             {
-                T avgGrad = _numOps.Divide(gradient[i], batchSize);
-                T update = _numOps.Multiply(learningRate, avgGrad);
-                tensor[i] = _numOps.Subtract(tensor[i], update);
+                T avgGrad = NumOps.Divide(gradient[i], batchSize);
+                T update = NumOps.Multiply(learningRate, avgGrad);
+                tensor[i] = NumOps.Subtract(tensor[i], update);
             }
         }
     }
+
+    private static ComputationNode<T> LayerNormNode(ComputationNode<T> input, Tensor<T> gamma, Tensor<T> beta, string prefix)
+        => TransformerGraphHelper<T>.LayerNormGraph(input, gamma, beta, prefix);
 }
 
 /// <summary>
 /// Tensor-based decoder layer for Informer with cross-attention.
 /// </summary>
-internal class InformerDecoderLayerTensor<T>
+internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
     private readonly int _embeddingDim;
     private readonly int _numHeads;
     private readonly int _headDim;
@@ -1444,13 +1541,82 @@ internal class InformerDecoderLayerTensor<T>
     private readonly Tensor<T> _layerNorm3Gamma;
     private readonly Tensor<T> _layerNorm3Beta;
 
-    public int ParameterCount =>
+    public override int ParameterCount =>
         _selfQueryProj.Length + _selfKeyProj.Length + _selfValueProj.Length + _selfOutputProj.Length +
         _crossQueryProj.Length + _crossKeyProj.Length + _crossValueProj.Length + _crossOutputProj.Length +
         _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
         _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2 + _layerNorm3Gamma.Length * 2;
 
+    private List<Tensor<T>>? _lastEncoderOutput;
+
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+    public override void ResetState() { _lastEncoderOutput = null; }
+    public override void UpdateParameters(T learningRate) { }
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        // Input node (decoder input)
+        var input = TensorOperations<T>.Variable(
+            new Tensor<T>(new[] { _embeddingDim }), "dec_input", requiresGradient: false);
+        nodes.Add(input);
+
+        // Self-attention block
+        var selfAttnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
+            input, _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj, "dec_self");
+        var residual1 = TensorOperations<T>.Add(input, selfAttnOut);
+        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual1, _layerNorm1Gamma, _layerNorm1Beta, "dec_ln1");
+
+        // Cross-attention block (for single-step JIT, encoder output approximated as self)
+        var crossAttnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
+            norm1, _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj, "dec_cross");
+        var residual2 = TensorOperations<T>.Add(norm1, crossAttnOut);
+        var norm2 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual2, _layerNorm2Gamma, _layerNorm2Beta, "dec_ln2");
+
+        // FFN block
+        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
+            norm2, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, "dec_ffn");
+        var residual3 = TensorOperations<T>.Add(norm2, ffnOut);
+        return TransformerGraphHelper<T>.LayerNormGraph(
+            residual3, _layerNorm3Gamma, _layerNorm3Beta, "dec_ln3");
+    }
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        foreach (var t in new Tensor<T>[] { _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj,
+            _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj,
+            _ffn1, _ffn1Bias, _ffn2, _ffn2Bias,
+            _layerNorm1Gamma, _layerNorm1Beta, _layerNorm2Gamma, _layerNorm2Beta, _layerNorm3Gamma, _layerNorm3Beta })
+            for (int i = 0; i < t.Length; i++) p.Add(t[i]);
+        return new Vector<T>(p.ToArray());
+    }
+    public override Tensor<T> Forward(Tensor<T> input)
+    {
+        var seq = new List<Tensor<T>> { input };
+        var enc = _lastEncoderOutput ?? seq;
+        var result = Forward(seq, enc);
+        return result.Count > 0 ? result[result.Count - 1] : input;
+    }
+    public override Tensor<T> Forward(params Tensor<T>[] inputs)
+    {
+        if (inputs.Length >= 2)
+        {
+            _lastEncoderOutput = new List<Tensor<T>> { inputs[1] };
+            return Forward(inputs[0]);
+        }
+        return Forward(inputs[0]);
+    }
+    public override Tensor<T> Backward(Tensor<T> outputGradient)
+    {
+        var dSeq = new List<Tensor<T>> { outputGradient };
+        var enc = _lastEncoderOutput ?? dSeq;
+        var (dInput, _) = Backward(dSeq, enc);
+        return dInput.Count > 0 ? dInput[dInput.Count - 1] : outputGradient;
+    }
+
     public InformerDecoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
+        : base(new int[][] { new[] { embeddingDim }, new[] { embeddingDim } }, new[] { embeddingDim })
     {
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
@@ -1493,7 +1659,7 @@ internal class InformerDecoderLayerTensor<T>
         var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
         return tensor;
     }
@@ -1503,7 +1669,7 @@ internal class InformerDecoderLayerTensor<T>
         var tensor = new Tensor<T>(new[] { size });
         for (int i = 0; i < size; i++)
         {
-            tensor[i] = _numOps.One;
+            tensor[i] = NumOps.One;
         }
         return tensor;
     }
@@ -1588,7 +1754,7 @@ internal class InformerDecoderLayerTensor<T>
                 double score = 0;
                 for (int d = 0; d < _embeddingDim && d < queries[q].Length && d < keys[k].Length; d++)
                 {
-                    score += _numOps.ToDouble(_numOps.Multiply(queries[q][d], keys[k][d]));
+                    score += NumOps.ToDouble(NumOps.Multiply(queries[q][d], keys[k][d]));
                 }
                 score /= Math.Sqrt(_headDim);
                 attnWeights[k] = score;
@@ -1609,8 +1775,8 @@ internal class InformerDecoderLayerTensor<T>
             {
                 for (int d = 0; d < _embeddingDim && d < values[k].Length; d++)
                 {
-                    result[d] = _numOps.Add(result[d],
-                        _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), values[k][d]));
+                    result[d] = NumOps.Add(result[d],
+                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
                 }
             }
 
@@ -1640,7 +1806,7 @@ internal class InformerDecoderLayerTensor<T>
                 double score = 0;
                 for (int d = 0; d < _embeddingDim && d < query.Length && d < keys[k].Length; d++)
                 {
-                    score += _numOps.ToDouble(_numOps.Multiply(query[d], keys[k][d]));
+                    score += NumOps.ToDouble(NumOps.Multiply(query[d], keys[k][d]));
                 }
                 score /= Math.Sqrt(_headDim);
                 attnWeights[k] = score;
@@ -1661,8 +1827,8 @@ internal class InformerDecoderLayerTensor<T>
             {
                 for (int d = 0; d < _embeddingDim && d < values[k].Length; d++)
                 {
-                    result[d] = _numOps.Add(result[d],
-                        _numOps.Multiply(_numOps.FromDouble(attnWeights[k]), values[k][d]));
+                    result[d] = NumOps.Add(result[d],
+                        NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), values[k][d]));
                 }
             }
 
@@ -1682,7 +1848,7 @@ internal class InformerDecoderLayerTensor<T>
             T sum = _ffn1Bias[i];
             for (int j = 0; j < _embeddingDim && j < input.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_ffn1[i * _embeddingDim + j], input[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_ffn1[i * _embeddingDim + j], input[j]));
             }
             hidden[i] = GELU(sum);
         }
@@ -1693,7 +1859,7 @@ internal class InformerDecoderLayerTensor<T>
             T sum = _ffn2Bias[i];
             for (int j = 0; j < ffnDim && j < hidden.Length; j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(_ffn2[i * ffnDim + j], hidden[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(_ffn2[i * ffnDim + j], hidden[j]));
             }
             output[i] = sum;
         }
@@ -1703,9 +1869,9 @@ internal class InformerDecoderLayerTensor<T>
 
     private T GELU(T x)
     {
-        double xd = _numOps.ToDouble(x);
+        double xd = NumOps.ToDouble(x);
         double result = 0.5 * xd * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (xd + 0.044715 * Math.Pow(xd, 3))));
-        return _numOps.FromDouble(result);
+        return NumOps.FromDouble(result);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -1725,10 +1891,10 @@ internal class InformerDecoderLayerTensor<T>
         var result = new Tensor<T>(new[] { rows });
         for (int i = 0; i < rows; i++)
         {
-            T sum = _numOps.Zero;
+            T sum = NumOps.Zero;
             for (int j = 0; j < Math.Min(cols, vec.Length); j++)
             {
-                sum = _numOps.Add(sum, _numOps.Multiply(matrix[i * cols + j], vec[j]));
+                sum = NumOps.Add(sum, NumOps.Multiply(matrix[i * cols + j], vec[j]));
             }
             result[i] = sum;
         }
@@ -1904,10 +2070,66 @@ internal class InformerDecoderLayerTensor<T>
         {
             for (int i = 0; i < Math.Min(tensor.Length, gradient.Length); i++)
             {
-                T avgGrad = _numOps.Divide(gradient[i], batchSize);
-                T update = _numOps.Multiply(learningRate, avgGrad);
-                tensor[i] = _numOps.Subtract(tensor[i], update);
+                T avgGrad = NumOps.Divide(gradient[i], batchSize);
+                T update = NumOps.Multiply(learningRate, avgGrad);
+                tensor[i] = NumOps.Subtract(tensor[i], update);
             }
         }
+    }
+}
+
+/// <summary>
+/// Shared computation graph builders for transformer layer components.
+/// Used by Informer, Autoformer, and Chronos transformer layers.
+/// </summary>
+internal static class TransformerGraphHelper<T>
+{
+    public static ComputationNode<T> LayerNormGraph(
+        ComputationNode<T> input, Tensor<T> gamma, Tensor<T> beta, string prefix)
+    {
+        var gammaNode = TensorOperations<T>.Constant(gamma.Clone(), $"{prefix}_gamma");
+        var betaNode = TensorOperations<T>.Constant(beta.Clone(), $"{prefix}_beta");
+        var mean = TensorOperations<T>.Mean(input);
+        var centered = TensorOperations<T>.Subtract(input, mean);
+        var sq = TensorOperations<T>.ElementwiseMultiply(centered, centered);
+        var variance = TensorOperations<T>.Mean(sq);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var eps = TensorOperations<T>.Constant(
+            new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { numOps.FromDouble(1e-5) })), $"{prefix}_eps");
+        var std = TensorOperations<T>.Sqrt(TensorOperations<T>.Add(variance, eps));
+        var normalized = TensorOperations<T>.Divide(centered, std);
+        return TensorOperations<T>.Add(
+            TensorOperations<T>.ElementwiseMultiply(gammaNode, normalized), betaNode);
+    }
+
+    public static ComputationNode<T> FeedForwardGraph(
+        ComputationNode<T> input,
+        Tensor<T> w1, Tensor<T> b1, Tensor<T> w2, Tensor<T> b2,
+        string prefix)
+    {
+        var wFFN1 = TensorOperations<T>.Constant(w1.Clone(), $"{prefix}_w1");
+        var bFFN1 = TensorOperations<T>.Constant(b1.Clone(), $"{prefix}_b1");
+        var wFFN2 = TensorOperations<T>.Constant(w2.Clone(), $"{prefix}_w2");
+        var bFFN2 = TensorOperations<T>.Constant(b2.Clone(), $"{prefix}_b2");
+        var hidden = TensorOperations<T>.Add(
+            TensorOperations<T>.MatrixVectorMultiply(wFFN1, input), bFFN1);
+        var activated = TensorOperations<T>.GELU(hidden);
+        return TensorOperations<T>.Add(
+            TensorOperations<T>.MatrixVectorMultiply(wFFN2, activated), bFFN2);
+    }
+
+    public static ComputationNode<T> SelfAttentionGraph(
+        ComputationNode<T> input,
+        Tensor<T> wQ, Tensor<T> wK, Tensor<T> wV, Tensor<T> wO,
+        string prefix)
+    {
+        var wQNode = TensorOperations<T>.Constant(wQ.Clone(), $"{prefix}_wQ");
+        var wKNode = TensorOperations<T>.Constant(wK.Clone(), $"{prefix}_wK");
+        var wVNode = TensorOperations<T>.Constant(wV.Clone(), $"{prefix}_wV");
+        var wONode = TensorOperations<T>.Constant(wO.Clone(), $"{prefix}_wO");
+        TensorOperations<T>.MatrixVectorMultiply(wQNode, input);
+        TensorOperations<T>.MatrixVectorMultiply(wKNode, input);
+        var v = TensorOperations<T>.MatrixVectorMultiply(wVNode, input);
+        return TensorOperations<T>.MatrixVectorMultiply(wONode, v);
     }
 }
