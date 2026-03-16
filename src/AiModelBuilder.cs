@@ -1163,8 +1163,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync()
+    public Task<AiModelResult<T, TInput, TOutput>> BuildAsync() => BuildAsync(CancellationToken.None);
+
+    public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         AiModelResult<T, TInput, TOutput> result;
 
         // RL TRAINING PATH - check if RL options are configured with an environment
@@ -1184,8 +1188,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Load data if not already loaded
             if (!_dataLoader.IsLoaded)
             {
-                await _dataLoader.LoadAsync();
+                await _dataLoader.LoadAsync(cancellationToken);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Get features and labels from the typed loader
             var features = inputOutputLoader.Features;
@@ -1203,8 +1209,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Load/prepare the streaming loader if not already loaded
             if (!_dataLoader.IsLoaded)
             {
-                await _dataLoader.LoadAsync();
+                await _dataLoader.LoadAsync(cancellationToken);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             // True streaming training - train on batches without materializing all data
             result = await BuildStreamingSupervisedAsync(streamingLoader);
