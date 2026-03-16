@@ -23,6 +23,10 @@ namespace AiDotNet.Attributes;
 /// </code>
 /// </para>
 /// </remarks>
+/// <remarks>
+/// This attribute is intentionally public so that external consumers extending the library
+/// can exempt their own IFullModel implementations from metadata validation diagnostics.
+/// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class ModelMetadataExemptAttribute : Attribute
 {
