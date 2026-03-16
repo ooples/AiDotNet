@@ -139,7 +139,7 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         private Vector<T> ComputeAttentionScores(Vector<T> contextVector)
         {
-            // Simple attention: W * context
+            // Linear attention projection: scores = W * context (no softmax needed for NAS scoring)
             var scores = new Vector<T>(_attentionWeights.Columns);
 
             for (int j = 0; j < _attentionWeights.Columns; j++)
