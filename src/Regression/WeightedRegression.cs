@@ -172,7 +172,11 @@ public class WeightedRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
             expandedX = expandedX.AddConstantColumn(NumOps.One);
 
-        var weightMatrix = Matrix<T>.CreateDiagonal(_weights);
+        // Use uniform weights if none were provided or length doesn't match
+        var weights = _weights.Length == x.Rows
+            ? _weights
+            : Vector<T>.CreateDefault(x.Rows, NumOps.One);
+        var weightMatrix = Matrix<T>.CreateDiagonal(weights);
         var xTWx = expandedX.Transpose().Multiply(weightMatrix).Multiply(expandedX);
         var regularizedXTWx = xTWx.Add(Regularization.Regularize(xTWx));
         var xTWy = expandedX.Transpose().Multiply(weightMatrix).Multiply(y);
