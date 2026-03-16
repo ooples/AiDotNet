@@ -9,4 +9,6 @@ public class ClassifierChainTests : ClassificationModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new ClassifierChain<double>();
+
+    protected override bool HasFlatParameters => false;
 }

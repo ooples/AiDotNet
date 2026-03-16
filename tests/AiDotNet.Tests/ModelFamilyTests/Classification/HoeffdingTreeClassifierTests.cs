@@ -9,4 +9,6 @@ public class HoeffdingTreeClassifierTests : ClassificationModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new HoeffdingTreeClassifier<double>();
+
+    protected override bool HasFlatParameters => false;
 }

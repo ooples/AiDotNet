@@ -730,6 +730,27 @@ public class OrdinalRegression<T> : ClassifierBase<T>
         return new OrdinalRegression<T>(_options, Regularization);
     }
 
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (OrdinalRegression<T>)CreateNewInstance();
+        clone.NumFeatures = NumFeatures;
+        clone.NumClasses = NumClasses;
+        clone.ClassLabels = ClassLabels?.Clone();
+        clone.TaskType = TaskType;
+
+        if (_coefficients is not null)
+        {
+            clone._coefficients = new Vector<T>(_coefficients);
+        }
+        if (_thresholds is not null)
+        {
+            clone._thresholds = new Vector<T>(_thresholds);
+        }
+
+        return clone;
+    }
+
     /// <summary>
     /// Computes gradients for the model parameters.
     /// </summary>

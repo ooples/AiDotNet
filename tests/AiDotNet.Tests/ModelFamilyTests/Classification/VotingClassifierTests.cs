@@ -9,4 +9,6 @@ public class VotingClassifierTests : ClassificationModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new VotingClassifier<double>();
+
+    protected override bool HasFlatParameters => false;
 }

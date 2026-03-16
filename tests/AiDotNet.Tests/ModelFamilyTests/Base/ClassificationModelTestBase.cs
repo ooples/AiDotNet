@@ -24,6 +24,12 @@ public abstract class ClassificationModelTestBase
     protected virtual (Matrix<double> X, Vector<double> Y) GenerateData(int samples, int features, int nClasses, Random rng)
         => ModelTestHelpers.GenerateClassificationData(samples, features, nClasses, rng);
 
+    /// <summary>
+    /// Whether this model exposes flat parameter vectors. Meta/ensemble/tree classifiers
+    /// that delegate to sub-models return empty parameters and should set this to false.
+    /// </summary>
+    protected virtual bool HasFlatParameters => true;
+
     // =====================================================
     // MATHEMATICAL INVARIANT: Predictions Are Valid Class Labels
     // Every prediction must be in {0, 1, ..., K-1}. No floats, no negatives,
@@ -325,6 +331,8 @@ public abstract class ClassificationModelTestBase
     [Fact]
     public void Parameters_ShouldBeNonEmpty_AfterTraining()
     {
+        if (!HasFlatParameters) return; // Meta/ensemble/tree models delegate to sub-models
+
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = GenerateData(TrainSamples, Features, NumClasses, rng);
