@@ -51,16 +51,21 @@ namespace AiDotNet.Classification;
 /// var classifier = new OrdinalRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data with features and ordinal labels (0, 1, 2 for Low, Medium, High)
-/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
-///     1.0, 1.5,  2.0, 2.5,  3.0, 3.5,
-///     0.5, 1.0,  1.5, 2.0,  2.5, 3.0 });
+/// var features = new Matrix&lt;double&gt;(6, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 0.5;
+/// features[1, 0] = 1.5; features[1, 1] = 1.0;
+/// features[2, 0] = 2.0; features[2, 1] = 1.5;
+/// features[3, 0] = 2.5; features[3, 1] = 2.0;
+/// features[4, 0] = 3.0; features[4, 1] = 2.5;
+/// features[5, 0] = 3.5; features[5, 1] = 3.0;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1, 2, 2 });
 ///
 /// // Train with proportional odds model
 /// classifier.Train(features, labels);
 ///
 /// // Predict ordinal class for new data
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 2.2, 1.8 });
+/// var newSample = new Matrix&lt;double&gt;(1, 2);
+/// newSample[0, 0] = 2.2; newSample[0, 1] = 1.8;
 /// var prediction = classifier.Predict(newSample);
 /// Console.WriteLine($"Predicted ordinal class: {prediction[0]}");
 /// </code>

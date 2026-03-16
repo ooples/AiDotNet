@@ -74,7 +74,7 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
         foreach (var iface in type.AllInterfaces)
         {
             if (iface.IsGenericType &&
-                iface.OriginalDefinition.ToDisplayString().StartsWith(IFullModelName, System.StringComparison.Ordinal))
+                iface.OriginalDefinition.ToDisplayString().StartsWith(IFullModelName + "<", System.StringComparison.Ordinal))
             {
                 return true;
             }
