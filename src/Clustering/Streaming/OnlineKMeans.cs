@@ -120,7 +120,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             : RandomHelper.CreateSecureRandom();
 
         // Initialize centers if not already initialized
-        if (_centers is null)
+        if (_centers.Rows == 0)
         {
             InitializeCenters(x, k, d, rand);
         }
@@ -157,8 +157,8 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             }
         }
 
-        // Set results — copy from internal centers to base class property
-        ClusterCenters = _centers;
+        // Set results — clone internal centers to base class property (avoid aliasing)
+        ClusterCenters = _centers.Clone();
         Labels = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
@@ -229,7 +229,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     {
         int d = point.Length;
 
-        if (_centers is null)
+        if (_centers.Rows == 0)
         {
             throw new InvalidOperationException("Model must be initialized before calling PartialFit. " +
                 "Call Train with initial data first, or use InitializeWithRandom.");
