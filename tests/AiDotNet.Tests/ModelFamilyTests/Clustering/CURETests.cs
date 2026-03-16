@@ -8,5 +8,5 @@ namespace AiDotNet.Tests.ModelFamilyTests.Clustering;
 public class CURETests : ClusteringModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
-        => new CURE<double>();
+        => new CURE<double>(new AiDotNet.Clustering.Options.CUREOptions<double> { NumClusters = NumClusters });
 }
