@@ -52,20 +52,25 @@ namespace AiDotNet.Classification.Boosting;
 /// <example>
 /// <code>
 /// // Create histogram-based gradient boosting classifier for fast training on large datasets
-/// var options = new HistGradientBoostingOptions&lt;double&gt;();
-/// var classifier = new HistGradientBoostingClassifier&lt;double&gt;(options);
+/// var classifier = new HistGradientBoostingClassifier&lt;double&gt;(
+///     maxBins: 256, maxDepth: 6, nEstimators: 100, learningRate: 0.1);
 ///
-/// // Prepare training data
-/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
-///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
-///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// // Prepare training data: 6 samples with 2 features
+/// var features = new Matrix&lt;double&gt;(6, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 1.1;
+/// features[1, 0] = 1.2; features[1, 1] = 0.9;
+/// features[2, 0] = 0.8; features[2, 1] = 1.0;
+/// features[3, 0] = 5.0; features[3, 1] = 5.1;
+/// features[4, 0] = 5.2; features[4, 1] = 4.9;
+/// features[5, 0] = 4.8; features[5, 1] = 5.0;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
 ///
 /// // Train with histogram binning for efficient split evaluation
 /// classifier.Train(features, labels);
 ///
 /// // Predict class for new sample
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var newSample = new Matrix&lt;double&gt;(1, 2);
+/// newSample[0, 0] = 1.1; newSample[0, 1] = 1.0;
 /// var prediction = classifier.Predict(newSample);
 /// Console.WriteLine($"Predicted class: {prediction[0]}");
 /// </code>
