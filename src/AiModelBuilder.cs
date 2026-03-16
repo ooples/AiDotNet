@@ -5624,14 +5624,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             reasoningTrace.AppendLine($"Data Analysis Results:\n{dataAnalysisResult}\n");
         }
 
-        // 2. MODEL SELECTION
-        if (_agentOptions.EnableModelSelection && _model == null)
-        {
-            reasoningTrace.AppendLine("STEP 2: Selecting optimal model type...\n");
+        // Derive computational budget and data complexity from dataset characteristics
+        var computationalBudget = nSamples > 100000 ? ComputationalBudget.High : ComputationalBudget.Moderate;
+        var dataComplexity = nFeatures > 50 ? DataComplexity.Complex
+            : nFeatures > 10 ? DataComplexity.Moderate
+            : DataComplexity.Simple;
 
-            // Derive problem type from builder configuration instead of hardcoding
-            var problemType = _autoMLOptions?.TaskFamilyOverride switch
-            {
+        // Derive problem type from builder configuration (used across multiple steps)
+        var problemType = _autoMLOptions?.TaskFamilyOverride switch
+        {
                 AutoMLTaskFamily.BinaryClassification => "classification",
                 AutoMLTaskFamily.MultiClassClassification => "classification",
                 AutoMLTaskFamily.TimeSeriesForecasting => "time_series",
@@ -5640,13 +5641,18 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 _ => "regression"
             };
 
+        // 2. MODEL SELECTION
+        if (_agentOptions.EnableModelSelection && _model == null)
+        {
+            reasoningTrace.AppendLine("STEP 2: Selecting optimal model type...\n");
+
             recommendation.SuggestedModelType = ModelSelectionTool.RecommendModelType(
                 problemType: problemType,
                 nSamples: nSamples,
                 nFeatures: nFeatures,
                 isLinear: nFeatures <= 5,
                 hasOutliers: false,
-                computationalConstraints: nSamples > 100000 ? "high" : "moderate",
+                computationalConstraints: computationalBudget.ToString().ToLowerInvariant(),
                 requiresInterpretability: false);
 
             // Also run the tool via the agent for detailed reasoning text
@@ -5659,7 +5665,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 ["has_outliers"] = false,
                 ["has_missing_values"] = false,
                 ["requires_interpretability"] = false,
-                ["computational_constraints"] = nSamples > 100000 ? "high" : "moderate"
+                ["computational_constraints"] = computationalBudget.ToString().ToLowerInvariant()
             }.ToString(Formatting.None);
 
             var modelSelectionResult = await agent.RunAsync(
@@ -5688,7 +5694,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
                 ["problem_type"] = problemType,
-                ["data_complexity"] = "moderate"
+                ["data_complexity"] = dataComplexity.ToString().ToLowerInvariant()
             }.ToString(Formatting.None);
 
             var hyperparameterResult = await agent.RunAsync(
@@ -5811,7 +5817,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 ["is_time_series"] = problemType == "time_series",
                 ["is_imbalanced"] = false,
                 ["has_groups"] = false,
-                ["computational_budget"] = "moderate"
+                ["computational_budget"] = computationalBudget.ToString().ToLowerInvariant()
             }.ToString(Formatting.None);
 
             var cvResult = await agent.RunAsync(
