@@ -218,20 +218,23 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// FSDP saves per-rank checkpoint files with rank suffix (e.g., "model.bin.rank0").
+    /// Each rank saves its own shard for correct round-trip across distributed workers.
+    /// </remarks>
     public override void SaveModel(string filePath)
     {
         Config.CommunicationBackend.Barrier();
 
         try
         {
-            if (Rank == 0)
+            // Each rank saves its own shard for correct round-trip
+            string rankPath = $"{filePath}.rank{Rank}";
+            Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
-                Helpers.ModelPersistenceGuard.EnforceBeforeSave();
-                using (Helpers.ModelPersistenceGuard.InternalOperation())
-                {
-                    var data = Serialize();
-                    File.WriteAllBytes(filePath, data);
-                }
+                var data = Serialize();
+                File.WriteAllBytes(rankPath, data);
             }
         }
         finally
@@ -247,8 +250,10 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
 
         try
         {
+            // Each rank loads its own shard
+            string rankPath = $"{filePath}.rank{Rank}";
             Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-            var data = File.ReadAllBytes(filePath);
+            var data = File.ReadAllBytes(rankPath);
             using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
                 Deserialize(data);
