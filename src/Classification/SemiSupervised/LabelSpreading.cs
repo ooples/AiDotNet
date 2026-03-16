@@ -638,7 +638,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (_allFeatures is null || _labelDistributions is null)
+        if (_allFeatures.Rows == 0 || _labelDistributions.Rows == 0)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
@@ -736,7 +736,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     public Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_allFeatures is null || _labelDistributions is null)
+        if (_allFeatures.Rows == 0 || _labelDistributions.Rows == 0)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }

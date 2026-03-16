@@ -535,8 +535,8 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
                 }
             }
 
-            if (ClassLabels is not null)
-                PseudoLabels[i] = ClassLabels[bestClass];
+            var labels = ClassLabels ?? throw new InvalidOperationException("ClassLabels must be set before extracting pseudo-labels.");
+            PseudoLabels[i] = labels[bestClass];
             PseudoLabelConfidences[i] = bestProb;
         }
     }
@@ -560,7 +560,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (_allFeatures is null || _labelDistributions is null)
+        if (_allFeatures.Rows == 0 || _labelDistributions.Rows == 0)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
@@ -663,7 +663,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     public Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_allFeatures is null || _labelDistributions is null)
+        if (_allFeatures.Rows == 0 || _labelDistributions.Rows == 0)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
@@ -758,7 +758,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     private int GetClassIndex(T label)
     {
         if (ClassLabels is null)
-            return -1;
+            throw new InvalidOperationException("ClassLabels must be set before calling GetClassIndex.");
         for (int i = 0; i < ClassLabels.Length; i++)
         {
             if (NumOps.Compare(ClassLabels[i], label) == 0)
