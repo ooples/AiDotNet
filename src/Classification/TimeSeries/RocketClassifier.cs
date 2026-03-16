@@ -46,12 +46,21 @@ namespace AiDotNet.Classification.TimeSeries;
 /// var options = new RocketOptions&lt;double&gt;();
 /// var classifier = new RocketClassifier&lt;double&gt;(options);
 ///
-/// // Prepare time series samples as tensors
-/// var series1 = new Tensor&lt;double&gt;(new double[] { 1.0, 1.2, 1.5, 1.3, 1.1 });
-/// var series2 = new Tensor&lt;double&gt;(new double[] { 2.0, 2.5, 2.3, 2.8, 3.0 });
+/// // Prepare time series data: rows are samples, columns are time steps
+/// var features = new Matrix&lt;double&gt;(4, 5);
+/// features[0, 0] = 1.0; features[0, 1] = 1.2; features[0, 2] = 1.5; features[0, 3] = 1.3; features[0, 4] = 1.1;
+/// features[1, 0] = 1.1; features[1, 1] = 1.3; features[1, 2] = 1.4; features[1, 3] = 1.2; features[1, 4] = 1.0;
+/// features[2, 0] = 2.0; features[2, 1] = 2.5; features[2, 2] = 2.3; features[2, 3] = 2.8; features[2, 4] = 3.0;
+/// features[3, 0] = 2.1; features[3, 1] = 2.4; features[3, 2] = 2.6; features[3, 3] = 2.9; features[3, 4] = 3.1;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
 ///
-/// // Extract max and PPV features from random kernels and classify
-/// var predictions = classifier.Predict(series1);
+/// // Train: extract max and PPV features from random kernels and fit classifier
+/// classifier.Train(features, labels);
+///
+/// // Predict class for new time series
+/// var newSample = new Matrix&lt;double&gt;(1, 5);
+/// newSample[0, 0] = 1.0; newSample[0, 1] = 1.1; newSample[0, 2] = 1.3; newSample[0, 3] = 1.2; newSample[0, 4] = 1.0;
+/// var predictions = classifier.Predict(newSample);
 /// Console.WriteLine($"Predicted class: {predictions[0]}");
 /// </code>
 /// </example>
