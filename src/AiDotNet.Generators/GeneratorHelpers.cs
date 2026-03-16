@@ -144,7 +144,9 @@ internal static class GeneratorHelpers
             .Replace("\\", "\\\\")
             .Replace("\"", "\\\"")
             .Replace("\n", "\\n")
-            .Replace("\r", "\\r");
+            .Replace("\r", "\\r")
+            .Replace("\t", "\\t")
+            .Replace("\0", "\\0");
     }
 
     /// <summary>
