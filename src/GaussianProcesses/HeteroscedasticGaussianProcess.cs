@@ -244,8 +244,11 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
         double yVar = 0;
         for (int i = 0; i < n; i++) { double d = _numOps.ToDouble(y[i]) - yMean; yVar += d * d; }
         yVar /= n;
-        // Start with noise = 1% of target variance (reasonable for many datasets)
-        double initialNoiseLog = Math.Log(Math.Max(yVar * 0.01, 1e-10));
+        // Start with noise = 0.01% of target variance. A small initial noise lets the
+        // mean GP fit tightly in the first EM iteration, then the E-step adjusts noise
+        // upward where the data actually has high variance. Starting too large causes
+        // under-fitting that the EM algorithm struggles to recover from.
+        double initialNoiseLog = Math.Log(Math.Max(yVar * 0.0001, 1e-10));
 
         _noiseLatentValues = new Vector<T>(n);
         for (int i = 0; i < n; i++)

@@ -16,6 +16,34 @@ public abstract class GaussianProcessModelTestBase
     protected virtual int TrainSamples => 30;
     protected virtual int Features => 2;
 
+    /// <summary>
+    /// Generates normalized linear data with features in [0,1] suitable for default kernels.
+    /// GP kernels (especially Gaussian/RBF with default sigma=1.0) require data in a
+    /// scale where pairwise distances are O(1). Features in [0,10] cause exp(-100)≈0.
+    /// </summary>
+    protected (Matrix<double> X, Vector<double> Y) GenerateNormalizedLinearData(
+        int samples, int features, Random rng, double noise = 0.1)
+    {
+        var (x, y) = ModelTestHelpers.GenerateLinearData(samples, features, rng, noise);
+        // Normalize features to [0,1]
+        for (int j = 0; j < features; j++)
+        {
+            double min = double.MaxValue, max = double.MinValue;
+            for (int i = 0; i < samples; i++)
+            {
+                if (x[i, j] < min) min = x[i, j];
+                if (x[i, j] > max) max = x[i, j];
+            }
+            double range = max - min;
+            if (range > 1e-10)
+            {
+                for (int i = 0; i < samples; i++)
+                    x[i, j] = (x[i, j] - min) / range;
+            }
+        }
+        return (x, y);
+    }
+
     // =====================================================
     // MATHEMATICAL INVARIANT: Predictive Variance ≥ 0 Everywhere
     // The GP posterior variance is σ²(x) = k(x,x) - k(x,X)K⁻¹k(X,x) ≥ 0
@@ -28,7 +56,7 @@ public abstract class GaussianProcessModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
+        var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);
 
         model.Fit(trainX, trainY);
 
@@ -36,9 +64,9 @@ public abstract class GaussianProcessModelTestBase
         var testPoints = new[]
         {
             MakePoint(0.0, 0.0),     // near origin
-            MakePoint(5.0, 5.0),     // in range
-            MakePoint(100.0, 100.0), // far away
-            MakePoint(-10.0, -10.0), // extrapolation
+            MakePoint(0.5, 0.5),     // in range
+            MakePoint(10.0, 10.0),   // far away
+            MakePoint(-2.0, -2.0),   // extrapolation
         };
 
         foreach (var point in testPoints)
@@ -64,7 +92,7 @@ public abstract class GaussianProcessModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.01);
+        var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng, noise: 0.01);
 
         model.Fit(trainX, trainY);
 
@@ -75,7 +103,7 @@ public abstract class GaussianProcessModelTestBase
         var (_, varianceNear) = model.Predict(nearPoint);
 
         // Variance far from all training data
-        var farPoint = MakePoint(500.0, 500.0);
+        var farPoint = MakePoint(10.0, 10.0);
         var (_, varianceFar) = model.Predict(farPoint);
 
         if (!double.IsNaN(varianceNear) && !double.IsNaN(varianceFar) &&
@@ -146,7 +174,7 @@ public abstract class GaussianProcessModelTestBase
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         // Use small dataset with low noise for clear interpolation test
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(15, Features, rng, noise: 0.001);
+        var (trainX, trainY) = GenerateNormalizedLinearData(15, Features, rng, noise: 0.001);
 
         model.Fit(trainX, trainY);
 
@@ -195,18 +223,19 @@ public abstract class GaussianProcessModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng, noise: 0.1);
+        var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng, noise: 0.1);
 
         model.Fit(trainX, trainY);
 
-        var testPoint = MakePoint(5.0, 5.0);
-        // Expected: 2*5 + 4*5 + 1 = 31 (for 2-feature linear data)
+        // Test at a point within the normalized training range [0,1]
+        var testPoint = MakePoint(0.5, 0.5);
+        // With normalized features and y=2x1+4x2+1, y at (0.5,0.5) ≈ positive
         var (mean, _) = model.Predict(testPoint);
 
         if (!double.IsNaN(mean) && !double.IsInfinity(mean))
         {
             Assert.True(mean > 0.0,
-                $"GP mean = {mean:F4} at (5,5). Should be positive for y=2x1+4x2+1.");
+                $"GP mean = {mean:F4} at (0.5,0.5). Should be positive for linear data.");
         }
     }
 
@@ -219,11 +248,11 @@ public abstract class GaussianProcessModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
+        var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);
 
         model.Fit(trainX, trainY);
 
-        var point = MakePoint(5.0, 5.0);
+        var point = MakePoint(0.5, 0.5);
         var (mean, variance) = model.Predict(point);
 
         Assert.False(double.IsNaN(mean), "GP mean is NaN.");
@@ -236,11 +265,11 @@ public abstract class GaussianProcessModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
+        var (trainX, trainY) = GenerateNormalizedLinearData(TrainSamples, Features, rng);
 
         model.Fit(trainX, trainY);
 
-        var point = MakePoint(5.0, 5.0);
+        var point = MakePoint(0.5, 0.5);
         var (mean1, var1) = model.Predict(point);
         var (mean2, var2) = model.Predict(point);
 
