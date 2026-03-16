@@ -207,10 +207,15 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
                 var prediction = member.Tree.Predict(ConvertToMatrix(selectedFeaturesForPred));
                 bool isCorrect = NumOps.Compare(prediction[0], label) == 0;
 
-                // Update accuracy estimate with exponential decay
+                // Update accuracy estimate with exponential moving average (alpha = 0.01)
+                // This decays old observations so recent performance dominates after drift
+                const double ewmaAlpha = 0.01;
                 member.TotalCount++;
                 if (isCorrect) member.CorrectCount++;
-                member.AccuracyEstimate = (double)member.CorrectCount / member.TotalCount;
+                double observation = isCorrect ? 1.0 : 0.0;
+                member.AccuracyEstimate = member.TotalCount == 1
+                    ? observation
+                    : (1 - ewmaAlpha) * member.AccuracyEstimate + ewmaAlpha * observation;
 
                 // Update drift detectors with error (1 = error, 0 = correct)
                 T error = isCorrect ? NumOps.Zero : NumOps.One;
@@ -345,9 +350,8 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
             var memberFeatures = member.SelectedFeatures ?? throw new InvalidOperationException("SelectedFeatures has not been initialized.");
             var memberTree = member.Tree ?? throw new InvalidOperationException("Tree has not been initialized.");
 
-            // Skip trees that haven't been trained yet (Poisson sampling may have skipped them)
-            if (!memberTree.IsWarm)
-                continue;
+            // Cold trees (not yet trained) get uniform weight to avoid empty-vote fallback
+            bool isCold = !memberTree.IsWarm;
 
             var selectedFeatures = ExtractSelectedFeatures(features, memberFeatures);
             var treePrediction = memberTree.Predict(ConvertToMatrix(selectedFeatures));
@@ -355,7 +359,8 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
             int classIdx = GetClassIndex(treePrediction[0]);
             if (classIdx >= 0)
             {
-                double weight = member.AccuracyEstimate;
+                // Cold trees get uniform weight (1.0) to avoid label-order fallback
+                double weight = isCold ? 1.0 : member.AccuracyEstimate;
                 if (!voteWeights.ContainsKey(classIdx))
                 {
                     voteWeights[classIdx] = 0;
