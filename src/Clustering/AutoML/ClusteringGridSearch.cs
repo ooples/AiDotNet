@@ -1,5 +1,7 @@
+using AiDotNet.AutoML;
 using AiDotNet.Clustering.Evaluation;
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Clustering.AutoML;
@@ -38,22 +40,18 @@ namespace AiDotNet.Clustering.AutoML;
 /// var result = gridSearch.Search(dataMatrix, p =&gt; new KMeans&lt;double&gt;(), paramGrid);
 /// </code>
 /// </example>
-public class ClusteringGridSearch<T>
+public class ClusteringGridSearch<T> : UnsupervisedAutoMLBase<T>
 {
     private readonly ClusteringEvaluator<T> _evaluator;
-    private readonly string _primaryMetric;
-    private readonly bool _higherIsBetter;
 
     /// <summary>
     /// Initializes a new ClusteringGridSearch instance.
     /// </summary>
     /// <param name="primaryMetric">The metric to optimize. Default is Silhouette Score.</param>
-    /// <param name="higherIsBetter">Whether higher metric values are better. Default is true.</param>
-    public ClusteringGridSearch(string primaryMetric = "Silhouette Score", bool higherIsBetter = true)
+    public ClusteringGridSearch(ClusteringMetricType primaryMetric = ClusteringMetricType.SilhouetteScore)
     {
         _evaluator = new ClusteringEvaluator<T>();
-        _primaryMetric = primaryMetric;
-        _higherIsBetter = higherIsBetter;
+        PrimaryMetricType = primaryMetric;
     }
 
     /// <summary>
@@ -87,7 +85,7 @@ public class ClusteringGridSearch<T>
                 var evaluation = _evaluator.EvaluateAll(data, labels);
 
                 double primaryScore = 0;
-                if (evaluation.InternalMetrics.TryGetValue(_primaryMetric, out double score))
+                if (evaluation.InternalMetrics.TryGetValue(PrimaryMetric, out double score))
                 {
                     primaryScore = score;
                 }
@@ -107,7 +105,7 @@ public class ClusteringGridSearch<T>
         }
 
         // Sort by primary metric
-        var sortedResults = _higherIsBetter
+        var sortedResults = HigherIsBetter
             ? results.OrderByDescending(r => r.PrimaryScore).ToList()
             : results.OrderBy(r => r.PrimaryScore).ToList();
 
@@ -117,8 +115,8 @@ public class ClusteringGridSearch<T>
             AllTrials = sortedResults,
             TotalCombinations = allCombinations.Count,
             SuccessfulTrials = results.Count,
-            PrimaryMetric = _primaryMetric,
-            HigherIsBetter = _higherIsBetter
+            PrimaryMetric = PrimaryMetric,
+            HigherIsBetter = HigherIsBetter
         };
     }
 
@@ -172,7 +170,7 @@ public class ClusteringGridSearch<T>
 
                     var evaluation = _evaluator.EvaluateAll(trainData, labels);
 
-                    if (evaluation.InternalMetrics.TryGetValue(_primaryMetric, out double score))
+                    if (evaluation.InternalMetrics.TryGetValue(PrimaryMetric, out double score))
                     {
                         foldScores.Add(score);
                     }
@@ -196,7 +194,7 @@ public class ClusteringGridSearch<T>
         }
 
         // Sort by mean score
-        var sortedResults = _higherIsBetter
+        var sortedResults = HigherIsBetter
             ? results.OrderByDescending(r => r.MeanScore).ToList()
             : results.OrderBy(r => r.MeanScore).ToList();
 
@@ -207,8 +205,8 @@ public class ClusteringGridSearch<T>
             TotalCombinations = allCombinations.Count,
             SuccessfulTrials = results.Count,
             NumFolds = numFolds,
-            PrimaryMetric = _primaryMetric,
-            HigherIsBetter = _higherIsBetter
+            PrimaryMetric = PrimaryMetric,
+            HigherIsBetter = HigherIsBetter
         };
     }
 

@@ -1,3 +1,4 @@
+using AiDotNet.AutoML;
 using AiDotNet.Clustering.AutoK;
 using AiDotNet.Clustering.Density;
 using AiDotNet.Clustering.Evaluation;
@@ -44,11 +45,10 @@ namespace AiDotNet.Clustering.AutoML;
 /// var bestModel = result.BestResult;
 /// </code>
 /// </example>
-public class ClusteringAutoML<T>
+public class ClusteringAutoML<T> : UnsupervisedAutoMLBase<T>
 {
     private readonly ClusteringAutoMLOptions _options;
     private readonly ClusteringEvaluator<T> _evaluator;
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new ClusteringAutoML instance.
@@ -58,7 +58,7 @@ public class ClusteringAutoML<T>
     {
         _options = options ?? new ClusteringAutoMLOptions();
         _evaluator = new ClusteringEvaluator<T>();
-        _numOps = MathHelper.GetNumericOperations<T>();
+        // NumOps available from base class
     }
 
     /// <summary>
@@ -397,7 +397,7 @@ public class ClusteringAutoML<T>
 
     private double ComputeDistance(Matrix<T> data, int i, int j)
     {
-        return _numOps.ToDouble(VectorHelper.EuclideanDistance(data.GetRow(i), data.GetRow(j)));
+        return NumOps.ToDouble(VectorHelper.EuclideanDistance(data.GetRow(i), data.GetRow(j)));
     }
 
     private int CountClusters(Vector<T> labels)
@@ -405,7 +405,7 @@ public class ClusteringAutoML<T>
         var unique = new HashSet<int>();
         for (int i = 0; i < labels.Length; i++)
         {
-            int label = (int)_numOps.ToDouble(labels[i]);
+            int label = (int)NumOps.ToDouble(labels[i]);
             if (label >= 0)
             {
                 unique.Add(label);

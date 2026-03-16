@@ -102,7 +102,7 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                     Zs[i, k] = NumOps.Add(ZsMu[i, k], NumOps.Multiply(stdS, epsilonS[i, k]));
                     T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[i, k])));
                     epsilonT[i, k] = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-                    Zt[i, k] = NumOps.Add(ZtMu[i, k], NumOps.Multiply(stdT, noiseT));
+                    Zt[i, k] = NumOps.Add(ZtMu[i, k], NumOps.Multiply(stdT, epsilonT[i, k]));
                 }
 
             // Compute edge probabilities: P[i,j] = sigmoid(Zs_i . Zt_j)
