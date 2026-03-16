@@ -102,8 +102,9 @@ public class EncryptionOverheadBenchmarkTests
         Assert.Equal(payload.Length, decrypted.Length);
         Assert.Equal(payload, decrypted);
 
-        // Log encryption overhead for diagnostic purposes.
-        // We don't assert a hard time limit since CI environments vary widely in performance.
+        // Assert crypto overhead stays reasonable — 10x memcpy is the budget.
+        // CI environments vary, so this is generous but still catches regressions.
+        Assert.True(overheadRatio < 100, $"Encryption overhead is {overheadRatio:F1}x memcpy — exceeds 100x budget");
         _output.WriteLine($"[{label}] Total crypto time: {totalCryptoMs:F1} ms ({measureIterations} iterations)");
     }
 
@@ -132,7 +133,8 @@ public class EncryptionOverheadBenchmarkTests
         _output.WriteLine($"Overhead: salt={encrypted.Salt.Length} + nonce={encrypted.Nonce.Length} + tag={encrypted.Tag.Length} = {totalOverhead} bytes");
         _output.WriteLine($"Overhead ratio: {(double)totalOverhead / payload.Length * 100:F4}%");
 
-        Assert.True(totalOverhead <= 64, $"Encryption metadata overhead is too large: {totalOverhead} bytes");
+        // AES-GCM overhead is exactly salt(16) + nonce(12) + tag(16) = 44 bytes
+        Assert.Equal(44, totalOverhead);
     }
 
     private static bool CheckAesGcmAvailability()

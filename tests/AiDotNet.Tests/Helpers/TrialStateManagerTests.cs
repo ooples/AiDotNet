@@ -218,7 +218,7 @@ public class TrialStateManagerTests : IDisposable
     }
 
     [Fact]
-    public void GetStatus_BeforeAnyOperation_DoesNotCreateFile()
+    public void GetStatus_BeforeAnyOperation_ReturnsZeroOperations()
     {
         var manager = new TrialStateManager(_trialFilePath);
 

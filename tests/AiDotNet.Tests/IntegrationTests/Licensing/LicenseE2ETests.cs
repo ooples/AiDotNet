@@ -180,10 +180,9 @@ public class LicenseE2ETests : IDisposable
         var trialManager = new TrialStateManager();
         trialManager.Reset();
 
-        // Step 1: Train a model (always free, no license needed)
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.trainbypass1.qrstuvwxyz123456");
+        // Step 1: Train a model (always free, no license needed — verify no license is set)
+        Assert.Null(Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY"));
         var result = TrainSimpleModel();
-        ClearAllLicenseSources();
 
         // Step 2: Serialize under trial (should count operations)
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
