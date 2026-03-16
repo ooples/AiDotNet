@@ -55,7 +55,7 @@ namespace AiDotNet.CausalInference;
 /// <code>
 /// var ipw = new InverseProbabilityWeighting&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);
 /// ipw.Fit(features, treatment, outcome);
-/// double ate = ipw.EstimateAte();
+/// var (ate, se) = ipw.EstimateATE(features, treatment, outcome);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
