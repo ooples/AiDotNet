@@ -77,7 +77,7 @@ namespace AiDotNet.Audio.AudioGen;
 ///     tokenizer: myTokenizer);
 ///
 /// // Generate audio from a text prompt
-/// Tensor&lt;float&gt; audio = model.Generate("a dog barking loudly");
+/// Tensor&lt;float&gt; audio = model.GenerateAudio("a dog barking loudly");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
