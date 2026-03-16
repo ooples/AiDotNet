@@ -186,10 +186,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 testNames, testedModels, untestedModels, seen);
         }
 
-        // Track whether models were found from source (meaning we're in the source project).
-        // When models are discovered from source, test classes live in a separate test project
-        // and won't be visible here — so diagnostics would be inaccurate (all models flagged).
-        bool modelsFoundFromSource = seen.Count > 0;
+        // Detect if we're in the source project (not the test project).
+        // When running in the source project, test classes live in a separate compilation
+        // and aren't visible, so all models appear untested — skip diagnostics.
+        // Use assembly name heuristic: test projects typically contain "Test" in the name.
+        string assemblyName = compilation.AssemblyName ?? string.Empty;
+        bool isTestProject = assemblyName.IndexOf("Test", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        bool modelsFoundFromSource = seen.Count > 0 && !isTestProject;
 
         // Second: if no source models were found, discover models from referenced assemblies.
         // This happens when the generator runs in the test project, where model classes
