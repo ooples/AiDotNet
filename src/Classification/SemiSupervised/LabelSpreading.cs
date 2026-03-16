@@ -1073,6 +1073,10 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
         }
 
         clone._numLabeled = _numLabeled;
+        clone.NumFeatures = NumFeatures;
+        clone.NumClasses = NumClasses;
+        clone.ClassLabels = ClassLabels?.Clone();
+        clone.TaskType = TaskType;
 
         return clone;
     }
