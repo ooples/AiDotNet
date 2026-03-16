@@ -5687,7 +5687,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 ["model_type"] = modelTypeStr,
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
-                ["problem_type"] = "regression",
+                ["problem_type"] = problemType,
                 ["data_complexity"] = "moderate"
             }.ToString(Formatting.None);
 
@@ -5807,8 +5807,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
-                ["problem_type"] = "regression",
-                ["is_time_series"] = false,
+                ["problem_type"] = problemType,
+                ["is_time_series"] = problemType == "time_series",
                 ["is_imbalanced"] = false,
                 ["has_groups"] = false,
                 ["computational_budget"] = "moderate"
