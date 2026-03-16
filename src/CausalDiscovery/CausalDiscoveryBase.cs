@@ -623,6 +623,11 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// <returns>Solution vector x, with zero for near-singular pivots.</returns>
     protected static double[] SolveSmallSystem(double[,] A, double[] b, int p)
     {
+        if (A.GetLength(0) < p || A.GetLength(1) < p)
+            throw new ArgumentException($"Matrix A must be at least {p}x{p}, got {A.GetLength(0)}x{A.GetLength(1)}.");
+        if (b.Length < p)
+            throw new ArgumentException($"Vector b must have at least {p} elements, got {b.Length}.");
+
         const double pivotTolerance = 1e-15;
         var aug = new double[p, p + 1];
         for (int i = 0; i < p; i++)
