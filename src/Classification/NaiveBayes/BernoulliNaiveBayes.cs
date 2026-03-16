@@ -46,16 +46,19 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// var classifier = new BernoulliNaiveBayes&lt;double&gt;(options);
 ///
 /// // Prepare binary feature data (0 = absent, 1 = present)
-/// var features = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
-///     1, 1, 0,  1, 0, 0,  // Class 0: features 1 present, 3 absent
-///     0, 1, 1,  0, 0, 1 });  // Class 1: feature 3 present
+/// var features = new Matrix&lt;double&gt;(4, 3);
+/// features[0, 0] = 1; features[0, 1] = 1; features[0, 2] = 0; // Class 0
+/// features[1, 0] = 1; features[1, 1] = 0; features[1, 2] = 0; // Class 0
+/// features[2, 0] = 0; features[2, 1] = 1; features[2, 2] = 1; // Class 1
+/// features[3, 0] = 0; features[3, 1] = 0; features[3, 2] = 1; // Class 1
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
 ///
 /// // Train by learning feature presence/absence probabilities per class
 /// classifier.Train(features, labels);
 ///
 /// // Predict using Bernoulli likelihood with absence penalty
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 1, 1, 0 });
+/// var newSample = new Matrix&lt;double&gt;(1, 3);
+/// newSample[0, 0] = 1; newSample[0, 1] = 1; newSample[0, 2] = 0;
 /// var prediction = classifier.Predict(newSample);
 /// Console.WriteLine($"Predicted class: {prediction[0]}");
 /// </code>
