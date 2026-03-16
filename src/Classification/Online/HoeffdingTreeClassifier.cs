@@ -119,9 +119,11 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     {
         public double Min { get; set; } = double.MaxValue;
         public double Max { get; set; } = double.MinValue;
-        // Fixed bin boundaries - frozen after first observation to keep bins consistent
-        public double BinMin { get; set; } = double.NaN;
-        public double BinMax { get; set; } = double.NaN;
+        /// <summary>
+        /// When true, Min/Max range is frozen (established during batch pass 1).
+        /// Bin assignments use the stable range without shifting boundaries.
+        /// </summary>
+        public bool RangeFrozen { get; set; }
         public Dictionary<int, BinStats>? BinsByClass { get; set; }
     }
 
@@ -240,15 +242,15 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
             _root = CreateLeaf(0);
             SamplesSeen = 0;
 
-            // Re-initialize with saved ranges
+            // Re-initialize with saved ranges and freeze them so bin assignment is
+            // consistent for ALL samples in pass 2 (no range drift).
             InitializeFeatureStats(_root, NumFeatures);
             for (int f = 0; f < NumFeatures; f++)
             {
                 var stats = _root.FeatureStatistics![f];
                 stats.Min = savedRanges[f].Min;
                 stats.Max = savedRanges[f].Max;
-                stats.BinMin = savedRanges[f].Min;
-                stats.BinMax = savedRanges[f].Max;
+                stats.RangeFrozen = true;
             }
 
             // Restore known classes
@@ -474,25 +476,16 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
             double value = NumOps.ToDouble(features[f]);
             var stats = featureStatistics[f];
 
-            // Update min/max for tracking
-            stats.Min = Math.Min(stats.Min, value);
-            stats.Max = Math.Max(stats.Max, value);
-
-            // Freeze bin edges on first observation to keep bins consistent
-            if (double.IsNaN(stats.BinMin))
+            // Update min/max range — used for BOTH bin assignment and split threshold mapping.
+            // When RangeFrozen is true (batch pass 2), the range was established in pass 1
+            // and must not change, ensuring all samples use consistent bin boundaries.
+            if (!stats.RangeFrozen)
             {
-                stats.BinMin = value;
-                stats.BinMax = value;
-            }
-            else
-            {
-                // Expand bin range if needed (but historical counts remain valid)
-                stats.BinMin = Math.Min(stats.BinMin, value);
-                stats.BinMax = Math.Max(stats.BinMax, value);
+                stats.Min = Math.Min(stats.Min, value);
+                stats.Max = Math.Max(stats.Max, value);
             }
 
             var binsByClass = stats.BinsByClass ?? throw new InvalidOperationException("BinsByClass has not been initialized.");
-            // Initialize bins for this class if needed
             if (!binsByClass.ContainsKey(classIdx))
             {
                 stats.BinsByClass[classIdx] = new BinStats
@@ -501,8 +494,8 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
                 };
             }
 
-            // Update bin count using fixed bin edges
-            int binIdx = GetBinIndex(value, stats.BinMin, stats.BinMax);
+            // Assign to bin using the same Min/Max range that CalculateInformationGain uses
+            int binIdx = GetBinIndex(value, stats.Min, stats.Max);
             stats.BinsByClass[classIdx].Counts[binIdx]++;
         }
     }
@@ -649,6 +642,42 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
         InitializeFeatureStats(leaf.Left, NumFeatures);
         InitializeFeatureStats(leaf.Right, NumFeatures);
 
+        // Distribute parent's class counts to children based on the split.
+        // In streaming mode, new samples populate children naturally. In batch mode
+        // (after ForceLeafSplits), no more data arrives, so children need initial counts
+        // to make predictions. We estimate counts from the bin statistics.
+        if (leaf.FeatureStatistics is not null && leaf.FeatureStatistics.ContainsKey(feature))
+        {
+            var stats = leaf.FeatureStatistics[feature];
+            int splitBin = GetBinIndex(threshold, stats.Min, stats.Max);
+
+            if (stats.BinsByClass is not null)
+            {
+                foreach (var kvp in stats.BinsByClass)
+                {
+                    int classIdx = kvp.Key;
+                    var bins = kvp.Value.Counts;
+
+                    long leftCount = 0, rightCount = 0;
+                    for (int b = 0; b <= splitBin && b < bins.Length; b++)
+                        leftCount += bins[b];
+                    for (int b = splitBin + 1; b < bins.Length; b++)
+                        rightCount += bins[b];
+
+                    if (leftCount > 0)
+                    {
+                        leaf.Left.ClassCounts[classIdx] = leftCount;
+                        leaf.Left.TotalCount += leftCount;
+                    }
+                    if (rightCount > 0)
+                    {
+                        leaf.Right.ClassCounts[classIdx] = rightCount;
+                        leaf.Right.TotalCount += rightCount;
+                    }
+                }
+            }
+        }
+
         // Clear leaf statistics (no longer needed)
         leaf.FeatureStatistics = null;
     }
@@ -789,9 +818,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
                 var featureDict = new Dictionary<string, object?>
                 {
                     ["Min"] = kvp.Value.Min,
-                    ["Max"] = kvp.Value.Max,
-                    ["BinMin"] = kvp.Value.BinMin,
-                    ["BinMax"] = kvp.Value.BinMax
+                    ["Max"] = kvp.Value.Max
                 };
 
                 if (kvp.Value.BinsByClass is not null)
@@ -850,9 +877,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
                     var stats = new FeatureStats
                     {
                         Min = featureObj["Min"]?.ToObject<double>() ?? double.MaxValue,
-                        Max = featureObj["Max"]?.ToObject<double>() ?? double.MinValue,
-                        BinMin = featureObj["BinMin"]?.ToObject<double>() ?? double.NaN,
-                        BinMax = featureObj["BinMax"]?.ToObject<double>() ?? double.NaN
+                        Max = featureObj["Max"]?.ToObject<double>() ?? double.MinValue
                     };
 
                     if (featureObj["BinsByClass"] is JObject binsObj)
