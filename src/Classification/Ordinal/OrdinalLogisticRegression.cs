@@ -301,18 +301,24 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                     }
                 }
 
-                // Compute gradients for thresholds
+                // Compute gradients for thresholds w.r.t. NLL.
+                // For P(Y ≤ k) = σ(αk - η):
+                //   ∂P(Y=k)/∂αk = +σ'(αk - η) = +γk
+                //   ∂P(Y=k+1)/∂αk = -σ'(αk - η) = -γk
+                // For NLL gradient ∂(-log P(Y=yi))/∂αk:
+                //   yi=k:   -γk / P(Y=k)     (negative: raising αk increases P(Y=k), decreasing NLL)
+                //   yi=k+1: +γk / P(Y=k+1)   (positive: raising αk decreases P(Y=k+1), increasing NLL)
                 for (int k = 0; k < K - 1; k++)
                 {
                     double gamma_k = cumProbs[k] * (1 - cumProbs[k]);
 
                     if (yi == k)
                     {
-                        gradThresh[k] += gamma_k / probs[yi];
+                        gradThresh[k] -= gamma_k / probs[yi];
                     }
                     else if (yi == k + 1)
                     {
-                        gradThresh[k] += -gamma_k / probs[yi];
+                        gradThresh[k] += gamma_k / probs[yi];
                     }
                 }
             }
