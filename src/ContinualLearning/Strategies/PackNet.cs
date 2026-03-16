@@ -104,7 +104,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     private readonly bool _layerWisePruning;
 
     // Mask tracking: 0 = available, task_id = assigned to that task
-    private int[] _parameterOwnership = Array.Empty<int>();
+    private int[]? _parameterOwnership;
 
     // Accumulated gradient importance for gradient-based pruning
     private Vector<T>? _gradientImportance;
@@ -344,10 +344,11 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
         double minMagnitude = Convert.ToDouble(_minWeightMagnitude);
 
         // Get indices of available parameters only
+        var ownership = _parameterOwnership ?? throw new InvalidOperationException("Parameter ownership not initialized.");
         var availableIndices = new List<int>();
         for (int i = 0; i < parameters.Length; i++)
         {
-            if (_parameterOwnership[i] == 0)
+            if (ownership[i] == 0)
             {
                 availableIndices.Add(i);
             }
@@ -388,12 +389,13 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     /// </summary>
     private void UpdateParameterOwnership(bool[] taskMask, int taskId)
     {
+        var ownership = _parameterOwnership ?? throw new InvalidOperationException("Parameter ownership not initialized.");
         for (int i = 0; i < taskMask.Length; i++)
         {
-            if (taskMask[i] && _parameterOwnership[i] == 0)
+            if (taskMask[i] && ownership[i] == 0)
             {
                 // Assign this parameter to the current task
-                _parameterOwnership[i] = taskId;
+                ownership[i] = taskId;
             }
         }
     }
@@ -462,7 +464,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     public override void Reset()
     {
         base.Reset();
-        _parameterOwnership = Array.Empty<int>();
+        _parameterOwnership = null;
         _gradientImportance = null;
         _gradientCount = 0;
         _preTaskParameters = null;
