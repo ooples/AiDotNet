@@ -344,10 +344,10 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
 
             sb.AppendLine($"        dict[{typeExpr}] = new ModelCompatibilityInfo(");
             sb.AppendLine($"            {typeExpr},");
-            sb.AppendLine($"            new string[] {{ {FormatStringArray(optimizers)} }},");
-            sb.AppendLine($"            new string[] {{ {FormatStringArray(lossFunctions)} }},");
-            sb.AppendLine($"            new string[] {{ {FormatStringArray(preprocessors)} }},");
-            sb.AppendLine($"            new string[] {{ {FormatStringArray(warnings)} }});");
+            sb.AppendLine($"            optimizers: new string[] {{ {FormatStringArray(optimizers)} }},");
+            sb.AppendLine($"            lossFunctions: new string[] {{ {FormatStringArray(lossFunctions)} }},");
+            sb.AppendLine($"            preprocessors: new string[] {{ {FormatStringArray(preprocessors)} }},");
+            sb.AppendLine($"            warnings: new string[] {{ {FormatStringArray(warnings)} }});");
         }
 
         sb.AppendLine("        return dict;");
