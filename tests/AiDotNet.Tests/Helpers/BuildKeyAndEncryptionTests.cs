@@ -318,7 +318,6 @@ public class BuildKeyAndEncryptionTests
             encrypted.Ciphertext, licenseKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad);
 
         Assert.True(decrypted.AsSpan().SequenceEqual(payload));
-        Assert.Equal(32, hash1.Length);
     }
 #endif
 

@@ -104,7 +104,7 @@ public class EncryptionOverheadBenchmarkTests
 
         // Assert crypto overhead stays reasonable — 10x memcpy is the budget.
         // CI environments vary, so this is generous but still catches regressions.
-        Assert.True(overheadRatio < 100, $"Encryption overhead is {overheadRatio:F1}x memcpy — exceeds 100x budget");
+        Assert.True(overheadRatio < 10, $"Encryption overhead is {overheadRatio:F1}x memcpy — exceeds 10x budget");
         _output.WriteLine($"[{label}] Total crypto time: {totalCryptoMs:F1} ms ({measureIterations} iterations)");
     }
 

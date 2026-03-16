@@ -174,14 +174,15 @@ public class TrialStateManagerTests : IDisposable
             manager.RecordOperationOrThrow();
         }
 
-        // Delete the file (simulates user clearing trial state)
+        // Delete the file (simulates user clearing trial state to bypass limits)
         File.Delete(_trialFilePath);
 
-        // Trial restarts — counter goes back to 1
-        manager.RecordOperationOrThrow();
+        // Missing file should be treated as expired (anti-reset behavior)
         var status = manager.GetStatus();
-        Assert.Equal(1, status.OperationsUsed);
-        Assert.False(status.IsExpired);
+        Assert.True(status.IsExpired, "Missing trial file should be treated as expired");
+
+        // Operations should not be allowed after file deletion
+        Assert.Throws<LicenseRequiredException>(() => manager.RecordOperationOrThrow());
     }
 
     [Fact]

@@ -228,8 +228,14 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
 
         try
         {
+            // Validate and normalize filePath
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
+
+            string normalizedPath = Path.GetFullPath(filePath.Trim());
+
             // Each rank saves its own shard for correct round-trip
-            string rankPath = $"{filePath}.rank{Rank}";
+            string rankPath = $"{normalizedPath}.rank{Rank}";
             Helpers.ModelPersistenceGuard.EnforceBeforeSave();
             using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
@@ -250,8 +256,14 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
 
         try
         {
+            // Validate and normalize filePath
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
+
+            string normalizedPath = Path.GetFullPath(filePath.Trim());
+
             // Each rank loads its own shard
-            string rankPath = $"{filePath}.rank{Rank}";
+            string rankPath = $"{normalizedPath}.rank{Rank}";
             Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
             var data = File.ReadAllBytes(rankPath);
             using (Helpers.ModelPersistenceGuard.InternalOperation())

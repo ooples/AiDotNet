@@ -281,15 +281,20 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null) throw new ArgumentNullException(nameof(data));
         var json = Encoding.UTF8.GetString(data);
-        try
+
+        var state = Newtonsoft.Json.Linq.JObject.Parse(json);
+        var optionsToken = state["options"];
+
+        if (optionsToken != null)
         {
-            var state = Newtonsoft.Json.Linq.JObject.Parse(json);
-            if (state["options"] is { } optionsToken)
-                _options = optionsToken.ToObject<AlignmentMethodOptions<T>>() ?? new AlignmentMethodOptions<T>();
+            // New format with "options" key
+            _options = optionsToken.ToObject<AlignmentMethodOptions<T>>() ?? new AlignmentMethodOptions<T>();
         }
-        catch (JsonException)
+        else
         {
-            _options = JsonConvert.DeserializeObject<AlignmentMethodOptions<T>>(json) ?? new AlignmentMethodOptions<T>();
+            // Legacy format: try to deserialize entire state as AlignmentMethodOptions<T>
+            var legacyOptions = state.ToObject<AlignmentMethodOptions<T>>();
+            _options = legacyOptions ?? new AlignmentMethodOptions<T>();
         }
     }
 

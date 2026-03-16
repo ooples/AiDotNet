@@ -410,7 +410,10 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
 
         Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
 
-        string fullPath = Path.GetFullPath(filePath);
+        // Try per-rank filename first (matching SaveModel's behavior)
+        string rankPath = $"{Path.GetFullPath(filePath)}.rank{Rank}";
+        string fullPath = File.Exists(rankPath) ? rankPath : Path.GetFullPath(filePath);
+
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Model file not found: {fullPath}", fullPath);
 

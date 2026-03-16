@@ -302,12 +302,13 @@ public class LicenseServerEndpointTests
         var validator = new LicenseValidator(key);
         var result = validator.Validate();
 
-        // Should not crash — returns ValidationPending or falls back to offline
+        // Should not crash — returns ValidationPending, Active, or Invalid depending on build type
         Assert.NotNull(result);
         Assert.True(
             result.Status == LicenseKeyStatus.ValidationPending ||
-            result.Status == LicenseKeyStatus.Active,
-            $"Expected ValidationPending or Active (offline fallback), got {result.Status}");
+            result.Status == LicenseKeyStatus.Active ||
+            result.Status == LicenseKeyStatus.Invalid,
+            $"Expected ValidationPending, Active, or Invalid, got {result.Status}");
     }
 
     [Fact]

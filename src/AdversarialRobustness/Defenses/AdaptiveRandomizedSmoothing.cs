@@ -243,7 +243,7 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     public void Reset() { }
 
     /// <inheritdoc/>
-    public byte[] Serialize()
+    internal byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
         var state = new Newtonsoft.Json.Linq.JObject
@@ -264,22 +264,36 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         if (data == null) throw new ArgumentNullException(nameof(data));
         var json = Encoding.UTF8.GetString(data);
 
-        // Try new format first, fall back to legacy (options-only) format
-        try
+        // Parse the JSON once
+        var state = Newtonsoft.Json.Linq.JObject.Parse(json);
+
+        // Check if state["options"] exists (new format)
+        if (state["options"] is { } optionsToken)
         {
-            var state = Newtonsoft.Json.Linq.JObject.Parse(json);
-            if (state["options"] is { } optionsToken)
-            {
-                _options = optionsToken.ToObject<CertifiedDefenseOptions<T>>() ?? new CertifiedDefenseOptions<T>();
-            }
+            _options = optionsToken.ToObject<CertifiedDefenseOptions<T>>() ?? new CertifiedDefenseOptions<T>();
             // Note: _minSigma, _maxSigma, _sensitivitySamples are readonly, so we can't restore them
             // after construction. The serialized values serve as documentation of the saved state.
             // For full round-trip fidelity, construct a new instance with the serialized parameters.
         }
-        catch (JsonException)
+        else
         {
-            // Legacy format: just options
-            _options = JsonConvert.DeserializeObject<CertifiedDefenseOptions<T>>(json) ?? new CertifiedDefenseOptions<T>();
+            // Try to deserialize the entire state as legacy options-only format
+            try
+            {
+                var legacyOptions = state.ToObject<CertifiedDefenseOptions<T>>();
+                if (legacyOptions != null)
+                {
+                    _options = legacyOptions;
+                }
+                else
+                {
+                    throw new InvalidOperationException("Failed to deserialize state: neither new format (with 'options' key) nor legacy format (plain CertifiedDefenseOptions<T>) could be parsed.");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Failed to deserialize state: neither new format (with 'options' key) nor legacy format (plain CertifiedDefenseOptions<T>) could be parsed.", ex);
+            }
         }
     }
 

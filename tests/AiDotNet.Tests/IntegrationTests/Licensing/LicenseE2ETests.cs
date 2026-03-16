@@ -177,38 +177,59 @@ public class LicenseE2ETests : IDisposable
     public void E2E_TrialLifecycle_TrainFreeSerializeWithTrialExhaustThenLicense()
     {
         ClearAllLicenseSources();
-        var trialManager = new TrialStateManager();
-        trialManager.Reset();
 
-        // Step 1: Train a model (always free, no license needed — verify no license is set)
-        Assert.Null(Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY"));
-        var result = TrainSimpleModel();
+        // Use a test-specific trial state file to avoid mutating global state
+        string testTrialDir = Path.Combine(Path.GetTempPath(), "aidotnet-test-trial-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testTrialDir);
+        string testTrialFile = Path.Combine(testTrialDir, "trial.json");
 
-        // Step 2: Serialize under trial (should count operations)
-        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
-        byte[] serialized = builder.SerializeModel(result);
-        Assert.True(serialized.Length > 0);
-
-        var status = trialManager.GetStatus();
-        Assert.True(status.OperationsUsed > 0, "Trial operation should be counted");
-        Assert.False(status.IsExpired, "Trial should not be expired yet");
-
-        // Step 3: Exhaust the trial
-        trialManager.Reset();
-        for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+        try
         {
-            trialManager.RecordOperationOrThrow();
+            var trialManager = new TrialStateManager(testTrialFile);
+
+            // Step 1: Train a model (always free, no license needed — verify no license is set)
+            Assert.Null(Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY"));
+            var result = TrainSimpleModel();
+
+            // Step 2: Serialize under trial (should count operations)
+            var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+            byte[] serialized = builder.SerializeModel(result);
+            Assert.True(serialized.Length > 0);
+
+            var status = trialManager.GetStatus();
+            Assert.True(status.OperationsUsed > 0, "Trial operation should be counted");
+            Assert.False(status.IsExpired, "Trial should not be expired yet");
+
+            // Step 3: Exhaust the trial
+            trialManager.Reset();
+            for (int i = 0; i < TrialStateManager.TrialOperationLimit; i++)
+            {
+                trialManager.RecordOperationOrThrow();
+            }
+
+            // Step 4: Serialize should now throw
+            Assert.Throws<AiDotNet.Exceptions.LicenseRequiredException>(() =>
+                builder.SerializeModel(result));
+
+            // Step 5: Add a license key — should immediately unblock
+            Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.rescue12345.abcdefghijklmnop");
+
+            byte[] serialized2 = builder.SerializeModel(result);
+            Assert.True(serialized2.Length > 0, "Licensed serialize should succeed after trial exhaustion");
         }
-
-        // Step 4: Serialize should now throw
-        Assert.Throws<AiDotNet.Exceptions.LicenseRequiredException>(() =>
-            builder.SerializeModel(result));
-
-        // Step 5: Add a license key — should immediately unblock
-        Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY", "aidn.rescue12345.abcdefghijklmnop");
-
-        byte[] serialized2 = builder.SerializeModel(result);
-        Assert.True(serialized2.Length > 0, "Licensed serialize should succeed after trial exhaustion");
+        finally
+        {
+            // Clean up test-specific trial state
+            try
+            {
+                if (Directory.Exists(testTrialDir))
+                    Directory.Delete(testTrialDir, true);
+            }
+            catch
+            {
+                // Best effort cleanup
+            }
+        }
     }
 
     // ─── E2E: License Key Format Validation ───
