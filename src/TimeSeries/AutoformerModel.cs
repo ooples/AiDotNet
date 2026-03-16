@@ -1194,7 +1194,32 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
     {
-        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _embeddingDim * 2 }), "autoformer_encoder_output");
+        // Input: [embeddingDim * 2] = [trend | seasonal] concatenated
+        var input = Autodiff.TensorOperations<T>.Variable(
+            new Tensor<T>(new[] { _embeddingDim * 2 }), "af_enc_input", requiresGradient: false);
+        nodes.Add(input);
+
+        // Extract seasonal component (first half) for attention
+        var seasonal = Autodiff.TensorOperations<T>.Slice(input, 0, _embeddingDim);
+
+        // Self-attention on seasonal component
+        var attnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
+            seasonal, _queryProj, _keyProj, _valueProj, _outputProj, "af_enc_attn");
+        var residual1 = Autodiff.TensorOperations<T>.Add(seasonal, attnOut);
+        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual1, _layerNorm1Gamma, _layerNorm1Beta, "af_enc_ln1");
+
+        // FFN
+        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
+            norm1, _ff1Weight, _ff1Bias, _ff2Weight, _ff2Bias, "af_enc_ffn");
+        var residual2 = Autodiff.TensorOperations<T>.Add(norm1, ffnOut);
+        var norm2 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual2, _layerNorm2Gamma, _layerNorm2Beta, "af_enc_ln2");
+
+        // Extract trend (second half) and concatenate back
+        var trend = Autodiff.TensorOperations<T>.Slice(input, _embeddingDim, _embeddingDim);
+        return Autodiff.TensorOperations<T>.Concat(
+            new List<Autodiff.ComputationNode<T>> { norm2, trend });
     }
 
     public override Vector<T> GetParameters()

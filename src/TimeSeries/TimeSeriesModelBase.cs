@@ -740,6 +740,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             }
         }
 
+        // Serialize auto-scaled guard threshold (persists training-data-aware overflow protection)
+        writer.Write(_autoGuardThreshold);
+
         // Let derived classes serialize their specific data
         SerializeCore(writer);
 
@@ -818,6 +821,16 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
                     T value = NumOps.FromDouble(reader.ReadDouble());
                     LastEvaluationMetrics[key] = value;
                 }
+            }
+
+            // Deserialize auto-scaled guard threshold (backwards-compatible)
+            try
+            {
+                _autoGuardThreshold = reader.ReadDouble();
+            }
+            catch (EndOfStreamException)
+            {
+                _autoGuardThreshold = 1e15; // Pre-patch model
             }
 
             // Let derived classes deserialize their specific data

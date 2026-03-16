@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
@@ -869,7 +870,42 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     public override bool SupportsJitCompilation => true;
     public override void ResetState() { }
     public override void UpdateParameters(T learningRate) { }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _embeddingDim }), "informer_encoder_output");
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        // Input node
+        var input = TensorOperations<T>.Variable(
+            new Tensor<T>(new[] { _embeddingDim }), "enc_input", requiresGradient: false);
+        nodes.Add(input);
+
+        // Q/K/V/Output projection weights
+        var wQ = TensorOperations<T>.Constant(_queryProj.Clone(), "enc_wQ");
+        var wK = TensorOperations<T>.Constant(_keyProj.Clone(), "enc_wK");
+        var wV = TensorOperations<T>.Constant(_valueProj.Clone(), "enc_wV");
+        var wO = TensorOperations<T>.Constant(_outputProj.Clone(), "enc_wO");
+
+        // Self-attention: Q = W_q @ input, K = W_k @ input, V = W_v @ input
+        var q = TensorOperations<T>.MatrixVectorMultiply(wQ, input);
+        var k = TensorOperations<T>.MatrixVectorMultiply(wK, input);
+        var v = TensorOperations<T>.MatrixVectorMultiply(wV, input);
+
+        // Single-step self-attention: softmax([score]) = [1.0], output = W_out @ V
+        var attnOut = TensorOperations<T>.MatrixVectorMultiply(wO, v);
+
+        // Residual + LayerNorm 1
+        var residual1 = TensorOperations<T>.Add(input, attnOut);
+        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual1, _layerNorm1Gamma, _layerNorm1Beta, "enc_ln1");
+
+        // Feed-forward network: GELU(W1 @ x + b1) then W2 @ h + b2
+        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
+            norm1, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, "enc_ffn");
+
+        // Residual + LayerNorm 2
+        var residual2 = TensorOperations<T>.Add(norm1, ffnOut);
+        return TransformerGraphHelper<T>.LayerNormGraph(
+            residual2, _layerNorm2Gamma, _layerNorm2Beta, "enc_ln2");
+    }
+
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();
@@ -1238,7 +1274,31 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public override bool SupportsJitCompilation => true;
     public override void ResetState() { }
     public override void UpdateParameters(T learningRate) { }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _embeddingDim }), "distilling_conv_output");
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        // Input node
+        var input = TensorOperations<T>.Variable(
+            new Tensor<T>(new[] { _embeddingDim }), "distill_input", requiresGradient: false);
+        nodes.Add(input);
+
+        // For single-step: 1D conv with kernel size 3 uses only center weight (no neighbors)
+        // Extract center kernel weights as a diagonal-like projection
+        var centerWeights = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
+        for (int d = 0; d < _embeddingDim; d++)
+            centerWeights[d, d] = _convWeights[d * 3 + 1]; // center kernel (k=0 → index 1)
+        var wConv = TensorOperations<T>.Constant(centerWeights, "distill_conv_w");
+        var bConv = TensorOperations<T>.Constant(_convBias.Clone(), "distill_conv_b");
+
+        // Conv: W @ input + bias
+        var conv = TensorOperations<T>.Add(
+            TensorOperations<T>.MatrixVectorMultiply(wConv, input), bConv);
+
+        // ELU activation
+        var activated = TensorOperations<T>.ELU(conv);
+
+        // Max pooling over single element is identity
+        return activated;
+    }
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();
@@ -1440,6 +1500,9 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             }
         }
     }
+
+    private static ComputationNode<T> LayerNormNode(ComputationNode<T> input, Tensor<T> gamma, Tensor<T> beta, string prefix)
+        => TransformerGraphHelper<T>.LayerNormGraph(input, gamma, beta, prefix);
 }
 
 /// <summary>
@@ -1490,7 +1553,34 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     public override bool SupportsJitCompilation => true;
     public override void ResetState() { _lastEncoderOutput = null; }
     public override void UpdateParameters(T learningRate) { }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes) => Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _embeddingDim }), "informer_decoder_output");
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        // Input node (decoder input)
+        var input = TensorOperations<T>.Variable(
+            new Tensor<T>(new[] { _embeddingDim }), "dec_input", requiresGradient: false);
+        nodes.Add(input);
+
+        // Self-attention block
+        var selfAttnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
+            input, _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj, "dec_self");
+        var residual1 = TensorOperations<T>.Add(input, selfAttnOut);
+        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual1, _layerNorm1Gamma, _layerNorm1Beta, "dec_ln1");
+
+        // Cross-attention block (for single-step JIT, encoder output approximated as self)
+        var crossAttnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
+            norm1, _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj, "dec_cross");
+        var residual2 = TensorOperations<T>.Add(norm1, crossAttnOut);
+        var norm2 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual2, _layerNorm2Gamma, _layerNorm2Beta, "dec_ln2");
+
+        // FFN block
+        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
+            norm2, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, "dec_ffn");
+        var residual3 = TensorOperations<T>.Add(norm2, ffnOut);
+        return TransformerGraphHelper<T>.LayerNormGraph(
+            residual3, _layerNorm3Gamma, _layerNorm3Beta, "dec_ln3");
+    }
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();
@@ -1985,5 +2075,61 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
                 tensor[i] = NumOps.Subtract(tensor[i], update);
             }
         }
+    }
+}
+
+/// <summary>
+/// Shared computation graph builders for transformer layer components.
+/// Used by Informer, Autoformer, and Chronos transformer layers.
+/// </summary>
+internal static class TransformerGraphHelper<T>
+{
+    public static ComputationNode<T> LayerNormGraph(
+        ComputationNode<T> input, Tensor<T> gamma, Tensor<T> beta, string prefix)
+    {
+        var gammaNode = TensorOperations<T>.Constant(gamma.Clone(), $"{prefix}_gamma");
+        var betaNode = TensorOperations<T>.Constant(beta.Clone(), $"{prefix}_beta");
+        var mean = TensorOperations<T>.Mean(input);
+        var centered = TensorOperations<T>.Subtract(input, mean);
+        var sq = TensorOperations<T>.ElementwiseMultiply(centered, centered);
+        var variance = TensorOperations<T>.Mean(sq);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var eps = TensorOperations<T>.Constant(
+            new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { numOps.FromDouble(1e-5) })), $"{prefix}_eps");
+        var std = TensorOperations<T>.Sqrt(TensorOperations<T>.Add(variance, eps));
+        var normalized = TensorOperations<T>.Divide(centered, std);
+        return TensorOperations<T>.Add(
+            TensorOperations<T>.ElementwiseMultiply(gammaNode, normalized), betaNode);
+    }
+
+    public static ComputationNode<T> FeedForwardGraph(
+        ComputationNode<T> input,
+        Tensor<T> w1, Tensor<T> b1, Tensor<T> w2, Tensor<T> b2,
+        string prefix)
+    {
+        var wFFN1 = TensorOperations<T>.Constant(w1.Clone(), $"{prefix}_w1");
+        var bFFN1 = TensorOperations<T>.Constant(b1.Clone(), $"{prefix}_b1");
+        var wFFN2 = TensorOperations<T>.Constant(w2.Clone(), $"{prefix}_w2");
+        var bFFN2 = TensorOperations<T>.Constant(b2.Clone(), $"{prefix}_b2");
+        var hidden = TensorOperations<T>.Add(
+            TensorOperations<T>.MatrixVectorMultiply(wFFN1, input), bFFN1);
+        var activated = TensorOperations<T>.GELU(hidden);
+        return TensorOperations<T>.Add(
+            TensorOperations<T>.MatrixVectorMultiply(wFFN2, activated), bFFN2);
+    }
+
+    public static ComputationNode<T> SelfAttentionGraph(
+        ComputationNode<T> input,
+        Tensor<T> wQ, Tensor<T> wK, Tensor<T> wV, Tensor<T> wO,
+        string prefix)
+    {
+        var wQNode = TensorOperations<T>.Constant(wQ.Clone(), $"{prefix}_wQ");
+        var wKNode = TensorOperations<T>.Constant(wK.Clone(), $"{prefix}_wK");
+        var wVNode = TensorOperations<T>.Constant(wV.Clone(), $"{prefix}_wV");
+        var wONode = TensorOperations<T>.Constant(wO.Clone(), $"{prefix}_wO");
+        TensorOperations<T>.MatrixVectorMultiply(wQNode, input);
+        TensorOperations<T>.MatrixVectorMultiply(wKNode, input);
+        var v = TensorOperations<T>.MatrixVectorMultiply(wVNode, input);
+        return TensorOperations<T>.MatrixVectorMultiply(wONode, v);
     }
 }

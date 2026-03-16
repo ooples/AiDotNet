@@ -1046,7 +1046,23 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
     {
-        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _embeddingDim }), "chronos_transformer_output");
+        var input = Autodiff.TensorOperations<T>.Variable(
+            new Tensor<T>(new[] { _embeddingDim }), "chr_input", requiresGradient: false);
+        nodes.Add(input);
+
+        // Self-attention block
+        var attnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
+            input, _queryProj, _keyProj, _valueProj, _outputProj, "chr_attn");
+        var residual1 = Autodiff.TensorOperations<T>.Add(input, attnOut);
+        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
+            residual1, _layerNorm1Gamma, _layerNorm1Beta, "chr_ln1");
+
+        // FFN block
+        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
+            norm1, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, "chr_ffn");
+        var residual2 = Autodiff.TensorOperations<T>.Add(norm1, ffnOut);
+        return TransformerGraphHelper<T>.LayerNormGraph(
+            residual2, _layerNorm2Gamma, _layerNorm2Beta, "chr_ln2");
     }
 
     public override Vector<T> GetParameters()
