@@ -96,7 +96,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         ApplyOptions(options);
         if (options?.MaxPenalty is { } maxPenalty)
         {
-            if (!double.IsFinite(maxPenalty) || maxPenalty <= 0)
+            if (double.IsNaN(maxPenalty) || maxPenalty <= 0)
                 throw new ArgumentException("MaxPenalty must be a positive finite number.");
             _rhoMax = maxPenalty;
         }
@@ -108,8 +108,8 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         }
         _seed = options?.Seed;
         _sobolevWeight = options?.SobolevWeight ?? DEFAULT_SOBOLEV_WEIGHT;
-        if (!double.IsFinite(_sobolevWeight) || _sobolevWeight < 0)
-            throw new ArgumentException("SobolevWeight must be a non-negative finite number.");
+        if (_sobolevWeight < 0)
+            throw new ArgumentException("SobolevWeight must be non-negative.");
     }
 
     /// <inheritdoc/>

@@ -48,8 +48,8 @@ namespace AiDotNet.Clustering.Density;
 /// <code>
 /// var options = new HDBSCANOptions&lt;double&gt;();
 /// var hDBSCAN = new HDBSCAN&lt;double&gt;(options);
-/// hDBSCAN.Fit(dataMatrix);
-/// int[] labels = hDBSCAN.Labels;
+/// hDBSCAN.Train(dataMatrix);
+/// Vector<double> labels = hDBSCAN.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -603,7 +603,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         return labels;
     }
 
-    private void ComputeProbabilitiesAndOutlierScores(int[] labels, List<CondensedTreeNode> condensedTree, int n)
+    private void ComputeProbabilitiesAndOutlierScores(Vector<double> labels, List<CondensedTreeNode> condensedTree, int n)
     {
         _probabilities = new T[n];
         _outlierScores = new T[n];

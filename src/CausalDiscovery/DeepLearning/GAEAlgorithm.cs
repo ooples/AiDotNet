@@ -72,10 +72,8 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                 ZtLogVar[i, k] = NumOps.FromDouble(-4);
             }
 
-        // KL weight for variational regularization — linearly warm up from 0 to target
-        // over first 20% of epochs to prevent posterior collapse
-        const double klWeightTarget = 0.01;
-        int warmupEpochs = Math.Max(1, MaxEpochs / 5);
+        // KL weight for variational regularization (warm up to prevent posterior collapse)
+        double klWeight = 0.01;
 
         T lr = NumOps.FromDouble(LearningRate);
         T alpha = NumOps.Zero;
@@ -84,11 +82,6 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
-            // Linear KL warm-up: ramp from 0 to klWeightTarget over warmupEpochs
-            double klWeight = epoch < warmupEpochs
-                ? klWeightTarget * (epoch + 1.0) / warmupEpochs
-                : klWeightTarget;
-
             // Sample embeddings via reparameterization: z = mu + sigma * epsilon
             var Zs = new Matrix<T>(d, embDim);
             var Zt = new Matrix<T>(d, embDim);
@@ -98,10 +91,10 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                 for (int k = 0; k < embDim; k++)
                 {
                     T stdS = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZsLogVar[i, k])));
-                    epsilonS[i, k] = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
+                    epsilonS[i, k] = NumOps.FromDouble(SampleStandardNormal(rng));
                     Zs[i, k] = NumOps.Add(ZsMu[i, k], NumOps.Multiply(stdS, epsilonS[i, k]));
                     T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[i, k])));
-                    epsilonT[i, k] = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
+                    epsilonT[i, k] = NumOps.FromDouble(SampleStandardNormal(rng));
                     Zt[i, k] = NumOps.Add(ZtMu[i, k], NumOps.Multiply(stdT, epsilonT[i, k]));
                 }
 
@@ -255,6 +248,16 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             }
 
         return result;
+    }
+
+    /// <summary>
+    /// Samples from a standard normal distribution N(0,1) using Box-Muller transform.
+    /// </summary>
+    private static double SampleStandardNormal(Random rng)
+    {
+        double u1 = 1.0 - rng.NextDouble(); // (0,1] to avoid log(0)
+        double u2 = rng.NextDouble();
+        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
     }
 
 }

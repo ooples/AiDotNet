@@ -1,4 +1,6 @@
+using System.Threading;
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.TimeSeries;
 
@@ -133,7 +135,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// before it's ready.
     /// </para>
     /// </remarks>
-    protected bool IsTrained { get; private set; } = false;
+    protected bool IsTrained { get; set; } = false;
 
     /// <summary>
     /// The default loss function used for gradient computation.
@@ -260,16 +262,64 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// will implement its own training algorithm.
     /// </para>
     /// </remarks>
-    public void Train(Matrix<T> x, Vector<T> y)
+    /// <summary>
+    /// Cancellation token that is active during training. Derived classes should check
+    /// <c>TrainingCancellationToken.IsCancellationRequested</c> in their training loops
+    /// to support both caller-initiated cancellation and wall-clock timeout from
+    /// <see cref="TimeSeriesRegressionOptions{T}.MaxTrainingTimeSeconds"/>.
+    /// </summary>
+    protected CancellationToken TrainingCancellationToken { get; private set; } = CancellationToken.None;
+
+    /// <summary>
+    /// Auto-scaled guard threshold computed from training data.
+    /// Set to 1000 * max(|y|) during training. Falls back to 1e15 if not trained.
+    /// </summary>
+    private double _autoGuardThreshold = 1e15;
+
+    public void Train(Matrix<T> x, Vector<T> y) => Train(x, y, CancellationToken.None);
+
+    public void Train(Matrix<T> x, Vector<T> y, CancellationToken callerToken)
     {
+        // Fail fast if already cancelled — don't discard existing trained state
+        callerToken.ThrowIfCancellationRequested();
+
         // Input validation
         ValidateTrainingInputs(x, y);
 
         // Reset model state before training
         Reset();
 
-        // Perform model-specific training (implemented by derived classes)
-        TrainCore(x, y);
+        // Auto-scale guard threshold from training data: 1000x max observed absolute value.
+        // This adapts overflow protection to the dataset scale instead of a fixed magic number.
+        double maxAbsY = 0;
+        for (int i = 0; i < y.Length; i++)
+        {
+            double absVal = Math.Abs(NumOps.ToDouble(y[i]));
+            if (absVal > maxAbsY && !double.IsNaN(absVal) && !double.IsInfinity(absVal))
+                maxAbsY = absVal;
+        }
+        _autoGuardThreshold = maxAbsY > 0 ? maxAbsY * 1000.0 : 1e15;
+
+        // Create a linked CancellationTokenSource that combines:
+        // 1. The caller's token (for external cancellation)
+        // 2. A wall-clock timeout from MaxTrainingTimeSeconds (safety net)
+        // Whichever fires first wins.
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(callerToken);
+        if (Options.MaxTrainingTimeSeconds > 0)
+        {
+            linkedCts.CancelAfter(TimeSpan.FromSeconds(Options.MaxTrainingTimeSeconds));
+        }
+        TrainingCancellationToken = linkedCts.Token;
+
+        try
+        {
+            // Perform model-specific training (implemented by derived classes)
+            TrainCore(x, y);
+        }
+        finally
+        {
+            TrainingCancellationToken = CancellationToken.None;
+        }
 
         // Mark the model as trained
         IsTrained = true;
@@ -418,6 +468,37 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// - The data meets any model-specific requirements
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Guards a prediction value against NaN, Infinity, and extreme overflow.
+    /// Returns a clamped finite value. All time series models should call this
+    /// before storing predictions to prevent cascading numerical instability
+    /// in recursive/autoregressive forecasting loops.
+    /// </summary>
+    /// <param name="value">The raw prediction value.</param>
+    /// <param name="maxAbsValue">
+    /// Maximum allowed absolute value. If not specified, uses the priority chain:
+    /// (1) user-configured <see cref="TimeSeriesRegressionOptions{T}.MaxPredictionAbsValue"/>,
+    /// (2) auto-scaled from training data (1000x max |y|),
+    /// (3) fallback to 1e15.
+    /// </param>
+    /// <returns>A finite, clamped value.</returns>
+    protected T GuardPrediction(T value, double maxAbsValue = -1)
+    {
+        // Priority chain: explicit parameter > user option > auto-scaled > 1e15 fallback
+        double threshold = maxAbsValue > 0
+            ? maxAbsValue
+            : Options.MaxPredictionAbsValue ?? _autoGuardThreshold;
+
+        var d = NumOps.ToDouble(value);
+        if (double.IsNaN(d) || double.IsInfinity(d) || Math.Abs(d) > threshold)
+        {
+            var safe = double.IsNaN(d) ? 0.0 : d;
+            var clamped = MathPolyfill.Clamp(safe, -threshold, threshold);
+            return NumOps.FromDouble(clamped);
+        }
+        return value;
+    }
+
     protected virtual void ValidatePredictionInput(Matrix<T> input)
     {
         if (input == null)
@@ -659,6 +740,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             }
         }
 
+        // Serialize auto-scaled guard threshold (persists training-data-aware overflow protection)
+        writer.Write(_autoGuardThreshold);
+
         // Let derived classes serialize their specific data
         SerializeCore(writer);
 
@@ -737,6 +821,16 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
                     T value = NumOps.FromDouble(reader.ReadDouble());
                     LastEvaluationMetrics[key] = value;
                 }
+            }
+
+            // Deserialize auto-scaled guard threshold (backwards-compatible)
+            try
+            {
+                _autoGuardThreshold = reader.ReadDouble();
+            }
+            catch (EndOfStreamException)
+            {
+                _autoGuardThreshold = 1e15; // Pre-patch model
             }
 
             // Let derived classes deserialize their specific data

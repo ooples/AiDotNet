@@ -1163,8 +1163,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync()
+    public Task<AiModelResult<T, TInput, TOutput>> BuildAsync() => BuildAsync(CancellationToken.None);
+
+    public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         AiModelResult<T, TInput, TOutput> result;
 
         // RL TRAINING PATH - check if RL options are configured with an environment
@@ -1184,8 +1188,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Load data if not already loaded
             if (!_dataLoader.IsLoaded)
             {
-                await _dataLoader.LoadAsync();
+                await _dataLoader.LoadAsync(cancellationToken);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             // Get features and labels from the typed loader
             var features = inputOutputLoader.Features;
@@ -1203,8 +1209,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Load/prepare the streaming loader if not already loaded
             if (!_dataLoader.IsLoaded)
             {
-                await _dataLoader.LoadAsync();
+                await _dataLoader.LoadAsync(cancellationToken);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             // True streaming training - train on batches without materializing all data
             result = await BuildStreamingSupervisedAsync(streamingLoader);
@@ -5379,7 +5387,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 }
             }
 
-            // Step 5: Define forward and backward functions
+            // Step 5: Validate that student supports gradient backpropagation
+            if (studentModel is not INeuralNetwork<T>)
+            {
+                throw new InvalidOperationException(
+                    $"Knowledge distillation requires a neural network (INeuralNetwork<T>) for gradient backpropagation. " +
+                    $"Current model type: {studentModel.GetType().Name}. Use a neural network model as the student.");
+            }
+
+            // Step 6: Define forward and backward functions
             // Storage for per-sample inputs to enable forward pass replay during backprop
             // Use a queue to match forward inputs with backward gradients in FIFO order
             var inputQueue = new Queue<Vector<T>>();

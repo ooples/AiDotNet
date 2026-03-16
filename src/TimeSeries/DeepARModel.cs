@@ -167,6 +167,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
+            TrainingCancellationToken.ThrowIfCancellationRequested();
             var indices = Enumerable.Range(0, numSamples).OrderBy(_ => _random.Next()).ToList();
 
             for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)
@@ -316,13 +317,15 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
         for (int layer = _lstmLayers.Count - 1; layer >= 0; layer--)
         {
-            var lstmGradients = _lstmLayers[layer].Backward(dHidden);
-            foreach (var kvp in lstmGradients)
+            var dInput = _lstmLayers[layer].Backward(dHidden);
+            var lstmGradients = _lstmLayers[layer].LastGradients;
+            if (lstmGradients is not null)
             {
-                gradients[$"lstm_{layer}_{kvp.Key}"] = kvp.Value;
+                foreach (var kvp in lstmGradients)
+                    gradients[$"lstm_{layer}_{kvp.Key}"] = kvp.Value;
             }
 
-            if (layer > 0 && lstmGradients.TryGetValue("input_gradient", out var inputGrad))
+            if (layer > 0 && lstmGradients is not null && lstmGradients.TryGetValue("input_gradient", out var inputGrad))
             {
                 dHidden = inputGrad;
             }
@@ -600,9 +603,9 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 /// Production-ready LSTM cell with proper gates (input, forget, output, cell).
 /// Uses Tensor operations for GPU acceleration and proper backpropagation.
 /// </summary>
-internal class DeepARLstmCellTensor<T>
+internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 {
-    private readonly INumericOperations<T> _numOps;
+
     private readonly int _inputSize;
     private readonly int _hiddenSize;
 
@@ -622,11 +625,32 @@ internal class DeepARLstmCellTensor<T>
     private Tensor<T> _lastCellCandidate;
     private Tensor<T> _lastPrevCell;
 
-    public int ParameterCount => _weights.Length + _bias.Length;
+    public override int ParameterCount => _weights.Length + _bias.Length;
+
+    public override bool SupportsTraining => true;
+    public override bool SupportsJitCompilation => true;
+
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
+    {
+        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _hiddenSize }), "lstm_cell_output");
+    }
+
+    public override Vector<T> GetParameters()
+    {
+        var p = new List<T>();
+        for (int i = 0; i < _weights.Length; i++) p.Add(_weights[i]);
+        for (int i = 0; i < _bias.Length; i++) p.Add(_bias[i]);
+        return new Vector<T>(p.ToArray());
+    }
+
+    public override void UpdateParameters(T learningRate)
+    {
+        // Gradients are applied externally by the model's training loop
+    }
 
     public DeepARLstmCellTensor(int inputSize, int hiddenSize, int seed = 42)
+        : base(new[] { inputSize }, new[] { hiddenSize })
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _inputSize = inputSize;
         _hiddenSize = hiddenSize;
 
@@ -637,14 +661,14 @@ internal class DeepARLstmCellTensor<T>
         _weights = new Tensor<T>([4 * hiddenSize, inputSize + hiddenSize]);
         for (int i = 0; i < _weights.Length; i++)
         {
-            _weights[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            _weights[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
         }
 
         // Initialize biases - forget gate bias typically initialized to 1
         _bias = new Tensor<T>([4 * hiddenSize]);
         for (int i = _hiddenSize; i < 2 * _hiddenSize; i++)
         {
-            _bias[i] = _numOps.One; // Forget gate bias
+            _bias[i] = NumOps.One; // Forget gate bias
         }
 
         _hiddenState = new Tensor<T>([hiddenSize]);
@@ -656,16 +680,16 @@ internal class DeepARLstmCellTensor<T>
         _lastPrevCell = new Tensor<T>([hiddenSize]);
     }
 
-    public void ResetState()
+    public override void ResetState()
     {
         for (int i = 0; i < _hiddenSize; i++)
         {
-            _hiddenState[i] = _numOps.Zero;
-            _cellState[i] = _numOps.Zero;
+            _hiddenState[i] = NumOps.Zero;
+            _cellState[i] = NumOps.Zero;
         }
     }
 
-    public Tensor<T> Forward(Tensor<T> input)
+    public override Tensor<T> Forward(Tensor<T> input)
     {
         // Cache input for backprop
         _lastInput = input.Clone();
@@ -677,7 +701,7 @@ internal class DeepARLstmCellTensor<T>
 
         for (int i = 0; i < _inputSize; i++)
         {
-            _lastCombined[i] = i < input.Length ? input[i] : _numOps.Zero;
+            _lastCombined[i] = i < input.Length ? input[i] : NumOps.Zero;
         }
         for (int i = 0; i < _hiddenSize; i++)
         {
@@ -694,7 +718,7 @@ internal class DeepARLstmCellTensor<T>
                 int idx = i * (_inputSize + _hiddenSize) + j;
                 if (idx < _weights.Length)
                 {
-                    sum = _numOps.Add(sum, _numOps.Multiply(_weights[idx], _lastCombined[j]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(_weights[idx], _lastCombined[j]));
                 }
             }
             _lastGates[i] = sum;
@@ -721,13 +745,13 @@ internal class DeepARLstmCellTensor<T>
             T outputGate = Sigmoid(_lastGates[3 * _hiddenSize + i]);
 
             // New cell state: f * c_prev + i * g
-            newCell[i] = _numOps.Add(
-                _numOps.Multiply(forgetGate, _cellState[i]),
-                _numOps.Multiply(inputGate, cellCandidate)
+            newCell[i] = NumOps.Add(
+                NumOps.Multiply(forgetGate, _cellState[i]),
+                NumOps.Multiply(inputGate, cellCandidate)
             );
 
             // New hidden state: o * tanh(c_new)
-            newHidden[i] = _numOps.Multiply(outputGate, MathHelper.Tanh(newCell[i]));
+            newHidden[i] = NumOps.Multiply(outputGate, MathHelper.Tanh(newCell[i]));
         }
 
         _cellState = newCell;
@@ -738,10 +762,23 @@ internal class DeepARLstmCellTensor<T>
 
     private T Sigmoid(T x)
     {
-        return _numOps.Divide(_numOps.One, _numOps.Add(_numOps.One, _numOps.Exp(_numOps.Negate(x))));
+        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(x))));
     }
 
-    public Dictionary<string, Tensor<T>> Backward(Tensor<T> dHidden)
+    /// <summary>
+    /// Stored gradients from last backward pass, accessible by the model's training loop.
+    /// </summary>
+    public Dictionary<string, Tensor<T>>? LastGradients { get; private set; }
+
+    public override Tensor<T> Backward(Tensor<T> dHidden)
+    {
+        LastGradients = BackwardInternal(dHidden);
+        if (LastGradients.TryGetValue("input_gradient", out var dInput))
+            return dInput;
+        return new Tensor<T>(new[] { _inputSize });
+    }
+
+    private Dictionary<string, Tensor<T>> BackwardInternal(Tensor<T> dHidden)
     {
         var gradients = new Dictionary<string, Tensor<T>>();
 
@@ -760,36 +797,36 @@ internal class DeepARLstmCellTensor<T>
             T tanhC = MathHelper.Tanh(_cellState[i]);
 
             // d_tanh_c = dh * o
-            T dTanhC = _numOps.Multiply(dh, o);
+            T dTanhC = NumOps.Multiply(dh, o);
 
             // d_o = dh * tanh(c)
-            T dO = _numOps.Multiply(dh, tanhC);
-            T dOGate = _numOps.Multiply(dO, _numOps.Multiply(o, _numOps.Subtract(_numOps.One, o)));
+            T dO = NumOps.Multiply(dh, tanhC);
+            T dOGate = NumOps.Multiply(dO, NumOps.Multiply(o, NumOps.Subtract(NumOps.One, o)));
 
             // d_c = d_tanh_c * (1 - tanh(c)^2)
-            T tanhCSq = _numOps.Multiply(tanhC, tanhC);
-            T dC = _numOps.Multiply(dTanhC, _numOps.Subtract(_numOps.One, tanhCSq));
+            T tanhCSq = NumOps.Multiply(tanhC, tanhC);
+            T dC = NumOps.Multiply(dTanhC, NumOps.Subtract(NumOps.One, tanhCSq));
 
             // d_i = dC * g, d_f = dC * c_prev, d_g = dC * i
             T iGate = Sigmoid(_lastGates[i]);
             T fGate = Sigmoid(_lastGates[_hiddenSize + i]);
             T g = _lastCellCandidate[i];
 
-            T dI = _numOps.Multiply(dC, g);
-            T dF = _numOps.Multiply(dC, _lastPrevCell[i]);
-            T dG = _numOps.Multiply(dC, iGate);
+            T dI = NumOps.Multiply(dC, g);
+            T dF = NumOps.Multiply(dC, _lastPrevCell[i]);
+            T dG = NumOps.Multiply(dC, iGate);
 
             // Apply sigmoid/tanh derivatives
-            T dIGate = _numOps.Multiply(dI, _numOps.Multiply(iGate, _numOps.Subtract(_numOps.One, iGate)));
-            T dFGate = _numOps.Multiply(dF, _numOps.Multiply(fGate, _numOps.Subtract(_numOps.One, fGate)));
-            T gSq = _numOps.Multiply(g, g);
-            T dGGate = _numOps.Multiply(dG, _numOps.Subtract(_numOps.One, gSq));
+            T dIGate = NumOps.Multiply(dI, NumOps.Multiply(iGate, NumOps.Subtract(NumOps.One, iGate)));
+            T dFGate = NumOps.Multiply(dF, NumOps.Multiply(fGate, NumOps.Subtract(NumOps.One, fGate)));
+            T gSq = NumOps.Multiply(g, g);
+            T dGGate = NumOps.Multiply(dG, NumOps.Subtract(NumOps.One, gSq));
 
             // Update bias gradients
-            dBias[i] = _numOps.Add(dBias[i], dIGate);
-            dBias[_hiddenSize + i] = _numOps.Add(dBias[_hiddenSize + i], dFGate);
-            dBias[2 * _hiddenSize + i] = _numOps.Add(dBias[2 * _hiddenSize + i], dGGate);
-            dBias[3 * _hiddenSize + i] = _numOps.Add(dBias[3 * _hiddenSize + i], dOGate);
+            dBias[i] = NumOps.Add(dBias[i], dIGate);
+            dBias[_hiddenSize + i] = NumOps.Add(dBias[_hiddenSize + i], dFGate);
+            dBias[2 * _hiddenSize + i] = NumOps.Add(dBias[2 * _hiddenSize + i], dGGate);
+            dBias[3 * _hiddenSize + i] = NumOps.Add(dBias[3 * _hiddenSize + i], dOGate);
 
             // Update weight gradients
             int combinedSize = _inputSize + _hiddenSize;
@@ -801,18 +838,18 @@ internal class DeepARLstmCellTensor<T>
                 int wg = (2 * _hiddenSize + i) * combinedSize + j;
                 int wo = (3 * _hiddenSize + i) * combinedSize + j;
 
-                if (wi < dWeights.Length) dWeights[wi] = _numOps.Add(dWeights[wi], _numOps.Multiply(dIGate, cj));
-                if (wf < dWeights.Length) dWeights[wf] = _numOps.Add(dWeights[wf], _numOps.Multiply(dFGate, cj));
-                if (wg < dWeights.Length) dWeights[wg] = _numOps.Add(dWeights[wg], _numOps.Multiply(dGGate, cj));
-                if (wo < dWeights.Length) dWeights[wo] = _numOps.Add(dWeights[wo], _numOps.Multiply(dOGate, cj));
+                if (wi < dWeights.Length) dWeights[wi] = NumOps.Add(dWeights[wi], NumOps.Multiply(dIGate, cj));
+                if (wf < dWeights.Length) dWeights[wf] = NumOps.Add(dWeights[wf], NumOps.Multiply(dFGate, cj));
+                if (wg < dWeights.Length) dWeights[wg] = NumOps.Add(dWeights[wg], NumOps.Multiply(dGGate, cj));
+                if (wo < dWeights.Length) dWeights[wo] = NumOps.Add(dWeights[wo], NumOps.Multiply(dOGate, cj));
 
                 // Accumulate input gradient
                 if (j < _inputSize)
                 {
-                    dInput[j] = _numOps.Add(dInput[j], _numOps.Multiply(dIGate, _weights[wi]));
-                    if (wf < _weights.Length) dInput[j] = _numOps.Add(dInput[j], _numOps.Multiply(dFGate, _weights[wf]));
-                    if (wg < _weights.Length) dInput[j] = _numOps.Add(dInput[j], _numOps.Multiply(dGGate, _weights[wg]));
-                    if (wo < _weights.Length) dInput[j] = _numOps.Add(dInput[j], _numOps.Multiply(dOGate, _weights[wo]));
+                    dInput[j] = NumOps.Add(dInput[j], NumOps.Multiply(dIGate, _weights[wi]));
+                    if (wf < _weights.Length) dInput[j] = NumOps.Add(dInput[j], NumOps.Multiply(dFGate, _weights[wf]));
+                    if (wg < _weights.Length) dInput[j] = NumOps.Add(dInput[j], NumOps.Multiply(dGGate, _weights[wg]));
+                    if (wo < _weights.Length) dInput[j] = NumOps.Add(dInput[j], NumOps.Multiply(dOGate, _weights[wo]));
                 }
             }
         }
@@ -830,9 +867,9 @@ internal class DeepARLstmCellTensor<T>
         {
             for (int i = 0; i < _weights.Length && i < wGrad.Length; i++)
             {
-                T avg = _numOps.Divide(wGrad[i], batchSize);
-                T scaled = _numOps.Multiply(avg, learningRate);
-                _weights[i] = _numOps.Subtract(_weights[i], scaled);
+                T avg = NumOps.Divide(wGrad[i], batchSize);
+                T scaled = NumOps.Multiply(avg, learningRate);
+                _weights[i] = NumOps.Subtract(_weights[i], scaled);
             }
         }
 
@@ -840,14 +877,14 @@ internal class DeepARLstmCellTensor<T>
         {
             for (int i = 0; i < _bias.Length && i < bGrad.Length; i++)
             {
-                T avg = _numOps.Divide(bGrad[i], batchSize);
-                T scaled = _numOps.Multiply(avg, learningRate);
-                _bias[i] = _numOps.Subtract(_bias[i], scaled);
+                T avg = NumOps.Divide(bGrad[i], batchSize);
+                T scaled = NumOps.Multiply(avg, learningRate);
+                _bias[i] = NumOps.Subtract(_bias[i], scaled);
             }
         }
     }
 
-    public void Serialize(BinaryWriter writer)
+    public override void Serialize(BinaryWriter writer)
     {
         writer.Write(_inputSize);
         writer.Write(_hiddenSize);
@@ -865,7 +902,7 @@ internal class DeepARLstmCellTensor<T>
             writer.Write(Convert.ToDouble(_bias[i]));
     }
 
-    public void Deserialize(BinaryReader reader)
+    public override void Deserialize(BinaryReader reader)
     {
         reader.ReadInt32(); // inputSize
         reader.ReadInt32(); // hiddenSize
@@ -880,7 +917,7 @@ internal class DeepARLstmCellTensor<T>
         {
             double v = reader.ReadDouble();
             if (i < _weights.Length)
-                _weights[i] = _numOps.FromDouble(v);
+                _weights[i] = NumOps.FromDouble(v);
         }
 
         int bRank = reader.ReadInt32();
@@ -893,7 +930,7 @@ internal class DeepARLstmCellTensor<T>
         {
             double v = reader.ReadDouble();
             if (i < _bias.Length)
-                _bias[i] = _numOps.FromDouble(v);
+                _bias[i] = NumOps.FromDouble(v);
         }
     }
 }

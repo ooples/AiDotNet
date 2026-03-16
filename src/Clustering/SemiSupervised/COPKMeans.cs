@@ -328,7 +328,7 @@ public class COPKMeans<T> : ClusteringBase<T>
         }
     }
 
-    private bool ViolatesConstraints(int pointIdx, int cluster, int[] labels)
+    private bool ViolatesConstraints(int pointIdx, int cluster, Vector<double> labels)
     {
         // Check must-link constraints
         foreach (var (i, j) in _mustLinkClosure!)
@@ -359,7 +359,7 @@ public class COPKMeans<T> : ClusteringBase<T>
         return false;
     }
 
-    private int CountViolations(int[] labels)
+    private int CountViolations(Vector<double> labels)
     {
         int violations = 0;
 

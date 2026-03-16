@@ -50,6 +50,9 @@ namespace AiDotNet.CausalDiscovery.Bayesian;
 public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
 {
     private readonly double _learningRate;
+    private const double RhoMax = 1e+16;
+    private const double RhoMultiplier = 10.0;
+    private const double RhoIncreaseThreshold = 0.25;
 
     /// <inheritdoc/>
     public override string Name => "BCD-Nets";
@@ -195,11 +198,11 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
 
             // Update augmented Lagrangian with NOTEARS h(P) = tr(exp(P∘P)) - d
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hValCurrent));
-            T rhoMax = NumOps.FromDouble(1e+16);
-            if (NumOps.GreaterThan(hValCurrent, NumOps.FromDouble(0.25)))
+            T rhoMaxT = NumOps.FromDouble(RhoMax);
+            if (NumOps.GreaterThan(hValCurrent, NumOps.FromDouble(RhoIncreaseThreshold)))
             {
-                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
-                rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
+                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(RhoMultiplier));
+                rho = NumOps.GreaterThan(newRho, rhoMaxT) ? rhoMaxT : newRho;
             }
         }
 

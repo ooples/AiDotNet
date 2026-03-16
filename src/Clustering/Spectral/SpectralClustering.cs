@@ -40,7 +40,7 @@ namespace AiDotNet.Clustering.Spectral;
 /// var options = new SpectralOptions&lt;double&gt;();
 /// var spectralClustering = new SpectralClustering&lt;double&gt;(options);
 /// spectralClustering.Train(dataMatrix);
-/// Vector&lt;double&gt; labels = spectralClustering.Labels;
+/// Vector&lt;double&gt;? labels = spectralClustering.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

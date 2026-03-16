@@ -226,6 +226,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
                 prediction = NumOps.Add(prediction, Engine.DotProduct(_maCoefficients, lastErrors));
             }
 
+            // Guard against numerical overflow in AR feedback loop (issue #991)
+            prediction = GuardPrediction(prediction);
+
             predictions[i] = prediction;
 
             // VECTORIZED: Shift last observed values using slice and copy
@@ -339,6 +342,15 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         {
             writer.Write(Convert.ToDouble(_maCoefficients[i]));
         }
+
+        // Write training state needed for prediction initialization
+        writer.Write(_lastTrainDiffValues.Length);
+        for (int i = 0; i < _lastTrainDiffValues.Length; i++)
+            writer.Write(Convert.ToDouble(_lastTrainDiffValues[i]));
+
+        writer.Write(_lastTrainResiduals.Length);
+        for (int i = 0; i < _lastTrainResiduals.Length; i++)
+            writer.Write(Convert.ToDouble(_lastTrainResiduals[i]));
     }
 
     /// <summary>
@@ -387,6 +399,29 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < maLength; i++)
         {
             _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Read training state for prediction initialization.
+        // These fields were added post-patch; older serialized models won't have them.
+        try
+        {
+            int diffLen = reader.ReadInt32();
+            _lastTrainDiffValues = new Vector<T>(diffLen);
+            for (int i = 0; i < diffLen; i++)
+                _lastTrainDiffValues[i] = NumOps.FromDouble(reader.ReadDouble());
+
+            int residLen = reader.ReadInt32();
+            _lastTrainResiduals = new Vector<T>(residLen);
+            for (int i = 0; i < residLen; i++)
+                _lastTrainResiduals[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            // Pre-patch model — initialize with empty vectors.
+            // Predictions will still work but won't have historical context
+            // for the first few steps.
+            _lastTrainDiffValues ??= new Vector<T>(0);
+            _lastTrainResiduals ??= new Vector<T>(0);
         }
     }
 
@@ -607,6 +642,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
             }
 
             // MA component is assumed zero for future predictions (no actual errors available)
+
+            // Guard against numerical overflow in AR feedback loop (issue #991)
+            prediction = GuardPrediction(prediction);
 
             diffForecasts[step] = prediction;
             extendedDiffHistory.Add(prediction);

@@ -48,8 +48,8 @@ namespace AiDotNet.Clustering.SemiSupervised;
 /// <code>
 /// var options = new SeededKMeansOptions&lt;double&gt;();
 /// var seededKMeans = new SeededKMeans&lt;double&gt;(options);
-/// seededKMeans.Fit(dataMatrix);
-/// int[] labels = seededKMeans.Labels;
+/// seededKMeans.Train(dataMatrix);
+/// Vector<double> labels = seededKMeans.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

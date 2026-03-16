@@ -48,7 +48,7 @@ namespace AiDotNet.Clustering.Ensemble;
 /// var options = new ConsensusClusteringOptions&lt;double&gt;();
 /// var consensusClustering = new ConsensusClustering&lt;double&gt;(options);
 /// consensusClustering.Train(dataMatrix);
-/// Vector&lt;double&gt; labels = consensusClustering.Labels;
+/// Vector<double> labels = consensusClustering.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -351,7 +351,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         return result;
     }
 
-    private void ComputeClusterCenters(Matrix<T> x, int[] labels, int n, int d)
+    private void ComputeClusterCenters(Matrix<T> x, Vector<double> labels, int n, int d)
     {
         if (NumClusters == 0)
         {

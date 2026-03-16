@@ -51,7 +51,7 @@ namespace AiDotNet.Classification.Boosting;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create histogram-based gradient boosting classifier for fast training on large datasets
+/// // Create histogram-based gradient boosting classifier for fast training
 /// var classifier = new HistGradientBoostingClassifier&lt;double&gt;(
 ///     maxBins: 256, maxDepth: 6, nEstimators: 100, learningRate: 0.1);
 ///
