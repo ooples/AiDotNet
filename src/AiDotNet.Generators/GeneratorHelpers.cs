@@ -13,6 +13,10 @@ namespace AiDotNet.Generators;
 /// </summary>
 internal static class GeneratorHelpers
 {
+    // NOTE: These dictionaries must be kept in sync with the corresponding enums in AiDotNet.Enums.
+    // Source generators cannot reference the runtime assembly, so we duplicate the mappings here.
+    // If you add/rename an enum member, update the corresponding dictionary below.
+
     /// <summary>Maps ModelDomain enum integer values to their string names.</summary>
     public static readonly Dictionary<int, string> DomainNames = new()
     {
