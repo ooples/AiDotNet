@@ -34,12 +34,15 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         isEnabledByDefault: true,
         description: "Every concrete model class must have all required metadata attributes: ModelDomain, ModelCategory, ModelTask, ModelComplexity, and ModelInput.");
 
+    // NOTE: AIDN010/011/012 temporarily set to Warning while XML docs are being
+    // added across ~5000 model classes. Will be restored to Error once complete.
+    // Tracked by issue #990 and related annotation PRs.
     private static readonly DiagnosticDescriptor MissingSummary = new(
         id: "AIDN010",
         title: "Missing XML doc summary",
         messageFormat: "Model class '{0}' is missing XML doc summary",
         category: "AiDotNet.ModelMetadata",
-        defaultSeverity: DiagnosticSeverity.Error,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor MissingBeginnerRemarks = new(
@@ -47,7 +50,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         title: "Missing beginner-friendly remarks",
         messageFormat: "Model class '{0}' is missing beginner-friendly remarks (XML remarks with 'For Beginners' content)",
         category: "AiDotNet.ModelMetadata",
-        defaultSeverity: DiagnosticSeverity.Error,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor MissingExample = new(
@@ -55,7 +58,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         title: "Missing usage example",
         messageFormat: "Model class '{0}' is missing XML doc example block",
         category: "AiDotNet.ModelMetadata",
-        defaultSeverity: DiagnosticSeverity.Error,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor InvalidPaperUrl = new(

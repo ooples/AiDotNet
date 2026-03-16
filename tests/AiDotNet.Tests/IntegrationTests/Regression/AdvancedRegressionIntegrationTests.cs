@@ -1,3 +1,4 @@
+using AiDotNet.Models;
 using AiDotNet.Regression;
 using AiDotNet.Regression.MixedEffects;
 using Xunit;
@@ -6,7 +7,7 @@ namespace AiDotNet.Tests.IntegrationTests.Regression;
 
 /// <summary>
 /// Integration tests for advanced regression models:
-/// M5ModelTreeRegression, SuperLearner, GeneralizedAdditiveModelRegression,
+/// M5ModelTree, SuperLearner, GeneralizedAdditiveModel,
 /// MixedEffectsModel, DeepHit, DeepSurv.
 ///
 /// Tests verify mathematical correctness on known synthetic data.
@@ -98,7 +99,7 @@ public class AdvancedRegressionIntegrationTests
     {
         var (x, y) = CreateNonLinearData(100, seed: 42);
 
-        var model = new M5ModelTreeRegression<double>();
+        var model = new M5ModelTree<double>();
         model.Train(x, y);
         var predictions = model.Predict(x);
 
@@ -114,7 +115,7 @@ public class AdvancedRegressionIntegrationTests
         // piecewise linear and non-linear relationships
         var (x, y) = CreateLinearData(80, new[] { 2.0, -1.0 }, intercept: 1.0, noise: 0.3, seed: 42);
 
-        var model = new M5ModelTreeRegression<double>();
+        var model = new M5ModelTree<double>();
         model.Train(x, y);
         var predictions = model.Predict(x);
 
@@ -165,7 +166,7 @@ public class AdvancedRegressionIntegrationTests
     {
         var (x, y) = CreateNonLinearData(80, seed: 42);
 
-        var model = new GeneralizedAdditiveModelRegression<double>();
+        var model = new GeneralizedAdditiveModel<double>();
         model.Train(x, y);
         var predictions = model.Predict(x);
 
@@ -180,7 +181,7 @@ public class AdvancedRegressionIntegrationTests
         // y = f1(x1) + f2(x2) — GAM should capture additive effects
         var (x, y) = CreateLinearData(60, new[] { 2.0, -1.0 }, intercept: 0, noise: 0.3, seed: 42);
 
-        var model = new GeneralizedAdditiveModelRegression<double>();
+        var model = new GeneralizedAdditiveModel<double>();
         model.Train(x, y);
         var predictions = model.Predict(x);
 
@@ -286,9 +287,9 @@ public class AdvancedRegressionIntegrationTests
     #region Cross-cutting: All models produce correct output length
 
     [Theory]
-    [InlineData(typeof(M5ModelTreeRegression<double>))]
+    [InlineData(typeof(M5ModelTree<double>))]
     [InlineData(typeof(SuperLearner<double>))]
-    [InlineData(typeof(GeneralizedAdditiveModelRegression<double>))]
+    [InlineData(typeof(GeneralizedAdditiveModel<double>))]
     [InlineData(typeof(DeepHit<double>))]
     [InlineData(typeof(DeepSurv<double>))]
     public void AdvancedModel_OutputLengthMatchesInput(Type modelType)

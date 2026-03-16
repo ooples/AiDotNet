@@ -1,3 +1,5 @@
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using Xunit;
 
@@ -113,11 +115,11 @@ public class BoostingRegressionIntegrationTests
     {
         var (x, y) = CreateLinearData(40, new[] { 1.0, 2.0 }, intercept: 0, noise: 0.1, seed: 42);
 
-        var model1 = new AdaBoostR2Regression<double>(seed: 42);
+        var model1 = new AdaBoostR2Regression<double>();
         model1.Train(x, y);
         var pred1 = model1.Predict(x);
 
-        var model2 = new AdaBoostR2Regression<double>(seed: 42);
+        var model2 = new AdaBoostR2Regression<double>();
         model2.Train(x, y);
         var pred2 = model2.Predict(x);
 
@@ -194,12 +196,12 @@ public class BoostingRegressionIntegrationTests
     {
         var (x, y) = CreateLinearData(60, new[] { 2.0, 1.0 }, intercept: 1.0, noise: 0.5, seed: 42);
 
-        var modelFew = new GradientBoostingRegression<double>(nEstimators: 5, seed: 42);
+        var modelFew = new GradientBoostingRegression<double>(new GradientBoostingRegressionOptions { NumberOfTrees = 5, Seed = 42 });
         modelFew.Train(x, y);
         var predFew = modelFew.Predict(x);
         double r2Few = ComputeR2(y, predFew);
 
-        var modelMany = new GradientBoostingRegression<double>(nEstimators: 50, seed: 42);
+        var modelMany = new GradientBoostingRegression<double>(new GradientBoostingRegressionOptions { NumberOfTrees = 50, Seed = 42 });
         modelMany.Train(x, y);
         var predMany = modelMany.Predict(x);
         double r2Many = ComputeR2(y, predMany);

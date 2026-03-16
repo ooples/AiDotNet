@@ -351,7 +351,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         return result;
     }
 
-    private void ComputeClusterCenters(Matrix<T> x, Vector<double> labels, int n, int d)
+    private void ComputeClusterCenters(Matrix<T> x, int[] labels, int n, int d)
     {
         if (NumClusters == 0)
         {

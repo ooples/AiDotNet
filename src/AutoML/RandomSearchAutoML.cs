@@ -36,11 +36,7 @@ namespace AiDotNet.AutoML;
 ///     timeLimit: TimeSpan.FromMinutes(5));
 /// </code>
 /// </example>
-[ModelDomain(ModelDomain.MachineLearning)]
-[ModelCategory(ModelCategory.Optimization)]
-[ModelTask(ModelTask.Regression)]
-[ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelMetadataExempt]
 public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput>
 {
     public RandomSearchAutoML(Random? random = null)

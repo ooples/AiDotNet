@@ -603,7 +603,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
         return labels;
     }
 
-    private void ComputeProbabilitiesAndOutlierScores(Vector<double> labels, List<CondensedTreeNode> condensedTree, int n)
+    private void ComputeProbabilitiesAndOutlierScores(int[] labels, List<CondensedTreeNode> condensedTree, int n)
     {
         _probabilities = new T[n];
         _outlierScores = new T[n];
