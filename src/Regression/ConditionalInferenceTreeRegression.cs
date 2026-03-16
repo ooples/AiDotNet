@@ -814,4 +814,15 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
         // Create and return a new instance with the same configuration
         return new ConditionalInferenceTreeRegression<T>(_options, Regularization);
     }
+
+    /// <summary>
+    /// Creates a deep copy via serialization to ensure the private _root tree is preserved.
+    /// </summary>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new ConditionalInferenceTreeRegression<T>(_options, Regularization);
+        var data = Serialize();
+        clone.Deserialize(data);
+        return clone;
+    }
 }

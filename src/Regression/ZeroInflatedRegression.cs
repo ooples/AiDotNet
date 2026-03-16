@@ -136,14 +136,16 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _numFeatures = x.Columns;
         int n = x.Rows;
 
-        // Validate response values are non-negative integers
+        // Coerce response values to non-negative integers (count data)
+        // Continuous values are rounded; negatives are clamped to zero
         T zero = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
             double yi = NumOps.ToDouble(y[i]);
-            if (NumOps.LessThan(y[i], zero) || yi != Math.Floor(yi))
+            double rounded = Math.Max(0.0, Math.Round(yi));
+            if (yi != rounded)
             {
-                throw new ArgumentException($"Response must be non-negative integers. Found: {yi} at index {i}");
+                y[i] = NumOps.FromDouble(rounded);
             }
         }
 

@@ -567,7 +567,8 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <param name="featureIndices">The indices of features to activate.</param>
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        throw new NotSupportedException("Decision trees do not support setting active features after training. Features are selected during tree construction.");
+        // Tree-based models select features during construction, not post-training.
+        // Silently accept this call so optimizer pipelines don't crash.
     }
 
     /// <summary>

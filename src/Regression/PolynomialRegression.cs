@@ -77,6 +77,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
+        TrainingFeatureCount = x.Columns;
         var polyX = CreatePolynomialFeatures(x);
 
         if (Options.UseIntercept)

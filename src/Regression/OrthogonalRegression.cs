@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Regression;
@@ -113,9 +114,6 @@ public class OrthogonalRegression<T> : RegressionBase<T>
         int n = x.Rows;
         int p = x.Columns;
 
-        // Apply regularization to the input matrix
-        x = Regularization.Regularize(x);
-
         // Center the data
         Vector<T> meanX = new(p);
         for (int j = 0; j < p; j++)
@@ -152,7 +150,8 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             }
         }
 
-        // Compute the augmented matrix [X y]
+        // Total Least Squares via SVD of the augmented matrix [X | y]
+        // The TLS solution is extracted from the last right singular vector of [X y].
         Matrix<T> augmentedMatrix = new(n, p + 1);
         for (int i = 0; i < n; i++)
         {
@@ -163,24 +162,21 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             augmentedMatrix[i, p] = centeredY[i];
         }
 
-        // Get the solution using MatrixSolutionHelper with the decomposition type from options
-        Vector<T> solution = MatrixSolutionHelper.SolveLinearSystem(augmentedMatrix, augmentedMatrix.GetColumn(p), _options.DecompositionType);
+        // SVD of the augmented matrix: the solution is the last column of V
+        var svd = new SvdDecomposition<T>(augmentedMatrix);
+        var vt = svd.Vt; // V transposed: rows are right singular vectors
+        // Last row of Vt = last column of V = right singular vector for smallest singular value
+        int lastRow = vt.Rows - 1;
 
-        // Rescale the solution
+        // TLS solution: beta_j = -V[j, p+1] / V[p+1, p+1]  (using Vt: -Vt[lastRow, j] / Vt[lastRow, p])
+        T vLast = vt[lastRow, p];
+        Coefficients = new Vector<T>(p);
         for (int j = 0; j < p; j++)
         {
-            solution[j] = NumOps.Divide(solution[j], scaleX[j]);
+            T coeff = NumOps.Negate(NumOps.Divide(vt[lastRow, j], vLast));
+            // Undo the scaling applied to centeredX
+            Coefficients[j] = NumOps.Divide(coeff, scaleX[j]);
         }
-
-        // Normalize the solution
-        T norm = NumOps.Sqrt(solution.DotProduct(solution));
-        solution = solution.Divide(norm);
-
-        // Extract coefficients and intercept
-        Coefficients = solution.GetSubVector(0, p);
-
-        // Apply regularization to the coefficients
-        Coefficients = Regularization.Regularize(Coefficients);
 
         Intercept = NumOps.Subtract(meanY, Coefficients.DotProduct(meanX));
     }

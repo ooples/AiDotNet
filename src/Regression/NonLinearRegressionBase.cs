@@ -857,15 +857,21 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// <param name="parameters">A vector containing the model parameters.</param>
     public virtual void SetParameters(Vector<T> parameters)
     {
-        int expectedParamCount = Alphas.Length + 1; // Alphas.Length + 1 (for Bias term)
-        if (parameters.Length != expectedParamCount)
+        if (parameters.Length < 1)
         {
-            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}", nameof(parameters));
+            throw new ArgumentException("Parameters vector must have at least one element (bias term).", nameof(parameters));
         }
 
         // Match GetParameters order: bias first, then alphas
         B = parameters[0];
-        for (int i = 0; i < Alphas.Length; i++)
+
+        // Resize Alphas if needed (optimizer may call before training initializes Alphas)
+        int alphaCount = parameters.Length - 1;
+        if (Alphas.Length != alphaCount)
+        {
+            Alphas = new Vector<T>(alphaCount);
+        }
+        for (int i = 0; i < alphaCount; i++)
         {
             Alphas[i] = parameters[i + 1];
         }

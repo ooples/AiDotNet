@@ -154,8 +154,31 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
-        // Note: SVR regularization is controlled through the C parameter (penalty),
-        // not through data transformation
+        // Auto-scale gamma if using the default value of 1.0
+        // Standard heuristic (scikit-learn 'scale'): gamma = 1 / (n_features * variance(X))
+        if (Math.Abs(_options.Gamma - 1.0) < 1e-15 && Options.KernelType != KernelType.Linear)
+        {
+            double totalVar = 0;
+            for (int j = 0; j < x.Columns; j++)
+            {
+                double mean = 0;
+                for (int i = 0; i < x.Rows; i++)
+                    mean += NumOps.ToDouble(x[i, j]);
+                mean /= x.Rows;
+
+                double variance = 0;
+                for (int i = 0; i < x.Rows; i++)
+                {
+                    double diff = NumOps.ToDouble(x[i, j]) - mean;
+                    variance += diff * diff;
+                }
+                totalVar += variance / x.Rows;
+            }
+
+            double autoGamma = totalVar > 1e-10 ? 1.0 / (x.Columns * (totalVar / x.Columns)) : 1.0;
+            Options.Gamma = autoGamma;
+        }
+
         SequentialMinimalOptimization(x, y);
     }
 
