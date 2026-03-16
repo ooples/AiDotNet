@@ -297,6 +297,27 @@ public class BuildKeyAndEncryptionTests
         var hash2 = hmac2.ComputeHash(buildKey);
 
         Assert.True(hash1.AsSpan().SequenceEqual(hash2));
+    }
+
+    [Fact]
+    public void ModelPayloadEncryption_RoundTrip_ProducesIdenticalPayload()
+    {
+        // Exercise the real production encryption path via ModelPayloadEncryption
+        var payload = new byte[128];
+        RandomNumberGenerator.Fill(payload);
+        string licenseKey = "test-license-key-for-roundtrip";
+        string aad = "test-aad";
+
+        var encrypted = ModelPayloadEncryption.Encrypt(payload, licenseKey, aad);
+
+        Assert.NotNull(encrypted.Ciphertext);
+        Assert.NotEqual(0, encrypted.Ciphertext.Length);
+        Assert.False(encrypted.Ciphertext.AsSpan().SequenceEqual(payload));
+
+        var decrypted = ModelPayloadEncryption.Decrypt(
+            encrypted.Ciphertext, licenseKey, encrypted.Salt, encrypted.Nonce, encrypted.Tag, aad);
+
+        Assert.True(decrypted.AsSpan().SequenceEqual(payload));
         Assert.Equal(32, hash1.Length);
     }
 #endif
@@ -331,8 +352,9 @@ public class BuildKeyAndEncryptionTests
     public void BuildAad_NullTypeName_DoesNotThrow()
     {
         var aad = ModelPayloadEncryption.BuildAad(null!, [10], [1]);
+        // Assert the exact AAD format: null type name should be normalized (empty or "null")
         Assert.NotNull(aad);
-        Assert.Contains("|", aad);
+        Assert.Equal("|10|1", aad);
     }
 
     [Fact]
