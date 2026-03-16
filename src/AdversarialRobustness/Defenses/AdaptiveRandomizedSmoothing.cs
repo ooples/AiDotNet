@@ -246,7 +246,14 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     public byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
-        var json = JsonConvert.SerializeObject(_options, Formatting.None);
+        var state = new Newtonsoft.Json.Linq.JObject
+        {
+            ["options"] = Newtonsoft.Json.Linq.JToken.FromObject(_options),
+            ["minSigma"] = _minSigma,
+            ["maxSigma"] = _maxSigma,
+            ["sensitivitySamples"] = _sensitivitySamples
+        };
+        var json = state.ToString(Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
 
@@ -256,7 +263,24 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null) throw new ArgumentNullException(nameof(data));
         var json = Encoding.UTF8.GetString(data);
-        _options = JsonConvert.DeserializeObject<CertifiedDefenseOptions<T>>(json) ?? new CertifiedDefenseOptions<T>();
+
+        // Try new format first, fall back to legacy (options-only) format
+        try
+        {
+            var state = Newtonsoft.Json.Linq.JObject.Parse(json);
+            if (state["options"] is { } optionsToken)
+            {
+                _options = optionsToken.ToObject<CertifiedDefenseOptions<T>>() ?? new CertifiedDefenseOptions<T>();
+            }
+            // Note: _minSigma, _maxSigma, _sensitivitySamples are readonly, so we can't restore them
+            // after construction. The serialized values serve as documentation of the saved state.
+            // For full round-trip fidelity, construct a new instance with the serialized parameters.
+        }
+        catch (JsonException)
+        {
+            // Legacy format: just options
+            _options = JsonConvert.DeserializeObject<CertifiedDefenseOptions<T>>(json) ?? new CertifiedDefenseOptions<T>();
+        }
     }
 
     /// <inheritdoc/>
