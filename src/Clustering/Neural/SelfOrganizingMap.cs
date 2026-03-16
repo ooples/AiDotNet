@@ -50,8 +50,8 @@ namespace AiDotNet.Clustering.Neural;
 /// <code>
 /// var options = new SelfOrganizingMapOptions&lt;double&gt;();
 /// var selfOrganizingMap = new SelfOrganizingMap&lt;double&gt;(options);
-/// selfOrganizingMap.Fit(dataMatrix);
-/// int[] labels = selfOrganizingMap.Labels;
+/// selfOrganizingMap.Train(dataMatrix);
+/// Vector<double> labels = selfOrganizingMap.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

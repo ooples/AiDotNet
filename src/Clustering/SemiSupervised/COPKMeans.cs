@@ -45,8 +45,8 @@ namespace AiDotNet.Clustering.SemiSupervised;
 /// <code>
 /// var options = new COPKMeansOptions&lt;double&gt;();
 /// var cOPKMeans = new COPKMeans&lt;double&gt;(options);
-/// cOPKMeans.Fit(dataMatrix);
-/// int[] labels = cOPKMeans.Labels;
+/// cOPKMeans.Train(dataMatrix);
+/// Vector<double> labels = cOPKMeans.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -327,7 +327,7 @@ public class COPKMeans<T> : ClusteringBase<T>
         }
     }
 
-    private bool ViolatesConstraints(int pointIdx, int cluster, int[] labels)
+    private bool ViolatesConstraints(int pointIdx, int cluster, Vector<double> labels)
     {
         // Check must-link constraints
         foreach (var (i, j) in _mustLinkClosure!)
@@ -358,7 +358,7 @@ public class COPKMeans<T> : ClusteringBase<T>
         return false;
     }
 
-    private int CountViolations(int[] labels)
+    private int CountViolations(Vector<double> labels)
     {
         int violations = 0;
 

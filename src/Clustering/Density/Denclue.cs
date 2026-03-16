@@ -47,8 +47,8 @@ namespace AiDotNet.Clustering.Density;
 /// <code>
 /// var options = new DenclueOptions&lt;double&gt;();
 /// var denclue = new Denclue&lt;double&gt;(options);
-/// denclue.Fit(dataMatrix);
-/// int[] labels = denclue.Labels;
+/// denclue.Train(dataMatrix);
+/// Vector<double> labels = denclue.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

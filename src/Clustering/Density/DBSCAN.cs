@@ -49,8 +49,8 @@ namespace AiDotNet.Clustering.Density;
 /// <code>
 /// var options = new DBSCANOptions&lt;double&gt;();
 /// var dBSCAN = new DBSCAN&lt;double&gt;(options);
-/// dBSCAN.Fit(dataMatrix);
-/// int[] labels = dBSCAN.Labels;
+/// dBSCAN.Train(dataMatrix);
+/// Vector<double> labels = dBSCAN.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -205,7 +205,7 @@ public class DBSCAN<T> : ClusteringBase<T>
         Matrix<T> x,
         int seedIndex,
         List<int>[] neighbors,
-        int[] labels,
+        Vector<double> labels,
         int clusterId,
         T epsilon,
         object neighborFinder)
@@ -237,7 +237,7 @@ public class DBSCAN<T> : ClusteringBase<T>
         }
     }
 
-    private void ComputeClusterCenters(Matrix<T> x, int[] labels, int numClusters)
+    private void ComputeClusterCenters(Matrix<T> x, Vector<double> labels, int numClusters)
     {
         ClusterCenters = new Matrix<T>(numClusters, x.Columns);
         var counts = new int[numClusters];

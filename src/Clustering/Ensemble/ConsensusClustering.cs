@@ -47,8 +47,8 @@ namespace AiDotNet.Clustering.Ensemble;
 /// <code>
 /// var options = new ConsensusClusteringOptions&lt;double&gt;();
 /// var consensusClustering = new ConsensusClustering&lt;double&gt;(options);
-/// consensusClustering.Fit(dataMatrix);
-/// int[] labels = consensusClustering.Labels;
+/// consensusClustering.Train(dataMatrix);
+/// Vector&lt;double&gt; labels = consensusClustering.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
