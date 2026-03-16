@@ -226,10 +226,9 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         // Calculate intercept
         Intercept = NumOps.Subtract(_yMean, Coefficients.DotProduct(_xMean));
 
-        // Apply regularization to the model matrices
-        _loadings = Regularization.Regularize(_loadings);
-        _scores = Regularization.Regularize(_scores);
-        _weights = Regularization.Regularize(_weights);
+        // Regularization for PLS is applied through the coefficient vector above.
+        // Matrix-based regularization (loadings, scores, weights) is not applicable
+        // since these matrices define the latent space decomposition.
     }
 
     /// <summary>

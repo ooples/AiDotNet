@@ -212,8 +212,8 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
 
             if (Regularization != null)
             {
-                gradient = Regularization.Regularize(gradient);
-                hessian = Regularization.Regularize(hessian);
+                gradient = gradient.Add(Regularization.Regularize(gradient));
+                hessian = hessian.Add(Regularization.Regularize(hessian));
             }
 
             Vector<T> flattenedGradient = gradient.Flatten();

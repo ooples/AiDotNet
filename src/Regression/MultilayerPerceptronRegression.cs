@@ -425,9 +425,9 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
                 _biases[i] = _biases[i].Subtract(avgBiasGradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
             }
 
-            // Apply regularization
-            _weights[i] = Regularization.Regularize(_weights[i]);
-            _biases[i] = Regularization.Regularize(_biases[i]);
+            // Regularization for neural network weights is applied through
+            // gradient-based methods (L2 weight decay), not post-hoc matrix replacement.
+            // The Regularize(Matrix) API returns a penalty matrix, not regularized weights.
         }
     }
 

@@ -177,12 +177,6 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
         Matrix<T> preparedX = PrepareInputData(x, y);
         Vector<T> preparedY = PrepareTargetData(y);
 
-        // Apply regularization to the prepared input data
-        if (Regularization != null)
-        {
-            preparedX = Regularization.Regularize(preparedX);
-        }
-
         // Train the time series model
         _timeSeriesModel.Train(preparedX, preparedY);
 
