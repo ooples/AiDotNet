@@ -286,6 +286,8 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         using (Helpers.ModelPersistenceGuard.InternalOperation())
         {
@@ -296,6 +298,8 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
         using (Helpers.ModelPersistenceGuard.InternalOperation())
         {
