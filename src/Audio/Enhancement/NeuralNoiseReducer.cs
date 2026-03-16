@@ -551,8 +551,14 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
                 }
 
                 // Shift output buffer
-                Array.Copy(_outputBuffer, _hopSize, _outputBuffer, 0, _fftSize - _hopSize);
-                Array.Clear(_outputBuffer, _fftSize - _hopSize, _hopSize);
+                for (int j = 0; j < _fftSize - _hopSize; j++)
+                {
+                    _outputBuffer[j] = _outputBuffer[j + _hopSize];
+                }
+                for (int j = _fftSize - _hopSize; j < _fftSize; j++)
+                {
+                    _outputBuffer[j] = NumOps.Zero;
+                }
 
                 _bufferPosition = 0;
             }
