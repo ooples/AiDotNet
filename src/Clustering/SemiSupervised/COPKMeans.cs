@@ -128,7 +128,7 @@ public class COPKMeans<T> : ClusteringBase<T>
         // Initialize centers using K-Means++
         var centers = InitializeCenters(x, k, n, d, rand, metric);
 
-        var labels = new Vector<double>(n);
+        var labels = new int[n];
         for (int i = 0; i < n; i++) labels[i] = -1;
 
         // Main loop

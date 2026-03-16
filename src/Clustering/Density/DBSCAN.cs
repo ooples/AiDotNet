@@ -139,13 +139,13 @@ public class DBSCAN<T> : ClusteringBase<T>
         ValidateInputData(x);
 
         int n = x.Rows;
-        var labels = new Vector<double>(n);
+        var labels = new int[n];
         _corePointMask = new bool[n];
 
         // Initialize all points as undefined
         for (int i = 0; i < n; i++)
         {
-            labels[i] = UndefinedLabel;
+            labels[i] = (int)UndefinedLabel;
         }
 
         // Build spatial index for efficient neighbor queries
