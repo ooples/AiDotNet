@@ -49,8 +49,8 @@ namespace AiDotNet.Clustering.Streaming;
 /// <code>
 /// var options = new MiniBatchKMeansOptions&lt;double&gt;();
 /// var miniBatchKMeans = new MiniBatchKMeans&lt;double&gt;(options);
-/// miniBatchKMeans.Fit(dataMatrix);
-/// int[] labels = miniBatchKMeans.Labels;
+/// miniBatchKMeans.Train(dataMatrix);
+/// Vector<double> labels = miniBatchKMeans.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

@@ -39,8 +39,8 @@ namespace AiDotNet.Clustering.Spectral;
 /// <code>
 /// var options = new SpectralOptions&lt;double&gt;();
 /// var spectralClustering = new SpectralClustering&lt;double&gt;(options);
-/// spectralClustering.Fit(dataMatrix);
-/// int[] labels = spectralClustering.Labels;
+/// spectralClustering.Train(dataMatrix);
+/// Vector<double> labels = spectralClustering.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

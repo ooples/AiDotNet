@@ -41,8 +41,8 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// <code>
 /// var options = new AgglomerativeClusteringOptions&lt;double&gt;();
 /// var agglomerativeClustering = new AgglomerativeClustering&lt;double&gt;(options);
-/// agglomerativeClustering.Fit(dataMatrix);
-/// int[] labels = agglomerativeClustering.Labels;
+/// agglomerativeClustering.Train(dataMatrix);
+/// Vector<double> labels = agglomerativeClustering.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
