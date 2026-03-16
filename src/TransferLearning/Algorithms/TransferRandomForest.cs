@@ -281,6 +281,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
         var baseBytes = _baseModel.Serialize();
@@ -290,6 +291,7 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
         if (TryReadWrapper(reader, out var baseBytes))
@@ -345,6 +347,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     public virtual void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         // Persist wrapper metadata and base model bytes together
         using var ms = new MemoryStream();
         using (var writer = new BinaryWriter(ms))
@@ -363,6 +367,8 @@ internal class MappedRandomForestModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 
     public virtual void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (!File.Exists(filePath))
         {
             throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);

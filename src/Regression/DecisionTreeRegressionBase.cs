@@ -345,6 +345,7 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
     /// </remarks>
     public virtual byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
         // Serialize options
@@ -403,6 +404,7 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
     /// </remarks>
     public virtual void Deserialize(byte[] modelData)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var ms = new MemoryStream(modelData);
         using var reader = new BinaryReader(ms);
         // Deserialize options

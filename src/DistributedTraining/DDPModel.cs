@@ -272,21 +272,22 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
-        // Barrier before rank check to prevent deadlock if rank 0 fails
         Config.CommunicationBackend.Barrier();
 
         try
         {
-            // Only rank 0 saves to avoid file write conflicts
             if (Rank == 0)
             {
-                var data = Serialize();
-                File.WriteAllBytes(filePath, data);
+                Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+                using (Helpers.ModelPersistenceGuard.InternalOperation())
+                {
+                    var data = Serialize();
+                    File.WriteAllBytes(filePath, data);
+                }
             }
         }
         finally
         {
-            // Ensure all processes reach this barrier even if rank 0 fails
             Config.CommunicationBackend.Barrier();
         }
     }
@@ -294,18 +295,19 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     /// <inheritdoc/>
     public override void LoadModel(string filePath)
     {
-        // Barrier before loading to ensure all processes start together
         Config.CommunicationBackend.Barrier();
 
         try
         {
-            // All processes read the same file (read-only, no conflicts)
+            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
             var data = File.ReadAllBytes(filePath);
-            Deserialize(data);
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
+            {
+                Deserialize(data);
+            }
         }
         finally
         {
-            // Ensure all processes finish loading before proceeding
             Config.CommunicationBackend.Barrier();
         }
     }

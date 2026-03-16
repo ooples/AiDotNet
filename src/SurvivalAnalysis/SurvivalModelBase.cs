@@ -513,6 +513,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
     /// </summary>
     public virtual byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var modelData = new Dictionary<string, object>
         {
             { "NumFeatures", NumFeatures },
@@ -530,6 +531,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape
     /// </summary>
     public virtual void Deserialize(byte[] modelData)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         var jsonString = Encoding.UTF8.GetString(modelData);
         var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
 

@@ -260,7 +260,8 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
-        // Barrier before rank check to prevent deadlock if rank 0 fails
+        // Barrier first so all ranks arrive together — prevents deadlock
+        // if a single rank throws from the license check
         Config.CommunicationBackend.Barrier();
 
         try
@@ -268,8 +269,12 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
             // Only rank 0 saves to avoid file write conflicts
             if (Rank == 0)
             {
-                var data = Serialize();
-                File.WriteAllBytes(filePath, data);
+                Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+                using (Helpers.ModelPersistenceGuard.InternalOperation())
+                {
+                    var data = Serialize();
+                    File.WriteAllBytes(filePath, data);
+                }
             }
         }
         finally
@@ -282,14 +287,19 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     /// <inheritdoc/>
     public override void LoadModel(string filePath)
     {
-        // Barrier before loading to ensure all processes start together
+        // Barrier first so all ranks arrive together
         Config.CommunicationBackend.Barrier();
 
         try
         {
+            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
             // All processes read the same file (read-only, no conflicts)
             var data = File.ReadAllBytes(filePath);
-            Deserialize(data);
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
+            {
+                Deserialize(data);
+            }
         }
         finally
         {

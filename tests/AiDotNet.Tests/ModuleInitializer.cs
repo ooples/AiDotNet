@@ -47,5 +47,17 @@ internal static class TestModuleInitializer
         {
             // Ignore errors during initialization - CPU mode may already be active
         }
+
+        // Set a default license key for all tests so that serialize/deserialize/save/load
+        // tests don't depend on trial state. Tests that explicitly test trial behavior
+        // (e.g., ModelPersistenceGuardTests, AiModelBuilderLicensingTests) clear this
+        // in their own setup via ClearAllLicenseSources().
+        if (string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("AIDOTNET_LICENSE_KEY")))
+        {
+            // Test-only placeholder key. Format: aidn.{id}.{signature}
+            // This is NOT a real license key — it exists solely to bypass trial state in tests.
+            System.Environment.SetEnvironmentVariable("AIDOTNET_LICENSE_KEY",
+                "aidn." + "testdefault1" + "." + "testsignature1");
+        }
     }
 }

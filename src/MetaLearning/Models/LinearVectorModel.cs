@@ -182,11 +182,16 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     /// <inheritdoc/>
-    public byte[] Serialize() => Encoding.UTF8.GetBytes(SerializeParameters());
+    public byte[] Serialize()
+    {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        return Encoding.UTF8.GetBytes(SerializeParameters());
+    }
 
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         Guard.NotNull(data);
         DeserializeParameters(Encoding.UTF8.GetString(data));
     }
@@ -194,6 +199,8 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path is required.", nameof(filePath));
@@ -205,6 +212,8 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path is required.", nameof(filePath));

@@ -396,6 +396,7 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// </remarks>
     public virtual byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var modelData = new Dictionary<string, object>
         {
             { "NumClasses", NumClasses },
@@ -429,6 +430,7 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// </remarks>
     public virtual void Deserialize(byte[] modelData)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         var jsonString = Encoding.UTF8.GetString(modelData);
         var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
 

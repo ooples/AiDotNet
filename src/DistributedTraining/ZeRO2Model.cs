@@ -343,7 +343,13 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         try
         {
             if (Rank == 0)
-                File.WriteAllBytes(filePath, Serialize());
+            {
+                Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+                using (Helpers.ModelPersistenceGuard.InternalOperation())
+                {
+                    File.WriteAllBytes(filePath, Serialize());
+                }
+            }
         }
         finally
         {
@@ -357,8 +363,12 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         Config.CommunicationBackend.Barrier();
         try
         {
+            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
             var data = File.ReadAllBytes(filePath);
-            Deserialize(data);
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
+            {
+                Deserialize(data);
+            }
         }
         finally
         {

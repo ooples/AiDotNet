@@ -245,23 +245,81 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     /// <inheritdoc/>
     public byte[] Serialize()
     {
-        var json = JsonConvert.SerializeObject(_options, Formatting.None);
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        var state = new Newtonsoft.Json.Linq.JObject
+        {
+            ["options"] = Newtonsoft.Json.Linq.JToken.FromObject(_options),
+            ["minSigma"] = _minSigma,
+            ["maxSigma"] = _maxSigma,
+            ["sensitivitySamples"] = _sensitivitySamples
+        };
+        var json = state.ToString(Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
 
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null) throw new ArgumentNullException(nameof(data));
         var json = Encoding.UTF8.GetString(data);
-        _options = JsonConvert.DeserializeObject<CertifiedDefenseOptions<T>>(json) ?? new CertifiedDefenseOptions<T>();
+
+        // Parse the JSON once
+        var state = Newtonsoft.Json.Linq.JObject.Parse(json);
+
+        // Check if state["options"] exists (new format)
+        if (state["options"] is { } optionsToken)
+        {
+            _options = optionsToken.ToObject<CertifiedDefenseOptions<T>>() ?? new CertifiedDefenseOptions<T>();
+            // Note: _minSigma, _maxSigma, _sensitivitySamples are readonly, so we can't restore them
+            // after construction. The serialized values serve as documentation of the saved state.
+            // For full round-trip fidelity, construct a new instance with the serialized parameters.
+        }
+        else
+        {
+            // Try to deserialize the entire state as legacy options-only format
+            try
+            {
+                var legacyOptions = state.ToObject<CertifiedDefenseOptions<T>>();
+                if (legacyOptions != null)
+                {
+                    _options = legacyOptions;
+                }
+                else
+                {
+                    throw new InvalidOperationException("Failed to deserialize state: neither new format (with 'options' key) nor legacy format (plain CertifiedDefenseOptions<T>) could be parsed.");
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Failed to deserialize state: neither new format (with 'options' key) nor legacy format (plain CertifiedDefenseOptions<T>) could be parsed.", ex);
+            }
+        }
     }
 
     /// <inheritdoc/>
-    public void SaveModel(string filePath) => File.WriteAllBytes(filePath, Serialize());
+    public void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
+    }
 
     /// <inheritdoc/>
-    public void LoadModel(string filePath) => Deserialize(File.ReadAllBytes(filePath));
+    public void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(File.ReadAllBytes(filePath));
+        }
+    }
 
     private double EstimateAdaptiveSigma(TInput input, IFullModel<T, TInput, TOutput> model)
     {

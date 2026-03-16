@@ -122,13 +122,24 @@ public abstract class MetaLearningModelBase<T, TInput, TOutput> : IFullModel<T, 
     // --- IModelSerializer ---
 
     /// <inheritdoc/>
-    public virtual byte[] Serialize() => BaseModel.Serialize();
+    public virtual byte[] Serialize()
+    {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return BaseModel.Serialize();
+        }
+    }
 
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         Guard.NotNull(data);
-        BaseModel.Deserialize(data);
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            BaseModel.Deserialize(data);
+        }
     }
 
     /// <inheritdoc/>
