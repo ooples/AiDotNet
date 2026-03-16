@@ -53,7 +53,8 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
     private const double IndependenceThreshold = 0.1;
 
     /// <summary>
-    /// Minimum absolute coefficient magnitude for an edge to be included.
+    /// Minimum absolute standardized coefficient magnitude for an edge to be included.
+    /// Applied after internal standardization to make the threshold scale-invariant.
     /// </summary>
     private const double EdgeCoefficientThreshold = 0.1;
 
@@ -177,6 +178,12 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         double denom = Math.Sqrt(Math.Max(dVarR, CorrelationDenominatorEpsilon) * Math.Max(dVarC, CorrelationDenominatorEpsilon));
         double corrResidual = dCovRC / denom;
 
-        return (corrResidual * corrResidual, NumOps.ToDouble(beta)); // Squared correlation as HSIC proxy
+        // Return standardized beta (scale-invariant): beta_std = beta * std(cause) / std(target)
+        double stdC = Math.Sqrt(Math.Max(dVarC / effectiveN, NumericalStabilityEpsilon));
+        double dVarT = NumOps.ToDouble(Engine.DotProduct(centT, centT));
+        double stdT = Math.Sqrt(Math.Max(dVarT / effectiveN, NumericalStabilityEpsilon));
+        double betaStd = NumOps.ToDouble(beta) * stdC / stdT;
+
+        return (corrResidual * corrResidual, betaStd); // Squared correlation as HSIC proxy
     }
 }
