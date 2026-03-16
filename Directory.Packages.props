@@ -58,7 +58,7 @@
     <!-- Infrastructure -->
     <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.3.1" />
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
-    <PackageVersion Include="StackExchange.Redis" Version="2.11.8" />
+    <PackageVersion Include="StackExchange.Redis" Version="2.12.1" />
     <PackageVersion Include="Stripe.net" Version="50.4.1" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.5" />
 
