@@ -41,7 +41,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// // Create a FastSAM model for real-time segment anything via YOLOv8
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
-///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     taskType: NeuralNetworkTaskType.ImageSegmentation,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
 /// var model = new FastSAM&lt;double&gt;(architecture, numClasses: 1);
 /// </code>

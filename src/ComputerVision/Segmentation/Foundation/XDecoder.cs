@@ -45,7 +45,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// // Create an X-Decoder model for vision-language segmentation and captioning
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
-///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     taskType: NeuralNetworkTaskType.ImageSegmentation,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
 /// var model = new XDecoder&lt;double&gt;(architecture, numClasses: 150);
 ///

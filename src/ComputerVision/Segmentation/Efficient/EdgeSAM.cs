@@ -41,7 +41,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// // Create an EdgeSAM model for edge-device interactive segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
-///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     taskType: NeuralNetworkTaskType.ImageSegmentation,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
 /// var model = new EdgeSAM&lt;double&gt;(architecture, numClasses: 1);
 ///

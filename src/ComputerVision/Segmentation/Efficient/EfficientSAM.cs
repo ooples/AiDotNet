@@ -41,7 +41,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// // Create an EfficientSAM model for efficient promptable segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
-///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     taskType: NeuralNetworkTaskType.ImageSegmentation,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
 /// var model = new EfficientSAM&lt;double&gt;(architecture, numClasses: 1);
 /// </code>
