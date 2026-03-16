@@ -85,6 +85,7 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
     interface Activation {
       id: string;
       machine_id_hash: string;
+      license_key_id: string;
       hostname: string | null;
       os_description: string | null;
       first_seen_at: string;
@@ -134,11 +135,15 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
 
       // Load activations for all licenses
       const licenseIds = licenses.map(l => l.id);
-      const { data: activations } = await supabase
+      const { data: activations, error: activationsError } = await supabase
         .from('license_activations')
         .select('id, license_key_id, machine_id_hash, hostname, os_description, first_seen_at, last_seen_at, is_active')
         .in('license_key_id', licenseIds)
         .order('last_seen_at', { ascending: false });
+
+      if (activationsError) {
+        console.error('Failed to load activations:', activationsError.message);
+      }
 
       const activationsByLicense = new Map<string, Activation[]>();
       if (activations) {

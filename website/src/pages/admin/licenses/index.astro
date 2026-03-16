@@ -237,13 +237,13 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
       }
 
       // Load all license keys
-      const licenses = await fetchAllPaginated<LicenseKey>('license_keys', 'id, user_id, license_key, tier, status, max_activations, organization_name, notes, stripe_subscription_id, issued_at, expires_at, created_at', 'created_at');
-      const error = licenses.length === 0 ? null : null; // pagination handles errors internally
-
-      if (error || !licenses) {
+      let licenses: LicenseKey[];
+      try {
+        licenses = await fetchAllPaginated<LicenseKey>('license_keys', 'id, user_id, license_key, tier, status, max_activations, organization_name, notes, stripe_subscription_id, issued_at, expires_at, created_at', 'created_at');
+      } catch (err) {
         const loading = document.getElementById('licenses-loading');
         if (loading) loading.innerHTML = '<p class="text-sm text-red-500">Failed to load licenses.</p>';
-        console.error('License load error:', error);
+        console.error('License load error:', err);
         return;
       }
 

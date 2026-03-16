@@ -4,9 +4,9 @@
 
 create table if not exists public.telemetry_events (
     id bigint generated always as identity primary key,
-    event_type text not null,
-    machine_id_hash text not null,
-    library_version text not null default '0.0.0',
+    event_type text not null check (char_length(event_type) between 1 and 100),
+    machine_id_hash text not null check (char_length(machine_id_hash) between 1 and 128),
+    library_version text not null default '0.0.0' check (char_length(library_version) <= 50),
     timestamp_utc timestamptz not null default now(),
     properties jsonb not null default '{}'::jsonb,
     created_at timestamptz not null default now()

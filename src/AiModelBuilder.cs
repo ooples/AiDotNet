@@ -3489,11 +3489,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
         else
         {
-            // No license key — enforce trial limits
-            var trialManager = new TrialStateManager();
-            trialManager.RecordOperationOrThrow();
-
-            // Use trial encryption key for models saved during trial
+            // No license key — use trial encryption key for models saved during trial
+            // Trial operation recording is deferred until after successful load
             resolvedKey = GenerateTrialEncryptionKey();
         }
 
@@ -3532,6 +3529,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         if (model is Interfaces.IFullModel<T, TInput, TOutput> fullModel)
         {
+            // Record trial operation only after successful load
+            if (resolvedKey is not null && !LicenseEnforcer.Instance.HasValidLicense)
+            {
+                var trialManager = new TrialStateManager();
+                trialManager.RecordOperationOrThrow();
+            }
+
             var result = new AiModelResult<T, TInput, TOutput>();
             result.Model = fullModel;
 
