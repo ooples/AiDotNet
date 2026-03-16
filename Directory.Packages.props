@@ -60,7 +60,7 @@
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.11.8" />
     <PackageVersion Include="Stripe.net" Version="50.4.1" />
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.4" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.5" />
 
     <!-- Code analysis (default version; source generators may override) -->
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
