@@ -265,13 +265,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         int? maxFeatures = null)
     {
         int min = minFeatures ?? Options.MinimumFeatures;
-        int max = maxFeatures ?? Math.Min(Options.MaximumFeatures, totalFeatures);
+        // MaximumFeatures = 0 means "use all features" (default behavior)
+        int configMax = Options.MaximumFeatures > 0 ? Options.MaximumFeatures : totalFeatures;
+        int max = maxFeatures ?? Math.Min(configMax, totalFeatures);
 
         // Ensure min/max values are valid
         min = Math.Max(1, Math.Min(min, totalFeatures));
         max = Math.Min(max, totalFeatures);
 
-        // If min > max (due to constraints), set them equal
         if (min > max)
         {
             max = min;
@@ -386,11 +387,22 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        // Step 1: Generate random feature selection independent of model state
-        var selectedFeaturesIndices = RandomlySelectFeatures(
-            InputHelper<T, TInput>.GetInputSize(inputData.XTrain),
-            Options.MinimumFeatures,
-            Options.MaximumFeatures);
+        // Step 1: Generate feature selection.
+        // Models that don't support parameter initialization (NB, decision trees, etc.)
+        // learn their structure from ALL features during training. Random feature selection
+        // can remove features that are critical for discrimination, causing 50% accuracy.
+        int totalFeatures = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        List<int> selectedFeaturesIndices;
+
+        if (!solution.SupportsParameterInitialization)
+        {
+            selectedFeaturesIndices = Enumerable.Range(0, totalFeatures).ToList();
+        }
+        else
+        {
+            selectedFeaturesIndices = RandomlySelectFeatures(
+                totalFeatures, Options.MinimumFeatures, Options.MaximumFeatures);
+        }
 
         // Step 2: Apply feature selection to the model BEFORE we check the cache
         ApplyFeatureSelection(solution, selectedFeaturesIndices);

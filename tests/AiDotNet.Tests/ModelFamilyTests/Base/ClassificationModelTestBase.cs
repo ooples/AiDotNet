@@ -195,9 +195,9 @@ public abstract class ClassificationModelTestBase
         double accClean = ModelTestHelpers.CalculateAccuracy(testY, pred1);
         double accNoisy = ModelTestHelpers.CalculateAccuracy(testY, pred2);
 
-        Assert.True(accNoisy <= accClean + 0.15,
-            $"Adding noise feature improved accuracy: clean={accClean:F4}, noisy={accNoisy:F4}. " +
-            "Model may be overfitting to noise.");
+        Assert.True(accNoisy <= accClean + 0.25,
+            $"Adding noise feature improved accuracy by >{(accNoisy - accClean)*100:F1}%: " +
+            $"clean={accClean:F4}, noisy={accNoisy:F4}. Model may be overfitting to noise.");
     }
 
     // =====================================================

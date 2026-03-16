@@ -133,9 +133,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
         _tolerance = tolerance;
         _regularizationStrength = regularization;
         _learningRate = 0.01; // Legacy field for serialization
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
+        _random = RandomHelper.CreateSeededRandom(seed ?? 42);
         // Default to Adam optimizer with learning rate 0.01, which is appropriate for
         // logistic regression models with a small number of parameters. The default Adam
         // LR of 0.001 (designed for neural networks with millions of params) is too small
@@ -161,9 +159,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
         _maxIterations = maxIterations;
         _tolerance = tolerance;
         _regularizationStrength = regularization;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
+        _random = RandomHelper.CreateSeededRandom(seed ?? 42);
         // Use Adam optimizer with the user-specified learning rate
         var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
         {
