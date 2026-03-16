@@ -490,7 +490,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (_coefficients == null || _thresholds == null)
+        if (_coefficients.Length == 0 || _thresholds.Length == 0)
         {
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
@@ -596,7 +596,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_coefficients == null || _thresholds == null)
+        if (_coefficients.Length == 0 || _thresholds.Length == 0)
         {
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
@@ -782,7 +782,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        if (_coefficients == null || _thresholds == null)
+        if (_coefficients.Length == 0 || _thresholds.Length == 0)
         {
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
@@ -855,7 +855,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        if (_coefficients == null || _thresholds == null)
+        if (_coefficients.Length == 0 || _thresholds.Length == 0)
         {
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }

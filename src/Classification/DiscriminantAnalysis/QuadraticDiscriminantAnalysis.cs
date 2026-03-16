@@ -770,9 +770,12 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
             }
         }
 
-        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans") ?? new Matrix<T>(0, 0);
-        _classPriors = DeserializeVector(modelDataObj, "ClassPriors") ?? new Vector<T>(0);
-        _classLogDets = DeserializeVector(modelDataObj, "ClassLogDets") ?? new Vector<T>(0);
+        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans")
+            ?? throw new InvalidOperationException("Missing required 'ClassMeans' in serialized model data.");
+        _classPriors = DeserializeVector(modelDataObj, "ClassPriors")
+            ?? throw new InvalidOperationException("Missing required 'ClassPriors' in serialized model data.");
+        _classLogDets = DeserializeVector(modelDataObj, "ClassLogDets")
+            ?? throw new InvalidOperationException("Missing required 'ClassLogDets' in serialized model data.");
 
         int numCovMatrices = modelDataObj["NumCovarianceMatrices"]?.ToObject<int>() ?? 0;
         if (numCovMatrices > 0)

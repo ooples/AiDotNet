@@ -436,7 +436,8 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
         {
             for (int c = 0; c < NumClasses; c++)
             {
-                if (ClassLabels is not null && NumOps.Compare(preds[i], ClassLabels[c]) == 0)
+                var classLabels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+                if (NumOps.Compare(preds[i], classLabels[c]) == 0)
                 {
                     probs[i, c] = NumOps.One;
                 }

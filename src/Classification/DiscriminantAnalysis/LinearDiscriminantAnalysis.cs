@@ -677,10 +677,14 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
             }
         }
 
-        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans") ?? new Matrix<T>(0, 0);
-        _pooledCovariance = DeserializeMatrix(modelDataObj, "PooledCovariance") ?? new Matrix<T>(0, 0);
-        _covarianceInverse = DeserializeMatrix(modelDataObj, "CovarianceInverse") ?? new Matrix<T>(0, 0);
-        _classPriors = DeserializeVector(modelDataObj, "ClassPriors") ?? new Vector<T>(0);
+        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans")
+            ?? throw new InvalidOperationException("Missing required 'ClassMeans' in serialized model data.");
+        _pooledCovariance = DeserializeMatrix(modelDataObj, "PooledCovariance")
+            ?? throw new InvalidOperationException("Missing required 'PooledCovariance' in serialized model data.");
+        _covarianceInverse = DeserializeMatrix(modelDataObj, "CovarianceInverse")
+            ?? throw new InvalidOperationException("Missing required 'CovarianceInverse' in serialized model data.");
+        _classPriors = DeserializeVector(modelDataObj, "ClassPriors")
+            ?? throw new InvalidOperationException("Missing required 'ClassPriors' in serialized model data.");
     }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)

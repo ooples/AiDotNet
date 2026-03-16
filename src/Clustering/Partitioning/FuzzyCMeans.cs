@@ -70,7 +70,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
     /// Each row sums to 1. membershipMatrix[i, k] is the degree to which
     /// point i belongs to cluster k.
     /// </remarks>
-    public Matrix<T> MembershipMatrix => _membershipMatrix;
+    public Matrix<T> MembershipMatrix => _membershipMatrix.Clone();
 
     /// <inheritdoc />
     protected override ModelType GetModelType() => ModelType.Clustering;

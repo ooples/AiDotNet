@@ -183,6 +183,9 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
     /// </summary>
     private Vector<T> HardVotePredict(Matrix<T> input)
     {
+        if (_weights.Length == 0 || _estimators.Count == 0)
+            throw new InvalidOperationException("Model must be trained before making predictions.");
+
         var predictions = new Vector<T>(input.Rows);
 
         for (int i = 0; i < input.Rows; i++)
@@ -233,7 +236,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
     /// <inheritdoc/>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_estimators is null)
+        if (_estimators.Count == 0 || _weights.Length == 0)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }

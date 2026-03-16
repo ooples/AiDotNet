@@ -161,6 +161,13 @@ public class SLearner<T> : CausalModelBase<T>
         EnsureFitted();
 
         int n = features.Rows;
+
+        if (features.Columns + 1 > _weights.Length)
+        {
+            throw new ArgumentException(
+                $"Feature width ({features.Columns}) + treatment column exceeds trained weight count ({_weights.Length}).");
+        }
+
         var effects = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
@@ -284,7 +291,7 @@ public class SLearner<T> : CausalModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        if (_weights is null)
+        if (_weights.Length == 0)
             return new Vector<T>(1) { [0] = _bias };
 
         var parameters = new Vector<T>(_weights.Length + 1);

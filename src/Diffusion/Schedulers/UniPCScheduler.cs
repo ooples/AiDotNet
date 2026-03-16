@@ -142,7 +142,7 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
     {
         ValidateStepParameters(modelOutput, sample, timestep);
 
-        if (_lambdas == null || _alphaTs == null || _sigmaTs == null)
+        if (_lambdas == null || _alphaTs.Length == 0 || _sigmaTs.Length == 0)
             throw new InvalidOperationException("Schedule not initialized. Call SetTimesteps() before Step().");
 
         int stepIndex = FindTimestepIndex(timestep);
