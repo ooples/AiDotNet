@@ -46,7 +46,7 @@ namespace AiDotNet.CausalInference;
 /// <code>
 /// var forest = new CausalForest&lt;double&gt;(numTrees: 100, maxDepth: 10);
 /// forest.Fit(features, treatment, outcome);
-/// Vector&lt;double&gt; cate = forest.EstimateCate(newFeatures);
+/// Vector&lt;double&gt; cate = forest.EstimateTreatmentEffect(newFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
