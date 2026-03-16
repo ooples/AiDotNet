@@ -65,7 +65,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 ///     sampleRate: 48000);
 ///
 /// // Generate audio embeddings for similarity search
-/// Tensor&lt;float&gt; embedding = model.GetEmbedding(audioTensor);
+/// Tensor&lt;float&gt; embedding = model.EncodeAudio(audioTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
