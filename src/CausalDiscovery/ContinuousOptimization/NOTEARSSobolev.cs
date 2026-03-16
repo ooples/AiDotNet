@@ -96,8 +96,8 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         ApplyOptions(options);
         if (options?.MaxPenalty is { } maxPenalty)
         {
-            if (maxPenalty <= 0)
-                throw new ArgumentException("MaxPenalty must be positive.");
+            if (double.IsNaN(maxPenalty) || maxPenalty <= 0)
+                throw new ArgumentException("MaxPenalty must be a positive finite number.");
             _rhoMax = maxPenalty;
         }
         if (options?.HiddenUnits is { } hiddenUnits)
