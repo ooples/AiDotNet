@@ -66,6 +66,7 @@ namespace AiDotNet.Audio.Enhancement;
 ///     numSources: 2);
 ///
 /// // Separate mixed audio into individual sources
+/// var mixedAudioTensor = new Tensor&lt;float&gt;(new[] { 1, 1, 8000 }); // 1 second of mono audio
 /// Tensor&lt;float&gt;[] sources = model.Separate(mixedAudioTensor);
 /// </code>
 /// </example>
