@@ -46,7 +46,7 @@ namespace AiDotNet.CausalInference;
 /// <code>
 /// var tLearner = new TLearner&lt;double&gt;(maxIterations: 100, learningRate: 0.1);
 /// tLearner.Fit(features, treatment, outcome);
-/// Vector&lt;double&gt; cate = tLearner.EstimateCate(newFeatures);
+/// Vector&lt;double&gt; cate = tLearner.EstimateTreatmentEffect(newFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

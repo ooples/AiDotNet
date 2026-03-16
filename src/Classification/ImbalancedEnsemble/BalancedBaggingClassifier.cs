@@ -61,16 +61,23 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// var classifier = new BalancedBaggingClassifier&lt;double&gt;(options);
 ///
 /// // Prepare imbalanced training data (majority class 0, minority class 1)
-/// var features = Matrix&lt;double&gt;.Build.Dense(8, 2, new double[] {
-///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,  1.3, 0.7,  // Class 0 (majority)
-///     5.0, 5.1,  5.2, 4.9,  0.0, 0.0,  0.0, 0.0 }); // Class 1 (minority)
+/// var features = new Matrix&lt;double&gt;(8, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 1.1;
+/// features[1, 0] = 1.2; features[1, 1] = 0.9;
+/// features[2, 0] = 0.8; features[2, 1] = 1.0;
+/// features[3, 0] = 1.3; features[3, 1] = 0.7;
+/// features[4, 0] = 5.0; features[4, 1] = 5.1;
+/// features[5, 0] = 5.2; features[5, 1] = 4.9;
+/// features[6, 0] = 4.8; features[6, 1] = 5.0;
+/// features[7, 0] = 5.3; features[7, 1] = 4.7;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 0, 1, 1, 1, 1 });
 ///
 /// // Train with balanced bootstrap sampling for each base classifier
 /// classifier.Train(features, labels);
 ///
 /// // Predict using majority vote across balanced sub-classifiers
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 5.1, 5.0 });
+/// var newSample = new Matrix&lt;double&gt;(1, 2);
+/// newSample[0, 0] = 5.1; newSample[0, 1] = 5.0;
 /// var prediction = classifier.Predict(newSample);
 /// Console.WriteLine($"Predicted class: {prediction[0]}");
 /// </code>
