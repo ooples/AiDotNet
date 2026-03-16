@@ -196,11 +196,26 @@ public class AdvancedRegressionIntegrationTests
     [Fact]
     public void LinearMixedModel_FitsData_PredictionsFinite()
     {
-        // Simple data with fixed effects — mixed model needs at least one random effect
-        var (x, y) = CreateLinearData(60, new[] { 2.0, -1.0 }, intercept: 3.0, noise: 0.5, seed: 42);
+        // Create data with 2 fixed-effect features + 1 grouping column (col 2)
+        // y = 2*x1 - x2 + 3 + group_effect + noise
+        int n = 60;
+        int nGroups = 3;
+        var random = new Random(42);
+        var x = new Matrix<double>(n, 3); // col 0,1 = fixed effects, col 2 = group
+        var y = new Vector<double>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            x[i, 0] = random.NextDouble() * 10 - 5;
+            x[i, 1] = random.NextDouble() * 10 - 5;
+            x[i, 2] = i % nGroups; // group assignment
+            double groupEffect = (i % nGroups) * 0.5; // different baseline per group
+            y[i] = 2.0 * x[i, 0] - 1.0 * x[i, 1] + 3.0 + groupEffect
+                    + NextGaussian(random) * 0.5;
+        }
 
         var model = new LinearMixedModel<double>();
-        model.AddRandomIntercept("group", 3); // Required by LinearMixedModel
+        model.AddRandomIntercept("group", 2); // column 2 is the grouping variable
         model.Train(x, y);
         var predictions = model.Predict(x);
 

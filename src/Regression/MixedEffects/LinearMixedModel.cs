@@ -216,6 +216,18 @@ public class LinearMixedModel<T> : RegressionBase<T>
             throw new InvalidOperationException("At least one random effect must be specified. Use AddRandomIntercept() or AddRandomSlope().");
         }
 
+        // Validate grouping column indices are within bounds
+        foreach (var re in _randomEffects)
+        {
+            if (re.GroupColumnIndex >= x.Columns)
+            {
+                throw new ArgumentException(
+                    $"Random effect '{re.Name}' references group column index {re.GroupColumnIndex}, " +
+                    $"but input matrix only has {x.Columns} columns (valid indices: 0 to {x.Columns - 1}). " +
+                    $"The group column must be included in the input matrix.");
+            }
+        }
+
         _nObservations = x.Rows;
         _nFixedParams = x.Columns - GetGroupingColumnCount();
 

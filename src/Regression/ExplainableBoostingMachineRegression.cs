@@ -364,9 +364,11 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
             }
             values.Sort();
 
-            // Determine number of bins based on unique values
+            // Determine number of bins: limit by unique values AND data size
+            // to ensure each bin has enough samples for reliable gradient estimates
             int numUnique = values.Distinct().Count();
-            int numBins = Math.Min(_options.MaxBins, numUnique);
+            int maxBinsForData = Math.Max(2, values.Count / Math.Max(1, _options.MinSamplesPerBin));
+            int numBins = Math.Min(_options.MaxBins, Math.Min(numUnique, maxBinsForData));
 
             if (numBins <= 1)
             {
