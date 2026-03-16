@@ -232,8 +232,7 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
             // Find a cycle via DFS and trace the exact cycle path
             var visited = new int[d]; // 0=unvisited, 1=in-stack, 2=done
             var parent = new int[d];
-            var parentEdgeChild = new int[d]; // which child edge led to this node
-            for (int i = 0; i < d; i++) { parent[i] = -1; parentEdgeChild[i] = -1; }
+            for (int i = 0; i < d; i++) { parent[i] = -1; }
 
             int cycleStart = -1, cycleEnd = -1;
             bool hasCycle = false;
