@@ -204,7 +204,11 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
                 if (NumOps.GreaterThan(absWeight, NumOps.FromDouble(MinEdgeWeight)))
                     W[parents[p], target] = weights[p];
                 else
-                    W[parents[p], target] = NumOps.FromDouble(MinEdgeWeight);
+                {
+                    // Preserve sign when applying minimum edge weight
+                    T sign = NumOps.GreaterThan(weights[p], NumOps.Zero) ? NumOps.One : NumOps.Negate(NumOps.One);
+                    W[parents[p], target] = NumOps.Multiply(sign, NumOps.FromDouble(MinEdgeWeight));
+                }
             }
         }
         return W;
