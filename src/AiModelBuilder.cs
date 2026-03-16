@@ -3391,9 +3391,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         else
         {
             // No license key — enforce trial limits
-            var trialManager = new TrialStateManager();
-            trialManager.RecordOperationOrThrow();
-
             // Use a deterministic trial encryption key derived from the machine fingerprint.
             // This ensures trial-saved models can be loaded on the same machine during the trial,
             // but cannot be loaded on other machines or after the trial expires without a license.
@@ -3404,6 +3401,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             ModelLoader.SaveEncrypted(serializer, filePath, resolvedKey, inputShape, outputShape,
                 decryptionToken: decryptionToken);
+        }
+
+        // Record trial operation only after save succeeded (not before, to avoid counting failed saves)
+        if (resolvedKey is not null && !LicenseEnforcer.Instance.HasValidLicense)
+        {
+            var trialManager = new TrialStateManager();
+            trialManager.RecordOperationOrThrow();
         }
     }
 
