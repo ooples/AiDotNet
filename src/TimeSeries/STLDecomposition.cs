@@ -1414,26 +1414,32 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model has not been trained. Call Train before making predictions.");
         }
 
-        // Extract the forecast horizon from the input
-        int horizon;
-        if (input.Length == 0)
+        // Extract the time index from the input
+        int t = input.Length > 0 ? Math.Max(0, Convert.ToInt32(input[0])) : 0;
+        int n = _trend.Length;
+        int period = _stlOptions.SeasonalPeriod;
+
+        // Determine trend component
+        T trendComponent;
+        if (t < n)
         {
-            // Default to one-step-ahead forecast if no horizon specified
-            horizon = 1;
+            // In-sample: use the decomposed trend directly
+            trendComponent = _trend[t];
         }
         else
         {
-            // Use the first element as the forecast horizon
-            horizon = Math.Max(1, Convert.ToInt32(input[0]));
+            // Out-of-sample: linear extrapolation from the last two trend values
+            T lastTrend = _trend[n - 1];
+            T prevTrend = n > 1 ? _trend[n - 2] : lastTrend;
+            T slope = NumOps.Subtract(lastTrend, prevTrend);
+            trendComponent = NumOps.Add(lastTrend, NumOps.Multiply(slope, NumOps.FromDouble(t - n + 1)));
         }
 
-        // Use the last trend value (assuming trend persists)
-        T trendComponent = _trend[_trend.Length - 1];
-
-        // Add the appropriate seasonal component
-        int seasonalIndex = (_seasonal.Length - 1 + horizon) % _stlOptions.SeasonalPeriod;
-        int seasonStart = _seasonal.Length - _stlOptions.SeasonalPeriod;
-        T seasonalComponent = _seasonal[seasonStart + seasonalIndex];
+        // Determine seasonal component (cyclically repeat the last full period)
+        int seasonalIndex = t % period;
+        int seasonStart = n - period;
+        if (seasonStart < 0) seasonStart = 0;
+        T seasonalComponent = _seasonal[seasonStart + (seasonalIndex % (n - seasonStart))];
 
         // Return the sum (residual component is assumed to be zero for forecasting)
         return NumOps.Add(trendComponent, seasonalComponent);
