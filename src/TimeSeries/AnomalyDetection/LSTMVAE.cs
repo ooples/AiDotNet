@@ -831,7 +831,9 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public Tensor<T> Backward(Tensor<T> dOutput, Tensor<T> hidden, Tensor<T> latent)
     {
         // Gradients for output projection: dOutputWeights = dOutput * hidden^T, dOutputBias = dOutput
-        for (int i = 0; i < _outputSize; i++)
+        int dOutLen = dOutput.Length;
+        int effectiveOutputSize = Math.Min(_outputSize, dOutLen);
+        for (int i = 0; i < effectiveOutputSize; i++)
         {
             _outputBiasGrad[i] = NumOps.Add(_outputBiasGrad[i], dOutput[i]);
             for (int j = 0; j < _hiddenSize; j++)
@@ -847,7 +849,7 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         for (int j = 0; j < _hiddenSize; j++)
         {
             T sum = NumOps.Zero;
-            for (int i = 0; i < _outputSize; i++)
+            for (int i = 0; i < effectiveOutputSize; i++)
             {
                 int idx = i * _hiddenSize + j;
                 sum = NumOps.Add(sum, NumOps.Multiply(_outputWeights[idx], dOutput[i]));
