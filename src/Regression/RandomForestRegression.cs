@@ -459,6 +459,16 @@ public class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return new RandomForestRegression<T>(_options, Regularization);
     }
 
+    /// <summary>
+    /// Deep copy via serialization to preserve the private _trees list.
+    /// </summary>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new RandomForestRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
     #region IJitCompilable Implementation Override
 
     /// <summary>
