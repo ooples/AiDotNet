@@ -186,6 +186,15 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> X, Vector<T> y)
     {
+        // Auto-adjust first layer to match input dimensions if needed
+        if (_options.LayerSizes.Count > 0 && _options.LayerSizes[0] != X.Columns)
+        {
+            _options.LayerSizes[0] = X.Columns;
+            _weights.Clear();
+            _biases.Clear();
+            InitializeNetwork();
+        }
+
         int batchSize = _options.BatchSize;
         int numBatches = (X.Rows + batchSize - 1) / batchSize;
 

@@ -257,7 +257,11 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
         if (_options.LayerSizes[0] != numFeatures)
         {
-            throw new ArgumentException("Input feature size does not match the first layer size.");
+            // Auto-adjust first layer to match input dimensions
+            _options.LayerSizes[0] = numFeatures;
+            _weights.Clear();
+            _biases.Clear();
+            InitializeNetwork();
         }
 
         for (int epoch = 0; epoch < _options.MaxEpochs; epoch++)
