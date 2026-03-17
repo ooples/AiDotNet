@@ -101,10 +101,10 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
-    /// Isotonic regression learns a monotonic step function from data — random parameter
-    /// injection and feature subset selection are not applicable.
+    /// Isotonic regression learns a monotonic step function — no optimizer parameter injection.
+    /// Returning 0 makes SupportsParameterInitialization return false.
     /// </summary>
-    public bool SupportsParameterInitialization => false;
+    public override int ParameterCount => 0;
 
     /// <summary>
     /// Trains the Isotonic Regression model using the provided input features and target values.
