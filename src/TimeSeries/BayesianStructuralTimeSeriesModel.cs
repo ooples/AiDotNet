@@ -1238,7 +1238,9 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         writer.Write(_bayesianOptions.IncludeRegression);
 
         // Serialize training series for in-sample predictions
-        SerializationHelper<T>.SerializeVector(writer, _trainingSeries);
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     /// <summary>
@@ -1303,7 +1305,10 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         // Deserialize training series (post-patch field)
         try
         {
-            _trainingSeries = SerializationHelper<T>.DeserializeVector(reader);
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
         }
         catch (EndOfStreamException)
         {
