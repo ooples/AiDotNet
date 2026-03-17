@@ -127,8 +127,10 @@ public class PoissonRegression<T> : RegressionBase<T>
         if (minY <= 0)
         {
             _yShift = Math.Abs(minY) + 1.0;
+            var yShifted = new Vector<T>(y.Length);
             for (int i = 0; i < y.Length; i++)
-                y[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);
+                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);
+            y = yShifted;
         }
 
         int numFeatures = x.Columns;
