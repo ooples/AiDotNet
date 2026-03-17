@@ -122,6 +122,11 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     private Vector<T> _lastTrainResiduals;
 
     /// <summary>
+    /// Stored original training series for in-sample prediction and Forecast initialization.
+    /// </summary>
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
+
+    /// <summary>
     /// Creates a new ARIMA model with the specified options.
     /// </summary>
     /// <param name="options">Options for the ARIMA model, including p, d, and q parameters. If null, default options are used.</param>
@@ -192,8 +197,52 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new(input.Rows);
-        // Initialize from stored training state instead of zeros
+        int horizon = input.Rows;
+        int n = _trainingSeries.Length;
+        int d = _arimaOptions.D;
+
+        // If we have stored training data, use in-sample + Forecast for proper differencing
+        if (n > 0 && d > 0)
+        {
+            var predictions = new Vector<T>(horizon);
+            int inSample = Math.Min(horizon, n);
+            int outOfSample = horizon - inSample;
+
+            // In-sample: one-step-ahead predictions with proper undifferencing
+            Vector<T> diffY = TimeSeriesHelper<T>.DifferenceSeries(_trainingSeries, d);
+            int startIdx = Math.Max(_arimaOptions.P, _arimaOptions.Q);
+
+            for (int t = 0; t < inSample; t++)
+            {
+                if (t < startIdx + d)
+                {
+                    predictions[t] = _trainingSeries[t];
+                }
+                else
+                {
+                    int diffT = t - d;
+                    T pred = _constant;
+                    for (int j = 0; j < _arCoefficients.Length && diffT - j - 1 >= 0; j++)
+                        pred = NumOps.Add(pred, NumOps.Multiply(_arCoefficients[j], diffY[diffT - j - 1]));
+
+                    // Undifference: add the value d steps ago in the original series
+                    predictions[t] = NumOps.Add(pred, _trainingSeries[t - d]);
+                }
+            }
+
+            // Out-of-sample: use Forecast for proper undifferencing
+            if (outOfSample > 0)
+            {
+                var forecasts = Forecast(_trainingSeries, outOfSample);
+                for (int i = 0; i < outOfSample; i++)
+                    predictions[inSample + i] = forecasts[i];
+            }
+
+            return predictions;
+        }
+
+        // Fallback for D=0 or no stored training data: predict on undifferenced scale directly
+        Vector<T> fallbackPredictions = new(horizon);
         Vector<T> lastObservedValues = new(_arCoefficients.Length);
         if (_lastTrainDiffValues.Length > 0)
         {
@@ -210,59 +259,37 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
                 lastErrors[j] = _lastTrainResiduals[j];
         }
 
-        for (int i = 0; i < predictions.Length; i++)
+        for (int i = 0; i < fallbackPredictions.Length; i++)
         {
             T prediction = _constant;
-
-            // VECTORIZED: Add AR component using dot product
             if (_arCoefficients.Length > 0)
-            {
                 prediction = NumOps.Add(prediction, Engine.DotProduct(_arCoefficients, lastObservedValues));
-            }
-
-            // VECTORIZED: Add MA component using dot product
             if (_maCoefficients.Length > 0)
-            {
                 prediction = NumOps.Add(prediction, Engine.DotProduct(_maCoefficients, lastErrors));
-            }
 
-            // Guard against numerical overflow in AR feedback loop (issue #991)
             prediction = GuardPrediction(prediction);
+            fallbackPredictions[i] = prediction;
 
-            predictions[i] = prediction;
-
-            // VECTORIZED: Shift last observed values using slice and copy
             if (lastObservedValues.Length > 1)
             {
                 var shifted = lastObservedValues.Slice(0, lastObservedValues.Length - 1);
                 for (int j = 1; j < lastObservedValues.Length; j++)
-                {
                     lastObservedValues[j] = shifted[j - 1];
-                }
             }
-            // Only set observed value if there are AR coefficients (P > 0)
             if (lastObservedValues.Length > 0)
-            {
                 lastObservedValues[0] = prediction;
-            }
 
-            // VECTORIZED: Shift last errors using slice and copy
             if (lastErrors.Length > 1)
             {
                 var shiftedErrors = lastErrors.Slice(0, lastErrors.Length - 1);
                 for (int j = 1; j < lastErrors.Length; j++)
-                {
                     lastErrors[j] = shiftedErrors[j - 1];
-                }
             }
-            // Only set error if there are MA coefficients (Q > 0)
             if (lastErrors.Length > 0)
-            {
-                lastErrors[0] = NumOps.Zero; // Assume zero error for future predictions
-            }
+                lastErrors[0] = NumOps.Zero;
         }
 
-        return predictions;
+        return fallbackPredictions;
     }
 
     /// <summary>
@@ -351,6 +378,11 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         writer.Write(_lastTrainResiduals.Length);
         for (int i = 0; i < _lastTrainResiduals.Length; i++)
             writer.Write(Convert.ToDouble(_lastTrainResiduals[i]));
+
+        // Write original training series for in-sample Predict(Matrix) support
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     /// <summary>
@@ -423,6 +455,19 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
             _lastTrainDiffValues ??= new Vector<T>(0);
             _lastTrainResiduals ??= new Vector<T>(0);
         }
+
+        // Read original training series (post-patch field)
+        try
+        {
+            int seriesLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(seriesLen);
+            for (int i = 0; i < seriesLen; i++)
+                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     /// <summary>
@@ -444,6 +489,11 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store original training series for Predict(Matrix) in-sample support
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
         int p = _arimaOptions.P; // AR order
         int d = _arimaOptions.D; // Differencing order
         int q = _arimaOptions.Q; // MA order
@@ -572,20 +622,11 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
 
-        // For ARIMA models, we typically use recent observations from the time series
-        // rather than arbitrary input features.
-        // This implementation assumes input contains recent observations in reverse order
-        // (most recent first)
-
-        // Add AR component - influence of past observations
+        // Add AR component using input as recent observations (reverse order)
         for (int j = 0; j < _arCoefficients.Length && j < input.Length; j++)
         {
             prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[j], input[j]));
         }
-
-        // Since we can't know the actual errors for future predictions,
-        // the MA component is often excluded when predicting a single value
-        // or we assume errors of zero for simplicity
 
         return prediction;
     }
