@@ -60,6 +60,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
     // Fully connected layer (Tensor-based)
     private Tensor<T> _fcWeights;      // [1, numChannels]
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
     private Tensor<T> _fcBias;         // [1]
 
     // Gradient accumulators for batch training
@@ -164,6 +165,18 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
         // Compute anomaly threshold based on training errors
         ComputeAnomalyThreshold(predictionErrors);
+
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
+        // Populate ModelParameters
+        ModelParameters = new Vector<T>(_fcWeights.Length + _fcBias.Length);
+        for (int i = 0; i < _fcWeights.Length; i++)
+            ModelParameters[i] = _fcWeights[i];
+        for (int i = 0; i < _fcBias.Length; i++)
+            ModelParameters[_fcWeights.Length + i] = _fcBias[i];
     }
 
     private void ResetGradients()
@@ -236,19 +249,36 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
     private void ApplyGradients(T learningRate, int batchSize)
     {
         T batchSizeT = _numOps.FromDouble(batchSize);
+        double maxGradNorm = 1.0; // Gradient clipping threshold
 
-        // Update FC weights
+        // Compute gradient norm for clipping
+        double gradNormSq = 0;
+        for (int j = 0; j < _fcWeightsGrad.Length; j++)
+        {
+            double g = _numOps.ToDouble(_numOps.Divide(_fcWeightsGrad[j], batchSizeT));
+            gradNormSq += g * g;
+        }
+        for (int b = 0; b < _fcBiasGrad.Length; b++)
+        {
+            double g = _numOps.ToDouble(_numOps.Divide(_fcBiasGrad[b], batchSizeT));
+            gradNormSq += g * g;
+        }
+        double gradNorm = Math.Sqrt(gradNormSq);
+        double clipScale = gradNorm > maxGradNorm ? maxGradNorm / gradNorm : 1.0;
+        T clipScaleT = _numOps.FromDouble(clipScale);
+
+        // Update FC weights with clipped gradients
         for (int j = 0; j < _fcWeights.Length; j++)
         {
-            T avgGrad = _numOps.Divide(_fcWeightsGrad[j], batchSizeT);
+            T avgGrad = _numOps.Multiply(_numOps.Divide(_fcWeightsGrad[j], batchSizeT), clipScaleT);
             T update = _numOps.Multiply(learningRate, avgGrad);
             _fcWeights[j] = _numOps.Subtract(_fcWeights[j], update);
         }
 
-        // Update FC bias
+        // Update FC bias with clipped gradients
         for (int b = 0; b < _fcBias.Length; b++)
         {
-            T avgGrad = _numOps.Divide(_fcBiasGrad[b], batchSizeT);
+            T avgGrad = _numOps.Multiply(_numOps.Divide(_fcBiasGrad[b], batchSizeT), clipScaleT);
             T update = _numOps.Multiply(learningRate, avgGrad);
             _fcBias[b] = _numOps.Subtract(_fcBias[b], update);
         }
@@ -278,6 +308,27 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
         // Threshold = mean + 3 * std
         _anomalyThreshold = _numOps.Add(mean, _numOps.Multiply(_numOps.FromDouble(3.0), std));
+    }
+
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+            {
+                predictions[i] = _trainingSeries[i];
+            }
+            else
+            {
+                predictions[i] = PredictSingle(input.GetRow(i));
+            }
+        }
+
+        return predictions;
     }
 
     public override T PredictSingle(Vector<T> input)
@@ -385,6 +436,11 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         writer.Write(_fcBias.Length);
         for (int i = 0; i < _fcBias.Length; i++)
             writer.Write(_numOps.ToDouble(_fcBias[i]));
+
+        // Serialize training series
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(_numOps.ToDouble(_trainingSeries[i]));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
@@ -440,6 +496,19 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         // Initialize gradient accumulators
         _fcWeightsGrad = new Tensor<T>(weightsShape);
         _fcBiasGrad = new Tensor<T>(biasShape);
+
+        // Deserialize training series (post-patch field)
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()
