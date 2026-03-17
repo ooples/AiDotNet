@@ -1679,26 +1679,20 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
-        // Validate input
-        if (_bayesianOptions.IncludeRegression && _regression != null && input.Length != _regression.Length)
+        // Compute structural prediction: level + trend + regression
+        T prediction = NumOps.Add(_level, _trend);
+
+        // Add regression component if configured
+        if (_bayesianOptions.IncludeRegression && _regression != null)
         {
-            throw new ArgumentException(
-                $"Input vector length ({input.Length}) must match the number of regression variables ({_regression.Length}).",
-                nameof(input));
+            int regLen = Math.Min(input.Length, _regression.Length);
+            for (int i = 0; i < regLen; i++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_regression[i], input[i]));
+            }
         }
 
-        // Create a matrix with a single row
-        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            singleRowMatrix[0, i] = input[i];
-        }
-
-        // Use the existing Predict method
-        Vector<T> predictions = Predict(singleRowMatrix);
-
-        // Return the single prediction
-        return predictions[0];
+        return GuardPrediction(prediction);
     }
 
     /// <summary>
