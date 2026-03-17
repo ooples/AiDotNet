@@ -304,24 +304,9 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Scale the input
-        Matrix<T> scaledInput = new Matrix<T>(input.Rows, input.Columns);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int j = 0; j < input.Columns; j++)
-            {
-                scaledInput[i, j] = NumOps.Divide(NumOps.Subtract(input[i, j], _xMean[j]), _xStd[j]);
-            }
-        }
-
-        // Make predictions
-        Vector<T> predictions = scaledInput.Multiply(Coefficients);
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            predictions[i] = NumOps.Add(NumOps.Multiply(predictions[i], _yStd), _yMean);
-        }
-
-        return predictions;
+        // Coefficients are already in original space (scaled by yStd/xStd in Train).
+        // Intercept accounts for centering. Use the base class prediction: X * coeff + intercept.
+        return base.Predict(input);
     }
 
     /// <summary>
