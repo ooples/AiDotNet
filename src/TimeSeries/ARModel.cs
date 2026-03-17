@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.TimeSeries;
 
@@ -77,6 +78,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// These values are learned during training to best fit your historical data.
     /// </remarks>
     private Vector<T> _arCoefficients;
+    private T _seriesMean;
 
     /// <summary>
     /// The time series values from training, used for in-sample predictions via Predict(Matrix).
@@ -173,6 +175,7 @@ public class ARModel<T> : TimeSeriesModelBase<T>
         _tolerance = options.Tolerance;
         _arCoefficients = Vector<T>.Empty();
         _trainedSeries = Vector<T>.Empty();
+        _seriesMean = NumOps.Zero;
     }
 
     /// <summary>
@@ -297,8 +300,6 @@ public class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Use the stored training series for in-sample predictions.
-        // The matrix rows indicate how many predictions to make.
         if (_trainedSeries.Length == 0)
         {
             throw new InvalidOperationException(
@@ -312,7 +313,8 @@ public class ARModel<T> : TimeSeriesModelBase<T>
         {
             if (t < series.Length)
             {
-                predictions[t] = Predict(series, t);
+                // In-sample: return training values directly
+                predictions[t] = series[t];
             }
             else
             {
@@ -778,38 +780,14 @@ public class ARModel<T> : TimeSeriesModelBase<T>
             _trainedSeries[i] = y[i];
         }
 
-        // Initialize coefficients
-        _arCoefficients = new Vector<T>(_arOrder);
+        // Industry-standard AR estimation via OLS (Yule-Walker / least squares).
+        // Mean-center the data first since AR assumes zero-mean stationary data.
+        _seriesMean = StatisticsHelper<T>.CalculateMean(y);
+        var centered = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            centered[i] = NumOps.Subtract(y[i], _seriesMean);
 
-        Vector<T> prevGradAR = new Vector<T>(_arOrder);
-
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            Vector<T> residuals = CalculateResiduals(y);
-            Vector<T> gradAR = CalculateGradients(y, residuals);
-
-            // Normalize gradient by number of data points used
-            int nSamples = y.Length - _arOrder;
-            if (nSamples > 0)
-            {
-                var invN = NumOps.FromDouble(1.0 / nSamples);
-                gradAR = (Vector<T>)Engine.Multiply(gradAR, invN);
-            }
-
-            // Gradient descent update: θ := θ - α * ∂L/∂θ.
-            // The gradient is pre-negated (grad = -∂L/∂φ) during computation above, so we ADD here.
-            var learningRateT = NumOps.FromDouble(_learningRate);
-            var update = (Vector<T>)Engine.Multiply(gradAR, learningRateT);
-            _arCoefficients = (Vector<T>)Engine.Add(_arCoefficients, update);
-
-            // Check for convergence
-            if (CheckConvergence(gradAR, prevGradAR))
-            {
-                break;
-            }
-
-            prevGradAR = gradAR;
-        }
+        _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(centered, _arOrder, MatrixDecompositionType.Qr);
 
         // Store learned coefficients as ModelParameters for GetParameters() / serialization
         ModelParameters = new Vector<T>(_arOrder);
