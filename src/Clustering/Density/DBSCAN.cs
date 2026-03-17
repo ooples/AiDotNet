@@ -175,9 +175,17 @@ public class DBSCAN<T> : ClusteringBase<T>
                 if (dists.Count >= k)
                     kDistances.Add(dists[k - 1]);
             }
-            kDistances.Sort();
             if (kDistances.Count > 0)
-                effectiveEpsilon = kDistances[kDistances.Count / 2]; // median k-distance
+            {
+                // Use the mean k-distance multiplied by a scaling factor.
+                // This naturally adapts to the data scale: for well-separated clusters,
+                // the mean k-distance reflects the intra-cluster density.
+                // Factor of 2.0 provides margin to include all same-cluster neighbors.
+                double mean = 0;
+                foreach (var d in kDistances) mean += d;
+                mean /= kDistances.Count;
+                effectiveEpsilon = mean * 2.5;
+            }
         }
 
         // Find neighbors for each point and identify core points
