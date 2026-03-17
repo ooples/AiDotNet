@@ -89,6 +89,11 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     private Matrix<T> _weights;
 
     /// <summary>
+    /// Y-loadings (c) from the NIPALS algorithm: c_k = t_k'*y / (t_k'*t_k).
+    /// </summary>
+    private Vector<T> _yLoadings = new Vector<T>(0);
+
+    /// <summary>
     /// The mean of the target variable used for centering.
     /// </summary>
     /// <value>
@@ -185,6 +190,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
         _loadings = new Matrix<T>(x.Columns, numComponents);
         _scores = new Matrix<T>(x.Rows, numComponents);
         _weights = new Matrix<T>(x.Columns, numComponents);
+        _yLoadings = new Vector<T>(numComponents);
 
         Matrix<T> xResidual = xScaled.Clone();
         Vector<T> yResidual = yScaled.Clone();
@@ -206,13 +212,15 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
             _loadings.SetColumn(i, p);
             _scores.SetColumn(i, t);
             _weights.SetColumn(i, w);
+            _yLoadings[i] = q;
         }
 
-        // Calculate regression coefficients
+        // Calculate regression coefficients: beta = R * c
+        // where R = W * (P'*W)^-1 and c is the y-loadings vector
         Matrix<T> W = _weights;
         Matrix<T> P = _loadings;
         Matrix<T> invPtW = P.Transpose().Multiply(W).Inverse();
-        Coefficients = W.Multiply(invPtW).Multiply(_scores.Transpose()).Multiply(yScaled);
+        Coefficients = W.Multiply(invPtW).Multiply(_yLoadings);
 
         // Apply regularization to coefficients
         Coefficients = Regularization.Regularize(Coefficients);
