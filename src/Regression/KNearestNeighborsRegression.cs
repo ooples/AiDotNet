@@ -117,6 +117,19 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
+    /// KNN is a lazy learner — no parameters to optimize, no feature selection by optimizer.
+    /// </summary>
+    public bool SupportsParameterInitialization => false;
+
+    /// <summary>
+    /// KNN uses all features (distance-based, no coefficient pruning).
+    /// </summary>
+    public new IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, _xTrain.Columns > 0 ? _xTrain.Columns : 0);
+    }
+
+    /// <summary>
     /// Optimizes the KNN model by storing the training data for later use in predictions.
     /// </summary>
     /// <param name="x">A matrix where each row represents a sample and each column represents a feature.</param>

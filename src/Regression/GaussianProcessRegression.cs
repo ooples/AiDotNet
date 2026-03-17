@@ -124,6 +124,12 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
+    /// GP solves analytically via kernel matrix inversion — random parameter
+    /// injection and feature subset selection by the optimizer are not supported.
+    /// </summary>
+    public bool SupportsParameterInitialization => false;
+
+    /// <summary>
     /// Optimizes the Gaussian Process model based on the provided training data.
     /// </summary>
     /// <param name="x">A matrix where each row represents a sample and each column represents a feature.</param>
