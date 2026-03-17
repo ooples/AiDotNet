@@ -170,7 +170,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Returns original feature indices (not expanded spline basis indices).
     /// </summary>
-    public new IEnumerable<int> GetActiveFeatureIndices()
+    public override IEnumerable<int> GetActiveFeatureIndices()
     {
         return Enumerable.Range(0, _knots.Count > 0 ? _knots.Count : 0);
     }
