@@ -944,7 +944,8 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
             FeatureIndex = node.FeatureIndex,
             SplitValue = node.SplitValue,
             Prediction = node.Prediction,
-            IsLeaf = node.IsLeaf
+            IsLeaf = node.IsLeaf,
+            LinearModel = node.LinearModel // M5 tree stores linear regression at leaves
         };
 
         // Recursively clone child nodes

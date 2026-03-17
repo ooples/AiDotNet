@@ -848,7 +848,8 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
             FeatureIndex = node.FeatureIndex,
             SplitValue = node.SplitValue,
             Prediction = node.Prediction,
-            IsLeaf = node.IsLeaf
+            IsLeaf = node.IsLeaf,
+            LinearModel = node.LinearModel // M5 tree stores linear regression at leaves
         };
 
         // Recursively clone child nodes

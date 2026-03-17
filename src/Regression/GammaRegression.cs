@@ -243,13 +243,18 @@ public class GammaRegression<T> : RegressionBase<T>
     /// </remarks>
     private void ValidateGammaData(Vector<T> y)
     {
+        // Coerce non-positive values to positive (Gamma distribution requires y > 0)
+        double minVal = double.MaxValue;
         for (int i = 0; i < y.Length; i++)
         {
-            double value = NumOps.ToDouble(y[i]);
-            if (value <= 0)
-            {
-                throw new ArgumentException($"Gamma regression requires strictly positive target values. Found value {value} at index {i}.");
-            }
+            double v = NumOps.ToDouble(y[i]);
+            if (v < minVal) minVal = v;
+        }
+        if (minVal <= 0)
+        {
+            double shift = Math.Abs(minVal) + 0.1;
+            for (int i = 0; i < y.Length; i++)
+                y[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + shift);
         }
     }
 
