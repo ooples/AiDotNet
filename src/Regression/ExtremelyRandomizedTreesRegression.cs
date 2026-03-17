@@ -261,18 +261,21 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        // Note: Tree-based methods handle regularization through tree structure parameters
-        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
-        var predictionTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.Predict(input)));
-        var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks, _options.MaxDegreeOfParallelism);
+        // Predict sequentially for deterministic results.
+        // Parallel execution can cause floating-point accumulation order differences.
+        var predictions = new List<Vector<T>>(_trees.Count);
+        foreach (var tree in _trees)
+        {
+            predictions.Add(await Task.Run(() => tree.Predict(input)));
+        }
 
         var result = new T[input.Rows];
         for (int i = 0; i < input.Rows; i++)
         {
-            result[i] = NumOps.Divide(
-                predictions.Aggregate(NumOps.Zero, (acc, p) => NumOps.Add(acc, p[i])),
-                NumOps.FromDouble(_trees.Count)
-            );
+            T sum = NumOps.Zero;
+            foreach (var p in predictions)
+                sum = NumOps.Add(sum, p[i]);
+            result[i] = NumOps.Divide(sum, NumOps.FromDouble(_trees.Count));
         }
 
         return new Vector<T>(result);
@@ -551,6 +554,25 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         var clone = new ExtremelyRandomizedTreesRegression<T>(_options, Regularization);
         clone.Deserialize(Serialize());
         return clone;
+    }
+
+    /// <summary>
+    /// Returns all features up to the number of features used during training.
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (_trees.Count > 0)
+        {
+            // Collect features used across all individual trees
+            var active = new HashSet<int>();
+            foreach (var tree in _trees)
+            {
+                foreach (var idx in tree.GetActiveFeatureIndices())
+                    active.Add(idx);
+            }
+            return active;
+        }
+        return base.GetActiveFeatureIndices();
     }
 
     #region IJitCompilable Implementation Override
