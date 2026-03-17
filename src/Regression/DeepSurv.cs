@@ -201,6 +201,20 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
+        // Survival times must be strictly positive. Coerce by shifting and clamping.
+        double minY = double.MaxValue;
+        for (int i = 0; i < y.Length; i++)
+        {
+            double yi = NumOps.ToDouble(y[i]);
+            if (yi < minY) minY = yi;
+        }
+        if (minY <= 0)
+        {
+            double shift = Math.Abs(minY) + 0.1;
+            for (int i = 0; i < y.Length; i++)
+                y[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + shift);
+        }
+
         // For standard interface, assume all events occurred (no censoring)
         var events = new Vector<T>(y.Length);
         for (int i = 0; i < y.Length; i++)
