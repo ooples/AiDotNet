@@ -837,4 +837,11 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new NGBoostRegression<T>(_options, Regularization);
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new NGBoostRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
 }

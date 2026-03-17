@@ -838,4 +838,11 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     {
         return new ExplainableBoostingMachineRegression<T>(_options, Regularization);
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new ExplainableBoostingMachineRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
 }

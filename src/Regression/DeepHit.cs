@@ -1438,4 +1438,11 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new DeepHit<T>(_options, Regularization);
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new DeepHit<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
 }

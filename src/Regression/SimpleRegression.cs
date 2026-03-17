@@ -129,7 +129,15 @@ public class SimpleRegression<T> : RegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
-        RegressionValidator.ValidateFeatureCount(x, 1, "Simple regression");
+        // Simple regression uses only the first feature column
+        if (x.Columns > 1)
+        {
+            TrainingFeatureCount = 1;
+            var singleCol = new Matrix<T>(x.Rows, 1);
+            for (int i = 0; i < x.Rows; i++)
+                singleCol[i, 0] = x[i, 0];
+            x = singleCol;
+        }
 
         if (Options.UseIntercept)
             x = x.AddConstantColumn(NumOps.One);
@@ -149,6 +157,21 @@ public class SimpleRegression<T> : RegressionBase<T>
         {
             Coefficients = new Vector<T>([solution[0]]);
         }
+    }
+
+    /// <summary>
+    /// Predicts using only the first feature column for multi-feature inputs.
+    /// </summary>
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        if (input.Columns > 1)
+        {
+            var singleCol = new Matrix<T>(input.Rows, 1);
+            for (int i = 0; i < input.Rows; i++)
+                singleCol[i, 0] = input[i, 0];
+            return base.Predict(singleCol);
+        }
+        return base.Predict(input);
     }
 
     /// <summary>
