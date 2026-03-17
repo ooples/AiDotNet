@@ -960,6 +960,12 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
         get { return CountNodes(Root) * 4 + 1; }
     }
 
+    /// <summary>
+    /// Tree-based models learn structure during training and don't support
+    /// random parameter injection or feature subset selection by the optimizer.
+    /// </summary>
+    public bool SupportsParameterInitialization => false;
+
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
