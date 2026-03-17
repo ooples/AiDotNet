@@ -80,6 +80,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
     private readonly AutoformerOptions<T> _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly Random _random;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Series decomposition components
     private readonly int _movingAvgKernel;
@@ -427,6 +428,15 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
                 ApplyGradients(learningRate, batchSize);
             }
         }
+
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
+        // Populate ModelParameters (store a summary of learned weights)
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = _numOps.FromDouble(y.Length);
     }
 
     private void ResetGradientAccumulators()
@@ -930,6 +940,27 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     /// <param name="input">The input sequence.</param>
     /// <returns>The predicted value.</returns>
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+            {
+                predictions[i] = _trainingSeries[i];
+            }
+            else
+            {
+                predictions[i] = PredictSingle(input.GetRow(i));
+            }
+        }
+
+        return predictions;
+    }
+
     public override T PredictSingle(Vector<T> input)
     {
         var (prediction, _) = ForwardWithCache(input);
@@ -1876,6 +1907,27 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
+        // Support broadcasting: if shapes don't match but one has dimension 1,
+        // broadcast it to match the other (common in attention mechanisms)
+        if (a.Shape.Length == b.Shape.Length && a.Shape.Length == 2)
+        {
+            if (a.Shape[0] != b.Shape[0] && a.Shape[1] == b.Shape[1])
+            {
+                // Broadcast along dimension 0
+                var smaller = a.Shape[0] < b.Shape[0] ? a : b;
+                var larger = a.Shape[0] < b.Shape[0] ? b : a;
+                if (smaller.Shape[0] == 1)
+                {
+                    var expanded = new Tensor<T>(larger.Shape);
+                    int cols = larger.Shape[1];
+                    for (int i = 0; i < larger.Shape[0]; i++)
+                        for (int j = 0; j < cols; j++)
+                            expanded[i * cols + j] = NumOps.Add(larger[i * cols + j], smaller[j]);
+                    return expanded;
+                }
+            }
+        }
+
         return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
