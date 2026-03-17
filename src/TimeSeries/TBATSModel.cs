@@ -1274,6 +1274,17 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
                 break;
             }
         }
+
+        // Store learned state as ModelParameters for GetParameters()
+        int arLen = _arCoefficients.Length;
+        int maLen = _maCoefficients.Length;
+        ModelParameters = new Vector<T>(2 + arLen + maLen);
+        ModelParameters[0] = _level.Length > 0 ? _level[_level.Length - 1] : NumOps.Zero;
+        ModelParameters[1] = _trend.Length > 0 ? _trend[_trend.Length - 1] : NumOps.Zero;
+        for (int i = 0; i < arLen; i++)
+            ModelParameters[2 + i] = _arCoefficients[i];
+        for (int i = 0; i < maLen; i++)
+            ModelParameters[2 + arLen + i] = _maCoefficients[i];
     }
 
     /// <summary>
