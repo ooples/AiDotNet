@@ -168,6 +168,14 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     public override int ParameterCount => 0;
 
     /// <summary>
+    /// Returns original feature indices (not expanded spline basis indices).
+    /// </summary>
+    public new IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, _knots.Count > 0 ? _knots.Count : 0);
+    }
+
+    /// <summary>
     /// Optimizes the spline regression model using the provided input data and target values.
     /// </summary>
     /// <param name="x">The input feature matrix, where rows represent observations and columns represent features.</param>

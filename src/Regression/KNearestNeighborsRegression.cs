@@ -125,7 +125,7 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// KNN uses all features (distance-based, no coefficient pruning).
     /// </summary>
-    public new IEnumerable<int> GetActiveFeatureIndices()
+    public override IEnumerable<int> GetActiveFeatureIndices()
     {
         return Enumerable.Range(0, _xTrain.Columns > 0 ? _xTrain.Columns : 0);
     }
