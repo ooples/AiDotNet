@@ -588,9 +588,25 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         // PrepareInputData adds trend and seasonal features to the input
-        // so _timeSeriesModel.Predict already accounts for them
+        // The lagged features reduce the row count by LagOrder
         Matrix<T> preparedInput = PrepareInputData(input, new Vector<T>(input.Rows)); // Dummy y vector
-        return _timeSeriesModel.Predict(preparedInput);
+        Vector<T> corePredictions = _timeSeriesModel.Predict(preparedInput);
+
+        // Pad to match original input length — the first LagOrder rows have no lag data
+        if (corePredictions.Length < input.Rows)
+        {
+            var fullPredictions = new Vector<T>(input.Rows);
+            int offset = input.Rows - corePredictions.Length;
+            // Fill leading positions with the first available prediction
+            T firstPred = corePredictions.Length > 0 ? corePredictions[0] : NumOps.Zero;
+            for (int i = 0; i < offset; i++)
+                fullPredictions[i] = firstPred;
+            for (int i = 0; i < corePredictions.Length; i++)
+                fullPredictions[offset + i] = corePredictions[i];
+            return fullPredictions;
+        }
+
+        return corePredictions;
     }
 
     /// <summary>
