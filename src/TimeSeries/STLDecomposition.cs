@@ -796,22 +796,35 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model has not been trained.");
 
         int forecastHorizon = input.Rows;
+        int n = _trend.Length;
+        int seasonLength = _stlOptions.SeasonalPeriod;
         Vector<T> forecast = new Vector<T>(forecastHorizon);
 
-        // Extend trend using last trend value
-        T lastTrendValue = _trend[_trend.Length - 1];
-
         // Use last full season for seasonal component
-        int seasonLength = _stlOptions.SeasonalPeriod;
+        int seasonStart = Math.Max(0, _seasonal.Length - seasonLength);
         Vector<T> lastSeason = new Vector<T>(seasonLength);
-        for (int i = 0; i < seasonLength; i++)
+        for (int i = 0; i < seasonLength && seasonStart + i < _seasonal.Length; i++)
         {
-            lastSeason[i] = _seasonal[_seasonal.Length - seasonLength + i];
+            lastSeason[i] = _seasonal[seasonStart + i];
         }
 
         for (int i = 0; i < forecastHorizon; i++)
         {
-            forecast[i] = NumOps.Add(lastTrendValue, lastSeason[i % seasonLength]);
+            T trendValue;
+            if (i < n)
+            {
+                // In-sample: use the decomposed trend at this time point
+                trendValue = _trend[i];
+            }
+            else
+            {
+                // Out-of-sample: linear extrapolation from last two trend values
+                T lastTrend = _trend[n - 1];
+                T slope = n > 1 ? NumOps.Subtract(_trend[n - 1], _trend[n - 2]) : NumOps.Zero;
+                trendValue = NumOps.Add(lastTrend, NumOps.Multiply(slope, NumOps.FromDouble(i - n + 1)));
+            }
+
+            forecast[i] = NumOps.Add(trendValue, lastSeason[i % seasonLength]);
         }
 
         return forecast;
