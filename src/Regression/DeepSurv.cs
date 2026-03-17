@@ -509,6 +509,10 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
 
             int batchIdx = batchIndexMap[idx];
             T ri = riskScores[batchIdx];
+            // Clamp risk score to prevent exp overflow
+            double riVal = NumOps.ToDouble(ri);
+            riVal = Math.Max(-20.0, Math.Min(20.0, riVal));
+            ri = NumOps.FromDouble(riVal);
             T expRi = NumOps.Exp(ri);
 
             riskSum = NumOps.Add(riskSum, expRi);
