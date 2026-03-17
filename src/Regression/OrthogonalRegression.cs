@@ -162,20 +162,43 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             augmentedMatrix[i, p] = centeredY[i];
         }
 
-        // SVD of the augmented matrix: the solution is the last column of V
-        var svd = new SvdDecomposition<T>(augmentedMatrix);
-        var vt = svd.Vt; // V transposed: rows are right singular vectors
-        // Last row of Vt = last column of V = right singular vector for smallest singular value
-        int lastRow = vt.Rows - 1;
-
-        // TLS solution: beta_j = -V[j, p+1] / V[p+1, p+1]  (using Vt: -Vt[lastRow, j] / Vt[lastRow, p])
-        T vLast = vt[lastRow, p];
+        // SVD of the augmented matrix: the TLS solution is the last column of V
         Coefficients = new Vector<T>(p);
-        for (int j = 0; j < p; j++)
+        try
         {
-            T coeff = NumOps.Negate(NumOps.Divide(vt[lastRow, j], vLast));
-            // Undo the scaling applied to centeredX
-            Coefficients[j] = NumOps.Divide(coeff, scaleX[j]);
+            var svd = new SvdDecomposition<T>(augmentedMatrix);
+            var vt = svd.Vt; // V transposed: rows are right singular vectors
+            int lastRow = vt.Rows - 1;
+
+            // TLS solution: beta_j = -V[j, p+1] / V[p+1, p+1]
+            T vLast = vt[lastRow, p];
+            if (NumOps.GreaterThan(NumOps.Abs(vLast), NumOps.FromDouble(1e-14)))
+            {
+                for (int j = 0; j < p; j++)
+                {
+                    T coeff = NumOps.Negate(NumOps.Divide(vt[lastRow, j], vLast));
+                    Coefficients[j] = NumOps.Divide(coeff, scaleX[j]);
+                }
+            }
+            else
+            {
+                // V[p,p] ≈ 0: fall back to OLS
+                var xTx = centeredX.Transpose().Multiply(centeredX);
+                var xTy = centeredX.Transpose().Multiply(centeredY);
+                Coefficients = SolveSystem(xTx, xTy);
+                for (int j = 0; j < p; j++)
+                    Coefficients[j] = NumOps.Divide(Coefficients[j], scaleX[j]);
+            }
+        }
+        catch (Exception)
+        {
+            // SVD failed (e.g., bidiagonal decomposition on ill-conditioned matrix).
+            // Fall back to OLS as a robust alternative.
+            var xTx = centeredX.Transpose().Multiply(centeredX);
+            var xTy = centeredX.Transpose().Multiply(centeredY);
+            Coefficients = SolveSystem(xTx, xTy);
+            for (int j = 0; j < p; j++)
+                Coefficients[j] = NumOps.Divide(Coefficients[j], scaleX[j]);
         }
 
         Intercept = NumOps.Subtract(meanY, Coefficients.DotProduct(meanX));
