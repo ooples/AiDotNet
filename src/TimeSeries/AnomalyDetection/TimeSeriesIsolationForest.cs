@@ -148,6 +148,11 @@ public class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         var sortedScores = scores.OrderByDescending(s => _numOps.ToDouble(s)).ToList();
         int thresholdIndex = (int)(_options.ContaminationRate * sortedScores.Count);
         _anomalyThreshold = _numOps.ToDouble(sortedScores[Math.Min(thresholdIndex, sortedScores.Count - 1)]);
+
+        // Store ModelParameters for GetParameters() — use anomaly threshold + tree count
+        ModelParameters = new Vector<T>(2);
+        ModelParameters[0] = _numOps.FromDouble(_anomalyThreshold);
+        ModelParameters[1] = _numOps.FromDouble(_forest.Count);
     }
 
     /// <summary>
