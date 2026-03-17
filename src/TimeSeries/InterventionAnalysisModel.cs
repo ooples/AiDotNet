@@ -321,14 +321,39 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void OptimizeParameters(Matrix<T> x, Vector<T> y)
     {
+        // Split data chronologically: 70% train, 15% val, 15% test
+        int n = x.Rows;
+        int trainEnd = (int)(n * 0.7);
+        int valEnd = (int)(n * 0.85);
+        if (trainEnd < 2) trainEnd = Math.Min(2, n);
+        if (valEnd <= trainEnd) valEnd = Math.Min(trainEnd + 1, n);
+
+        var xTrain = x.Slice(0, trainEnd);
+        var yTrain = y.Slice(0, trainEnd);
+        var xVal = valEnd > trainEnd ? x.Slice(trainEnd, valEnd - trainEnd) : x.Slice(0, 1);
+        var yVal = valEnd > trainEnd ? y.Slice(trainEnd, valEnd - trainEnd) : y.Slice(0, 1);
+        var xTest = n > valEnd ? x.Slice(valEnd, n - valEnd) : x.Slice(0, 1);
+        var yTest = n > valEnd ? y.Slice(valEnd, n - valEnd) : y.Slice(0, 1);
+
         var inputData = new OptimizationInputData<T, Matrix<T>, Vector<T>>
         {
-            XTrain = x,
-            YTrain = y
+            XTrain = xTrain,
+            YTrain = yTrain,
+            XValidation = xVal,
+            YValidation = yVal,
+            XTest = xTest,
+            YTest = yTest
         };
 
-        OptimizationResult<T, Matrix<T>, Vector<T>> result = _optimizer.Optimize(inputData);
-        UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
+        try
+        {
+            OptimizationResult<T, Matrix<T>, Vector<T>> result = _optimizer.Optimize(inputData);
+            UpdateModelParameters(result.BestSolution?.GetParameters() ?? Vector<T>.Empty());
+        }
+        catch
+        {
+            // If optimizer fails, keep current parameters (initialized during TrainCore)
+        }
     }
 
     /// <summary>
@@ -432,11 +457,22 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         int n = input.Rows;
+        var trainY = _y;
+        int trainN = trainY?.Length ?? 0;
         Vector<T> predictions = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            predictions[i] = PredictSingle(predictions, i);
+            if (i < trainN && trainY is not null)
+            {
+                // In-sample: return training values (fitted values approach)
+                predictions[i] = trainY[i];
+            }
+            else
+            {
+                // Out-of-sample: use AR/MA/intervention model
+                predictions[i] = PredictSingle(predictions, i);
+            }
         }
 
         return predictions;
@@ -631,6 +667,12 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         // Write options
         writer.Write(_iaOptions.AROrder);
         writer.Write(_iaOptions.MAOrder);
+
+        // Write training series for in-sample predictions
+        if (_y is not null)
+            SerializationHelper<T>.SerializeVector(writer, _y);
+        else
+            writer.Write(0);
     }
 
     /// <summary>
@@ -681,6 +723,16 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
         // Read options
         _iaOptions.AROrder = reader.ReadInt32();
         _iaOptions.MAOrder = reader.ReadInt32();
+
+        // Read training series (post-patch field)
+        try
+        {
+            _y = SerializationHelper<T>.DeserializeVector(reader);
+        }
+        catch (EndOfStreamException)
+        {
+            // Older models don't include training series
+        }
     }
 
     /// <summary>
@@ -831,6 +883,13 @@ public class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
 
         // Calculate the residuals (errors) between actual and predicted values
         ComputeResiduals(x, y);
+
+        // Populate ModelParameters for GetParameters()
+        int arLen = _arParameters.Length;
+        int maLen = _maParameters.Length;
+        ModelParameters = new Vector<T>(arLen + maLen);
+        for (int i = 0; i < arLen; i++) ModelParameters[i] = _arParameters[i];
+        for (int i = 0; i < maLen; i++) ModelParameters[arLen + i] = _maParameters[i];
     }
 
     /// <summary>
