@@ -9,4 +9,8 @@ public class LSTMVAETests : TimeSeriesModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new LSTMVAE<double>();
+
+    // LSTMVAE is an anomaly detector — returns reconstruction errors, not forecasts
+    protected override bool IsForecastingModel => false;
+    protected override bool CanCaptureTrend => false;
 }

@@ -65,6 +65,7 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
     // Anomaly threshold
     private T _reconstructionThreshold;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
     /// Initializes a new instance of the LSTMVAE class.
@@ -142,6 +143,15 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
             int idx = (int)(0.95 * sorted.Count);
             _reconstructionThreshold = _numOps.FromDouble(sorted[Math.Min(idx, sorted.Count - 1)]);
         }
+
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
+        // Populate ModelParameters
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = _reconstructionThreshold;
     }
 
     /// <summary>
@@ -222,6 +232,23 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         }
 
         return _numOps.Divide(error, _numOps.FromDouble(len > 0 ? len : 1));
+    }
+
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+
+        return predictions;
     }
 
     public override T PredictSingle(Vector<T> input)
