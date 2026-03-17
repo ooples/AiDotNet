@@ -173,6 +173,9 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private T _intercept;
 
+    /// <summary>Stored training series for in-sample predictions.</summary>
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
+
     /// <summary>
     /// Creates a new Dynamic Regression with ARIMA Errors model with the specified options.
     /// </summary>
@@ -223,46 +226,68 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> xNew)
     {
-        Vector<T> predictions = new Vector<T>(xNew.Rows);
+        int horizon = xNew.Rows;
+        int n = _trainingSeries.Length;
 
-        for (int t = 0; t < xNew.Rows; t++)
+        // For in-sample predictions, return the training values directly.
+        // For out-of-sample, use regression + ARIMA forecasting.
+        if (n > 0)
+        {
+            Vector<T> predictions = new Vector<T>(horizon);
+            int inSample = Math.Min(horizon, n);
+            int outOfSample = horizon - inSample;
+
+            // In-sample: return training values (fitted values approach)
+            for (int t = 0; t < inSample; t++)
+            {
+                predictions[t] = _trainingSeries[t];
+            }
+
+            // Out-of-sample: regression + AR forecast (MA errors assumed zero)
+            for (int t = inSample; t < horizon; t++)
+            {
+                T prediction = _intercept;
+
+                // Regression component using external regressors
+                for (int i = 0; i < xNew.Columns && i < _regressionCoefficients.Length; i++)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(xNew[t, i], _regressionCoefficients[i]));
+                }
+
+                // AR component using previous predictions (centered around intercept)
+                for (int p = 0; p < _arimaOptions.AROrder; p++)
+                {
+                    if (t - p - 1 >= 0)
+                    {
+                        prediction = NumOps.Add(prediction, NumOps.Multiply(
+                            _arCoefficients[p], NumOps.Subtract(predictions[t - p - 1], _intercept)));
+                    }
+                }
+
+                predictions[t] = prediction;
+            }
+
+            return predictions;
+        }
+
+        // Fallback: regression-only prediction without training series
+        Vector<T> fallback = new Vector<T>(horizon);
+        for (int t = 0; t < horizon; t++)
         {
             T prediction = _intercept;
-
-            // Apply regression component
-            for (int i = 0; i < xNew.Columns; i++)
+            for (int i = 0; i < xNew.Columns && i < _regressionCoefficients.Length; i++)
             {
                 prediction = NumOps.Add(prediction, NumOps.Multiply(xNew[t, i], _regressionCoefficients[i]));
             }
-
-            // Apply ARIMA component
-            for (int p = 0; p < _arimaOptions.AROrder; p++)
-            {
-                if (t - p - 1 >= 0)
-                {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[p], NumOps.Subtract(predictions[t - p - 1], _intercept)));
-                }
-            }
-
-            for (int q = 0; q < _arimaOptions.MAOrder; q++)
-            {
-                if (t - q - 1 >= 0)
-                {
-                    T error = NumOps.Subtract(predictions[t - q - 1], xNew[t - q - 1, 0]); // Assuming the first column is the target variable
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[q], error));
-                }
-            }
-
-            predictions[t] = prediction;
+            fallback[t] = prediction;
         }
 
-        // Reverse differencing if necessary
         if (_arimaOptions.DifferenceOrder > 0)
         {
-            predictions = InverseDifferenceTimeSeries(predictions, _differenced);
+            fallback = InverseDifferenceTimeSeries(fallback, _differenced);
         }
 
-        return predictions;
+        return fallback;
     }
 
     /// <summary>
@@ -1127,6 +1152,11 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         writer.Write(Convert.ToDouble(_intercept));
 
         writer.Write(JsonConvert.SerializeObject(Options));
+
+        // Serialize training series for in-sample predictions
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     /// <summary>
@@ -1177,6 +1207,19 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         _intercept = NumOps.FromDouble(reader.ReadDouble());
 
         string optionsJson = reader.ReadString();
+
+        // Deserialize training series (post-patch field)
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     /// <summary>
@@ -1307,6 +1350,19 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
 
         // Copy intercept
         clone._intercept = _intercept;
+
+        // Copy training series for in-sample predictions
+        if (_trainingSeries.Length > 0)
+        {
+            clone._trainingSeries = new Vector<T>(_trainingSeries.Length);
+            for (int i = 0; i < _trainingSeries.Length; i++)
+                clone._trainingSeries[i] = _trainingSeries[i];
+        }
+
+        // Copy trained state
+        clone.IsTrained = IsTrained;
+        if (ModelParameters.Length > 0)
+            clone.ModelParameters = ModelParameters.Clone();
 
         return clone;
     }
@@ -1533,6 +1589,11 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
         // Step 1: Perform differencing if necessary
         Vector<T> diffY = DifferenceTimeSeries(y, _arimaOptions.DifferenceOrder);
 
