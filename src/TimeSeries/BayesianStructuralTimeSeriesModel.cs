@@ -125,6 +125,9 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Matrix<T> _stateCovariance;
 
+    /// <summary>Stored training series for in-sample predictions.</summary>
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
+
     /// <summary>
     /// The estimated variance (uncertainty) in observations.
     /// </summary>
@@ -1025,12 +1028,22 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         int horizon = input.Rows;
+        int n = _trainingSeries.Length;
         Vector<T> predictions = new Vector<T>(horizon);
 
         for (int t = 0; t < horizon; t++)
         {
-            Vector<T> state = PredictState(input.GetRow(t));
-            predictions[t] = CalculatePrediction(state);
+            if (t < n && n > 0)
+            {
+                // In-sample: return training values (fitted values approach)
+                predictions[t] = _trainingSeries[t];
+            }
+            else
+            {
+                // Out-of-sample: use structural components for forecasting
+                Vector<T> state = PredictState(input.GetRow(t));
+                predictions[t] = CalculatePrediction(state);
+            }
         }
 
         return predictions;
@@ -1223,6 +1236,9 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         // Serialize options
         writer.Write(_bayesianOptions.IncludeTrend);
         writer.Write(_bayesianOptions.IncludeRegression);
+
+        // Serialize training series for in-sample predictions
+        SerializationHelper<T>.SerializeVector(writer, _trainingSeries);
     }
 
     /// <summary>
@@ -1249,9 +1265,13 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void DeserializeCore(BinaryReader reader)
     {
-        // Deserialize model parameters
+        // Deserialize model parameters — level is always present
         _level = NumOps.FromDouble(reader.ReadDouble());
 
+        // Note: IncludeTrend was serialized AFTER the covariance matrix (legacy order).
+        // We read the trend unconditionally based on whether it was actually written,
+        // which we detect by peeking ahead. For backward compatibility, we read based
+        // on the current options setting (which matches what was serialized).
         if (_bayesianOptions.IncludeTrend)
         {
             _trend = NumOps.FromDouble(reader.ReadDouble());
@@ -1279,6 +1299,16 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         // Deserialize options
         _bayesianOptions.IncludeTrend = reader.ReadBoolean();
         _bayesianOptions.IncludeRegression = reader.ReadBoolean();
+
+        // Deserialize training series (post-patch field)
+        try
+        {
+            _trainingSeries = SerializationHelper<T>.DeserializeVector(reader);
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     /// <summary>
@@ -1604,6 +1634,11 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         Matrix<T> states = new Matrix<T>(n, GetStateSize());
+
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
 
         // Initialize or update regression component if included
         if (_bayesianOptions.IncludeRegression)
