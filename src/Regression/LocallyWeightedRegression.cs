@@ -144,6 +144,27 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // In LWR, we don't pre-compute a global model. Instead, we store the training data.
         _xTrain = x;
         _yTrain = y;
+
+        // Auto-scale bandwidth if using the default value of 1.0.
+        // The tricube kernel returns 0 for |distance/bandwidth| > 1,
+        // so bandwidth must be large enough relative to typical inter-point distances.
+        if (Math.Abs(_options.Bandwidth - 1.0) < 1e-10)
+        {
+            // Use the median of pairwise distances as a robust bandwidth estimate
+            double totalDist = 0;
+            int count = 0;
+            int sampleSize = Math.Min(50, x.Rows);
+            for (int i = 0; i < sampleSize; i++)
+            {
+                for (int j = i + 1; j < sampleSize; j++)
+                {
+                    totalDist += NumOps.ToDouble(VectorHelper.EuclideanDistance(x.GetRow(i), x.GetRow(j)));
+                    count++;
+                }
+            }
+            double meanDist = count > 0 ? totalDist / count : 1.0;
+            _options.Bandwidth = Math.Max(meanDist, 0.1);
+        }
     }
 
     /// <summary>
@@ -221,7 +242,9 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // For weighted least squares, we multiply each row of X by its corresponding weight
         // This is equivalent to W^0.5 * X where W is the diagonal weight matrix
         var sqrtWeights = weights.Transform(w => NumOps.Sqrt(w));
-        var weightedX = sqrtWeights.CreateDiagonal().Multiply(_xTrain);
+        // Add intercept column to training data for bias term
+        var xWithIntercept = _xTrain.AddConstantColumn(NumOps.One);
+        var weightedX = sqrtWeights.CreateDiagonal().Multiply(xWithIntercept);
         var weightedY = _yTrain.PointwiseMultiply(sqrtWeights);
 
         // Solve the weighted least squares problem
@@ -248,8 +271,11 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
             coefficients = Regularization.Regularize(coefficients);
         }
 
-        // Make prediction
-        return input.DotProduct(coefficients);
+        // Make prediction: coefficients[0..p-1] are feature weights, coefficients[p] is intercept
+        T prediction = coefficients[coefficients.Length - 1]; // intercept
+        for (int j = 0; j < input.Length; j++)
+            prediction = NumOps.Add(prediction, NumOps.Multiply(input[j], coefficients[j]));
+        return prediction;
     }
 
     /// <summary>
