@@ -2111,8 +2111,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Standard supervised learning path: split FIRST, then fit preprocessing on training only.
             // This prevents data leakage from test/validation sets into the preprocessing pipeline.
             // Disable shuffling for time-series tasks to preserve chronological ordering.
-            bool shuffleBeforeSplit = !(_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
-                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection);
+            // Disable shuffling for time-series models to preserve chronological ordering.
+            // Random shuffling destroys the sequential dependencies that TS models rely on.
+            bool isTimeSeriesModel = _model is TimeSeries.TimeSeriesModelBase<T>
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection;
+            bool shuffleBeforeSplit = !isTimeSeriesModel;
             (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
                 preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
 
@@ -2494,6 +2498,48 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 BestSolution = trainer.GetGlobalModel(),
                 Iterations = federatedLearningMetadata.RoundsCompleted
+            };
+        }
+        else if (model is TimeSeries.TimeSeriesModelBase<T>)
+        {
+            // TIME SERIES DIRECT TRAINING PATH (industry standard)
+            // Time series models use their own internal optimizers (MLE, gradient descent, Kalman filter, EM)
+            // and require sequential data ordering. The outer optimizer's clone-evaluate-select loop
+            // destroys sequential state and provides no benefit. Train directly on the full training data.
+            model.Train(XTrain, yTrain);
+
+            // Compute evaluation metrics on chronological splits
+            int inputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
+            TOutput trainPredOutput = model.Predict(XTrain);
+            var trainPredVec = ConversionsHelper.ConvertToVector<T, TOutput>(trainPredOutput);
+            var trainActual = ConversionsHelper.ConvertToVector<T, TOutput>(yTrain);
+
+            var trainErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+            {
+                Actual = trainActual,
+                Predicted = trainPredVec,
+                FeatureCount = inputSize
+            });
+            var trainPredStats = new PredictionStats<T>(new PredictionStatsInputs<T>
+            {
+                Actual = trainActual,
+                Predicted = trainPredVec,
+                NumberOfParameters = inputSize
+            });
+
+            // trainPredOutput is already TOutput from model.Predict
+
+            optimizationResult = new OptimizationResult<T, TInput, TOutput>
+            {
+                BestSolution = model,
+                Iterations = 1,
+                SelectedFeatureIndices = Enumerable.Range(0, inputSize).ToList(),
+                TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                {
+                    X = XTrain, Y = yTrain, Predictions = trainPredOutput,
+                    ErrorStats = trainErrorStats,
+                    PredictionStats = trainPredStats
+                }
             };
         }
         else
