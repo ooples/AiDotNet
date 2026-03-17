@@ -9,4 +9,8 @@ public class TimeSeriesIsolationForestTests : TimeSeriesModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new TimeSeriesIsolationForest<double>();
+
+    // TimeSeriesIsolationForest is an anomaly detector, not a forecaster
+    protected override bool IsForecastingModel => false;
+    protected override bool CanCaptureTrend => false;
 }

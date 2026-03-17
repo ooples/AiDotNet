@@ -16,6 +16,18 @@ public abstract class TimeSeriesModelTestBase
     protected virtual int TrainLength => 100;
     protected virtual int TestLength => 20;
 
+    /// <summary>
+    /// Whether this model can capture trends. Stationary models (MA, pure ARMA without
+    /// differencing) cannot — R² on trending data will be negative by design.
+    /// </summary>
+    protected virtual bool CanCaptureTrend => true;
+
+    /// <summary>
+    /// Whether this is a forecasting model. Non-forecasting models (anomaly detectors,
+    /// spectral analysis) return scores/frequencies instead of time-domain predictions.
+    /// </summary>
+    protected virtual bool IsForecastingModel => true;
+
     // =====================================================
     // MATHEMATICAL INVARIANT: Trend Direction Recovery
     // Data has a positive linear trend y = 0.5t + seasonal + noise.
@@ -25,6 +37,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact]
     public void TrendRecovery_LaterTimeShouldHaveHigherPrediction()
     {
+        if (!IsForecastingModel) return;
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.1);
@@ -66,6 +79,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact]
     public void TranslationEquivariance_ShiftingTargets_ShiftsPredictions()
     {
+        if (!IsForecastingModel) return;
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
@@ -103,6 +117,9 @@ public abstract class TimeSeriesModelTestBase
     [Fact]
     public void R2_ShouldBePositive_OnTrendData()
     {
+        // Stationary models (MA) cannot capture trends — skip this test for them
+        if (!CanCaptureTrend) return;
+
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.5);
@@ -149,6 +166,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact]
     public void TrainingError_ShouldNotExceedTestError()
     {
+        if (!IsForecastingModel) return;
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.5);
@@ -178,6 +196,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact]
     public void ResidualMean_ShouldBeNearZero()
     {
+        if (!IsForecastingModel) return;
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
         var (trainX, trainY) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng, noise: 0.5);
@@ -205,6 +224,7 @@ public abstract class TimeSeriesModelTestBase
     [Fact]
     public void ScalingEquivariance_ScalingTargets_ScalesPredictions()
     {
+        if (!IsForecastingModel) return;
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
