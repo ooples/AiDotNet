@@ -88,8 +88,15 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Spectral analysis doesn't typically make predictions, but we can return the periodogram
-        return _periodogram;
+        // Generate sinusoidal predictions using the dominant frequency component
+        // for each input row (time index). This provides a time-domain reconstruction
+        // from the spectral analysis.
+        var predictions = new Vector<T>(input.Rows);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            predictions[i] = PredictSingle(input.GetRow(i));
+        }
+        return predictions;
     }
 
     /// <summary>
