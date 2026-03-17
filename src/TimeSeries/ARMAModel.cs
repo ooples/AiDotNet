@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.TimeSeries;
 
@@ -131,6 +132,9 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private readonly double _learningRate;
 
+    /// <summary>Mean of the training series, used for centering predictions.</summary>
+    private T _seriesMean;
+
     /// <summary>
     /// The maximum number of iterations for the training algorithm.
     /// </summary>
@@ -197,6 +201,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         _maCoefficients = Vector<T>.Empty();
         _trainedSeries = Vector<T>.Empty();
         _trainedResiduals = Vector<T>.Empty();
+        _seriesMean = NumOps.Zero;
     }
 
     /// <summary>
@@ -334,8 +339,10 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
                 "Model has not been trained. Call Train() before Predict().");
         }
 
-        // Use the stored training series and residuals for in-sample predictions.
+        // ARMA operates on mean-centered data. Center the stored series, predict
+        // in the centered space, then add mean back for the final predictions.
         var series = _trainedSeries;
+        T mean = _seriesMean;
         var residuals = _trainedResiduals.Length > 0
             ? _trainedResiduals
             : new Vector<T>(series.Length);
@@ -348,10 +355,11 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
 
             if (t < series.Length)
             {
-                // In-sample: use stored series and stored residuals (no recursion)
+                // In-sample: AR on centered values, MA on stored residuals
                 for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
                 {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], series[t - i - 1]));
+                    T centeredLag = NumOps.Subtract(series[t - i - 1], mean);
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], centeredLag));
                 }
                 for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
                 {
@@ -360,25 +368,26 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
             }
             else
             {
-                // Out-of-sample: use recursive predictions for lag values beyond series
+                // Out-of-sample: use recursive centered predictions
                 for (int i = 0; i < _arOrder; i++)
                 {
                     int lagIdx = t - i - 1;
                     T lagValue;
                     if (lagIdx < series.Length)
                     {
-                        lagValue = lagIdx >= 0 ? series[lagIdx] : NumOps.Zero;
+                        lagValue = lagIdx >= 0 ? NumOps.Subtract(series[lagIdx], mean) : NumOps.Zero;
                     }
                     else
                     {
-                        lagValue = predictions[lagIdx];
+                        // Previous predictions were already de-meaned below, so re-center
+                        lagValue = NumOps.Subtract(predictions[lagIdx], mean);
                     }
                     prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], lagValue));
                 }
-                // MA residuals are assumed 0 for out-of-sample (no actual observations)
             }
 
-            predictions[t] = prediction;
+            // Add mean back to get prediction on original scale
+            predictions[t] = NumOps.Add(prediction, mean);
         }
 
         return predictions;
@@ -524,6 +533,9 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         {
             writer.Write(Convert.ToDouble(_trainedResiduals[i]));
         }
+
+        // Serialize series mean for centered prediction
+        writer.Write(Convert.ToDouble(_seriesMean));
     }
 
     /// <summary>
@@ -585,6 +597,9 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
                     _trainedResiduals[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
             }
+
+            // Deserialize series mean
+            _seriesMean = NumOps.FromDouble(reader.ReadDouble());
         }
         catch (EndOfStreamException)
         {
@@ -858,6 +873,8 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
             }
         }
 
+        clone._seriesMean = _seriesMean;
+
         return clone;
     }
 
@@ -900,100 +917,38 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
                 nameof(y));
         }
 
-        // Initialize coefficients (after validation to avoid unnecessary allocations)
-        _arCoefficients = new Vector<T>(_arOrder);
-        _maCoefficients = new Vector<T>(_maOrder);
+        // Industry-standard ARMA estimation on mean-centered data:
+        // ARMA models assume zero-mean stationary data. Center the series first.
+        _seriesMean = StatisticsHelper<T>.CalculateMean(y);
+        T mean = _seriesMean;
+        var centered = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            centered[i] = NumOps.Subtract(y[i], mean);
 
-        int nSamples = y.Length - startIdx;
+        // Step 1: Estimate AR coefficients via OLS (Yule-Walker / least squares)
+        _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(centered, _arOrder, MatrixDecompositionType.Qr);
 
-        Vector<T> prevGradAR = new Vector<T>(_arOrder);
-        Vector<T> prevGradMA = new Vector<T>(_maOrder);
+        // Step 2: Compute AR residuals for MA estimation
+        Vector<T> arResiduals = TimeSeriesHelper<T>.CalculateARResiduals(centered, _arCoefficients);
 
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            // Compute residuals iteratively (not recursively) to avoid exponential blow-up
-            Vector<T> residuals = new Vector<T>(y.Length);
-            for (int t = startIdx; t < y.Length; t++)
-            {
-                T prediction = NumOps.Zero;
-                // AR component
-                for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
-                {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], y[t - i - 1]));
-                }
-                // MA component using previously computed residuals (iterative, stable)
-                for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
-                {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], residuals[t - i - 1]));
-                }
-                residuals[t] = NumOps.Subtract(y[t], prediction);
-            }
+        // Step 3: Estimate MA coefficients from residual autocorrelations (innovations algorithm)
+        _maCoefficients = TimeSeriesHelper<T>.EstimateMACoefficients(arResiduals, _maOrder);
 
-            // Compute gradients
-            Vector<T> gradAR = new Vector<T>(_arOrder);
-            Vector<T> gradMA = new Vector<T>(_maOrder);
-            for (int t = startIdx; t < y.Length; t++)
-            {
-                for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
-                {
-                    gradAR[i] = NumOps.Add(gradAR[i], NumOps.Multiply(residuals[t], y[t - i - 1]));
-                }
-                for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
-                {
-                    gradMA[i] = NumOps.Add(gradMA[i], NumOps.Multiply(residuals[t], residuals[t - i - 1]));
-                }
-            }
-
-            // Normalize gradients by number of samples
-            if (nSamples > 0)
-            {
-                T invN = NumOps.FromDouble(1.0 / nSamples);
-                for (int i = 0; i < _arOrder; i++)
-                {
-                    gradAR[i] = NumOps.Multiply(gradAR[i], invN);
-                }
-                for (int i = 0; i < _maOrder; i++)
-                {
-                    gradMA[i] = NumOps.Multiply(gradMA[i], invN);
-                }
-            }
-
-            // Gradient descent update: θ := θ - α * ∂L/∂θ.
-            // Gradients are pre-negated (grad = -∂L/∂φ) during computation above, so we ADD here.
-            T lr = NumOps.FromDouble(_learningRate);
-            for (int i = 0; i < _arOrder; i++)
-            {
-                _arCoefficients[i] = NumOps.Add(_arCoefficients[i], NumOps.Multiply(lr, gradAR[i]));
-            }
-            for (int i = 0; i < _maOrder; i++)
-            {
-                _maCoefficients[i] = NumOps.Add(_maCoefficients[i], NumOps.Multiply(lr, gradMA[i]));
-            }
-
-            // Check for convergence
-            if (CheckConvergence(gradAR, gradMA, prevGradAR, prevGradMA))
-            {
-                break;
-            }
-
-            prevGradAR = gradAR;
-            prevGradMA = gradMA;
-        }
-
-        // Store final training residuals for use during prediction
+        // Store final training residuals on centered data for use during prediction.
+        // Residuals = centered_y[t] - AR(centered_y) - MA(residuals)
         _trainedResiduals = new Vector<T>(y.Length);
         for (int t = startIdx; t < y.Length; t++)
         {
             T prediction = NumOps.Zero;
             for (int i = 0; i < _arOrder && t - i - 1 >= 0; i++)
             {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], y[t - i - 1]));
+                prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[i], centered[t - i - 1]));
             }
             for (int i = 0; i < _maOrder && t - i - 1 >= 0; i++)
             {
                 prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[i], _trainedResiduals[t - i - 1]));
             }
-            _trainedResiduals[t] = NumOps.Subtract(y[t], prediction);
+            _trainedResiduals[t] = NumOps.Subtract(centered[t], prediction);
         }
 
         // Store learned coefficients as ModelParameters for GetParameters() / serialization
