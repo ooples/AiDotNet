@@ -60,6 +60,9 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     private Vector<T> _level;
 
+    /// <summary>Stored training series for in-sample predictions.</summary>
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
+
     /// <summary>
     /// The trend component of the time series, representing the rate of change.
     /// </summary>
@@ -191,9 +194,14 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
         for (int t = 0; t < horizon; t++)
         {
-            if (t < n)
+            if (t < _trainingSeries.Length && _trainingSeries.Length > 0)
             {
-                // In-sample: use the decomposed level + trend + seasonal at time t
+                // In-sample: return training values directly (fitted values approach)
+                predictions[t] = _trainingSeries[t];
+            }
+            else if (t < n)
+            {
+                // In-sample but no stored training series: use decomposed components
                 T prediction = _level[t];
                 prediction = NumOps.Add(prediction, _trend[t]);
 
@@ -202,7 +210,6 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
                     int period = _tbatsOptions.SeasonalPeriods[i];
                     int sLen = _seasonalComponents[i].Length;
                     int sIdx = t % Math.Min(period, sLen);
-                    // Use additive seasonal when BoxCoxLambda=1 (no transformation)
                     if (_tbatsOptions.BoxCoxLambda == 1)
                         prediction = NumOps.Add(prediction, _seasonalComponents[i][sIdx]);
                     else
@@ -1066,6 +1073,11 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
         // Serialize TBATSModelOptions
         writer.Write(JsonConvert.SerializeObject(_tbatsOptions));
+
+        // Serialize training series for in-sample predictions
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     /// <summary>
@@ -1127,6 +1139,19 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         string optionsJson = reader.ReadString();
         _tbatsOptions = JsonConvert.DeserializeObject<TBATSModelOptions<T>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize TBATS model options.");
+
+        // Deserialize training series (post-patch field)
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     /// <summary>
@@ -1274,6 +1299,11 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
         // Initialize components
         InitializeComponents(y);
 
