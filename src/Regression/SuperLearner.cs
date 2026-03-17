@@ -927,6 +927,11 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         };
     }
 
+    /// <summary>
+    /// SuperLearner is an ensemble that doesn't support optimizer parameter injection.
+    /// </summary>
+    public bool SupportsParameterInitialization => false;
+
     /// <inheritdoc/>
     public override byte[] Serialize()
     {
