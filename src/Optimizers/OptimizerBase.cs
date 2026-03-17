@@ -784,6 +784,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <returns>A unique cache key string.</returns>
     protected virtual string GenerateCacheKey(IFullModel<T, TInput, TOutput> solution, OptimizationInputData<T, TInput, TOutput> inputData)
     {
+        // Models that don't support parameter initialization (time series, density-based clustering)
+        // may not have parameters before training — use type name + hash code as fallback.
+        if (!solution.SupportsParameterInitialization)
+        {
+            return $"{solution.GetType().Name}_{solution.GetHashCode()}";
+        }
+
         // Generate a simple cache key based on parameter values
         var parameters = solution.GetParameters();
         var paramHash = parameters.GetHashCode();

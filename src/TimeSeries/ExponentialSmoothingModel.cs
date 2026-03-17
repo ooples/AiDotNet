@@ -923,6 +923,20 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 
         // Run through the training data to compute the final level/trend/seasonal state
         SaveTrainedState(y);
+
+        // Store learned parameters as ModelParameters for GetParameters() / serialization
+        // Layout: [alpha, beta, gamma, level, trend, seasonal_0, seasonal_1, ...]
+        int seasonalCount = _trainedSeasonalFactors.Length;
+        int totalParams = 3 + 2 + seasonalCount; // alpha, beta, gamma + level, trend + seasonal factors
+        ModelParameters = new Vector<T>(totalParams);
+        int idx = 0;
+        ModelParameters[idx++] = _alpha;
+        ModelParameters[idx++] = _beta;
+        ModelParameters[idx++] = _gamma;
+        ModelParameters[idx++] = _trainedLevel;
+        ModelParameters[idx++] = _trainedTrend;
+        for (int i = 0; i < seasonalCount; i++)
+            ModelParameters[idx++] = _trainedSeasonalFactors[i];
     }
 
     /// <summary>

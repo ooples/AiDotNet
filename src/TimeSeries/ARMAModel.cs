@@ -995,6 +995,13 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
             }
             _trainedResiduals[t] = NumOps.Subtract(y[t], prediction);
         }
+
+        // Store learned coefficients as ModelParameters for GetParameters() / serialization
+        ModelParameters = new Vector<T>(_arOrder + _maOrder);
+        for (int i = 0; i < _arOrder; i++)
+            ModelParameters[i] = _arCoefficients[i];
+        for (int i = 0; i < _maOrder; i++)
+            ModelParameters[_arOrder + i] = _maCoefficients[i];
     }
 
     /// <summary>

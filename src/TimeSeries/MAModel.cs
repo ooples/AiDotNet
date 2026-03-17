@@ -192,6 +192,13 @@ public class MAModel<T> : TimeSeriesModelBase<T>
         // Step 5: Calculate the most recent errors for making future predictions
         _recentErrors = CalculateRecentErrors(y);
 
+        // Store learned coefficients as ModelParameters for GetParameters() / serialization
+        int q = _maOptions.MAOrder;
+        ModelParameters = new Vector<T>(q + 1);
+        ModelParameters[0] = _mean;
+        for (int i = 0; i < q; i++)
+            ModelParameters[i + 1] = _maCoefficients[i];
+
         IsTrained = true;
     }
 

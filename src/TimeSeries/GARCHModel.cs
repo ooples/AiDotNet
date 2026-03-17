@@ -1094,6 +1094,18 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
 
         // Step 5: Calculate final residuals and conditional variances
         CalculateResidualsAndVariances(_residuals);
+
+        // Store learned GARCH parameters as ModelParameters for GetParameters() / serialization
+        // Layout: [omega_0, alpha_0..alpha_p, beta_0..beta_q]
+        int totalParams = _omega.Length + _alpha.Length + _beta.Length;
+        ModelParameters = new Vector<T>(totalParams);
+        int idx = 0;
+        for (int i = 0; i < _omega.Length; i++)
+            ModelParameters[idx++] = _omega[i];
+        for (int i = 0; i < _alpha.Length; i++)
+            ModelParameters[idx++] = _alpha[i];
+        for (int i = 0; i < _beta.Length; i++)
+            ModelParameters[idx++] = _beta[i];
     }
 
     /// <summary>

@@ -947,6 +947,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// - Transferred to another model with the same structure
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Time series models do not support random parameter initialization from the optimizer.
+    /// They must be trained on sequential data to learn meaningful coefficients.
+    /// </summary>
+    public virtual bool SupportsParameterInitialization => false;
+
     public virtual Vector<T> GetParameters()
     {
         if (!IsTrained && (ModelParameters == null || ModelParameters.Length == 0))

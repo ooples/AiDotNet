@@ -810,6 +810,11 @@ public class ARModel<T> : TimeSeriesModelBase<T>
 
             prevGradAR = gradAR;
         }
+
+        // Store learned coefficients as ModelParameters for GetParameters() / serialization
+        ModelParameters = new Vector<T>(_arOrder);
+        for (int i = 0; i < _arOrder; i++)
+            ModelParameters[i] = _arCoefficients[i];
     }
 
     /// <summary>

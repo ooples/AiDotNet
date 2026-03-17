@@ -696,6 +696,21 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         {
             _lastTrainResiduals[i] = arResiduals[arResiduals.Length - 1 - i];
         }
+
+        // Store learned coefficients as ModelParameters for GetParameters() / serialization
+        int totalParams = 1 + _arCoefficients.Length + _maCoefficients.Length
+                            + _sarCoefficients.Length + _smaCoefficients.Length; // +1 for constant
+        ModelParameters = new Vector<T>(totalParams);
+        int idx = 0;
+        ModelParameters[idx++] = _constant;
+        for (int i = 0; i < _arCoefficients.Length; i++)
+            ModelParameters[idx++] = _arCoefficients[i];
+        for (int i = 0; i < _maCoefficients.Length; i++)
+            ModelParameters[idx++] = _maCoefficients[i];
+        for (int i = 0; i < _sarCoefficients.Length; i++)
+            ModelParameters[idx++] = _sarCoefficients[i];
+        for (int i = 0; i < _smaCoefficients.Length; i++)
+            ModelParameters[idx++] = _smaCoefficients[i];
     }
 
     /// <summary>

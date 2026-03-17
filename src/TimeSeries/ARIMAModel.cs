@@ -481,6 +481,16 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         {
             ComputeAnomalyThreshold(arResiduals);
         }
+
+        // Store learned coefficients as ModelParameters for GetParameters() / serialization
+        int totalParams = _arCoefficients.Length + _maCoefficients.Length + 1; // +1 for constant
+        ModelParameters = new Vector<T>(totalParams);
+        int idx = 0;
+        ModelParameters[idx++] = _constant;
+        for (int i = 0; i < _arCoefficients.Length; i++)
+            ModelParameters[idx++] = _arCoefficients[i];
+        for (int i = 0; i < _maCoefficients.Length; i++)
+            ModelParameters[idx++] = _maCoefficients[i];
     }
 
     /// <summary>
