@@ -185,29 +185,43 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new Vector<T>(input.Rows);
+        int horizon = input.Rows;
+        int n = _level.Length;
+        Vector<T> predictions = new Vector<T>(horizon);
 
-        for (int t = 0; t < input.Rows; t++)
+        for (int t = 0; t < horizon; t++)
         {
-            T prediction = _level[_level.Length - 1];
-            prediction = NumOps.Add(prediction, _trend[_trend.Length - 1]);
-
-            for (int i = 0; i < _seasonalComponents.Count; i++)
+            if (t < n)
             {
-                int period = _tbatsOptions.SeasonalPeriods[i];
-                prediction = NumOps.Multiply(prediction, _seasonalComponents[i][t % period]);
-            }
+                // In-sample: use the decomposed level + trend + seasonal at time t
+                T prediction = _level[t];
+                prediction = NumOps.Add(prediction, _trend[t]);
 
-            // Apply ARMA effects
-            for (int p = 0; p < _tbatsOptions.ARMAOrder; p++)
-            {
-                if (t - p - 1 >= 0)
+                for (int i = 0; i < _seasonalComponents.Count; i++)
                 {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[p], NumOps.Subtract(predictions[t - p - 1], _level[_level.Length - p - 2])));
+                    int period = _tbatsOptions.SeasonalPeriods[i];
+                    int sLen = _seasonalComponents[i].Length;
+                    prediction = NumOps.Multiply(prediction, _seasonalComponents[i][t % Math.Min(period, sLen)]);
                 }
-            }
 
-            predictions[t] = prediction;
+                predictions[t] = prediction;
+            }
+            else
+            {
+                // Out-of-sample: use last level + trend, extrapolate
+                T prediction = _level[n - 1];
+                T trendSlope = _trend[n - 1];
+                prediction = NumOps.Add(prediction, NumOps.Multiply(trendSlope, NumOps.FromDouble(t - n + 1)));
+
+                for (int i = 0; i < _seasonalComponents.Count; i++)
+                {
+                    int period = _tbatsOptions.SeasonalPeriods[i];
+                    int sLen = _seasonalComponents[i].Length;
+                    prediction = NumOps.Multiply(prediction, _seasonalComponents[i][t % Math.Min(period, sLen)]);
+                }
+
+                predictions[t] = prediction;
+            }
         }
 
         return predictions;
