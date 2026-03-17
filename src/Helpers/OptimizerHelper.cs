@@ -191,10 +191,18 @@ public static class OptimizerHelper<T, TInput, TOutput>
     /// </remarks>
     private static Matrix<T> SelectFeaturesMatrix(Matrix<T> X, List<int> selectedFeatures)
     {
-        var selectedX = new Matrix<T>(X.Rows, selectedFeatures.Count);
-        for (int i = 0; i < selectedFeatures.Count; i++)
+        // Filter out-of-bounds indices to prevent crashes from models
+        // with coefficient vectors larger than the input feature count.
+        var validFeatures = selectedFeatures.Where(f => f >= 0 && f < X.Columns).ToList();
+        if (validFeatures.Count == 0)
         {
-            var featureIndex = selectedFeatures[i];
+            validFeatures = Enumerable.Range(0, X.Columns).ToList();
+        }
+
+        var selectedX = new Matrix<T>(X.Rows, validFeatures.Count);
+        for (int i = 0; i < validFeatures.Count; i++)
+        {
+            var featureIndex = validFeatures[i];
             for (int j = 0; j < X.Rows; j++)
             {
                 selectedX[j, i] = X[j, featureIndex];
