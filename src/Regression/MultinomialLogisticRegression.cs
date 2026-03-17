@@ -219,10 +219,11 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
             Vector<T> flattenedGradient = gradient.Flatten();
             Vector<T> update = MatrixSolutionHelper.SolveLinearSystem(hessian, flattenedGradient, _options.DecompositionType);
 
-            Matrix<T> updateMatrix = new Matrix<T>(gradient.Rows, gradient.Columns);
-            for (int i = 0; i < update.Length; i++)
+            // Reshape update into _coefficients shape: _numClasses × (numFeatures+1)
+            Matrix<T> updateMatrix = new Matrix<T>(_coefficients.Rows, _coefficients.Columns);
+            for (int i = 0; i < Math.Min(update.Length, _coefficients.Rows * _coefficients.Columns); i++)
             {
-                updateMatrix[i / gradient.Columns, i % gradient.Columns] = update[i];
+                updateMatrix[i / _coefficients.Columns, i % _coefficients.Columns] = update[i];
             }
 
             _coefficients = _coefficients.Subtract(updateMatrix);
