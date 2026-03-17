@@ -241,7 +241,10 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <inheritdoc/>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        return Predict(input, null);
+        // Use the same default group assignment as Train so random effects are included
+        var groupIndices = Enumerable.Range(0, input.Rows)
+            .Select(i => i % Math.Max(1, input.Rows / 10)).ToArray();
+        return Predict(input, groupIndices);
     }
 
     /// <summary>

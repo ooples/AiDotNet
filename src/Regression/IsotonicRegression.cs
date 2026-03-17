@@ -135,8 +135,20 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
 
         // Note: Isotonic regression doesn't use traditional regularization -
         // the monotonicity constraint itself acts as a form of regularization
-        _xValues = x.GetColumn(0); // Isotonic regression typically works with 1D input
-        _yValues = y;
+        // Isotonic regression works with 1D input — use first feature
+        var xCol = x.GetColumn(0);
+
+        // Sort by x values (required for PAV algorithm to produce meaningful monotonic fit)
+        var indices = Enumerable.Range(0, xCol.Length)
+            .OrderBy(i => NumOps.ToDouble(xCol[i]))
+            .ToArray();
+        _xValues = new Vector<T>(xCol.Length);
+        _yValues = new Vector<T>(y.Length);
+        for (int i = 0; i < indices.Length; i++)
+        {
+            _xValues[i] = xCol[indices[i]];
+            _yValues[i] = y[indices[i]];
+        }
 
         OptimizeModel(x, _yValues);
     }
