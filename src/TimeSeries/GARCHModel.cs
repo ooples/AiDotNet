@@ -306,13 +306,14 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
             variances[t] = variance;
             lastVariance = variance;
 
-            // Generate prediction
-            T standardNormal = GenerateStandardNormal();
-            T residual = NumOps.Multiply(NumOps.Sqrt(variance), standardNormal);
-            predictions[t] = NumOps.Add(meanPredictions[t], residual);
+            // Point forecast: return the conditional mean (mean model prediction).
+            // The variance captures uncertainty but the point forecast is the mean —
+            // this is the industry standard for GARCH point predictions.
+            // Stochastic sampling (adding sqrt(variance) * N(0,1)) is for simulation.
+            predictions[t] = meanPredictions[t];
 
-            // Update last residual for the next iteration
-            lastResidual = residual;
+            // For variance forecasting, update the last residual using expected value (0)
+            lastResidual = NumOps.Zero;
         }
 
         return predictions;
