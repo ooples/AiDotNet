@@ -115,9 +115,34 @@ public class QuantileRegression<T> : RegressionBase<T>
         int n = x.Rows;
         int p = x.Columns;
 
-        // Initialize coefficients
+        // Initialize coefficients and intercept
         Coefficients = new Vector<T>(p);
-        Intercept = NumOps.Zero;
+        // Initialize intercept to quantile of y for faster convergence
+        var sortedY = y.OrderBy(v => NumOps.ToDouble(v)).ToList();
+        int qIdx = Math.Max(0, Math.Min(sortedY.Count - 1, (int)(sortedY.Count * _options.Quantile)));
+        Intercept = sortedY[qIdx];
+
+        // Auto-scale learning rate relative to data magnitude
+        double lr = _options.LearningRate;
+        if (Math.Abs(lr - 0.01) < 1e-10) // default value
+        {
+            double xScale = 0;
+            for (int j = 0; j < p; j++)
+            {
+                double colMean = 0;
+                for (int i = 0; i < n; i++) colMean += NumOps.ToDouble(x[i, j]);
+                colMean /= n;
+                double colVar = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    double d = NumOps.ToDouble(x[i, j]) - colMean;
+                    colVar += d * d;
+                }
+                xScale += colVar / n;
+            }
+            xScale = Math.Sqrt(xScale / p);
+            lr = Math.Max(0.1, xScale > 1e-10 ? 1.0 / xScale : 0.01);
+        }
 
         // Gradient descent optimization for quantile regression
         T invN = NumOps.FromDouble(1.0 / n);
@@ -142,14 +167,14 @@ public class QuantileRegression<T> : RegressionBase<T>
             }
 
             // Average gradients over samples and update
-            T lr = NumOps.FromDouble(_options.LearningRate);
+            T lrT = NumOps.FromDouble(lr);
             for (int j = 0; j < p; j++)
             {
                 T avgGrad = NumOps.Multiply(gradients[j], invN);
-                Coefficients[j] = NumOps.Add(Coefficients[j], NumOps.Multiply(lr, avgGrad));
+                Coefficients[j] = NumOps.Add(Coefficients[j], NumOps.Multiply(lrT, avgGrad));
             }
             T avgInterceptGrad = NumOps.Multiply(interceptGradient, invN);
-            Intercept = NumOps.Add(Intercept, NumOps.Multiply(lr, avgInterceptGrad));
+            Intercept = NumOps.Add(Intercept, NumOps.Multiply(lrT, avgInterceptGrad));
 
             // Apply regularization to coefficients (not to input data)
             Coefficients = Regularization.Regularize(Coefficients);
