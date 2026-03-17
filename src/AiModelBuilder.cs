@@ -6357,9 +6357,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             return;
         }
 
-        var preTransformer = _preprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
-        var postTransformer = _postprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
-        documentModel.ConfigureTransformers(preTransformer, postTransformer);
+        // Transformers are now configured through the pipeline directly, not on the model
     }
 
     private void ApplyGpuConfiguration()

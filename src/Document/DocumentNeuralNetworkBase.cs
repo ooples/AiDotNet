@@ -238,13 +238,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        // Priority 1: User-configured pipeline via AiModelBuilder
-        if (PostprocessingRegistry<T, Tensor<T>>.IsConfigured)
-        {
-            return PostprocessingRegistry<T, Tensor<T>>.Transform(modelOutput);
-        }
-
-        // Priority 2: Model-specific industry-standard defaults
+        // Model-specific industry-standard defaults
         return ApplyDefaultPostprocessing(modelOutput);
     }
 

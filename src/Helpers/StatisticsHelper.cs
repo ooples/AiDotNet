@@ -57,6 +57,7 @@ public static class StatisticsHelper<T>
     public static T CalculateMedian(IEnumerable<T> values)
     {
         var sortedValues = values.ToArray();
+        if (sortedValues.Length == 0) return _numOps.Zero;
         Array.Sort(sortedValues);
         int n = sortedValues.Length;
         if (n % 2 == 0)
