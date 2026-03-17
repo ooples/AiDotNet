@@ -1586,25 +1586,14 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
-        // Validate input dimensions
-        if (input.Length != _regressionCoefficients.Length)
+        // Compute regression component: y_reg = intercept + sum(coeff[i] * x[i])
+        T prediction = _intercept;
+        int regLen = Math.Min(input.Length, _regressionCoefficients.Length);
+        for (int i = 0; i < regLen; i++)
         {
-            throw new ArgumentException(
-                $"Input vector length ({input.Length}) must match the number of external regressors ({_regressionCoefficients.Length}).",
-                nameof(input));
+            prediction = NumOps.Add(prediction, NumOps.Multiply(_regressionCoefficients[i], input[i]));
         }
 
-        // Create a matrix with a single row
-        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            singleRowMatrix[0, i] = input[i];
-        }
-
-        // Use the existing Predict method
-        Vector<T> predictions = Predict(singleRowMatrix);
-
-        // Return the single prediction
-        return predictions[0];
+        return GuardPrediction(prediction);
     }
 }
