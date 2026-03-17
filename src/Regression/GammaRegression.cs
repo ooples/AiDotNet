@@ -152,12 +152,11 @@ public class GammaRegression<T> : RegressionBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidationHelper<T>.ValidateInputData(x, y);
-        bool wasShifted = ValidateGammaData(y);
+        ValidateGammaData(y);
 
-        // When data was shifted (continuous, not positive), use OLS for accurate linear predictions
-        if (wasShifted)
+        // For identity link, use OLS directly for exact MSE minimization
+        if (_options.LinkFunction == GammaLinkFunction.Identity)
         {
-            Options.UseIntercept = true;
             var xWithInt = x.AddConstantColumn(NumOps.One);
             var xTx = xWithInt.Transpose().Multiply(xWithInt);
             var xTy = xWithInt.Transpose().Multiply(y);
