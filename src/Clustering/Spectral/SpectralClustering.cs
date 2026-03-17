@@ -175,8 +175,35 @@ public class SpectralClustering<T> : ClusteringBase<T>
         var affinity = new T[n, n];
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
-        // Compute gamma if not specified
-        T gamma = NumOps.FromDouble(_options.Gamma ?? 1.0 / x.Columns);
+        // Compute gamma if not specified. Use 1/(n_features * Var(X)) following
+        // scikit-learn's "scale" convention. The naive 1/n_features doesn't account for
+        // data scale, causing the RBF kernel to collapse when features are large.
+        double gammaValue;
+        if (_options.Gamma.HasValue)
+        {
+            gammaValue = _options.Gamma.Value;
+        }
+        else
+        {
+            double totalVar = 0;
+            for (int j = 0; j < x.Columns; j++)
+            {
+                double mean = 0;
+                for (int i2 = 0; i2 < n; i2++)
+                    mean += NumOps.ToDouble(x[i2, j]);
+                mean /= n;
+
+                double featureVar = 0;
+                for (int i2 = 0; i2 < n; i2++)
+                {
+                    double diff = NumOps.ToDouble(x[i2, j]) - mean;
+                    featureVar += diff * diff;
+                }
+                totalVar += featureVar / n;
+            }
+            gammaValue = totalVar > 1e-10 ? 1.0 / totalVar : 1.0 / x.Columns;
+        }
+        T gamma = NumOps.FromDouble(gammaValue);
 
         for (int i = 0; i < n; i++)
         {

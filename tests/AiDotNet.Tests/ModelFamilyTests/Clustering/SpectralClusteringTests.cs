@@ -8,5 +8,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Clustering;
 public class SpectralClusteringTests : ClusteringModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
-        => new SpectralClustering<double>(new AiDotNet.Clustering.Options.SpectralOptions<double> { NumClusters = NumClusters });
+        => new SpectralClustering<double>(new AiDotNet.Clustering.Options.SpectralOptions<double>
+        {
+            NumClusters = NumClusters,
+            Seed = 42 // Deterministic KMeans in eigenvector space
+        });
 }

@@ -143,6 +143,9 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (GaussianMixtureModel<T>)CreateNewInstance();
