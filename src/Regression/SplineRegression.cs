@@ -162,6 +162,12 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
+    /// Spline regression solves analytically — no optimizer parameter injection needed.
+    /// Returning 0 makes SupportsParameterInitialization return false.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>
     /// Optimizes the spline regression model using the provided input data and target values.
     /// </summary>
     /// <param name="x">The input feature matrix, where rows represent observations and columns represent features.</param>

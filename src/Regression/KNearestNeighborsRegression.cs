@@ -117,9 +117,10 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
-    /// KNN is a lazy learner — no parameters to optimize, no feature selection by optimizer.
+    /// KNN is a lazy learner — no optimizer parameter injection.
+    /// Returning 0 makes SupportsParameterInitialization return false.
     /// </summary>
-    public bool SupportsParameterInitialization => false;
+    public override int ParameterCount => 0;
 
     /// <summary>
     /// KNN uses all features (distance-based, no coefficient pruning).
