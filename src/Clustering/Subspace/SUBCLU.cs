@@ -102,6 +102,55 @@ public class SUBCLU<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (SUBCLU<T>)CreateNewInstance();
+
+        if (_trainingData is not null)
+        {
+            clone._trainingData = new Matrix<T>(_trainingData.Rows, _trainingData.Columns);
+            for (int i = 0; i < _trainingData.Rows; i++)
+                for (int j = 0; j < _trainingData.Columns; j++)
+                    clone._trainingData[i, j] = _trainingData[i, j];
+        }
+
+        if (_subspaceClusterInfos is not null)
+        {
+            clone._subspaceClusterInfos = _subspaceClusterInfos.Select(c => new SubspaceClusterInfo
+            {
+                ClusterId = c.ClusterId,
+                Dimensions = c.Dimensions.ToArray(),
+                Points = new HashSet<int>(c.Points),
+                CorePoints = new HashSet<int>(c.CorePoints)
+            }).ToList();
+        }
+
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        return clone;
+    }
+
+    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (SUBCLU<T>)CreateNewInstance();

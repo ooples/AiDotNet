@@ -107,6 +107,41 @@ public class HDBSCAN<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
+    public override bool SupportsParameterInitialization => false;
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (HDBSCAN<T>)CreateNewInstance();
+        clone._outlierScores = _outlierScores?.ToArray();
+        clone._probabilities = _probabilities?.ToArray();
+        clone._condensedTree = _condensedTree?.ToList();
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        return clone;
+    }
+
+    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (HDBSCAN<T>)CreateNewInstance();

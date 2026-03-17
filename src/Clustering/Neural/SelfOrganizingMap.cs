@@ -109,6 +109,45 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (SelfOrganizingMap<T>)CreateNewInstance();
+        if (_weights is not null)
+        {
+            int h = _weights.GetLength(0);
+            int w = _weights.GetLength(1);
+            clone._weights = new T[h, w][];
+            for (int r = 0; r < h; r++)
+                for (int c = 0; c < w; c++)
+                    clone._weights[r, c] = (T[])_weights[r, c].Clone();
+        }
+        clone._neuronLabels = _neuronLabels?.ToArray();
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        return clone;
+    }
+
+    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (SelfOrganizingMap<T>)CreateNewInstance();
@@ -130,7 +169,25 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
             ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize weights randomly
+        // Compute data range per feature for proper weight initialization
+        var minVals = new double[d];
+        var maxVals = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            minVals[j] = double.MaxValue;
+            maxVals[j] = double.MinValue;
+        }
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                double val = NumOps.ToDouble(x[i, j]);
+                if (val < minVals[j]) minVals[j] = val;
+                if (val > maxVals[j]) maxVals[j] = val;
+            }
+        }
+
+        // Initialize weights randomly within the data range
         _weights = new T[height, width][];
         for (int r = 0; r < height; r++)
         {
@@ -139,7 +196,9 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                 _weights[r, c] = new T[d];
                 for (int j = 0; j < d; j++)
                 {
-                    _weights[r, c][j] = NumOps.FromDouble(rand.NextDouble());
+                    double range = maxVals[j] - minVals[j];
+                    if (range < 1e-10) range = 1.0;
+                    _weights[r, c][j] = NumOps.FromDouble(minVals[j] + rand.NextDouble() * range);
                 }
             }
         }
