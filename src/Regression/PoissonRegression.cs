@@ -59,6 +59,11 @@ public class PoissonRegression<T> : RegressionBase<T>
     private readonly PoissonRegressionOptions<T> _options;
 
     /// <summary>
+    /// Shift applied to y to make it positive (0 if y was already positive).
+    /// </summary>
+    private double _yShift;
+
+    /// <summary>
     /// Initializes a new instance of the PoissonRegression class with the specified options and regularization.
     /// </summary>
     /// <param name="options">Configuration options for the Poisson regression model. If null, default options will be used.</param>
@@ -109,11 +114,32 @@ public class PoissonRegression<T> : RegressionBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidationHelper<T>.ValidateInputData(x, y);
-        ValidationHelper<T>.ValidatePoissonData(y);
+
+        // Poisson requires positive targets. Shift if needed and store the shift
+        // so we can adjust predictions back.
+        _yShift = 0.0;
+        double minY = double.MaxValue;
+        for (int i = 0; i < y.Length; i++)
+        {
+            double yi = NumOps.ToDouble(y[i]);
+            if (yi < minY) minY = yi;
+        }
+        if (minY <= 0)
+        {
+            _yShift = Math.Abs(minY) + 1.0;
+            var yShifted = new Vector<T>(y.Length);
+            for (int i = 0; i < y.Length; i++)
+                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);
+            y = yShifted;
+        }
 
         int numFeatures = x.Columns;
         Coefficients = new Vector<T>(numFeatures);
-        Intercept = NumOps.Zero;
+        // Initialize intercept to log(mean(y)) for better convergence
+        double meanY = 0;
+        for (int i = 0; i < y.Length; i++) meanY += NumOps.ToDouble(y[i]);
+        meanY /= y.Length;
+        Intercept = NumOps.FromDouble(Math.Log(Math.Max(meanY, 1e-10)));
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
 
@@ -176,7 +202,14 @@ public class PoissonRegression<T> : RegressionBase<T>
     /// </remarks>
     private Vector<T> PredictMean(Matrix<T> x, Vector<T> coefficients)
     {
-        return x.Multiply(coefficients).Transform(NumOps.Exp);
+        var linearPredictor = x.Multiply(coefficients);
+        // Clamp linear predictor to prevent exp() overflow
+        return linearPredictor.Transform(v =>
+        {
+            double d = NumOps.ToDouble(v);
+            d = Math.Max(-20.0, Math.Min(20.0, d)); // exp(20) ≈ 5e8, safe range
+            return NumOps.FromDouble(Math.Exp(d));
+        });
     }
 
     /// <summary>
@@ -276,7 +309,16 @@ public class PoissonRegression<T> : RegressionBase<T>
         }
         coefficientsWithIntercept[Coefficients.Length] = Intercept;
 
-        return PredictMean(xWithIntercept, coefficientsWithIntercept);
+        var predictions = PredictMean(xWithIntercept, coefficientsWithIntercept);
+
+        // Undo the y-shift applied during training
+        if (_yShift > 0)
+        {
+            for (int i = 0; i < predictions.Length; i++)
+                predictions[i] = NumOps.Subtract(predictions[i], NumOps.FromDouble(_yShift));
+        }
+
+        return predictions;
     }
 
     /// <summary>

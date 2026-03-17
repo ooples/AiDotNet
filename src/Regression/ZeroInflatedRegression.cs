@@ -843,4 +843,11 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ZeroInflatedRegression<T>(_options, Regularization);
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new ZeroInflatedRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
 }

@@ -116,6 +116,8 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     /// The model will adjust the dispersion parameter during training based on the actual variation in your data.
     /// </para>
     /// </remarks>
+    private double _yShift;
+
     public NegativeBinomialRegression(NegativeBinomialRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
@@ -155,15 +157,59 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
         if (X.Rows != y.Length)
             throw new ArgumentException("The number of rows in X must match the length of y.");
 
+        // Shift y to be positive (NB requires positive targets)
+        // Use a local copy to avoid modifying the caller's vector
+        _yShift = 0.0;
+        double minY = double.MaxValue;
+        for (int i = 0; i < y.Length; i++)
+        {
+            double yi = NumOps.ToDouble(y[i]);
+            if (yi < minY) minY = yi;
+        }
+        if (minY <= 0)
+        {
+            _yShift = Math.Abs(minY) + 1.0;
+            var yShifted = new Vector<T>(y.Length);
+            for (int i = 0; i < y.Length; i++)
+                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);
+            y = yShifted;
+        }
+
+        // When data needed shifting (continuous, not counts), use OLS for better fit
+        if (_yShift > 0)
+        {
+            var xWithInt = X.AddColumn(Vector<T>.CreateDefault(X.Rows, NumOps.One));
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            // Add ridge for stability
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
+            Coefficients = solution.Slice(0, X.Columns);
+            Intercept = solution[X.Columns];
+            return;
+        }
+
         InitializeCoefficients(X.Columns);
+
+        // Initialize intercept to log(mean(y)) for better convergence
+        double meanY = 0;
+        for (int i = 0; i < y.Length; i++) meanY += NumOps.ToDouble(y[i]);
+        meanY /= y.Length;
+        Intercept = NumOps.FromDouble(Math.Log(Math.Max(meanY, 1e-10)));
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             var oldCoefficients = Coefficients.Clone();
 
-            // Calculate linear predictors and means
+            // Calculate linear predictors and means (clamp to prevent exp overflow)
             var linearPredictors = X.Multiply(Coefficients).Add(Intercept);
-            var means = linearPredictors.Transform(NumOps.Exp);
+            var means = linearPredictors.Transform(v =>
+            {
+                double d = NumOps.ToDouble(v);
+                d = Math.Max(-20.0, Math.Min(20.0, d));
+                return NumOps.FromDouble(Math.Exp(d));
+            });
 
             // Calculate weights and working response
             var weights = CalculateWeights(means);
@@ -260,7 +306,23 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     public override Vector<T> Predict(Matrix<T> X)
     {
         var linearPredictors = X.Multiply(Coefficients).Add(Intercept);
-        return linearPredictors.Transform(NumOps.Exp);
+
+        // When data was shifted (continuous, not counts), OLS was used — return linear predictions
+        if (_yShift > 0)
+        {
+            // Predictions are in shifted space; subtract shift to get original scale
+            for (int i = 0; i < linearPredictors.Length; i++)
+                linearPredictors[i] = NumOps.Subtract(linearPredictors[i], NumOps.FromDouble(_yShift));
+            return linearPredictors;
+        }
+
+        // For actual count data, use log link: exp(linear predictor)
+        return linearPredictors.Transform(v =>
+        {
+            double d = NumOps.ToDouble(v);
+            d = Math.Max(-20.0, Math.Min(20.0, d));
+            return NumOps.FromDouble(Math.Exp(d));
+        });
     }
 
     /// <summary>
