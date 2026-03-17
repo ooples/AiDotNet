@@ -127,8 +127,42 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// these responses to predict the target values.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// RBF solves analytically — no optimizer parameter injection.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>
+    /// Returns all features since RBF uses distance-based kernels across all features.
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, SupportVectors.Columns > 0 ? SupportVectors.Columns : 0);
+    }
+
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
+        // Auto-scale gamma if using the default value of 1.0
+        if (Math.Abs(_options.Gamma - 1.0) < 1e-10)
+        {
+            double totalVar = 0;
+            for (int j = 0; j < x.Columns; j++)
+            {
+                double mean = 0;
+                for (int i = 0; i < x.Rows; i++)
+                    mean += NumOps.ToDouble(x[i, j]);
+                mean /= x.Rows;
+                double variance = 0;
+                for (int i = 0; i < x.Rows; i++)
+                {
+                    double d = NumOps.ToDouble(x[i, j]) - mean;
+                    variance += d * d;
+                }
+                totalVar += variance / x.Rows;
+            }
+            _options.Gamma = totalVar > 1e-10 ? 1.0 / (x.Columns * (totalVar / x.Columns)) : 1.0;
+        }
+
         // Select centers
         _centers = SelectCenters(x);
 
