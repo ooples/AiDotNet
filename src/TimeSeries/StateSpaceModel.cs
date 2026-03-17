@@ -675,6 +675,13 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
 
         // Store smoothed states for use in Predict
         _smoothedStates = lastSmoothedStates;
+
+        // Populate ModelParameters from transition matrix for GetParameters()
+        int stateSize = _transitionMatrix.Rows;
+        ModelParameters = new Vector<T>(stateSize * stateSize);
+        for (int i = 0; i < stateSize; i++)
+            for (int j = 0; j < stateSize; j++)
+                ModelParameters[i * stateSize + j] = _transitionMatrix[i, j];
     }
 
     /// <summary>

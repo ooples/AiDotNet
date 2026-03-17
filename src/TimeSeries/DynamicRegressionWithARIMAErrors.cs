@@ -1547,6 +1547,16 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
 
         // Step 5: Update model parameters
         UpdateModelParameters();
+
+        // Populate ModelParameters for GetParameters()
+        int regLen = _regressionCoefficients.Length;
+        int arLen = _arCoefficients.Length;
+        int maLen = _maCoefficients.Length;
+        ModelParameters = new Vector<T>(1 + regLen + arLen + maLen);
+        ModelParameters[0] = _intercept;
+        for (int i = 0; i < regLen; i++) ModelParameters[1 + i] = _regressionCoefficients[i];
+        for (int i = 0; i < arLen; i++) ModelParameters[1 + regLen + i] = _arCoefficients[i];
+        for (int i = 0; i < maLen; i++) ModelParameters[1 + regLen + arLen + i] = _maCoefficients[i];
     }
 
     /// <summary>

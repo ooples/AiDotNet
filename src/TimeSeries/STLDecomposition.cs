@@ -1238,6 +1238,12 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             // Re-throw with more context
             throw new InvalidOperationException($"STL decomposition failed: {ex.Message}", ex);
         }
+
+        // Populate ModelParameters from seasonal pattern (one period) for GetParameters()
+        int period = _stlOptions.SeasonalPeriod;
+        ModelParameters = new Vector<T>(period);
+        for (int i = 0; i < period && i < _seasonal.Length; i++)
+            ModelParameters[i] = _seasonal[i];
     }
 
     /// <summary>

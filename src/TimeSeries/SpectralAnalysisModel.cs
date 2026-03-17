@@ -440,6 +440,11 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
                 _frequencies[i] = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(nfft));
             }
         }
+
+        // Populate ModelParameters from periodogram for GetParameters()
+        ModelParameters = new Vector<T>(_periodogram.Length);
+        for (int i = 0; i < _periodogram.Length; i++)
+            ModelParameters[i] = _periodogram[i];
     }
 
     /// <summary>

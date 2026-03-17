@@ -1364,28 +1364,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
-        // Create a new instance
-        var clone = (TimeSeriesModelBase<T>)CreateInstance();
-
-        // Copy options (shallow copy is usually sufficient for options)
-        clone.Options = this.Options;
-
-        // Copy trained status
-        clone.IsTrained = this.IsTrained;
-
-        // Copy model parameters if trained
-        if (this.IsTrained)
-        {
-            clone.ModelParameters = this.ModelParameters.Clone();
-
-            // Copy evaluation metrics
-            foreach (var kvp in this.LastEvaluationMetrics)
-            {
-                clone.LastEvaluationMetrics[kvp.Key] = kvp.Value;
-            }
-        }
-
-        return clone;
+        // Use DeepCopy (serialize/deserialize) to ensure all internal state is preserved.
+        // The lighter Clone approach only copies ModelParameters but misses subclass-specific
+        // state (e.g. _arCoefficients, _trainedSeries) that Predict actually uses.
+        return DeepCopy();
     }
 
     /// <summary>

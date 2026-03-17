@@ -1642,6 +1642,14 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
 
         // Parameter estimation (e.g., EM algorithm or variational inference)
         EstimateParameters(x, y, states);
+
+        // Populate ModelParameters for GetParameters()
+        int regLen = _regression?.Length ?? 0;
+        ModelParameters = new Vector<T>(2 + regLen); // level + trend + regression coefficients
+        ModelParameters[0] = _level;
+        ModelParameters[1] = _trend;
+        for (int i = 0; i < regLen; i++)
+            ModelParameters[2 + i] = _regression![i];
     }
 
     /// <summary>

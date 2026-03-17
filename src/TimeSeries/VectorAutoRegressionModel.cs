@@ -582,6 +582,16 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
 
             throw new InvalidOperationException("VAR model training failed: " + ex.Message, ex);
         }
+
+        // Populate ModelParameters from intercepts + coefficient matrix for GetParameters()
+        int m2 = _coefficients.Rows;
+        int cols = _coefficients.Columns;
+        ModelParameters = new Vector<T>(m2 + m2 * cols);
+        for (int i = 0; i < m2; i++)
+            ModelParameters[i] = _intercepts[i];
+        for (int i = 0; i < m2; i++)
+            for (int j = 0; j < cols; j++)
+                ModelParameters[m2 + i * cols + j] = _coefficients[i, j];
     }
 
     /// <summary>
