@@ -520,6 +520,15 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         var activeFeatures = new HashSet<int>();
         CollectActiveFeatures(Root, activeFeatures);
+
+        // Models that don't use tree structure (EBM, DeepHit, DeepSurv, etc.)
+        // have null Root. Return all feature indices based on FeatureImportances.
+        if (activeFeatures.Count == 0 && FeatureImportances.Length > 0)
+        {
+            for (int i = 0; i < FeatureImportances.Length; i++)
+                activeFeatures.Add(i);
+        }
+
         return activeFeatures;
     }
 
