@@ -184,6 +184,40 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
             Options.Gamma = autoGamma;
         }
 
+        // Auto-scale epsilon relative to y range if using default 0.1
+        if (Math.Abs(_options.Epsilon - 0.1) < 1e-10)
+        {
+            double yMin = double.MaxValue, yMax = double.MinValue;
+            for (int i = 0; i < y.Length; i++)
+            {
+                double yi = NumOps.ToDouble(y[i]);
+                if (yi < yMin) yMin = yi;
+                if (yi > yMax) yMax = yi;
+            }
+            double yRange = yMax - yMin;
+            if (yRange > 1.0)
+            {
+                _options.Epsilon = yRange * 0.05; // 5% of range
+            }
+        }
+
+        // Auto-scale C relative to y range if using default 1.0
+        if (Math.Abs(_options.C - 1.0) < 1e-10)
+        {
+            double yStd = 0;
+            double yMean = 0;
+            for (int i = 0; i < y.Length; i++) yMean += NumOps.ToDouble(y[i]);
+            yMean /= y.Length;
+            for (int i = 0; i < y.Length; i++)
+            {
+                double d = NumOps.ToDouble(y[i]) - yMean;
+                yStd += d * d;
+            }
+            yStd = Math.Sqrt(yStd / y.Length);
+            if (yStd > 1.0)
+                _options.C = yStd;
+        }
+
         SequentialMinimalOptimization(x, y);
     }
 
