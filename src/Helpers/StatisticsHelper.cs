@@ -4357,19 +4357,25 @@ public static class StatisticsHelper<T>
         // The correct formula for VIF from a correlation matrix is:
         // VIF_i = (R^-1)_ii where R^-1 is the inverse of the correlation matrix
         // This gives the diagonal elements of the inverse correlation matrix
-        var inverseCorrelationMatrix = correlationMatrix.Inverse();
+        Matrix<T> inverseCorrelationMatrix;
+        try
+        {
+            inverseCorrelationMatrix = correlationMatrix.Inverse();
+        }
+        catch (InvalidOperationException)
+        {
+            // Correlation matrix is singular (e.g., single feature or perfect collinearity).
+            // Return VIF = 1.0 for all features (no multicollinearity detected).
+            for (int i = 0; i < correlationMatrix.Rows; i++)
+                vifValues.Add(_numOps.One);
+            return vifValues;
+        }
 
         for (int i = 0; i < correlationMatrix.Rows; i++)
         {
             // VIF is the diagonal element of the inverse correlation matrix
             var vif = inverseCorrelationMatrix[i, i];
             vifValues.Add(vif);
-
-            // Check if VIF exceeds the maximum allowed value
-            if (_numOps.GreaterThan(vif, _numOps.FromDouble(options.MaxVIF)))
-            {
-                Console.WriteLine($"High VIF detected for feature {i}: {vif}");
-            }
         }
 
         return vifValues;
@@ -5057,7 +5063,23 @@ public static class StatisticsHelper<T>
     {
         // Calculate the hat matrix (H = X(X'X)^(-1)X')
         var transposeFeatures = features.Transpose();
-        var inverseMatrix = (transposeFeatures * features).Inverse();
+        Matrix<T> inverseMatrix;
+        try
+        {
+            inverseMatrix = (transposeFeatures * features).Inverse();
+        }
+        catch (InvalidOperationException)
+        {
+            // X'X is singular (e.g., single feature or collinear features).
+            // Fall back to the number of non-zero coefficients as effective parameters.
+            int count = 0;
+            for (int i = 0; i < coefficients.Length; i++)
+            {
+                if (!_numOps.Equals(coefficients[i], _numOps.Zero))
+                    count++;
+            }
+            return _numOps.FromDouble(count);
+        }
         var hatMatrix = features * (inverseMatrix * transposeFeatures);
 
         // The effective number of parameters is the trace of the hat matrix

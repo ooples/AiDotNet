@@ -203,6 +203,16 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
         // Solve for coefficients with optional ridge regularization
         var xTx = basisFunctions.Transpose().Multiply(basisFunctions);
 
+        // Symmetrize X'X to handle floating-point rounding in matrix multiplication
+        // (X'X is mathematically symmetric but may have tiny asymmetries)
+        for (int i = 0; i < xTx.Rows; i++)
+            for (int j = i + 1; j < xTx.Columns; j++)
+            {
+                var avg = NumOps.Divide(NumOps.Add(xTx[i, j], xTx[j, i]), NumOps.FromDouble(2.0));
+                xTx[i, j] = avg;
+                xTx[j, i] = avg;
+            }
+
         // Add ridge regularization to the diagonal if strength is specified
         var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
         if (regularizationStrength > 0)
