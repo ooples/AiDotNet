@@ -1611,6 +1611,19 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             }
         }
 
+        // Copy training series for in-sample predictions
+        if (_trainingSeries.Length > 0)
+        {
+            clone._trainingSeries = new Vector<T>(_trainingSeries.Length);
+            for (int i = 0; i < _trainingSeries.Length; i++)
+                clone._trainingSeries[i] = _trainingSeries[i];
+        }
+
+        // Copy trained state
+        clone.IsTrained = IsTrained;
+        if (ModelParameters.Length > 0)
+            clone.ModelParameters = ModelParameters.Clone();
+
         return clone;
     }
 
