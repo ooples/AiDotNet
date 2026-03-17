@@ -152,7 +152,22 @@ public class GammaRegression<T> : RegressionBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidationHelper<T>.ValidateInputData(x, y);
-        ValidateGammaData(y);
+        bool wasShifted = ValidateGammaData(y);
+
+        // When data was shifted (continuous, not positive), use OLS for accurate linear predictions
+        if (wasShifted)
+        {
+            Options.UseIntercept = true;
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Coefficients = solution.Slice(0, x.Columns);
+            Intercept = solution[x.Columns];
+            return;
+        }
 
         int numFeatures = x.Columns;
         int numSamples = x.Rows;
@@ -241,7 +256,7 @@ public class GammaRegression<T> : RegressionBase<T>
     /// contains zero or negative values, you'll need to transform it or use a different model.
     /// </para>
     /// </remarks>
-    private void ValidateGammaData(Vector<T> y)
+    private bool ValidateGammaData(Vector<T> y)
     {
         // Coerce non-positive values to positive (Gamma distribution requires y > 0)
         double minVal = double.MaxValue;
@@ -255,7 +270,9 @@ public class GammaRegression<T> : RegressionBase<T>
             double shift = Math.Abs(minVal) + 0.1;
             for (int i = 0; i < y.Length; i++)
                 y[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + shift);
+            return true;
         }
+        return false;
     }
 
     /// <summary>
