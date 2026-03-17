@@ -269,6 +269,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         int configMax = Options.MaximumFeatures > 0 ? Options.MaximumFeatures : totalFeatures;
         int max = maxFeatures ?? Math.Min(configMax, totalFeatures);
 
+        // When neither MinimumFeatures nor MaximumFeatures is explicitly configured,
+        // use all features to avoid random subset selection that can break small-feature models.
+        if (Options.MinimumFeatures == 0 && Options.MaximumFeatures == 0)
+        {
+            return Enumerable.Range(0, totalFeatures).ToList();
+        }
+
         // Ensure min/max values are valid
         min = Math.Max(1, Math.Min(min, totalFeatures));
         max = Math.Min(max, totalFeatures);
