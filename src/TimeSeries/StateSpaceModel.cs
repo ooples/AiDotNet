@@ -513,15 +513,17 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         writer.Write(_tolerance);
         writer.Write(_convergenceThreshold);
 
-        // Serialize last smoothed state for prediction support
+        // Serialize ALL smoothed states for in-sample prediction support
         if (_smoothedStates != null && _smoothedStates.Count > 0)
         {
             writer.Write(_smoothedStates.Count);
-            var lastState = _smoothedStates[_smoothedStates.Count - 1];
-            writer.Write(lastState.Length);
-            for (int i = 0; i < lastState.Length; i++)
+            writer.Write(_smoothedStates[0].Length);
+            foreach (var state in _smoothedStates)
             {
-                writer.Write(Convert.ToDouble(lastState[i]));
+                for (int i = 0; i < state.Length; i++)
+                {
+                    writer.Write(Convert.ToDouble(state[i]));
+                }
             }
         }
         else
@@ -567,7 +569,7 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
         _tolerance = reader.ReadDouble();
         _convergenceThreshold = reader.ReadDouble();
 
-        // Deserialize smoothed states if available (backward-compatible)
+        // Deserialize ALL smoothed states for in-sample prediction support
         _smoothedStates = new List<Vector<T>>();
         try
         {
@@ -575,14 +577,15 @@ public class StateSpaceModel<T> : TimeSeriesModelBase<T>
             if (smoothedCount > 0)
             {
                 int stateLen = reader.ReadInt32();
-                var lastState = new Vector<T>(stateLen);
-                for (int i = 0; i < stateLen; i++)
+                for (int s = 0; s < smoothedCount; s++)
                 {
-                    lastState[i] = NumOps.FromDouble(reader.ReadDouble());
+                    var state = new Vector<T>(stateLen);
+                    for (int i = 0; i < stateLen; i++)
+                    {
+                        state[i] = NumOps.FromDouble(reader.ReadDouble());
+                    }
+                    _smoothedStates.Add(state);
                 }
-                // Only the last state is serialized; after deserialization, in-sample predictions
-                // beyond index 0 will fall through to forecast mode using this single state.
-                _smoothedStates.Add(lastState);
             }
         }
         catch (EndOfStreamException)
