@@ -11,9 +11,6 @@ public class DBSCANTests : ClusteringModelTestBase
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new DBSCAN<double>(new DBSCANOptions<double>
         {
-            // Data has clusters at 0, 10, 20 with std=0.5. Points within a cluster
-            // are within ~2 Euclidean distance (sqrt(3) * 0.5 ≈ 0.87 for 3 features).
-            // Default epsilon=0.5 is too small for this data scale.
             Epsilon = 2.0,
             MinPoints = 3
         });

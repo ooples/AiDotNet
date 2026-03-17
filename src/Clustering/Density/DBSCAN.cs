@@ -151,9 +151,38 @@ public class DBSCAN<T> : ClusteringBase<T>
         // Build spatial index for efficient neighbor queries
         var neighborFinder = CreateNeighborFinder(x);
 
+        // Auto-estimate epsilon from data if enabled.
+        // Uses k-distance method: compute the MinPoints-nearest-neighbor distance for each point,
+        // then use the median as epsilon. This adapts to the data scale automatically.
+        double effectiveEpsilon = _options.Epsilon;
+        if (_options.AutoEpsilon)
+        {
+            var metric = _options.DistanceMetric ?? new AiDotNet.Clustering.DistanceMetrics.EuclideanDistance<T>();
+            var kDistances = new List<double>(n);
+            int k = _options.MinPoints;
+            for (int i = 0; i < Math.Min(n, 200); i++) // sample for efficiency
+            {
+                var dists = new List<double>();
+                var pointI = GetRow(x, i);
+                for (int j = 0; j < n; j++)
+                {
+                    if (i != j)
+                    {
+                        dists.Add(NumOps.ToDouble(metric.Compute(pointI, GetRow(x, j))));
+                    }
+                }
+                dists.Sort();
+                if (dists.Count >= k)
+                    kDistances.Add(dists[k - 1]);
+            }
+            kDistances.Sort();
+            if (kDistances.Count > 0)
+                effectiveEpsilon = kDistances[kDistances.Count / 2]; // median k-distance
+        }
+
         // Find neighbors for each point and identify core points
         var neighbors = new List<int>[n];
-        T epsilonT = NumOps.FromDouble(_options.Epsilon);
+        T epsilonT = NumOps.FromDouble(effectiveEpsilon);
 
         for (int i = 0; i < n; i++)
         {
