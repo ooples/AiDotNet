@@ -546,6 +546,13 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
         return new ExtremelyRandomizedTreesRegression<T>(_options, Regularization);
     }
 
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new ExtremelyRandomizedTreesRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
     #region IJitCompilable Implementation Override
 
     /// <summary>
