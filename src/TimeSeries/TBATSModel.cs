@@ -201,7 +201,12 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
                 {
                     int period = _tbatsOptions.SeasonalPeriods[i];
                     int sLen = _seasonalComponents[i].Length;
-                    prediction = NumOps.Multiply(prediction, _seasonalComponents[i][t % Math.Min(period, sLen)]);
+                    int sIdx = t % Math.Min(period, sLen);
+                    // Use additive seasonal when BoxCoxLambda=1 (no transformation)
+                    if (_tbatsOptions.BoxCoxLambda == 1)
+                        prediction = NumOps.Add(prediction, _seasonalComponents[i][sIdx]);
+                    else
+                        prediction = NumOps.Multiply(prediction, _seasonalComponents[i][sIdx]);
                 }
 
                 predictions[t] = prediction;
@@ -217,7 +222,11 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
                 {
                     int period = _tbatsOptions.SeasonalPeriods[i];
                     int sLen = _seasonalComponents[i].Length;
-                    prediction = NumOps.Multiply(prediction, _seasonalComponents[i][t % Math.Min(period, sLen)]);
+                    int sIdx = t % Math.Min(period, sLen);
+                    if (_tbatsOptions.BoxCoxLambda == 1)
+                        prediction = NumOps.Add(prediction, _seasonalComponents[i][sIdx]);
+                    else
+                        prediction = NumOps.Multiply(prediction, _seasonalComponents[i][sIdx]);
                 }
 
                 predictions[t] = prediction;
