@@ -66,6 +66,8 @@ public class Denclue<T> : ClusteringBase<T>
     public override ModelOptions GetOptions() => _options;
     private T[][]? _attractors;
     private T[]? _attractorDensities;
+    private double[]? _featureMeans;
+    private double[]? _featureStds;
 
     /// <summary>
     /// Initializes a new DENCLUE instance.
@@ -118,6 +120,28 @@ public class Denclue<T> : ClusteringBase<T>
         int n = x.Rows;
         int d = x.Columns;
         NumFeatures = d;
+
+        // Normalize features for scale-invariant density estimation
+        _featureMeans = new double[d];
+        _featureStds = new double[d];
+        var xNorm = new Matrix<T>(n, d);
+        for (int j = 0; j < d; j++)
+        {
+            double sum = 0, varSum = 0;
+            for (int i = 0; i < n; i++)
+                sum += NumOps.ToDouble(x[i, j]);
+            _featureMeans[j] = sum / n;
+            for (int i = 0; i < n; i++)
+            {
+                double diff = NumOps.ToDouble(x[i, j]) - _featureMeans[j];
+                varSum += diff * diff;
+            }
+            _featureStds[j] = Math.Sqrt(varSum / n);
+            if (_featureStds[j] < 1e-10) _featureStds[j] = 1.0;
+            for (int i = 0; i < n; i++)
+                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+        }
+        x = xNorm;
 
         T minDensity = NumOps.FromDouble(_options.MinDensity);
         T mergeThreshold = NumOps.FromDouble(_options.AttractorMergeThreshold);
@@ -208,6 +232,8 @@ public class Denclue<T> : ClusteringBase<T>
 
         IsTrained = true;
     }
+
+    // Predict override is below (after the attractor computation methods)
 
     private (T[] attractor, T density) HillClimb(T[] point, Matrix<T> data, int n, int d)
     {
@@ -381,6 +407,17 @@ public class Denclue<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
+        // Normalize input using saved parameters from training
+        if (_featureMeans is not null && _featureStds is not null)
+        {
+            var xNorm = new Matrix<T>(x.Rows, x.Columns);
+            for (int i = 0; i < x.Rows; i++)
+                for (int j = 0; j < x.Columns; j++)
+                    xNorm[i, j] = NumOps.FromDouble(
+                        (NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+            x = xNorm;
+        }
+
         var labels = new Vector<T>(x.Rows);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
@@ -409,6 +446,39 @@ public class Denclue<T> : ClusteringBase<T>
         }
 
         return labels;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (Denclue<T>)CreateNewInstance();
+        clone._attractors = _attractors?.Select(a => (T[])a.Clone()).ToArray();
+        clone._attractorDensities = _attractorDensities?.ToArray();
+        clone._featureMeans = _featureMeans?.ToArray();
+        clone._featureStds = _featureStds?.ToArray();
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        return clone;
     }
 
     /// <inheritdoc />
