@@ -73,6 +73,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepAROptions<T> _options;
     private readonly Random _random;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Tensor-based LSTM layers
     private readonly List<DeepARLstmCellTensor<T>> _lstmLayers;
@@ -199,6 +200,15 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
                 ApplyGradients(batchGradients, learningRate, batchSize);
             }
         }
+
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
+        // Populate ModelParameters
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = NumOps.FromDouble(y.Length);
     }
 
     private Tensor<T> ConvertRowToTensor(Matrix<T> x, int rowIndex)
@@ -388,6 +398,23 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         {
             _lstmLayers[layer].ApplyGradients(gradients, $"lstm_{layer}_", learningRate, batchSizeT);
         }
+    }
+
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+
+        return predictions;
     }
 
     public override T PredictSingle(Vector<T> input)
