@@ -237,7 +237,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
             var xTy = xWithInt.Transpose().Multiply(y);
             for (int i = 0; i < xTx.Rows; i++)
                 xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = SolveSystem(xTx, xTy);
+            var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
             Intercept = solution[0];
             Coefficients = solution.Slice(1, x.Columns);
             return;
@@ -285,6 +285,12 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // OLS uses all features directly
+        if (Coefficients.Length == input.Columns)
+        {
+            return base.Predict(input);
+        }
+
         if (_selectedFeatures.Count == 0 || Coefficients.Length == 0)
         {
             return new Vector<T>(input.Rows);
