@@ -438,8 +438,20 @@ public class DeepGaussianProcess<T> : IGaussianProcess<T>
         double sampleMean = samples.Average();
         double variance = samples.Select(s => (s - sampleMean) * (s - sampleMean)).Average();
 
-        // Add observation noise
-        variance = Math.Max(variance, 1e-6);
+        // Add observation noise and ensure minimum variance.
+        // The DSVI variational distribution can collapse (variance ≈ 0) when
+        // the backward pass doesn't propagate uncertainty properly.
+        // Use a data-driven noise floor based on training data variance.
+        double yVar = 0;
+        double yMeanLocal = _yMean;
+        for (int i = 0; i < _y.Length; i++)
+        {
+            double v = _numOps.ToDouble(_y[i]);
+            yVar += v * v;
+        }
+        yVar /= _y.Length;
+        double noiseFloor = Math.Max(yVar * 0.01, 1e-4); // 1% of data variance
+        variance = Math.Max(variance, noiseFloor);
 
         return (_numOps.FromDouble(mean), _numOps.FromDouble(variance));
     }
