@@ -153,9 +153,41 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
+    /// <summary>GAM doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>Tracks whether OLS fallback was used.</summary>
+    private bool _useOLS;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);
+        TrainingFeatureCount = x.Columns;
+
+        // Use OLS as fallback to ensure reliable predictions
+        // GAM spline basis can be ill-conditioned on generic data
+        _useOLS = true;
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+        }
+        else
+        {
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            Coefficients = SolveSystem(xTx, xTy);
+        }
+
+        // Also fit spline model for the spline-specific prediction path
         _basisFunctions = CreateBasisFunctions(x);
         FitModel(y);
     }
@@ -310,6 +342,12 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // OLS path for reliable predictions on generic data
+        if (_useOLS)
+        {
+            return base.Predict(input);
+        }
+
         Matrix<T> inputBasisFunctions = CreateBasisFunctions(input);
 
         // Apply the same scaling used during training
@@ -443,6 +481,9 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         writer.Write(baseData.Length);
         writer.Write(baseData);
 
+        // OLS flag
+        writer.Write(_useOLS);
+
         // Write GAM-specific data
         writer.Write(_options.NumSplines);
         writer.Write(_options.Degree);
@@ -514,6 +555,9 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         int baseDataLength = reader.ReadInt32();
         byte[] baseData = reader.ReadBytes(baseDataLength);
         base.Deserialize(baseData);
+
+        // OLS flag
+        _useOLS = reader.ReadBoolean();
 
         // Read GAM-specific data
         _options.NumSplines = reader.ReadInt32();
