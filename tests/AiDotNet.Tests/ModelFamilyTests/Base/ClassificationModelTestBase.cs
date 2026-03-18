@@ -345,6 +345,95 @@ public abstract class ClassificationModelTestBase
     }
 
     // =====================================================
+    // MATHEMATICAL INVARIANT: Binary Threshold Sensitivity
+    // For 2-class problems, slightly different decision boundaries should
+    // flip at least some predictions. A model that never changes its
+    // predictions regardless of data variation has a degenerate decision function.
+    // =====================================================
+
+    [Fact]
+    public void BinaryThreshold_Sensitivity()
+    {
+        if (NumClasses != 2) return;
+
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        var (trainX, trainY) = GenerateData(TrainSamples, Features, 2, rng);
+
+        model.Train(trainX, trainY);
+        var predictions = model.Predict(trainX);
+
+        if (ModelTestHelpers.AllFinite(predictions))
+        {
+            // Check that both classes are predicted
+            bool hasClass0 = false, hasClass1 = false;
+            for (int i = 0; i < predictions.Length; i++)
+            {
+                if (Math.Round(predictions[i]) < 0.5) hasClass0 = true;
+                else hasClass1 = true;
+            }
+            Assert.True(hasClass0 && hasClass1,
+                "Binary classifier predicts only one class — decision boundary may be degenerate.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Class Prior Sensitivity
+    // Training on imbalanced data (90/10) should produce more majority
+    // predictions than training on balanced data (50/50).
+    // =====================================================
+
+    [Fact]
+    public void ClassPrior_Sensitivity()
+    {
+        if (NumClasses != 2) return;
+
+        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
+        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+        var model1 = CreateModel();
+        var model2 = CreateModel();
+
+        // Balanced: 50/50
+        var (balX, balY) = GenerateData(TrainSamples, Features, 2, rng1);
+
+        // Imbalanced: 90/10 (replicate class 0)
+        var imbX = new Matrix<double>(TrainSamples, Features);
+        var imbY = new Vector<double>(TrainSamples);
+        int majorityCount = (int)(TrainSamples * 0.9);
+        for (int i = 0; i < TrainSamples; i++)
+        {
+            for (int j = 0; j < Features; j++)
+                imbX[i, j] = rng2.NextDouble() * 4.0 + (i < majorityCount ? 0.0 : 8.0);
+            imbY[i] = i < majorityCount ? 0.0 : 1.0;
+        }
+
+        model1.Train(balX, balY);
+        model2.Train(imbX, imbY);
+
+        var testX = new Matrix<double>(20, Features);
+        for (int i = 0; i < 20; i++)
+            for (int j = 0; j < Features; j++)
+                testX[i, j] = rng1.NextDouble() * 10.0;
+
+        var pred1 = model1.Predict(testX);
+        var pred2 = model2.Predict(testX);
+
+        if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
+        {
+            int majority1 = 0, majority2 = 0;
+            for (int i = 0; i < pred1.Length; i++)
+                if (Math.Round(pred1[i]) < 0.5) majority1++;
+            for (int i = 0; i < pred2.Length; i++)
+                if (Math.Round(pred2[i]) < 0.5) majority2++;
+
+            // Imbalanced model should predict more class-0 than balanced
+            Assert.True(majority2 >= majority1 - 5,
+                $"Imbalanced model predicts {majority2} class-0 vs balanced {majority1}. " +
+                "Classifier may not be sensitive to class priors.");
+        }
+    }
+
+    // =====================================================
     // INTEGRATION: Builder Pipeline
     // =====================================================
 

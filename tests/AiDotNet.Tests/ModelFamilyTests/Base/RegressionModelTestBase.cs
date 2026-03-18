@@ -551,6 +551,109 @@ public abstract class RegressionModelTestBase
     }
 
     // =====================================================
+    // MATHEMATICAL INVARIANT: Intercept Recovery
+    // On constant data y = C, all predictions should equal C.
+    // If not, the bias/intercept term is broken.
+    // =====================================================
+
+    [Fact]
+    public void InterceptRecovery_ConstantTarget_ShouldPredictConstant()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        int n = TrainSamples;
+        var x = new Matrix<double>(n, Features);
+        var y = new Vector<double>(n);
+        const double constant = 7.5;
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < Features; j++)
+                x[i, j] = rng.NextDouble() * 10.0;
+            y[i] = constant;
+        }
+
+        model.Train(x, y);
+        var predictions = model.Predict(x);
+
+        if (ModelTestHelpers.AllFinite(predictions))
+        {
+            double meanPred = 0;
+            for (int i = 0; i < predictions.Length; i++) meanPred += predictions[i];
+            meanPred /= predictions.Length;
+
+            Assert.True(Math.Abs(meanPred - constant) < constant * 0.3,
+                $"Mean prediction = {meanPred:F4} on constant data (y={constant}). " +
+                "Intercept/bias term may be broken.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Collinear Features Should Not Crash
+    // Perfectly correlated features should not cause NaN/Infinity.
+    // =====================================================
+
+    [Fact]
+    public void CollinearFeatures_ShouldNotCrash()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        int n = TrainSamples;
+        var x = new Matrix<double>(n, Features);
+        var y = new Vector<double>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            double val = rng.NextDouble() * 10.0;
+            for (int j = 0; j < Features; j++)
+                x[i, j] = val + j * 0.001; // nearly perfectly collinear
+            y[i] = val * 2.0 + 1.0;
+        }
+
+        model.Train(x, y);
+        var predictions = model.Predict(x);
+
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.False(double.IsNaN(predictions[i]),
+                $"Prediction[{i}] is NaN with collinear features — numerical instability.");
+            Assert.False(double.IsInfinity(predictions[i]),
+                $"Prediction[{i}] is Infinity with collinear features.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Single Feature Should Work
+    // Regression model should handle 1-dimensional input.
+    // =====================================================
+
+    [Fact]
+    public void SingleFeature_ShouldWork()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        int n = TrainSamples;
+        var x = new Matrix<double>(n, 1);
+        var y = new Vector<double>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            x[i, 0] = rng.NextDouble() * 10.0;
+            y[i] = 3.0 * x[i, 0] + 1.0 + ModelTestHelpers.NextGaussian(rng) * 0.1;
+        }
+
+        model.Train(x, y);
+        var predictions = model.Predict(x);
+        Assert.Equal(n, predictions.Length);
+
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.False(double.IsNaN(predictions[i]),
+                $"Prediction[{i}] is NaN for 1-feature input.");
+        }
+    }
+
+    // =====================================================
     // INTEGRATION: Builder Pipeline Produces Valid Result
     // =====================================================
 

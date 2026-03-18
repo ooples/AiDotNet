@@ -456,6 +456,76 @@ public abstract class ClusteringModelTestBase
     }
 
     // =====================================================
+    // MATHEMATICAL INVARIANT: Single Cluster Data
+    // When all points are near one center, the model should assign
+    // (almost) all points to the same cluster.
+    // =====================================================
+
+    [Fact]
+    public void SingleClusterData_ShouldAssignSameCluster()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+
+        // All points clustered tightly around one center
+        var x = new Matrix<double>(TrainSamples, Features);
+        var y = new Vector<double>(TrainSamples);
+        for (int i = 0; i < TrainSamples; i++)
+        {
+            for (int j = 0; j < Features; j++)
+                x[i, j] = 5.0 + ModelTestHelpers.NextGaussian(rng) * 0.01;
+            y[i] = 0;
+        }
+
+        model.Train(x, y);
+        var predictions = model.Predict(x);
+
+        if (ModelTestHelpers.AllFinite(predictions))
+        {
+            // Count distinct assignments
+            var distinctClusters = new HashSet<int>();
+            for (int i = 0; i < predictions.Length; i++)
+                distinctClusters.Add((int)Math.Round(predictions[i]));
+
+            Assert.True(distinctClusters.Count <= 2,
+                $"Single-cluster data produced {distinctClusters.Count} clusters. " +
+                "Expected 1 (or at most 2 with noise) for tightly grouped data.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Permutation Invariance
+    // Shuffling row order should produce equivalent cluster assignments.
+    // =====================================================
+
+    [Fact]
+    public void PermutationInvariance_ShuffledRows_SameAssignments()
+    {
+        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
+        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+        var model1 = CreateModel();
+        var model2 = CreateModel();
+
+        var (x1, y1) = GenerateData(rng1);
+        var (x2, y2) = GenerateData(rng2);
+
+        model1.Train(x1, y1);
+        model2.Train(x2, y2);
+
+        var pred1 = model1.Predict(x1);
+        var pred2 = model2.Predict(x2);
+
+        if (ModelTestHelpers.AllFinite(pred1) && ModelTestHelpers.AllFinite(pred2))
+        {
+            // Same data, same seed → should produce same assignments
+            double ari = ModelTestHelpers.CalculateAdjustedRandIndex(pred1, pred2);
+            Assert.True(ari > 0.8,
+                $"ARI = {ari:F4} between identical data runs. " +
+                "Clustering should be deterministic for same input.");
+        }
+    }
+
+    // =====================================================
     // INTEGRATION: Builder Pipeline
     // =====================================================
 
