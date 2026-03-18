@@ -445,13 +445,46 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsFrameInterpolation = false, extendsVideoSR = false, extendsVideoDenoising = false;
         bool extendsAudioClassifier = false, extendsOpticalFlow = false, extendsSpeakerRecognition = false;
         bool extendsEnsembleClassifier = false, extendsNaiveBayes = false, extendsSVM = false;
+        bool extendsVideoInpainting = false, extendsVideoStabilization = false;
+        bool extendsLinearClassifier = false, extendsMetaClassifier = false;
+        bool extendsOrdinalClassifier = false, extendsSemiSupervised = false;
+        bool extendsMultiLabel = false, extendsFinancialNLP = false;
+        bool extendsRiskModel = false, extendsPortfolioOptimizer = false;
+        bool extendsTransformerNER = false, extendsSpanBasedNER = false, extendsSequenceLabelingNER = false;
 
         var baseType = modelClass.BaseType;
         while (baseType is not null)
         {
             var baseName = baseType.Name;
+            // Phase B extended leaf-level checks
+            if (baseName.StartsWith("VideoInpaintingBase", System.StringComparison.Ordinal))
+                extendsVideoInpainting = true;
+            else if (baseName.StartsWith("VideoStabilizationBase", System.StringComparison.Ordinal))
+                extendsVideoStabilization = true;
+            else if (baseName.StartsWith("LinearClassifierBase", System.StringComparison.Ordinal))
+                extendsLinearClassifier = true;
+            else if (baseName.StartsWith("MetaClassifierBase", System.StringComparison.Ordinal))
+                extendsMetaClassifier = true;
+            else if (baseName.StartsWith("OrdinalClassifierBase", System.StringComparison.Ordinal))
+                extendsOrdinalClassifier = true;
+            else if (baseName.StartsWith("SemiSupervisedClassifierBase", System.StringComparison.Ordinal))
+                extendsSemiSupervised = true;
+            else if (baseName.StartsWith("MultiLabelClassifierBase", System.StringComparison.Ordinal))
+                extendsMultiLabel = true;
+            else if (baseName.StartsWith("FinancialNLPModelBase", System.StringComparison.Ordinal))
+                extendsFinancialNLP = true;
+            else if (baseName.StartsWith("RiskModelBase", System.StringComparison.Ordinal))
+                extendsRiskModel = true;
+            else if (baseName.StartsWith("PortfolioOptimizerBase", System.StringComparison.Ordinal))
+                extendsPortfolioOptimizer = true;
+            else if (baseName.StartsWith("TransformerNERBase", System.StringComparison.Ordinal))
+                extendsTransformerNER = true;
+            else if (baseName.StartsWith("SpanBasedNERBase", System.StringComparison.Ordinal))
+                extendsSpanBasedNER = true;
+            else if (baseName.StartsWith("SequenceLabelingNERBase", System.StringComparison.Ordinal))
+                extendsSequenceLabelingNER = true;
             // Phase B leaf-level checks (most specific first)
-            if (baseName.StartsWith("VideoDiffusionModelBase", System.StringComparison.Ordinal))
+            else if (baseName.StartsWith("VideoDiffusionModelBase", System.StringComparison.Ordinal))
                 extendsVideoDiffusion = true;
             else if (baseName.StartsWith("AudioDiffusionModelBase", System.StringComparison.Ordinal))
                 extendsAudioDiffusion = true;
@@ -596,6 +629,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsSVMBase = extendsSVM,
             ExtendsForecastingModelBase = extendsForecasting,
             ExtendsThreeDDiffusionModelBase = extendsThreeDDiffusion,
+            ExtendsVideoInpaintingBase = extendsVideoInpainting,
+            ExtendsVideoStabilizationBase = extendsVideoStabilization,
+            ExtendsLinearClassifierBase = extendsLinearClassifier,
+            ExtendsMetaClassifierBase = extendsMetaClassifier,
+            ExtendsOrdinalClassifierBase = extendsOrdinalClassifier,
+            ExtendsSemiSupervisedClassifierBase = extendsSemiSupervised,
+            ExtendsMultiLabelClassifierBase = extendsMultiLabel,
+            ExtendsFinancialNLPModelBase = extendsFinancialNLP,
+            ExtendsRiskModelBase = extendsRiskModel,
+            ExtendsPortfolioOptimizerBase = extendsPortfolioOptimizer,
+            ExtendsTransformerNERBase = extendsTransformerNER,
+            ExtendsSpanBasedNERBase = extendsSpanBasedNER,
+            ExtendsSequenceLabelingNERBase = extendsSequenceLabelingNER,
             ExtendsAnomalyDetectorBase = extendsAnomalyDetector,
             ExtendsSurvivalModelBase = extendsSurvival,
             ExtendsCausalModelBase = extendsCausal,
@@ -790,6 +836,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ExtendsVideoDenoisingBase)
             return TestFamily.VideoDenoising;
 
+        // Priority 12e: Video Inpainting (leaf of VideoNN)
+        if (model.ExtendsVideoInpaintingBase)
+            return TestFamily.VideoInpainting;
+
+        // Priority 12f: Video Stabilization (leaf of VideoNN)
+        if (model.ExtendsVideoStabilizationBase)
+            return TestFamily.VideoStabilization;
+
         // Priority 12d: Optical Flow (leaf of VideoNN)
         if (model.ExtendsOpticalFlowBase)
             return TestFamily.OpticalFlow;
@@ -806,9 +860,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ExtendsForecastingModelBase)
             return TestFamily.Forecasting;
 
+        // Priority 13b: Financial NLP (leaf of Financial)
+        if (model.ExtendsFinancialNLPModelBase)
+            return TestFamily.FinancialNLP;
+
+        // Priority 13c: Risk Model (leaf of Financial)
+        if (model.ExtendsRiskModelBase)
+            return TestFamily.RiskModel;
+
+        // Priority 13d: Portfolio Optimizer (leaf of Financial)
+        if (model.ExtendsPortfolioOptimizerBase)
+            return TestFamily.PortfolioOptimizer;
+
         // Priority 14: Financial
         if (model.ExtendsFinancialModelBase)
             return TestFamily.Financial;
+
+        // Priority 14e: Transformer NER (leaf of NER)
+        if (model.ExtendsTransformerNERBase)
+            return TestFamily.TransformerNER;
+
+        // Priority 14f: Span-Based NER (leaf of NER)
+        if (model.ExtendsSpanBasedNERBase)
+            return TestFamily.SpanBasedNER;
+
+        // Priority 14g: Sequence Labeling NER (leaf of NER)
+        if (model.ExtendsSequenceLabelingNERBase)
+            return TestFamily.SequenceLabelingNER;
 
         // Priority 15: NER
         if (model.ExtendsNERNeuralNetworkBase)
@@ -823,6 +901,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Priority 13: Non-linear Regression (more specific than Regression)
         if (model.ExtendsNonLinearRegressionBase)
             return TestFamily.NonLinearRegression;
+
+        // Priority 13e: Linear Classifier (leaf of ProbabilisticClassifier)
+        if (model.ExtendsLinearClassifierBase)
+            return TestFamily.LinearClassifier;
 
         // Priority 14a: SVM (leaf of ProbabilisticClassifier)
         if (model.ExtendsSVMBase)
@@ -839,6 +921,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Priority 14c: Ensemble Classifier
         if (model.ExtendsEnsembleClassifierBase)
             return TestFamily.EnsembleClassifier;
+
+        // Priority 14d: Meta Classifier
+        if (model.ExtendsMetaClassifierBase)
+            return TestFamily.MetaClassifier;
+
+        // Priority 14e: Ordinal Classifier
+        if (model.ExtendsOrdinalClassifierBase)
+            return TestFamily.OrdinalClassifier;
+
+        // Priority 14f: Semi-Supervised Classifier
+        if (model.ExtendsSemiSupervisedClassifierBase)
+            return TestFamily.SemiSupervisedClassifier;
+
+        // Priority 14g: Multi-Label Classifier (uses Matrix output, not Vector)
+        if (model.ExtendsMultiLabelClassifierBase)
+            return TestFamily.MultiLabelClassifier;
 
         // Priority 15: Regression task + Matrix input
         if (model.Tasks.Contains(TaskRegression) && model.UsesMatrixInput)
@@ -998,6 +1096,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.OpticalFlow:
             case TestFamily.SpeakerRecognition:
             case TestFamily.Forecasting:
+            case TestFamily.VideoInpainting:
+            case TestFamily.VideoStabilization:
+            case TestFamily.FinancialNLP:
+            case TestFamily.RiskModel:
+            case TestFamily.PortfolioOptimizer:
+            case TestFamily.TransformerNER:
+            case TestFamily.SpanBasedNER:
+            case TestFamily.SequenceLabelingNER:
             case TestFamily.NeuralNetwork:
                 return model.ImplementsNeuralNetworkModel;
 
@@ -1024,9 +1130,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.AnomalyDetector:
             case TestFamily.Survival:
             case TestFamily.Causal:
+            case TestFamily.LinearClassifier:
+            case TestFamily.MetaClassifier:
+            case TestFamily.OrdinalClassifier:
+            case TestFamily.SemiSupervisedClassifier:
             case TestFamily.Clustering:
             case TestFamily.TimeSeries:
                 return model.UsesMatrixInput && model.UsesVectorOutput;
+
+            // MultiLabel uses Matrix/Matrix — compatible if has Matrix input
+            case TestFamily.MultiLabelClassifier:
+                return model.UsesMatrixInput;
 
             // RL uses Vector/Vector — always compatible if it has IFullModel
             case TestFamily.ReinforcementLearning:
@@ -1206,6 +1320,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsSVMBase { get; set; }
         public bool ExtendsForecastingModelBase { get; set; }
         public bool ExtendsThreeDDiffusionModelBase { get; set; }
+        public bool ExtendsVideoInpaintingBase { get; set; }
+        public bool ExtendsVideoStabilizationBase { get; set; }
+        public bool ExtendsLinearClassifierBase { get; set; }
+        public bool ExtendsMetaClassifierBase { get; set; }
+        public bool ExtendsOrdinalClassifierBase { get; set; }
+        public bool ExtendsSemiSupervisedClassifierBase { get; set; }
+        public bool ExtendsMultiLabelClassifierBase { get; set; }
+        public bool ExtendsFinancialNLPModelBase { get; set; }
+        public bool ExtendsRiskModelBase { get; set; }
+        public bool ExtendsPortfolioOptimizerBase { get; set; }
+        public bool ExtendsTransformerNERBase { get; set; }
+        public bool ExtendsSpanBasedNERBase { get; set; }
+        public bool ExtendsSequenceLabelingNERBase { get; set; }
         public bool ExtendsAnomalyDetectorBase { get; set; }
         public bool ExtendsSurvivalModelBase { get; set; }
         public bool ExtendsCausalModelBase { get; set; }
@@ -1249,6 +1376,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         SVM,
         Forecasting,
         ThreeDDiffusion,
+        VideoInpainting,
+        VideoStabilization,
+        LinearClassifier,
+        MetaClassifier,
+        OrdinalClassifier,
+        SemiSupervisedClassifier,
+        MultiLabelClassifier,
+        FinancialNLP,
+        RiskModel,
+        PortfolioOptimizer,
+        TransformerNER,
+        SpanBasedNER,
+        SequenceLabelingNER,
         AnomalyDetector,
         Survival,
         Causal,
@@ -1297,6 +1437,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.SVM:                   return "SVMTestBase";
             case TestFamily.Forecasting:           return "ForecastingModelTestBase";
             case TestFamily.ThreeDDiffusion:       return "ThreeDDiffusionTestBase";
+            case TestFamily.VideoInpainting:       return "VideoInpaintingTestBase";
+            case TestFamily.VideoStabilization:    return "VideoStabilizationTestBase";
+            case TestFamily.LinearClassifier:      return "LinearClassifierTestBase";
+            case TestFamily.MetaClassifier:        return "MetaClassifierTestBase";
+            case TestFamily.OrdinalClassifier:     return "OrdinalClassifierTestBase";
+            case TestFamily.SemiSupervisedClassifier: return "SemiSupervisedClassifierTestBase";
+            case TestFamily.MultiLabelClassifier:  return "MultiLabelClassifierTestBase";
+            case TestFamily.FinancialNLP:          return "FinancialNLPTestBase";
+            case TestFamily.RiskModel:             return "RiskModelTestBase";
+            case TestFamily.PortfolioOptimizer:    return "PortfolioOptimizerTestBase";
+            case TestFamily.TransformerNER:        return "TransformerNERTestBase";
+            case TestFamily.SpanBasedNER:          return "SpanBasedNERTestBase";
+            case TestFamily.SequenceLabelingNER:   return "SequenceLabelingNERTestBase";
             case TestFamily.AnomalyDetector:       return "AnomalyDetectorTestBase";
             case TestFamily.Survival:              return "SurvivalModelTestBase";
             case TestFamily.Causal:                return "CausalModelTestBase";
@@ -1338,6 +1491,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.OpticalFlow:
             case TestFamily.SpeakerRecognition:
             case TestFamily.Forecasting:
+            case TestFamily.VideoInpainting:
+            case TestFamily.VideoStabilization:
+            case TestFamily.FinancialNLP:
+            case TestFamily.RiskModel:
+            case TestFamily.PortfolioOptimizer:
+            case TestFamily.TransformerNER:
+            case TestFamily.SpanBasedNER:
+            case TestFamily.SequenceLabelingNER:
             case TestFamily.NeuralNetwork:
                 return "CreateNetwork";
             default:
@@ -1379,10 +1540,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.OpticalFlow:
             case TestFamily.SpeakerRecognition:
             case TestFamily.Forecasting:
+            case TestFamily.VideoInpainting:
+            case TestFamily.VideoStabilization:
+            case TestFamily.FinancialNLP:
+            case TestFamily.RiskModel:
+            case TestFamily.PortfolioOptimizer:
+            case TestFamily.TransformerNER:
+            case TestFamily.SpanBasedNER:
+            case TestFamily.SequenceLabelingNER:
             case TestFamily.NeuralNetwork:
                 return "INeuralNetworkModel<double>";
             case TestFamily.ReinforcementLearning:
                 return "IFullModel<double, Vector<double>, Vector<double>>";
+            case TestFamily.MultiLabelClassifier:
+                return "IFullModel<double, Matrix<double>, Matrix<double>>";
             case TestFamily.TimeSeries:
             case TestFamily.Regression:
             case TestFamily.NonLinearRegression:
@@ -1391,6 +1562,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.AnomalyDetector:
             case TestFamily.Survival:
             case TestFamily.Causal:
+            case TestFamily.LinearClassifier:
+            case TestFamily.MetaClassifier:
+            case TestFamily.OrdinalClassifier:
+            case TestFamily.SemiSupervisedClassifier:
             case TestFamily.Clustering:
             default:
                 return "IFullModel<double, Matrix<double>, Vector<double>>";
@@ -1417,6 +1592,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.Survival:
             case TestFamily.Causal:
             case TestFamily.ReinforcementLearning:
+            case TestFamily.LinearClassifier:
+            case TestFamily.MetaClassifier:
+            case TestFamily.OrdinalClassifier:
+            case TestFamily.SemiSupervisedClassifier:
+            case TestFamily.MultiLabelClassifier:
             case TestFamily.Clustering:
                 return true;
             default:
