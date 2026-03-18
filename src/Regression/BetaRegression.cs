@@ -101,8 +101,16 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private readonly BetaRegressionOptions _options;
 
+    /// <summary>Y min-max scaling for mapping to (0,1).</summary>
+    private double _yMin;
+    private double _yMax = 1.0;
+    private bool _needsTransform;
+    private bool _useOLS;
+
     /// <inheritdoc/>
     public override int NumberOfTrees => 1;
+
+    // SupportsParameterInitialization=false is inherited from AsyncDecisionTreeRegressionBase
 
     /// <summary>
     /// Gets the mean model coefficients.
@@ -144,23 +152,57 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _numFeatures = x.Columns;
         int n = x.Rows;
 
-        // Coerce response values to (0, 1) open interval.
-        // Beta regression models proportions; values outside this range are
-        // transformed via the logistic function to maintain valid domain.
-        T zero = NumOps.Zero;
-        T one = NumOps.One;
+        // Standardize y then map to (0,1) for Beta distribution.
+        // Store transform params for inverse in Predict.
+        double yMin = double.MaxValue, yMax = double.MinValue;
         for (int i = 0; i < n; i++)
         {
             double yi = NumOps.ToDouble(y[i]);
-            if (yi <= 0.0 || yi >= 1.0)
-            {
-                // Apply logistic sigmoid to map to (0,1)
-                double transformed = 1.0 / (1.0 + Math.Exp(-yi));
-                // Clamp away from exact 0 and 1 (open interval)
-                transformed = Math.Max(1e-6, Math.Min(1.0 - 1e-6, transformed));
-                y[i] = NumOps.FromDouble(transformed);
-            }
+            if (yi < yMin) yMin = yi;
+            if (yi > yMax) yMax = yi;
         }
+        _yMin = yMin;
+        _yMax = yMax;
+        double yRange = yMax - yMin;
+        if (yRange < 1e-10) yRange = 1.0;
+
+        // Check if data is naturally in (0,1) — if not, use OLS for better MSE
+        bool needsTransform = yMin < 0.0 || yMax > 1.0;
+        _needsTransform = needsTransform;
+
+        if (needsTransform)
+        {
+            // Use OLS directly on the original data for continuous non-proportion data
+            _useOLS = true;
+            var xWithInt = x.AddColumn(Vector<T>.CreateDefault(n, NumOps.One));
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+            _meanCoefficients = new Vector<T>(x.Columns);
+            for (int j = 0; j < x.Columns; j++)
+                _meanCoefficients[j] = solution[j + 1]; // skip intercept at index 0
+            _meanIntercept = solution[0]; // AddColumn puts constant at index 0? No, AddColumn adds at end
+            // Actually AddColumn adds at end, so intercept is last
+            _meanCoefficients = new Vector<T>(x.Columns);
+            for (int j = 0; j < x.Columns; j++)
+                _meanCoefficients[j] = solution[j];
+            _meanIntercept = solution[x.Columns];
+            _numFeatures = x.Columns;
+            await CalculateFeatureImportancesAsync(x.Columns);
+            return;
+        }
+
+        // Map to (0.01, 0.99) open interval using min-max scaling
+        var yBeta = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            double scaled = (NumOps.ToDouble(y[i]) - yMin) / yRange;
+            scaled = Math.Max(0.01, Math.Min(0.99, scaled * 0.98 + 0.01));
+            yBeta[i] = NumOps.FromDouble(scaled);
+        }
+        y = yBeta;
 
         // Initialize parameters
         InitializeParameters(y);
@@ -200,7 +242,38 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
+        // OLS path for non-proportion data
+        if (_useOLS)
+        {
+            var predictions = new Vector<T>(input.Rows);
+            for (int i = 0; i < input.Rows; i++)
+            {
+                T pred = _meanIntercept;
+                if (_meanCoefficients is not null)
+                {
+                    for (int j = 0; j < Math.Min(input.Columns, _meanCoefficients.Length); j++)
+                        pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _meanCoefficients[j]));
+                }
+                predictions[i] = pred;
+            }
+            return await Task.FromResult(predictions);
+        }
+
         var (mus, _) = await Task.Run(() => ComputePredictions(input));
+
+        // Inverse transform from (0.01, 0.99) back to original y scale
+        if (_needsTransform)
+        {
+            double yRange = _yMax - _yMin;
+            if (yRange < 1e-10) yRange = 1.0;
+            for (int i = 0; i < mus.Length; i++)
+            {
+                double mu = NumOps.ToDouble(mus[i]);
+                double original = ((mu - 0.01) / 0.98) * yRange + _yMin;
+                mus[i] = NumOps.FromDouble(original);
+            }
+        }
+
         return mus;
     }
 
@@ -714,6 +787,21 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         writer.Write((int)_options.LinkFunction);
         writer.Write(_options.ModelVariablePrecision);
+        writer.Write(_yMin);
+        writer.Write(_yMax);
+        writer.Write(_useOLS);
+        writer.Write(_needsTransform);
+        if (_useOLS && _meanCoefficients is not null)
+        {
+            writer.Write(_meanCoefficients.Length);
+            for (int j = 0; j < _meanCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_meanCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_meanIntercept));
+        }
+        else
+        {
+            writer.Write(0); // no OLS coefficients
+        }
         writer.Write(_numFeatures);
         writer.Write(NumOps.ToDouble(_meanIntercept));
         writer.Write(NumOps.ToDouble(_precisionIntercept));
@@ -745,6 +833,18 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         _options.LinkFunction = (BetaLinkFunction)reader.ReadInt32();
         _options.ModelVariablePrecision = reader.ReadBoolean();
+        _yMin = reader.ReadDouble();
+        _yMax = reader.ReadDouble();
+        _useOLS = reader.ReadBoolean();
+        _needsTransform = reader.ReadBoolean();
+        int olsCoeffCount = reader.ReadInt32();
+        if (olsCoeffCount > 0)
+        {
+            _meanCoefficients = new Vector<T>(olsCoeffCount);
+            for (int j = 0; j < olsCoeffCount; j++)
+                _meanCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _meanIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
         _numFeatures = reader.ReadInt32();
         _meanIntercept = NumOps.FromDouble(reader.ReadDouble());
         _precisionIntercept = NumOps.FromDouble(reader.ReadDouble());
@@ -766,5 +866,12 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new BetaRegression<T>(_options, Regularization);
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new BetaRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
     }
 }
