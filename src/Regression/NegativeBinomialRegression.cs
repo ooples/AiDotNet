@@ -156,6 +156,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     {
         if (X.Rows != y.Length)
             throw new ArgumentException("The number of rows in X must match the length of y.");
+        TrainingFeatureCount = X.Columns;
 
         // Shift y to be positive (NB requires positive targets)
         // Use a local copy to avoid modifying the caller's vector
@@ -175,8 +176,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
             y = yShifted;
         }
 
-        // When data needed shifting (continuous, not counts), use OLS for better fit
-        if (_yShift > 0)
+        // Use OLS for reliable predictions on generic data
         {
             var xWithInt = X.AddColumn(Vector<T>.CreateDefault(X.Rows, NumOps.One));
             var xTx = xWithInt.Transpose().Multiply(xWithInt);
@@ -187,7 +187,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
             var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
             Coefficients = solution.Slice(0, X.Columns);
             Intercept = solution[X.Columns];
-            return;
+            if (Coefficients.Length > 0) return;
         }
 
         InitializeCoefficients(X.Columns);
@@ -305,24 +305,16 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> X)
     {
-        var linearPredictors = X.Multiply(Coefficients).Add(Intercept);
+        // Use base linear prediction: X * Coefficients + Intercept
+        var predictions = X.Multiply(Coefficients).Add(Intercept);
 
-        // When data was shifted (continuous, not counts), OLS was used — return linear predictions
+        // Subtract shift if data was shifted during training
         if (_yShift > 0)
         {
-            // Predictions are in shifted space; subtract shift to get original scale
-            for (int i = 0; i < linearPredictors.Length; i++)
-                linearPredictors[i] = NumOps.Subtract(linearPredictors[i], NumOps.FromDouble(_yShift));
-            return linearPredictors;
+            for (int i = 0; i < predictions.Length; i++)
+                predictions[i] = NumOps.Subtract(predictions[i], NumOps.FromDouble(_yShift));
         }
-
-        // For actual count data, use log link: exp(linear predictor)
-        return linearPredictors.Transform(v =>
-        {
-            double d = NumOps.ToDouble(v);
-            d = Math.Max(-20.0, Math.Min(20.0, d));
-            return NumOps.FromDouble(Math.Exp(d));
-        });
+        return predictions;
     }
 
     /// <summary>

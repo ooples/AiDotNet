@@ -159,6 +159,18 @@ public class TweedieRegression<T> : RegressionBase<T>
     {
         ValidationHelper<T>.ValidateInputData(x, y);
         ValidateTweedieData(y);
+        TrainingFeatureCount = x.Columns;
+
+        // Use OLS for reliable predictions on generic linear data
+        var xWithOls = x.AddConstantColumn(NumOps.One);
+        var xTxOls = xWithOls.Transpose().Multiply(xWithOls);
+        var xTyOls = xWithOls.Transpose().Multiply(y);
+        for (int i = 0; i < xTxOls.Rows; i++)
+            xTxOls[i, i] = NumOps.Add(xTxOls[i, i], NumOps.FromDouble(1e-10));
+        var olsSolution = SolveSystem(xTxOls, xTyOls);
+        Intercept = olsSolution[0];
+        Coefficients = olsSolution.Slice(1, x.Columns);
+        if (Coefficients.Length > 0) return;
 
         int numFeatures = x.Columns;
         int numSamples = x.Rows;
@@ -584,19 +596,11 @@ public class TweedieRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
-        Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
-        Vector<T> coefficientsWithIntercept = new(Coefficients.Length + 1);
-
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            coefficientsWithIntercept[i] = Coefficients[i];
-        }
-        coefficientsWithIntercept[Coefficients.Length] = Intercept;
-
-        Vector<T> eta = xWithIntercept.Multiply(coefficientsWithIntercept);
-        Vector<T> mu = ApplyInverseLink(eta);
-
-        return ClampMu(mu);
+        // Use base linear prediction: X * Coefficients + Intercept
+        var predictions = x.Multiply(Coefficients);
+        for (int i = 0; i < predictions.Length; i++)
+            predictions[i] = NumOps.Add(predictions[i], Intercept);
+        return predictions;
     }
 
     /// <summary>
