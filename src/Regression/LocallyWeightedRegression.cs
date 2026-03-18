@@ -139,6 +139,31 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// postpones the real work until prediction time.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// LWR is a lazy learner — no optimizer parameter injection.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>
+    /// Returns all features used during training.
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, _xTrain.Columns > 0 ? _xTrain.Columns : 0);
+    }
+
+    /// <summary>
+    /// Deep copy via serialization.
+    /// </summary>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new LocallyWeightedRegression<T>(null, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // In LWR, we don't pre-compute a global model. Instead, we store the training data.
