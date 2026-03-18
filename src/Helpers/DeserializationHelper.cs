@@ -288,6 +288,41 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, activation });
         }
+        else if (genericDef == typeof(GraphSAGELayer<>))
+        {
+            // GraphSAGELayer(int inputFeatures, int outputFeatures, SAGEAggregatorType, bool normalize, IActivationFunction<T>?)
+            int inputFeatures = inputShape[0];
+            int outputFeatures = outputShape[0];
+            int aggType = TryGetInt(additionalParams, "AggregatorType") ?? 0;
+            bool normalize = TryGetBool(additionalParams, "Normalize") ?? true;
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(SAGEAggregatorType), typeof(bool), activationFuncType });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find GraphSAGELayer constructor with expected signature.");
+            }
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, (SAGEAggregatorType)aggType, normalize, activation });
+        }
+        else if (genericDef == typeof(GraphIsomorphismLayer<>))
+        {
+            // GraphIsomorphismLayer(int inputFeatures, int outputFeatures, int mlpHiddenDim, bool learnEpsilon, double initialEpsilon, IActivationFunction<T>?)
+            int inputFeatures = inputShape[0];
+            int outputFeatures = outputShape[0];
+            int mlpHiddenDim = TryGetInt(additionalParams, "MlpHiddenDim") ?? 64;
+            bool learnEpsilon = TryGetBool(additionalParams, "LearnEpsilon") ?? true;
+            double initialEpsilon = TryGetDouble(additionalParams, "InitialEpsilon") ?? 0.0;
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(bool), typeof(double), activationFuncType });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find GraphIsomorphismLayer constructor with expected signature.");
+            }
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, mlpHiddenDim, learnEpsilon, initialEpsilon, activation });
+        }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Attention.FlashAttentionLayer<>))
         {
             instance = CreateFlashAttentionLayer<T>(type, inputShape, additionalParams);

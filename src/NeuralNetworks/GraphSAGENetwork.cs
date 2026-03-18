@@ -208,8 +208,15 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGraphSAGELayers(
-                Architecture, AggregatorType, NumLayers, Normalize));
+            // Graph networks need per-node softmax, not global softmax.
+            // Filter out trailing ActivationLayer which applies softmax over all elements.
+            foreach (var layer in LayerHelper<T>.CreateDefaultGraphSAGELayers(
+                Architecture, AggregatorType, NumLayers, Normalize))
+            {
+                if (layer is ActivationLayer<T>)
+                    continue;
+                Layers.Add(layer);
+            }
         }
     }
 
@@ -813,18 +820,39 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        if (_cachedAdjacencyMatrix == null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Predict.");
-        }
+        // Ensure 2D input [numNodes, features]
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
 
         foreach (var layer in Layers)
         {
             layer.SetTrainingMode(false);
         }
 
-        return Forward(input, _cachedAdjacencyMatrix);
+        return Forward(input, adjacencyMatrix);
+    }
+
+    private Tensor<T> EnsureAdjacencyMatrix(Tensor<T> input)
+    {
+        int numNodes = input.Shape[0];
+
+        if (_cachedAdjacencyMatrix != null &&
+            _cachedAdjacencyMatrix.Shape[0] == numNodes &&
+            _cachedAdjacencyMatrix.Shape[1] == numNodes)
+        {
+            return _cachedAdjacencyMatrix;
+        }
+
+        // Generate fully-connected adjacency matrix
+        var adj = new Tensor<T>([numNodes, numNodes]);
+        for (int i = 0; i < numNodes; i++)
+            for (int j = 0; j < numNodes; j++)
+                adj[i, j] = NumOps.One;
+
+        _cachedAdjacencyMatrix = adj;
+        return adj;
     }
 
     /// <summary>
@@ -840,11 +868,11 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (_cachedAdjacencyMatrix == null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Train.");
-        }
+        // Ensure 2D input [numNodes, features]
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
 
         // Set all layers to training mode
         foreach (var layer in Layers)
@@ -853,7 +881,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         }
 
         // Forward pass
-        var predictions = Forward(input, _cachedAdjacencyMatrix);
+        var predictions = Forward(input, adjacencyMatrix);
 
         // Flatten tensors for loss function (which works on vectors)
         var flattenedPredictions = predictions.ToVector();
@@ -886,6 +914,33 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
 
         // Apply updated parameters
         UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Gets the intermediate activations from each layer, ensuring adjacency is set for graph layers.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
+
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+        }
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = input;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     /// <summary>
