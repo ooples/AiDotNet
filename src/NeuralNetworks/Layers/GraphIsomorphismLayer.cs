@@ -354,9 +354,26 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <inheritdoc/>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
+        // Forward reshapes 2D→3D internally but returns 2D.
+        // Backward receives 2D gradient but internal state is 3D.
+        // Reshape gradient to 3D for internal computation, then reshape result to original input rank.
+        bool needsReshape = _originalInputShape != null && outputGradient.Rank < 3;
+        if (needsReshape && _lastOutput != null)
+        {
+            outputGradient = outputGradient.Reshape(_lastOutput.Shape);
+        }
+
+        var result = UseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
+
+        // Reshape result back to original input rank
+        if (needsReshape && _originalInputShape != null)
+        {
+            result = result.Reshape(_originalInputShape);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -419,7 +436,11 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var selfGrad = Engine.TensorMultiplyScalar(aggregatedGrad, onePlusEpsilon);
 
         // Neighbor gradient: A^T @ aggregatedGrad (batched via permute)
-        var adjT = Engine.TensorPermute(_adjacencyMatrix, [0, 2, 1]);
+        // Ensure adjacency is 3D [batch, nodes, nodes] for batched operations
+        var adj3D = _adjacencyMatrix.Rank == 2
+            ? _adjacencyMatrix.Reshape([1, _adjacencyMatrix.Shape[0], _adjacencyMatrix.Shape[1]])
+            : _adjacencyMatrix;
+        var adjT = Engine.TensorPermute(adj3D, [0, 2, 1]);
         var neighborGrad = Engine.TensorMatMul(adjT, aggregatedGrad);
 
         // Combine gradients: fully vectorized addition
@@ -655,6 +676,45 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         {
             _epsilon = NumOps.Subtract(_epsilon, NumOps.Multiply(learningRate, _epsilonGradient));
         }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradList = new List<T>();
+
+        var w1Grad = _mlpWeights1Gradient;
+        for (int i = 0; i < _mlpWeights1.Length; i++)
+            gradList.Add(w1Grad != null ? w1Grad.GetFlat(i) : NumOps.Zero);
+
+        var b1Grad = _mlpBias1Gradient;
+        for (int i = 0; i < _mlpBias1.Length; i++)
+            gradList.Add(b1Grad != null ? b1Grad.GetFlat(i) : NumOps.Zero);
+
+        var w2Grad = _mlpWeights2Gradient;
+        for (int i = 0; i < _mlpWeights2.Length; i++)
+            gradList.Add(w2Grad != null ? w2Grad.GetFlat(i) : NumOps.Zero);
+
+        var b2Grad = _mlpBias2Gradient;
+        for (int i = 0; i < _mlpBias2.Length; i++)
+            gradList.Add(b2Grad != null ? b2Grad.GetFlat(i) : NumOps.Zero);
+
+        if (_learnEpsilon)
+            gradList.Add(_epsilonGradient);
+
+        return new Vector<T>(gradList.ToArray());
+    }
+
+    /// <summary>
+    /// Returns layer-specific metadata for serialization.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["MlpHiddenDim"] = _mlpHiddenDim.ToString();
+        metadata["LearnEpsilon"] = _learnEpsilon.ToString();
+        metadata["InitialEpsilon"] = NumOps.ToDouble(_epsilon).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
     }
 
     /// <inheritdoc/>
