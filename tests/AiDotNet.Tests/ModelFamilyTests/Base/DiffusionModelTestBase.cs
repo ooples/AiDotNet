@@ -18,7 +18,7 @@ public abstract class DiffusionModelTestBase
     protected virtual int[] InputShape => [1, 4];
     protected virtual int[] OutputShape => [1, 4];
 
-    private Tensor<double> CreateRandomTensor(int[] shape, Random rng)
+    protected Tensor<double> CreateRandomTensor(int[] shape, Random rng)
     {
         var tensor = new Tensor<double>(shape);
         for (int i = 0; i < tensor.Length; i++)
@@ -26,7 +26,7 @@ public abstract class DiffusionModelTestBase
         return tensor;
     }
 
-    private Tensor<double> CreateConstantTensor(int[] shape, double value)
+    protected Tensor<double> CreateConstantTensor(int[] shape, double value)
     {
         var tensor = new Tensor<double>(shape);
         for (int i = 0; i < tensor.Length; i++)

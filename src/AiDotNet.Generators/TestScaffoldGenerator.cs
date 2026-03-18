@@ -430,6 +430,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
         }
 
+        // Walk the base type chain to detect mid-level hierarchy bases
+        bool extendsAudioNN = false, extendsDocumentNN = false, extendsVisionLanguage = false;
+        bool extendsSegmentation = false, extendsVideoNN = false;
+        bool extendsLatentDiffusion = false, extendsNonLinearRegression = false;
+        bool extendsProbabilisticClassifier = false;
+
+        var baseType = modelClass.BaseType;
+        while (baseType is not null)
+        {
+            var baseName = baseType.Name;
+            if (baseName.StartsWith("AudioNeuralNetworkBase", System.StringComparison.Ordinal))
+                extendsAudioNN = true;
+            else if (baseName.StartsWith("DocumentNeuralNetworkBase", System.StringComparison.Ordinal))
+                extendsDocumentNN = true;
+            else if (baseName.StartsWith("VisionLanguageModelBase", System.StringComparison.Ordinal))
+                extendsVisionLanguage = true;
+            else if (baseName.StartsWith("SegmentationModelBase", System.StringComparison.Ordinal) ||
+                     baseName.EndsWith("SegmentationBase", System.StringComparison.Ordinal))
+                extendsSegmentation = true;
+            else if (baseName.StartsWith("VideoNeuralNetworkBase", System.StringComparison.Ordinal) ||
+                     baseName.EndsWith("VideoBase", System.StringComparison.Ordinal))
+                extendsVideoNN = true;
+            else if (baseName.StartsWith("LatentDiffusionModelBase", System.StringComparison.Ordinal))
+                extendsLatentDiffusion = true;
+            else if (baseName.StartsWith("NonLinearRegressionBase", System.StringComparison.Ordinal))
+                extendsNonLinearRegression = true;
+            else if (baseName.StartsWith("ProbabilisticClassifierBase", System.StringComparison.Ordinal))
+                extendsProbabilisticClassifier = true;
+
+            baseType = baseType.BaseType;
+        }
+
         // Detect a public constructor callable with zero arguments:
         // either parameterless, or all parameters have default values.
         bool hasParameterlessCtor = false;
@@ -477,6 +509,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             UsesMatrixInput = usesMatrixInput,
             UsesVectorOutput = usesVectorOutput,
             HasParameterlessConstructor = hasParameterlessCtor,
+            ExtendsAudioNeuralNetworkBase = extendsAudioNN,
+            ExtendsDocumentNeuralNetworkBase = extendsDocumentNN,
+            ExtendsVisionLanguageModelBase = extendsVisionLanguage,
+            ExtendsSegmentationModelBase = extendsSegmentation,
+            ExtendsVideoNeuralNetworkBase = extendsVideoNN,
+            ExtendsLatentDiffusionModelBase = extendsLatentDiffusion,
+            ExtendsNonLinearRegressionBase = extendsNonLinearRegression,
+            ExtendsProbabilisticClassifierBase = extendsProbabilisticClassifier,
             Location = modelClass.Locations.Length > 0 ? modelClass.Locations[0] : null
         };
 
@@ -584,6 +624,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// </remarks>
     private static TestFamily? ResolveTestBaseClass(ModelTestInfo model)
     {
+        // === TIER 1: Specialized families (check first — most specific) ===
+
         // Priority 1: GaussianProcess
         if (model.Categories.Contains(CategoryGaussianProcess) || model.ImplementsGaussianProcess)
             return TestFamily.GaussianProcess;
@@ -592,48 +634,85 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.Categories.Contains(CategoryTimeSeriesModel))
             return TestFamily.TimeSeries;
 
-        // Priority 3: Diffusion
+        // Priority 3: Latent Diffusion (more specific than plain Diffusion)
+        if (model.ExtendsLatentDiffusionModelBase)
+            return TestFamily.LatentDiffusion;
+
+        // Priority 4: Diffusion (plain, non-latent)
         if (model.Categories.Contains(CategoryDiffusion) || model.ImplementsDiffusionModel)
             return TestFamily.Diffusion;
 
-        // Priority 4: GAN
+        // Priority 5: GAN
         if (model.Categories.Contains(CategoryGAN))
             return TestFamily.GAN;
 
-        // Priority 5: EmbeddingModel
+        // Priority 6: EmbeddingModel
         if (model.Categories.Contains(CategoryEmbeddingModel))
             return TestFamily.Embedding;
 
-        // Priority 6: GraphNetwork
+        // Priority 7: GraphNetwork
         if (model.Categories.Contains(CategoryGraphNetwork))
             return TestFamily.GraphNN;
 
-        // Priority 7: Regression task + Matrix input
+        // === TIER 2: Mid-level NN hierarchy (base class chain detection) ===
+
+        // Priority 8: Audio NN
+        if (model.ExtendsAudioNeuralNetworkBase)
+            return TestFamily.AudioNN;
+
+        // Priority 9: Document NN
+        if (model.ExtendsDocumentNeuralNetworkBase)
+            return TestFamily.DocumentNN;
+
+        // Priority 10: Vision-Language
+        if (model.ExtendsVisionLanguageModelBase)
+            return TestFamily.VisionLanguage;
+
+        // Priority 11: Segmentation
+        if (model.ExtendsSegmentationModelBase)
+            return TestFamily.Segmentation;
+
+        // Priority 12: Video NN
+        if (model.ExtendsVideoNeuralNetworkBase)
+            return TestFamily.VideoNN;
+
+        // === TIER 3: Matrix/Vector model families ===
+
+        // Priority 13: Non-linear Regression (more specific than Regression)
+        if (model.ExtendsNonLinearRegressionBase)
+            return TestFamily.NonLinearRegression;
+
+        // Priority 14: Probabilistic Classifier (more specific than Classification)
+        if (model.ExtendsProbabilisticClassifierBase)
+            return TestFamily.ProbabilisticClassifier;
+
+        // Priority 15: Regression task + Matrix input
         if (model.Tasks.Contains(TaskRegression) && model.UsesMatrixInput)
             return TestFamily.Regression;
 
-        // Priority 8: Classification task + Matrix input
+        // Priority 16: Classification task + Matrix input
         if (model.Tasks.Contains(TaskClassification) && model.UsesMatrixInput)
             return TestFamily.Classification;
 
-        // Priority 9: Clustering task + Matrix input
+        // Priority 17: Clustering task + Matrix input
         if (model.Tasks.Contains(TaskClustering) && model.UsesMatrixInput)
             return TestFamily.Clustering;
 
-        // Priority 10: Neural network (by interface or Tensor input)
+        // === TIER 4: Fallbacks ===
+
+        // Priority 18: Neural network (by interface or Tensor input)
         if (model.ImplementsNeuralNetworkModel || model.UsesTensorInput)
             return TestFamily.NeuralNetwork;
 
-        // Priority 11: Matrix input fallback → Regression
+        // Priority 19: Matrix input fallback → Regression
         if (model.UsesMatrixInput)
             return TestFamily.Regression;
 
-        // Priority 12: NeuralNetwork category (for models where interface detection
-        // failed due to open generic type parameters like <T, TInput, TOutput>)
+        // Priority 20: NeuralNetwork category
         if (model.Categories.Contains(CategoryNeuralNetwork))
             return TestFamily.NeuralNetwork;
 
-        // Priority 13: MetaLearning category → NeuralNetwork (meta-learning models are NN-based)
+        // Priority 21: MetaLearning category → NeuralNetwork
         if (model.Categories.Contains(CategoryMetaLearning))
             return TestFamily.NeuralNetwork;
 
@@ -731,21 +810,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.GAN:
             case TestFamily.Embedding:
             case TestFamily.GraphNN:
+            case TestFamily.AudioNN:
+            case TestFamily.DocumentNN:
+            case TestFamily.VisionLanguage:
+            case TestFamily.Segmentation:
+            case TestFamily.VideoNN:
             case TestFamily.NeuralNetwork:
                 return model.ImplementsNeuralNetworkModel;
 
-            // Diffusion family requires IDiffusionModel interface
+            // Diffusion families require IDiffusionModel interface
             case TestFamily.Diffusion:
+            case TestFamily.LatentDiffusion:
                 return model.ImplementsDiffusionModel;
 
             // GP family requires IGaussianProcess interface
             case TestFamily.GaussianProcess:
                 return model.ImplementsGaussianProcess;
 
-            // Matrix/Vector families require IFullModel<T, Matrix<T>, Vector<T>>.
-            // Models with Matrix<T> output (multi-label classifiers) won't match.
+            // Matrix/Vector families require IFullModel<T, Matrix<T>, Vector<T>>
             case TestFamily.Regression:
+            case TestFamily.NonLinearRegression:
             case TestFamily.Classification:
+            case TestFamily.ProbabilisticClassifier:
             case TestFamily.Clustering:
             case TestFamily.TimeSeries:
                 return model.UsesMatrixInput && model.UsesVectorOutput;
@@ -898,6 +984,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         /// <summary>Whether the model has an accessible parameterless constructor.</summary>
         public bool HasParameterlessConstructor { get; set; }
+
+        // Base class chain detection (for mid-level hierarchy resolution)
+        public bool ExtendsAudioNeuralNetworkBase { get; set; }
+        public bool ExtendsDocumentNeuralNetworkBase { get; set; }
+        public bool ExtendsVisionLanguageModelBase { get; set; }
+        public bool ExtendsSegmentationModelBase { get; set; }
+        public bool ExtendsVideoNeuralNetworkBase { get; set; }
+        public bool ExtendsLatentDiffusionModelBase { get; set; }
+        public bool ExtendsNonLinearRegressionBase { get; set; }
+        public bool ExtendsProbabilisticClassifierBase { get; set; }
     }
 
     /// <summary>
@@ -909,11 +1005,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         GaussianProcess,
         TimeSeries,
         Diffusion,
+        LatentDiffusion,
         GAN,
         Embedding,
         GraphNN,
+        AudioNN,
+        DocumentNN,
+        VisionLanguage,
+        Segmentation,
+        VideoNN,
         Regression,
+        NonLinearRegression,
         Classification,
+        ProbabilisticClassifier,
         Clustering,
         NeuralNetwork
     }
@@ -925,17 +1029,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         switch (family)
         {
-            case TestFamily.GaussianProcess: return "GaussianProcessModelTestBase";
-            case TestFamily.TimeSeries:      return "TimeSeriesModelTestBase";
-            case TestFamily.Diffusion:       return "DiffusionModelTestBase";
-            case TestFamily.GAN:             return "GANModelTestBase";
-            case TestFamily.Embedding:       return "EmbeddingModelTestBase";
-            case TestFamily.GraphNN:         return "GraphNNModelTestBase";
-            case TestFamily.Regression:      return "RegressionModelTestBase";
-            case TestFamily.Classification:  return "ClassificationModelTestBase";
-            case TestFamily.Clustering:      return "ClusteringModelTestBase";
-            case TestFamily.NeuralNetwork:   return "NeuralNetworkModelTestBase";
-            default:                         return "RegressionModelTestBase";
+            case TestFamily.GaussianProcess:       return "GaussianProcessModelTestBase";
+            case TestFamily.TimeSeries:            return "TimeSeriesModelTestBase";
+            case TestFamily.Diffusion:             return "DiffusionModelTestBase";
+            case TestFamily.LatentDiffusion:       return "LatentDiffusionTestBase";
+            case TestFamily.GAN:                   return "GANModelTestBase";
+            case TestFamily.Embedding:             return "EmbeddingModelTestBase";
+            case TestFamily.GraphNN:               return "GraphNNModelTestBase";
+            case TestFamily.AudioNN:               return "AudioNNModelTestBase";
+            case TestFamily.DocumentNN:            return "DocumentNNModelTestBase";
+            case TestFamily.VisionLanguage:        return "VisionLanguageTestBase";
+            case TestFamily.Segmentation:          return "SegmentationTestBase";
+            case TestFamily.VideoNN:               return "VideoNNModelTestBase";
+            case TestFamily.Regression:            return "RegressionModelTestBase";
+            case TestFamily.NonLinearRegression:   return "NonLinearRegressionTestBase";
+            case TestFamily.Classification:        return "ClassificationModelTestBase";
+            case TestFamily.ProbabilisticClassifier: return "ProbabilisticClassifierTestBase";
+            case TestFamily.Clustering:            return "ClusteringModelTestBase";
+            case TestFamily.NeuralNetwork:         return "NeuralNetworkModelTestBase";
+            default:                               return "RegressionModelTestBase";
         }
     }
 
@@ -950,6 +1062,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.GAN:
             case TestFamily.Embedding:
             case TestFamily.GraphNN:
+            case TestFamily.AudioNN:
+            case TestFamily.DocumentNN:
+            case TestFamily.VisionLanguage:
+            case TestFamily.Segmentation:
+            case TestFamily.VideoNN:
             case TestFamily.NeuralNetwork:
                 return "CreateNetwork";
             default:
@@ -967,15 +1084,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.GaussianProcess:
                 return "IGaussianProcess<double>";
             case TestFamily.Diffusion:
+            case TestFamily.LatentDiffusion:
                 return "IDiffusionModel<double>";
             case TestFamily.GAN:
             case TestFamily.Embedding:
             case TestFamily.GraphNN:
+            case TestFamily.AudioNN:
+            case TestFamily.DocumentNN:
+            case TestFamily.VisionLanguage:
+            case TestFamily.Segmentation:
+            case TestFamily.VideoNN:
             case TestFamily.NeuralNetwork:
                 return "INeuralNetworkModel<double>";
             case TestFamily.TimeSeries:
             case TestFamily.Regression:
+            case TestFamily.NonLinearRegression:
             case TestFamily.Classification:
+            case TestFamily.ProbabilisticClassifier:
             case TestFamily.Clustering:
             default:
                 return "IFullModel<double, Matrix<double>, Vector<double>>";
@@ -992,7 +1117,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             case TestFamily.TimeSeries:
             case TestFamily.Regression:
+            case TestFamily.NonLinearRegression:
             case TestFamily.Classification:
+            case TestFamily.ProbabilisticClassifier:
             case TestFamily.Clustering:
                 return true;
             default:
