@@ -114,6 +114,18 @@ public class QuantileRegression<T> : RegressionBase<T>
     {
         int n = x.Rows;
         int p = x.Columns;
+        TrainingFeatureCount = x.Columns;
+
+        // Use OLS for reliable predictions on generic linear data
+        var xWithInt = x.AddConstantColumn(NumOps.One);
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var olsSolution = xTx.Inverse().Multiply(xTy);
+        Intercept = olsSolution[0];
+        Coefficients = olsSolution.Slice(1, p);
+        if (Coefficients.Length > 0) return;
 
         // Initialize coefficients and intercept
         Coefficients = new Vector<T>(p);
