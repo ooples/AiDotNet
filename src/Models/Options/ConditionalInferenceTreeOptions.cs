@@ -75,5 +75,5 @@ public class ConditionalInferenceTreeOptions : DecisionTreeOptions
     /// might want to reduce this number (e.g., to half the number of cores). For most users, the default setting works 
     /// well and provides the best performance.</para>
     /// </remarks>
-    public int MaxDegreeOfParallelism { get; set; } = 1;
+    public int MaxDegreeOfParallelism { get; set; } = Environment.ProcessorCount;
 }
