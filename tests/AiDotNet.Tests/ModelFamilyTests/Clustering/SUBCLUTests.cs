@@ -10,7 +10,7 @@ public class SUBCLUTests : ClusteringModelTestBase
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new SUBCLU<double>(new AiDotNet.Clustering.Options.SUBCLUOptions<double>
         {
-            Epsilon = 3.0, // Data has clusters at spacing=10 with std=1
+            Epsilon = 0.5, // After normalization, data has std=1, clusters well-separated
             MinPoints = 3
         });
 

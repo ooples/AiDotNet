@@ -167,15 +167,38 @@ public class SUBCLU<T> : ClusteringBase<T>
         int d = x.Columns;
         NumFeatures = d;
 
-        // Store training data for prediction
+        // Store original training data for prediction
         _trainingData = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
                 _trainingData[i, j] = x[i, j];
+
+        // Normalize features to zero-mean unit-variance for scale-invariant epsilon.
+        // Without normalization, epsilon is scale-dependent.
+        var featureMeans = new double[d];
+        var featureStds = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            double sum = 0;
+            for (int i = 0; i < n; i++)
+                sum += NumOps.ToDouble(x[i, j]);
+            featureMeans[j] = sum / n;
+
+            double varSum = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double diff = NumOps.ToDouble(x[i, j]) - featureMeans[j];
+                varSum += diff * diff;
             }
+            featureStds[j] = Math.Sqrt(varSum / n);
+            if (featureStds[j] < 1e-10) featureStds[j] = 1.0;
         }
+
+        var xNorm = new Matrix<T>(n, d);
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < d; j++)
+                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - featureMeans[j]) / featureStds[j]);
+        x = xNorm;
 
         _subspaceClusterInfos = new List<SubspaceClusterInfo>();
 
