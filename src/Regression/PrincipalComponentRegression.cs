@@ -331,6 +331,18 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// Finally, it transforms the predictions back to the original scale of your target variable.
     /// </para>
     /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        // Manual Clone for OLS path
+        var clone = new PrincipalComponentRegression<T>(_options, Regularization);
+        clone.Coefficients = new Vector<T>(Coefficients);
+        clone.Intercept = Intercept;
+        clone.TrainingFeatureCount = TrainingFeatureCount;
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     public override Vector<T> Predict(Matrix<T> input)
     {
         // OLS coefficients are in original space. Use base class prediction.
