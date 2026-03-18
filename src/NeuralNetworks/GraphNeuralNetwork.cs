@@ -366,14 +366,20 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
-            // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
         }
         else
         {
-            // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(Architecture));
+            // Graph networks need per-node softmax, not global softmax.
+            // Filter out trailing ActivationLayer (SoftmaxActivation) which applies
+            // softmax over all (nodes × classes) elements — incorrect for graphs.
+            foreach (var layer in LayerHelper<T>.CreateDefaultGNNLayers(Architecture))
+            {
+                if (layer is ActivationLayer<T>)
+                    continue;
+                Layers.Add(layer);
+            }
         }
     }
 
@@ -720,31 +726,50 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Reset any layer states
+        // Ensure 2D input [numNodes, features]
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        int numNodes = input.Shape[0];
+        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+
+        // Set all layers to inference mode
         foreach (var layer in Layers)
         {
             layer.SetTrainingMode(false);
         }
 
-        // Forward pass through all layers
+        // Forward pass through all layers with adjacency
         Tensor<T> current = input;
-        for (int i = 0; i < Layers.Count; i++)
+        foreach (var layer in Layers)
         {
-            // Skip graph-specific layers if this is a standard prediction
-            if (Layers[i] is IGraphConvolutionLayer<T>)
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
             {
-                // For graph layers, we need adjacency information which is not available
-                // Just pass through without modification for standard prediction
-                continue;
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
             }
-            else
-            {
-                // Process through standard layers
-                current = Layers[i].Forward(current);
-            }
+            current = layer.Forward(current);
         }
 
         return current;
+    }
+
+    /// <summary>
+    /// Cached adjacency matrix for forward/backward passes.
+    /// </summary>
+    private Tensor<T>? _autoAdjacencyMatrix;
+
+    private Tensor<T> EnsureAdjacencyMatrix(int numNodes)
+    {
+        if (_autoAdjacencyMatrix != null && _autoAdjacencyMatrix.Shape[0] == numNodes)
+            return _autoAdjacencyMatrix;
+
+        var adj = new Tensor<T>([numNodes, numNodes]);
+        for (int i = 0; i < numNodes; i++)
+            for (int j = 0; j < numNodes; j++)
+                adj[i, j] = NumOps.One;
+
+        _autoAdjacencyMatrix = adj;
+        return adj;
     }
 
     /// <summary>
@@ -778,36 +803,50 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
             SetTrainingMode(true);
         }
 
-        // Extract node features and adjacency matrix from the input tensor
-        int featuresDimension = input.Shape[0] / 2; // First half contains features
+        // Ensure 2D input [numNodes, features]
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
 
-        // Extract node features
-        Tensor<T> nodeFeatures = input.Slice(0, featuresDimension);
+        int numNodes = input.Shape[0];
+        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
 
-        // Extract adjacency matrix
-        Tensor<T> adjacencyMatrix = input.Slice(featuresDimension, featuresDimension);
+        // Set all layers to training mode
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(true);
+        }
 
-        // Forward pass with graph data
-        Tensor<T> prediction = PredictGraph(nodeFeatures, adjacencyMatrix);
+        // Forward pass through all layers with adjacency
+        Tensor<T> current = input;
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            {
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+            }
+            current = layer.Forward(current);
+        }
 
-        // Calculate main loss
-        var flattenedPredictions = prediction.ToVector();
+        // Calculate loss
+        var flattenedPredictions = current.ToVector();
         var flattenedExpected = expectedOutput.ToVector();
         LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
 
-        // Add auxiliary loss if enabled
-        if (UseAuxiliaryLoss)
-        {
-            T auxLoss = ComputeAuxiliaryLoss();
-            T weightedAuxLoss = NumOps.Multiply(AuxiliaryLossWeight, auxLoss);
-            LastLoss = NumOps.Add(LastLoss, weightedAuxLoss);
-        }
-
         // Calculate output gradients
         var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
+        var gradOutput = Tensor<T>.FromVector(outputGradients);
 
-        // Backpropagate to get parameter gradients
-        Vector<T> gradients = Backpropagate(Tensor<T>.FromVector(outputGradients)).ToVector();
+        // Reshape gradient back to tensor shape if needed
+        if (gradOutput.Shape.Length == 1 && current.Shape.Length > 1)
+        {
+            gradOutput = gradOutput.Reshape(current.Shape);
+        }
+
+        // Backward pass through all layers
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            gradOutput = Layers[i].Backward(gradOutput);
+        }
 
         // Get parameter gradients for all trainable layers
         Vector<T> parameterGradients = GetParameterGradients();
@@ -924,6 +963,34 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     /// - Saving the model for later use
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Gets the intermediate activations from each layer, ensuring adjacency is set for graph layers.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        int numNodes = input.Shape[0];
+        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+        }
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = input;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

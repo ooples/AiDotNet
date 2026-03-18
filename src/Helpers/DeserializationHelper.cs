@@ -273,6 +273,21 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation });
         }
+        else if (genericDef == typeof(GraphConvolutionalLayer<>))
+        {
+            // GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
+            int inputFeatures = inputShape[0];
+            int outputFeatures = outputShape[0];
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find GraphConvolutionalLayer constructor with expected signature.");
+            }
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, activation });
+        }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Attention.FlashAttentionLayer<>))
         {
             instance = CreateFlashAttentionLayer<T>(type, inputShape, additionalParams);
