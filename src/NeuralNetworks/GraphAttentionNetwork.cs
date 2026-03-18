@@ -192,8 +192,17 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGraphAttentionLayers(
-                Architecture, NumHeads, NumLayers, DropoutRate));
+            // Graph networks need per-node softmax, not global softmax.
+            // The default layer helper adds a trailing ActivationLayer with SoftmaxActivation
+            // that applies softmax over ALL elements (nodes × classes), which is incorrect.
+            // Filter it out — the network applies per-node softmax internally during training.
+            foreach (var layer in LayerHelper<T>.CreateDefaultGraphAttentionLayers(
+                Architecture, NumHeads, NumLayers, DropoutRate))
+            {
+                if (layer is ActivationLayer<T>)
+                    continue;
+                Layers.Add(layer);
+            }
         }
     }
 
@@ -829,6 +838,34 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
 
         // Apply updated parameters
         UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Gets the intermediate activations from each layer, ensuring adjacency is set for graph layers.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        Tensor<T> normalizedInput = NormalizeSingleNodeInput(input, out _);
+        var adjacencyMatrix = EnsureAdjacencyMatrix(normalizedInput);
+
+        // Set adjacency on all graph layers before calling Forward on each
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            {
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+            }
+        }
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = normalizedInput;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     /// <summary>

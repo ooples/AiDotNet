@@ -1358,6 +1358,22 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var weightsGrad = _weightsGradient != null
+            ? new Vector<T>(_weightsGradient.ToArray())
+            : new Vector<T>(_weights.Length);
+        var attnGrad = _attentionWeightsGradient != null
+            ? new Vector<T>(_attentionWeightsGradient.ToArray())
+            : new Vector<T>(_attentionWeights.Length);
+        var biasGrad = _biasGradient != null
+            ? new Vector<T>(_biasGradient.ToArray())
+            : new Vector<T>(_bias.Length);
+
+        return Vector<T>.Concatenate(weightsGrad, attnGrad, biasGrad);
+    }
+
+    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
@@ -1395,6 +1411,18 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         Engine.InvalidatePersistentTensor(_weights);
         Engine.InvalidatePersistentTensor(_attentionWeights);
         Engine.InvalidatePersistentTensor(_bias);
+    }
+
+    /// <summary>
+    /// Returns layer-specific metadata for serialization (numHeads, alpha, dropoutRate).
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumHeads"] = _numHeads.ToString();
+        metadata["Alpha"] = NumOps.ToDouble(_alpha).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["DropoutRate"] = _dropoutRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
     }
 
     /// <inheritdoc/>
