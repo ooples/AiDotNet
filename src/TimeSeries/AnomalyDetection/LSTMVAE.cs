@@ -311,6 +311,10 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
         _encoder.Serialize(writer);
         _decoder.Serialize(writer);
+
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(_numOps.ToDouble(_trainingSeries[i]));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
@@ -326,6 +330,18 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
         _encoder.Deserialize(reader);
         _decoder.Deserialize(reader);
+
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()

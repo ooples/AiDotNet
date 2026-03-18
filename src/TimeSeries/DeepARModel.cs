@@ -545,6 +545,10 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         SerializeTensor(writer, _meanBias);
         SerializeTensor(writer, _scaleWeights);
         SerializeTensor(writer, _scaleBias);
+
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(NumOps.ToDouble(_trainingSeries[i]));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
@@ -564,6 +568,18 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         _meanBias = DeserializeTensor(reader);
         _scaleWeights = DeserializeTensor(reader);
         _scaleBias = DeserializeTensor(reader);
+
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)

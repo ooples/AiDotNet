@@ -1092,6 +1092,10 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         {
             layer.Serialize(writer);
         }
+
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(_numOps.ToDouble(_trainingSeries[i]));
     }
 
     /// <inheritdoc/>
@@ -1151,6 +1155,18 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         }
 
         InitializeGradientAccumulators();
+
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
