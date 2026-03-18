@@ -95,6 +95,12 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private int _numParams;
 
+    /// <summary>
+    /// Y standardization parameters for scale-invariant training.
+    /// </summary>
+    private double _yMean;
+    private double _yStd = 1.0;
+
     /// <inheritdoc/>
     public override int NumberOfTrees => _trees.Count * _numParams;
 
@@ -131,6 +137,25 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
+
+        // Standardize y for scale-invariant training
+        double yMean = 0, yStd = 0;
+        for (int i = 0; i < n; i++) yMean += NumOps.ToDouble(y[i]);
+        yMean /= n;
+        for (int i = 0; i < n; i++)
+        {
+            double d = NumOps.ToDouble(y[i]) - yMean;
+            yStd += d * d;
+        }
+        yStd = Math.Sqrt(yStd / n);
+        if (yStd < 1e-10) yStd = 1.0;
+        _yMean = yMean;
+        _yStd = yStd;
+
+        var yStandardized = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            yStandardized[i] = NumOps.FromDouble((NumOps.ToDouble(y[i]) - yMean) / yStd);
+        y = yStandardized;
 
         // Initialize distribution and get number of parameters
         var initialDist = CreateDistribution(y);
@@ -281,7 +306,9 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            predictions[i] = distributions[i].Mean;
+            // Denormalize: prediction = standardized_mean * yStd + yMean
+            double mean = NumOps.ToDouble(distributions[i].Mean);
+            predictions[i] = NumOps.FromDouble(mean * _yStd + _yMean);
         }
 
         return predictions;
@@ -767,6 +794,10 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write((int)_options.ScoringRule);
         writer.Write(_options.UseNaturalGradient);
 
+        // Y standardization
+        writer.Write(_yMean);
+        writer.Write(_yStd);
+
         // Initial parameters
         writer.Write(_numParams);
         for (int p = 0; p < _numParams; p++)
@@ -806,6 +837,10 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _options.DistributionType = (NGBoostDistributionType)reader.ReadInt32();
         _options.ScoringRule = (NGBoostScoringRuleType)reader.ReadInt32();
         _options.UseNaturalGradient = reader.ReadBoolean();
+
+        // Y standardization
+        _yMean = reader.ReadDouble();
+        _yStd = reader.ReadDouble();
 
         // Initial parameters
         _numParams = reader.ReadInt32();
