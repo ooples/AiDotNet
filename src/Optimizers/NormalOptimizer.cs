@@ -23,6 +23,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// Options specific to the normal optimizer, including parameters inherited from genetic algorithms.
     /// </summary>
     private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _normalOptions;
+    private int _configuredMinFeatures;
 
     /// <summary>
     /// Initializes a new instance of the NormalOptimizer class.
@@ -78,6 +79,8 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
             Options.MaximumFeatures = totalFeatures;
         if (Options.MinimumFeatures <= 0)
             Options.MinimumFeatures = Math.Max(1, totalFeatures);
+        // Store the configured minimum so adaptive updates don't go below it
+        _configuredMinFeatures = Options.MinimumFeatures;
 
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
@@ -163,7 +166,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     {
         if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
-            Options.MinimumFeatures = Math.Max(1, Options.MinimumFeatures - 1);
+            Options.MinimumFeatures = Math.Max(_configuredMinFeatures, Options.MinimumFeatures - 1);
             Options.MaximumFeatures = Math.Min(Options.MaximumFeatures + 1, _normalOptions.MaximumFeatures);
         }
         else
