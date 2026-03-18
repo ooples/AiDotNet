@@ -135,10 +135,29 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>Y standardization for scale-invariant training.</summary>
+    private double _yMean;
+    private double _yStd = 1.0;
+
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
         _numFeatures = x.Columns;
         int n = x.Rows;
+
+        // Standardize y for scale-invariant training
+        double yMean = 0;
+        for (int i = 0; i < n; i++) yMean += NumOps.ToDouble(y[i]);
+        yMean /= n;
+        double yVar = 0;
+        for (int i = 0; i < n; i++) { double d = NumOps.ToDouble(y[i]) - yMean; yVar += d * d; }
+        double yStd = Math.Sqrt(yVar / n);
+        if (yStd < 1e-10) yStd = 1.0;
+        _yMean = yMean;
+        _yStd = yStd;
+        var yStandardized = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            yStandardized[i] = NumOps.FromDouble((NumOps.ToDouble(y[i]) - yMean) / yStd);
+        y = yStandardized;
 
         // Initialize parameters
         InitializeParameters(y);
@@ -205,7 +224,9 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            predictions[i] = distributions[i].Mean;
+            // Denormalize: prediction = standardized_mean * yStd + yMean
+            double mean = NumOps.ToDouble(distributions[i].Mean);
+            predictions[i] = NumOps.FromDouble(mean * _yStd + _yMean);
         }
 
         return predictions;
@@ -711,6 +732,10 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write((int)_options.ScaleModelType);
         writer.Write((int)_options.ShapeModelType);
 
+        // Y standardization
+        writer.Write(_yMean);
+        writer.Write(_yStd);
+
         // State
         writer.Write(_numFeatures);
         writer.Write(NumOps.ToDouble(_locationIntercept));
@@ -753,6 +778,10 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _options.LocationModelType = (GAMLSSModelType)reader.ReadInt32();
         _options.ScaleModelType = (GAMLSSModelType)reader.ReadInt32();
         _options.ShapeModelType = (GAMLSSModelType)reader.ReadInt32();
+
+        // Y standardization
+        _yMean = reader.ReadDouble();
+        _yStd = reader.ReadDouble();
 
         // State
         _numFeatures = reader.ReadInt32();
