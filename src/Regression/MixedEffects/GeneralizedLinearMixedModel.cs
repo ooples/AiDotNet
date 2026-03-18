@@ -996,4 +996,22 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
 
         return newModel;
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        if (_useOLS)
+        {
+            var clone = new GeneralizedLinearMixedModel<T>(_options, Regularization);
+            clone._useOLS = true;
+            clone.Coefficients = new Vector<T>(Coefficients);
+            clone.Intercept = Intercept;
+            clone.TrainingFeatureCount = TrainingFeatureCount;
+            foreach (var re in _randomEffects)
+                clone.AddRandomIntercept(re.Name, re.GroupColumnIndex);
+            return clone;
+        }
+        return base.Clone();
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }
