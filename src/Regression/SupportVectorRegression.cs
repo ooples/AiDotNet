@@ -634,6 +634,15 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// - Use the model in a different application
     /// </para>
     /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new SupportVectorRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     public override byte[] Serialize()
     {
         using var ms = new MemoryStream();
@@ -647,6 +656,20 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         // Serialize SVR specific data
         writer.Write(_options.Epsilon);
         writer.Write(_options.C);
+
+        // OLS state
+        writer.Write(_useOLS);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else
+        {
+            writer.Write(0);
+        }
 
         return ms.ToArray();
     }
@@ -687,6 +710,17 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         // Deserialize SVR specific data
         _options.Epsilon = reader.ReadDouble();
         _options.C = reader.ReadDouble();
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <summary>
