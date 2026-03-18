@@ -818,8 +818,28 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             }
         }
 
+        // OLS state
+        writer.Write(_useOLS);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else { writer.Write(0); }
+
         return ms.ToArray();
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new NeuralNetworkRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <summary>
     /// Deserializes the model from a byte array.
@@ -886,6 +906,17 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         }
 
         InitializeNetwork();
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <summary>
