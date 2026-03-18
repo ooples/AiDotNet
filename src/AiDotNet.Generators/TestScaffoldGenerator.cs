@@ -436,6 +436,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsTts = false, extendsFinancial = false, extendsNER = false, extendsCode = false;
         bool extendsLatentDiffusion = false, extendsNonLinearRegression = false;
         bool extendsProbabilisticClassifier = false;
+        // Phase B gap + Phase C
+        bool extendsForecasting = false, extendsThreeDDiffusion = false;
+        bool extendsAnomalyDetector = false, extendsSurvival = false;
+        bool extendsCausal = false, extendsRLAgent = false;
         // Phase B leaf-level
         bool extendsVideoDiffusion = false, extendsAudioDiffusion = false;
         bool extendsFrameInterpolation = false, extendsVideoSR = false, extendsVideoDenoising = false;
@@ -486,9 +490,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      baseName.StartsWith("AcousticModelBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("VocoderBase", System.StringComparison.Ordinal))
                 extendsTts = true;
+            else if (baseName.StartsWith("ForecastingModelBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("TimeSeriesFoundationModelBase", System.StringComparison.Ordinal))
+                extendsForecasting = true;
             else if (baseName.StartsWith("FinancialModelBase", System.StringComparison.Ordinal) ||
-                     baseName.StartsWith("ForecastingModelBase", System.StringComparison.Ordinal) ||
-                     baseName.StartsWith("TimeSeriesFoundationModelBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("RiskModelBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("PortfolioOptimizerBase", System.StringComparison.Ordinal) ||
                      baseName.StartsWith("FinancialNLPModelBase", System.StringComparison.Ordinal))
@@ -500,6 +505,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsNER = true;
             else if (baseName.StartsWith("CodeModelBase", System.StringComparison.Ordinal))
                 extendsCode = true;
+            else if (baseName.StartsWith("ThreeDDiffusionModelBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("3DDiffusionModelBase", System.StringComparison.Ordinal))
+                extendsThreeDDiffusion = true;
+            else if (baseName.StartsWith("AnomalyDetectorBase", System.StringComparison.Ordinal))
+                extendsAnomalyDetector = true;
+            else if (baseName.StartsWith("SurvivalModelBase", System.StringComparison.Ordinal))
+                extendsSurvival = true;
+            else if (baseName.StartsWith("CausalModelBase", System.StringComparison.Ordinal))
+                extendsCausal = true;
+            else if (baseName.StartsWith("ReinforcementLearningAgentBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("DeepReinforcementLearningAgentBase", System.StringComparison.Ordinal))
+                extendsRLAgent = true;
             else if (baseName.StartsWith("LatentDiffusionModelBase", System.StringComparison.Ordinal))
                 extendsLatentDiffusion = true;
             else if (baseName.StartsWith("NonLinearRegressionBase", System.StringComparison.Ordinal))
@@ -577,6 +594,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsEnsembleClassifierBase = extendsEnsembleClassifier,
             ExtendsNaiveBayesBase = extendsNaiveBayes,
             ExtendsSVMBase = extendsSVM,
+            ExtendsForecastingModelBase = extendsForecasting,
+            ExtendsThreeDDiffusionModelBase = extendsThreeDDiffusion,
+            ExtendsAnomalyDetectorBase = extendsAnomalyDetector,
+            ExtendsSurvivalModelBase = extendsSurvival,
+            ExtendsCausalModelBase = extendsCausal,
+            ExtendsRLAgentBase = extendsRLAgent,
             ExtendsLatentDiffusionModelBase = extendsLatentDiffusion,
             ExtendsNonLinearRegressionBase = extendsNonLinearRegression,
             ExtendsProbabilisticClassifierBase = extendsProbabilisticClassifier,
@@ -697,7 +720,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.Categories.Contains(CategoryTimeSeriesModel))
             return TestFamily.TimeSeries;
 
-        // Priority 3a: Video Diffusion (most specific diffusion subtype)
+        // Priority 2a: 3D Diffusion (most specific diffusion subtype)
+        if (model.ExtendsThreeDDiffusionModelBase)
+            return TestFamily.ThreeDDiffusion;
+
+        // Priority 3a: Video Diffusion
         if (model.ExtendsVideoDiffusionModelBase)
             return TestFamily.VideoDiffusion;
 
@@ -775,6 +802,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ExtendsTtsModelBase)
             return TestFamily.TTS;
 
+        // Priority 13a: Forecasting (leaf of Financial)
+        if (model.ExtendsForecastingModelBase)
+            return TestFamily.Forecasting;
+
         // Priority 14: Financial
         if (model.ExtendsFinancialModelBase)
             return TestFamily.Financial;
@@ -821,7 +852,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.Tasks.Contains(TaskClustering) && model.UsesMatrixInput)
             return TestFamily.Clustering;
 
-        // === TIER 4: Fallbacks ===
+        // === TIER 4: Phase C new top-level families ===
+
+        // Priority 17a: Anomaly Detection
+        if (model.ExtendsAnomalyDetectorBase)
+            return TestFamily.AnomalyDetector;
+
+        // Priority 17b: Survival Analysis
+        if (model.ExtendsSurvivalModelBase)
+            return TestFamily.Survival;
+
+        // Priority 17c: Causal Inference
+        if (model.ExtendsCausalModelBase)
+            return TestFamily.Causal;
+
+        // Priority 17d: Reinforcement Learning
+        if (model.ExtendsRLAgentBase)
+            return TestFamily.ReinforcementLearning;
+
+        // === TIER 5: Fallbacks ===
 
         // Priority 18: Neural network (by interface or Tensor input)
         if (model.ImplementsNeuralNetworkModel || model.UsesTensorInput)
@@ -948,6 +997,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.AudioClassifier:
             case TestFamily.OpticalFlow:
             case TestFamily.SpeakerRecognition:
+            case TestFamily.Forecasting:
             case TestFamily.NeuralNetwork:
                 return model.ImplementsNeuralNetworkModel;
 
@@ -956,6 +1006,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.LatentDiffusion:
             case TestFamily.VideoDiffusion:
             case TestFamily.AudioDiffusion:
+            case TestFamily.ThreeDDiffusion:
                 return model.ImplementsDiffusionModel;
 
             // GP family requires IGaussianProcess interface
@@ -970,9 +1021,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.EnsembleClassifier:
             case TestFamily.NaiveBayes:
             case TestFamily.SVM:
+            case TestFamily.AnomalyDetector:
+            case TestFamily.Survival:
+            case TestFamily.Causal:
             case TestFamily.Clustering:
             case TestFamily.TimeSeries:
                 return model.UsesMatrixInput && model.UsesVectorOutput;
+
+            // RL uses Vector/Vector — always compatible if it has IFullModel
+            case TestFamily.ReinforcementLearning:
+                return true;
 
             default:
                 return false;
@@ -1146,6 +1204,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsEnsembleClassifierBase { get; set; }
         public bool ExtendsNaiveBayesBase { get; set; }
         public bool ExtendsSVMBase { get; set; }
+        public bool ExtendsForecastingModelBase { get; set; }
+        public bool ExtendsThreeDDiffusionModelBase { get; set; }
+        public bool ExtendsAnomalyDetectorBase { get; set; }
+        public bool ExtendsSurvivalModelBase { get; set; }
+        public bool ExtendsCausalModelBase { get; set; }
+        public bool ExtendsRLAgentBase { get; set; }
         public bool ExtendsNonLinearRegressionBase { get; set; }
         public bool ExtendsProbabilisticClassifierBase { get; set; }
     }
@@ -1183,6 +1247,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         EnsembleClassifier,
         NaiveBayes,
         SVM,
+        Forecasting,
+        ThreeDDiffusion,
+        AnomalyDetector,
+        Survival,
+        Causal,
+        ReinforcementLearning,
         Regression,
         NonLinearRegression,
         Classification,
@@ -1225,6 +1295,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.EnsembleClassifier:    return "EnsembleClassifierTestBase";
             case TestFamily.NaiveBayes:            return "NaiveBayesTestBase";
             case TestFamily.SVM:                   return "SVMTestBase";
+            case TestFamily.Forecasting:           return "ForecastingModelTestBase";
+            case TestFamily.ThreeDDiffusion:       return "ThreeDDiffusionTestBase";
+            case TestFamily.AnomalyDetector:       return "AnomalyDetectorTestBase";
+            case TestFamily.Survival:              return "SurvivalModelTestBase";
+            case TestFamily.Causal:                return "CausalModelTestBase";
+            case TestFamily.ReinforcementLearning: return "ReinforcementLearningTestBase";
             case TestFamily.Regression:            return "RegressionModelTestBase";
             case TestFamily.NonLinearRegression:   return "NonLinearRegressionTestBase";
             case TestFamily.Classification:        return "ClassificationModelTestBase";
@@ -1261,6 +1337,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.AudioClassifier:
             case TestFamily.OpticalFlow:
             case TestFamily.SpeakerRecognition:
+            case TestFamily.Forecasting:
             case TestFamily.NeuralNetwork:
                 return "CreateNetwork";
             default:
@@ -1281,6 +1358,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.LatentDiffusion:
             case TestFamily.VideoDiffusion:
             case TestFamily.AudioDiffusion:
+            case TestFamily.ThreeDDiffusion:
                 return "IDiffusionModel<double>";
             case TestFamily.GAN:
             case TestFamily.Embedding:
@@ -1300,13 +1378,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.AudioClassifier:
             case TestFamily.OpticalFlow:
             case TestFamily.SpeakerRecognition:
+            case TestFamily.Forecasting:
             case TestFamily.NeuralNetwork:
                 return "INeuralNetworkModel<double>";
+            case TestFamily.ReinforcementLearning:
+                return "IFullModel<double, Vector<double>, Vector<double>>";
             case TestFamily.TimeSeries:
             case TestFamily.Regression:
             case TestFamily.NonLinearRegression:
             case TestFamily.Classification:
             case TestFamily.ProbabilisticClassifier:
+            case TestFamily.AnomalyDetector:
+            case TestFamily.Survival:
+            case TestFamily.Causal:
             case TestFamily.Clustering:
             default:
                 return "IFullModel<double, Matrix<double>, Vector<double>>";
@@ -1329,6 +1413,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.EnsembleClassifier:
             case TestFamily.NaiveBayes:
             case TestFamily.SVM:
+            case TestFamily.AnomalyDetector:
+            case TestFamily.Survival:
+            case TestFamily.Causal:
+            case TestFamily.ReinforcementLearning:
             case TestFamily.Clustering:
                 return true;
             default:
