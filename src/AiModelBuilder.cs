@@ -2500,19 +2500,23 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 Iterations = federatedLearningMetadata.RoundsCompleted
             };
         }
-        else if (model is TimeSeries.TimeSeriesModelBase<T>)
+        else if (!model.SupportsParameterInitialization)
         {
-            // TIME SERIES DIRECT TRAINING PATH (industry standard)
-            // Time series models use their own internal optimizers (MLE, gradient descent, Kalman filter, EM)
-            // and require sequential data ordering. The outer optimizer's clone-evaluate-select loop
-            // destroys sequential state and provides no benefit. Train directly on the full training data.
-            model.Train(XTrain, yTrain);
+            // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
+            // These models use their own internal optimizers and don't benefit from the outer
+            // optimizer's clone-evaluate-select loop. Train directly on the full training data.
+            // For clustering/density models, use full data (not split) since cluster
+            // structure depends on having all points. For TS models, use XTrain (split).
+            bool useFullData = model is Clustering.Base.ClusteringBase<T>;
+            var directX = useFullData ? x : XTrain;
+            var directY = useFullData ? y : yTrain;
+            model.Train(directX, directY);
 
-            // Compute evaluation metrics on chronological splits
-            int inputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
-            TOutput trainPredOutput = model.Predict(XTrain);
+            // Compute evaluation metrics
+            int inputSize = InputHelper<T, TInput>.GetInputSize(directX);
+            TOutput trainPredOutput = model.Predict(directX);
             var trainPredVec = ConversionsHelper.ConvertToVector<T, TOutput>(trainPredOutput);
-            var trainActual = ConversionsHelper.ConvertToVector<T, TOutput>(yTrain);
+            var trainActual = ConversionsHelper.ConvertToVector<T, TOutput>(directY);
 
             var trainErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
             {
