@@ -875,7 +875,8 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     #region Abstract Method Implementations
 
     /// <summary>
-    /// Makes a prediction (generates a graph) using the trained model.
+    /// Makes a prediction by encoding input features and decoding to adjacency matrix.
+    /// Uses the mean of the latent distribution (no sampling) for deterministic inference.
     /// </summary>
     public override Tensor<T> Predict(Tensor<T> input)
     {
@@ -883,49 +884,110 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // For generation models, input can be noise or conditioning features
-        // Return generated node features
-        return Generate(input.Shape[0], MaxNodes, input);
+        // Ensure 2D input [numNodes, features]
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        int numNodes = input.Shape[0];
+        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+
+        // Set to inference mode
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
+
+        // Encode → use mean (deterministic) → decode
+        var (mean, _) = Encode(input, adjacencyMatrix);
+        return Decode(mean);
+    }
+
+    private Tensor<T>? _autoAdjacencyMatrix;
+
+    private Tensor<T> EnsureAdjacencyMatrix(int numNodes)
+    {
+        if (_autoAdjacencyMatrix != null && _autoAdjacencyMatrix.Shape[0] == numNodes)
+            return _autoAdjacencyMatrix;
+
+        var adj = new Tensor<T>([numNodes, numNodes]);
+        for (int i = 0; i < numNodes; i++)
+            for (int j = 0; j < numNodes; j++)
+                adj[i, j] = NumOps.One;
+
+        _autoAdjacencyMatrix = adj;
+        return adj;
     }
 
     /// <summary>
-    /// Trains the model on a single batch of data.
+    /// Trains the model on a single batch of data using VAE training (encode → sample → decode).
     /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Ensure 2D input [numNodes, features]
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        int numNodes = input.Shape[0];
+        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+
         // Set all layers to training mode
         foreach (var layer in Layers)
-        {
             layer.SetTrainingMode(true);
-        }
 
-        // Forward pass through encoder
-        var encoded = input;
+        // Forward pass: encode → sample → decode
+        var reconstructed = Forward(input, adjacencyMatrix);
+
+        // Compute ELBO loss
+        LastLoss = ComputeLoss(reconstructed, adjacencyMatrix);
+
+        // Compute reconstruction gradient
+        var reconGrad = ComputeReconstructionGradient(reconstructed, adjacencyMatrix);
+
+        // Backward pass
+        Backward(reconGrad);
+
+        // Update encoder parameters
+        var lr = NumOps.FromDouble(0.01);
+        foreach (var layer in Layers)
+            layer.UpdateParameters(lr);
+
+        // Update variational layer parameters
+        if (_meanWeightsGradient != null)
+        {
+            _meanWeights = Engine.TensorSubtract(_meanWeights,
+                Engine.TensorMultiplyScalar(_meanWeightsGradient, lr));
+        }
+        if (_logVarWeightsGradient != null)
+        {
+            _logVarWeights = Engine.TensorSubtract(_logVarWeights,
+                Engine.TensorMultiplyScalar(_logVarWeightsGradient, lr));
+        }
+    }
+
+    /// <summary>
+    /// Gets the intermediate activations from each layer, ensuring adjacency is set.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        int numNodes = input.Shape[0];
+        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+
         foreach (var layer in Layers)
         {
             if (layer is IGraphConvolutionLayer<T> graphLayer)
-            {
-                graphLayer.SetAdjacencyMatrix(expectedOutput);
-            }
-            encoded = layer.Forward(encoded);
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
         }
 
-        // Compute loss and backward pass
-        var flattenedPredictions = encoded.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients).Reshape(encoded.Shape);
-        Backward(gradOutput);
-
-        // Update parameters
-        foreach (var layer in Layers)
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = input;
+        for (int i = 0; i < Layers.Count; i++)
         {
-            var layerParams = layer.GetParameters();
-            var layerGrads = layer.GetParameterGradients();
-            var updated = _optimizer.UpdateParameters(layerParams, layerGrads);
-            layer.SetParameters(updated);
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
         }
+
+        return activations;
     }
 
     /// <summary>
@@ -959,6 +1021,14 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         writer.Write((int)GenerationType);
         SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
         SerializationHelper<T>.SerializeInterface(writer, _optimizer);
+
+        // Serialize variational layer weights
+        writer.Write(_meanWeights.Length);
+        for (int i = 0; i < _meanWeights.Length; i++)
+            writer.Write(Convert.ToDouble(_meanWeights.GetFlat(i)));
+        writer.Write(_logVarWeights.Length);
+        for (int i = 0; i < _logVarWeights.Length; i++)
+            writer.Write(Convert.ToDouble(_logVarWeights.GetFlat(i)));
     }
 
     /// <summary>
@@ -973,6 +1043,19 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         _ = (GraphGenerationType)reader.ReadInt32();
         _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
         _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
+
+        // Restore variational layer weights
+        int meanCount = reader.ReadInt32();
+        var meanData = new T[meanCount];
+        for (int i = 0; i < meanCount; i++)
+            meanData[i] = NumOps.FromDouble(reader.ReadDouble());
+        _meanWeights = Tensor<T>.FromVector(new Vector<T>(meanData)).Reshape(_meanWeights.Shape);
+
+        int logVarCount = reader.ReadInt32();
+        var logVarData = new T[logVarCount];
+        for (int i = 0; i < logVarCount; i++)
+            logVarData[i] = NumOps.FromDouble(reader.ReadDouble());
+        _logVarWeights = Tensor<T>.FromVector(new Vector<T>(logVarData)).Reshape(_logVarWeights.Shape);
     }
 
     /// <summary>
