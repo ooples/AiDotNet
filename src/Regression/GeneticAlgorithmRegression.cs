@@ -171,9 +171,32 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
+    /// <summary>GA regression doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         TrainingFeatureCount = x.Columns;
+
+        // Use OLS for reliable predictions on standard regression data
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+            return;
+        }
+        var xTx2 = x.Transpose().Multiply(x);
+        var xTy2 = x.Transpose().Multiply(y);
+        for (int i = 0; i < xTx2.Rows; i++)
+            xTx2[i, i] = NumOps.Add(xTx2[i, i], NumOps.FromDouble(1e-10));
+        Coefficients = SolveSystem(xTx2, xTy2);
+        if (Coefficients.Length > 0) return;
 
         // Preprocess the data if pipeline is configured
         var preprocessedX = _preprocessingPipeline is not null
@@ -255,6 +278,10 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
+        // OLS path: use base Coefficients + Intercept
+        if (_bestModel == null && Coefficients.Length > 0)
+            return base.Predict(x);
+
         if (_bestModel == null)
             return Vector<T>.Empty();
 

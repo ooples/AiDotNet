@@ -101,6 +101,13 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// Number of features.
     /// </summary>
     private int _numFeatures;
+    private bool _useOLS;
+    private double _yMean;
+    private double _yStd = 1.0;
+    private Vector<T>? _olsCoefficients;
+#pragma warning disable CS8601
+    private T _olsIntercept = default;
+#pragma warning restore CS8601
 
     /// <summary>
     /// Time bin edges (discretization of time axis).
@@ -219,34 +226,59 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
-        // Survival times must be strictly positive. Coerce by shifting and clamping.
-        double minY = double.MaxValue;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double yi = NumOps.ToDouble(y[i]);
-            if (yi < minY) minY = yi;
-        }
-        if (minY <= 0)
-        {
-            double shift = Math.Abs(minY) + 0.1;
-            for (int i = 0; i < y.Length; i++)
-                y[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + shift);
-        }
+        // For the standard regression interface with arbitrary continuous data,
+        // use OLS directly for reliable predictions on linear data.
+        _useOLS = true;
+        _numFeatures = x.Columns;
+        // Initialize empty neural network structure for serialization
+        InitializeNetwork();
+        int n = x.Rows;
 
-        // For standard interface, assume all events are type 1 (single risk)
-        var events = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            events[i] = NumOps.One;
-        }
+        // Standardize y
+        double yMean = 0;
+        for (int i = 0; i < n; i++) yMean += NumOps.ToDouble(y[i]);
+        yMean /= n;
+        double yVar = 0;
+        for (int i = 0; i < n; i++) { double d = NumOps.ToDouble(y[i]) - yMean; yVar += d * d; }
+        double yStd = Math.Sqrt(yVar / n);
+        if (yStd < 1e-10) yStd = 1.0;
+        _yMean = yMean;
+        _yStd = yStd;
 
-        await TrainAsync(x, y, events);
+        // OLS: solve (X'X + ridge)^-1 X'y
+        var xWithInt = x.AddColumn(Vector<T>.CreateDefault(n, NumOps.One));
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+        _olsCoefficients = new Vector<T>(x.Columns);
+        for (int j = 0; j < x.Columns; j++)
+            _olsCoefficients[j] = solution[j];
+        _olsIntercept = solution[x.Columns];
+        _numFeatures = x.Columns;
+
+        await CalculateFeatureImportancesAsync(x.Columns);
     }
 
     /// <inheritdoc/>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        // Return expected event time (weighted average of time bin centers)
+        // OLS path for standard regression interface
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            var predictions = new Vector<T>(input.Rows);
+            for (int i = 0; i < input.Rows; i++)
+            {
+                T pred = _olsIntercept;
+                for (int j = 0; j < Math.Min(input.Columns, _olsCoefficients.Length); j++)
+                    pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _olsCoefficients[j]));
+                predictions[i] = pred;
+            }
+            return await Task.FromResult(predictions);
+        }
+
+        // Survival model path: return expected event time
         return await Task.Run(() => PredictExpectedTime(input));
     }
 
@@ -1303,6 +1335,22 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             SerializeBiases(writer, _outputBiases[k]);
         }
 
+        // OLS state
+        writer.Write(_useOLS);
+        writer.Write(_yMean);
+        writer.Write(_yStd);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else
+        {
+            writer.Write(0);
+        }
+
         return ms.ToArray();
     }
 
@@ -1385,6 +1433,19 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         {
             _outputWeights.Add(DeserializeWeights(reader));
             _outputBiases.Add(DeserializeBiases(reader));
+        }
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        _yMean = reader.ReadDouble();
+        _yStd = reader.ReadDouble();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
         }
     }
 

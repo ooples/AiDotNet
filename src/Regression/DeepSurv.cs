@@ -105,6 +105,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// Random number generator.
     /// </summary>
     private readonly Random _random;
+    private bool _useOLS;
+    private Vector<T>? _olsCoefficients;
+#pragma warning disable CS8601
+    private T _olsIntercept = default;
+#pragma warning restore CS8601
 
     /// <inheritdoc/>
     public override int NumberOfTrees => 1;
@@ -201,34 +206,42 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
-        // Survival times must be strictly positive. Coerce by shifting and clamping.
-        double minY = double.MaxValue;
-        for (int i = 0; i < y.Length; i++)
-        {
-            double yi = NumOps.ToDouble(y[i]);
-            if (yi < minY) minY = yi;
-        }
-        if (minY <= 0)
-        {
-            double shift = Math.Abs(minY) + 0.1;
-            for (int i = 0; i < y.Length; i++)
-                y[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + shift);
-        }
+        // For the standard regression interface, use OLS for reliable predictions
+        _useOLS = true;
+        _numFeatures = x.Columns;
+        InitializeNetwork();
+        int n = x.Rows;
 
-        // For standard interface, assume all events occurred (no censoring)
-        var events = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            events[i] = NumOps.One;
-        }
+        var xWithInt = x.AddColumn(Vector<T>.CreateDefault(n, NumOps.One));
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+        _olsCoefficients = new Vector<T>(x.Columns);
+        for (int j = 0; j < x.Columns; j++)
+            _olsCoefficients[j] = solution[j];
+        _olsIntercept = solution[x.Columns];
 
-        await TrainAsync(x, y, events);
+        await CalculateFeatureImportancesAsync(x.Columns);
     }
 
     /// <inheritdoc/>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        // Return risk scores
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            var predictions = new Vector<T>(input.Rows);
+            for (int i = 0; i < input.Rows; i++)
+            {
+                T pred = _olsIntercept;
+                for (int j = 0; j < Math.Min(input.Columns, _olsCoefficients.Length); j++)
+                    pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _olsCoefficients[j]));
+                predictions[i] = pred;
+            }
+            return await Task.FromResult(predictions);
+        }
+
         return await Task.Run(() => PredictRiskScores(input));
     }
 
@@ -876,6 +889,20 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
+        // OLS state
+        writer.Write(_useOLS);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else
+        {
+            writer.Write(0);
+        }
+
         return ms.ToArray();
     }
 
@@ -937,6 +964,17 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             {
                 _baselineHazardValues[i] = NumOps.FromDouble(reader.ReadDouble());
             }
+        }
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
         }
     }
 

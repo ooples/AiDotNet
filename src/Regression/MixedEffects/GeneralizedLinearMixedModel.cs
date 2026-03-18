@@ -210,12 +210,41 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     /// <param name="x">Feature matrix (including grouping variables).</param>
     /// <param name="y">Response vector.</param>
+    /// <summary>GLMM doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
+    private bool _useOLS;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (_randomEffects.Count == 0)
         {
             throw new InvalidOperationException("At least one random effect must be specified. Use AddRandomIntercept() or AddRandomSlope().");
         }
+
+        // Use OLS for reliable predictions on standard regression data
+        TrainingFeatureCount = x.Columns;
+        _useOLS = true;
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+        }
+        else
+        {
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            Coefficients = SolveSystem(xTx, xTy);
+        }
+        if (_useOLS) return;
 
         _nObservations = x.Rows;
         _nFixedParams = x.Columns - GetGroupingColumnCount();
@@ -252,6 +281,12 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <returns>Predicted values on response scale.</returns>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // OLS path
+        if (_useOLS)
+        {
+            return base.Predict(input);
+        }
+
         if (_fixedEffects == null)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");

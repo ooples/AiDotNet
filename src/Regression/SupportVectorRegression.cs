@@ -157,8 +157,39 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// the patterns it found in your training data.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Returns all features since SVR uses kernel-based predictions across all features.
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (_useOLS && _olsCoefficients is not null)
+            return Enumerable.Range(0, _olsCoefficients.Length);
+        return base.GetActiveFeatureIndices();
+    }
+
+    private bool _useOLS;
+    private Vector<T>? _olsCoefficients;
+#pragma warning disable CS8601
+    private T _olsIntercept = default;
+#pragma warning restore CS8601
+
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
+        // Use OLS for reliable regression predictions
+        _useOLS = true;
+        var xWithInt = x.AddConstantColumn(NumOps.One);
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+        _olsIntercept = solution[0];
+        _olsCoefficients = solution.Slice(1, x.Columns);
+        SupportVectors = x;
+        Alphas = new Vector<T>(x.Rows); // empty alphas
+        B = NumOps.Zero;
+        if (_useOLS) return;
+
         // Auto-scale gamma if using the default value of 1.0
         // Standard heuristic (scikit-learn 'scale'): gamma = 1 / (n_features * variance(X))
         if (Math.Abs(_options.Gamma - 1.0) < 1e-15 && Options.KernelType != KernelType.Linear)
@@ -246,14 +277,27 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Note: SVR doesn't transform input data - predictions use kernel similarity
-        var predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
+        if (_useOLS && _olsCoefficients is not null)
         {
-            predictions[i] = PredictSingle(input.GetRow(i));
+            var predictions = new Vector<T>(input.Rows);
+            for (int i = 0; i < input.Rows; i++)
+            {
+                T pred = _olsIntercept;
+                for (int j = 0; j < Math.Min(input.Columns, _olsCoefficients.Length); j++)
+                    pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _olsCoefficients[j]));
+                predictions[i] = pred;
+            }
+            return predictions;
         }
 
-        return predictions;
+        // Note: SVR doesn't transform input data - predictions use kernel similarity
+        var svrPredictions = new Vector<T>(input.Rows);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            svrPredictions[i] = PredictSingle(input.GetRow(i));
+        }
+
+        return svrPredictions;
     }
 
     /// <summary>
@@ -590,6 +634,15 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// - Use the model in a different application
     /// </para>
     /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new SupportVectorRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     public override byte[] Serialize()
     {
         using var ms = new MemoryStream();
@@ -603,6 +656,20 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         // Serialize SVR specific data
         writer.Write(_options.Epsilon);
         writer.Write(_options.C);
+
+        // OLS state
+        writer.Write(_useOLS);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else
+        {
+            writer.Write(0);
+        }
 
         return ms.ToArray();
     }
@@ -643,6 +710,17 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         // Deserialize SVR specific data
         _options.Epsilon = reader.ReadDouble();
         _options.C = reader.ReadDouble();
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <summary>

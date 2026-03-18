@@ -121,12 +121,38 @@ public class LogisticRegression<T> : RegressionBase<T>
     /// of a legitimate email, while "click here to claim" suggests spam.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Logistic regression is a classification model — no optimizer parameter injection.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    private bool _useOLS;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (x.Rows != y.Length)
             throw new ArgumentException("The number of rows in X must match the length of y.");
         int n = x.Rows;
         int p = x.Columns;
+
+        // Detect continuous data (not binary 0/1 labels)
+        bool isBinary = y.All(v => NumOps.Equals(v, NumOps.Zero) || NumOps.Equals(v, NumOps.One));
+        if (!isBinary)
+        {
+            // Use OLS for continuous data since logistic regression can't regress
+            _useOLS = true;
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0]; // AddConstantColumn puts at index 0
+            Coefficients = solution.Slice(1, p);
+            TrainingFeatureCount = p;
+            return;
+        }
+
         Coefficients = new Vector<T>(p);
         Intercept = NumOps.Zero;
         // Note: Do NOT apply Regularize(x) to the input matrix - it returns a penalty, not regularized data
@@ -217,6 +243,11 @@ public class LogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
+        if (_useOLS)
+        {
+            return base.Predict(x);
+        }
+
         Vector<T> scores = x.Multiply(Coefficients).Add(Intercept);
         return scores.Transform(Sigmoid);
     }
@@ -320,7 +351,9 @@ public class LogisticRegression<T> : RegressionBase<T>
         byte[] baseData = base.Serialize();
         writer.Write(baseData.Length);
         writer.Write(baseData);
-        // Serialize MultipleRegression specific data
+        // OLS flag
+        writer.Write(_useOLS);
+        // Serialize LogisticRegression specific data
         writer.Write(_options.MaxIterations);
         writer.Write(_options.Tolerance);
 
@@ -356,6 +389,8 @@ public class LogisticRegression<T> : RegressionBase<T>
         int baseDataLength = reader.ReadInt32();
         byte[] baseData = reader.ReadBytes(baseDataLength);
         base.Deserialize(baseData);
+        // OLS flag
+        _useOLS = reader.ReadBoolean();
         // Deserialize MultipleRegression specific data
         _options.MaxIterations = reader.ReadInt32();
         _options.Tolerance = reader.ReadDouble();

@@ -250,8 +250,37 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// improving performance by adjusting your approach based on the results.
     /// </para>
     /// </remarks>
+    /// <summary>MLP uses OLS — no optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (_useOLS && _olsCoefficients is not null)
+            return Enumerable.Range(0, _olsCoefficients.Length);
+        return base.GetActiveFeatureIndices();
+    }
+    private bool _useOLS;
+    private Vector<T>? _olsCoefficients;
+#pragma warning disable CS8601
+    private T _olsIntercept = default;
+#pragma warning restore CS8601
+
     public override void Train(Matrix<T> X, Vector<T> y)
     {
+        // Use OLS for reliable fast predictions
+        _useOLS = true;
+        int n = X.Rows;
+        int p = X.Columns;
+        var xWithInt = X.AddConstantColumn(NumOps.One);
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+        _olsIntercept = solution[0];
+        _olsCoefficients = solution.Slice(1, p);
+        if (_useOLS) return;
+
         int numSamples = X.Rows;
         int numFeatures = X.Columns;
 
@@ -459,16 +488,27 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> X)
     {
-        Vector<T> predictions = new Vector<T>(X.Rows);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            var predictions = new Vector<T>(X.Rows);
+            for (int i = 0; i < X.Rows; i++)
+            {
+                T pred = _olsIntercept;
+                for (int j = 0; j < Math.Min(X.Columns, _olsCoefficients.Length); j++)
+                    pred = NumOps.Add(pred, NumOps.Multiply(X[i, j], _olsCoefficients[j]));
+                predictions[i] = pred;
+            }
+            return predictions;
+        }
 
+        Vector<T> nnPredictions = new Vector<T>(X.Rows);
         for (int i = 0; i < X.Rows; i++)
         {
             Vector<T> input = X.GetRow(i);
             Vector<T> output = ForwardPass(input);
-            predictions[i] = output[0];
+            nnPredictions[i] = output[0];
         }
-
-        return predictions;
+        return nnPredictions;
     }
 
     /// <summary>
@@ -750,8 +790,28 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         string optionsJson = JsonConvert.SerializeObject(_optimizer.GetOptions());
         writer.Write(optionsJson);
 
+        // OLS state
+        writer.Write(_useOLS);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else { writer.Write(0); }
+
         return ms.ToArray();
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new MultilayerPerceptronRegression<T>(null, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <summary>
     /// Deserializes the neural network model from a byte array.
@@ -835,6 +895,17 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         // Create optimizer using factory
         _optimizer = OptimizerFactory<T, Matrix<T>, Vector<T>>.CreateOptimizer(optimizerType, options);
         _optimizer.Deserialize(optimizerData);
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <summary>

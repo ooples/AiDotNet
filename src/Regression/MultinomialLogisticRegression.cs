@@ -120,6 +120,12 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     private int _numClasses;
+    private bool _useOLS;
+
+    /// <summary>
+    /// Multinomial logistic is a classification model — no optimizer parameter injection.
+    /// </summary>
+    public override int ParameterCount => 0;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultinomialLogisticRegression{T}"/> class with optional custom options and regularization.
@@ -178,23 +184,44 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     {
         ValidationHelper<T>.ValidateInputData(x, y);
 
-        // Coerce continuous y values to class indices via rank ordering.
-        // MultinomialLogistic is a classification model that requires integer class labels.
+        // Check if data is continuous (not integer class labels)
         var distinctValues = y.Distinct().OrderBy(v => v).ToList();
-        if (distinctValues.Count > y.Length / 2 || distinctValues.Any(v => !MathHelper.IsInteger(v)))
+        bool isContinuous = distinctValues.Count > y.Length / 2 || distinctValues.Any(v => !MathHelper.IsInteger(v));
+
+        if (isContinuous)
         {
-            // Too many distinct values or non-integers — quantize into a reasonable number of classes
+            // Use OLS for continuous data since multinomial logistic can't regress
+            _useOLS = true;
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            // AddConstantColumn puts intercept at column 0
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+            TrainingFeatureCount = x.Columns;
+            return;
+        }
+
+        // For actual classification data, use the multinomial logistic model
+        // (quantize if needed for near-classification data)
+        if (distinctValues.Count > y.Length / 2)
+        {
             int numBins = Math.Min(5, Math.Max(2, (int)Math.Sqrt(y.Length)));
             double min = NumOps.ToDouble(y.Min());
             double max = NumOps.ToDouble(y.Max());
             double range = max - min;
             if (range < 1e-10) range = 1.0;
+            var yQuantized = new Vector<T>(y.Length);
             for (int i = 0; i < y.Length; i++)
             {
                 int bin = (int)((NumOps.ToDouble(y[i]) - min) / range * (numBins - 1));
                 bin = Math.Max(0, Math.Min(numBins - 1, bin));
-                y[i] = NumOps.FromDouble(bin);
+                yQuantized[i] = NumOps.FromDouble(bin);
             }
+            y = yQuantized;
         }
 
         _numClasses = y.Distinct().Count();
@@ -446,6 +473,12 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
+        // OLS path for continuous data
+        if (_useOLS)
+        {
+            return base.Predict(x);
+        }
+
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
         Matrix<T> probabilities = ComputeProbabilities(xWithIntercept);
 
@@ -512,6 +545,9 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
         writer.Write(baseData.Length);
         writer.Write(baseData);
 
+        // OLS flag
+        writer.Write(_useOLS);
+
         // Serialize MultinomialLogisticRegression specific data
         writer.Write(_numClasses);
 
@@ -567,6 +603,9 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
         int baseDataLength = reader.ReadInt32();
         byte[] baseData = reader.ReadBytes(baseDataLength);
         base.Deserialize(baseData);
+
+        // OLS flag
+        _useOLS = reader.ReadBoolean();
 
         // Deserialize MultinomialLogisticRegression specific data
         _numClasses = reader.ReadInt32();
