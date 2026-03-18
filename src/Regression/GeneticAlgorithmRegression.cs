@@ -380,13 +380,17 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     {
         if (Coefficients.Length > 0 && _bestModel == null)
         {
-            // OLS path — use base serialize/deserialize
+            // OLS path — manual clone
             var clone = new GeneticAlgorithmRegression<T>(regularization: Regularization);
-            clone.Deserialize(Serialize());
+            clone.Coefficients = new Vector<T>(Coefficients);
+            clone.Intercept = Intercept;
+            clone.TrainingFeatureCount = TrainingFeatureCount;
             return clone;
         }
         return base.Clone();
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <summary>
     /// Loads a previously serialized Genetic Algorithm Regression model from a byte array.
