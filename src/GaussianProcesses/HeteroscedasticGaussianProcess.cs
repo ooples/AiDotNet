@@ -108,6 +108,7 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
     /// Number of EM iterations for joint optimization.
     /// </summary>
     private readonly int _maxIterations;
+    private double _yMean;
 
     /// <summary>
     /// Convergence tolerance for EM algorithm.
@@ -232,8 +233,18 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
             throw new ArgumentException("Number of rows in X must match length of y.");
 
         _X = X;
-        _y = y;
         int n = X.Rows;
+
+        // Center y by subtracting the mean. GP assumes zero-mean prior,
+        // so large y offsets cause poor conditioning. Mean is added back in Predict.
+        double yMeanForCentering = 0;
+        for (int i = 0; i < n; i++) yMeanForCentering += _numOps.ToDouble(y[i]);
+        yMeanForCentering /= n;
+        _yMean = yMeanForCentering;
+
+        _y = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            _y[i] = _numOps.FromDouble(_numOps.ToDouble(y[i]) - _yMean);
 
         // Initialize noise latent values by estimating from data variance.
         // Using the prior mean (log(0.1)) is too large for low-noise data and causes
@@ -617,8 +628,8 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
                 kStarNoise[j] = _noiseKernel.Calculate(xNew, xj);
             }
 
-            // Mean prediction: k_*^T * alpha
-            double predMean = 0;
+            // Mean prediction: k_*^T * alpha + yMean (add back centered mean)
+            double predMean = _yMean;
             for (int j = 0; j < n; j++)
             {
                 predMean += _numOps.ToDouble(kStar[j]) * _numOps.ToDouble(_alpha[j]);
