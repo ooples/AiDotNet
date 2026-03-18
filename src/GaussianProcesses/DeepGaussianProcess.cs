@@ -91,6 +91,7 @@ public class DeepGaussianProcess<T> : IGaussianProcess<T>
     /// Learning rate for optimization.
     /// </summary>
     private readonly double _learningRate;
+    private double _yMean;
 
     /// <summary>
     /// Maximum optimization iterations.
@@ -258,7 +259,16 @@ public class DeepGaussianProcess<T> : IGaussianProcess<T>
         }
 
         _X = X;
-        _y = y;
+
+        // Center y for better GP conditioning (zero-mean prior assumption)
+        double yMeanVal = 0;
+        for (int i = 0; i < y.Length; i++) yMeanVal += _numOps.ToDouble(y[i]);
+        yMeanVal /= y.Length;
+        _yMean = yMeanVal;
+
+        _y = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _y[i] = _numOps.FromDouble(_numOps.ToDouble(y[i]) - _yMean);
 
         // Initialize each layer
         int inputDim = X.Columns;
@@ -423,9 +433,10 @@ public class DeepGaussianProcess<T> : IGaussianProcess<T>
             samples.Add(_numOps.ToDouble(currentInput[0, 0]));
         }
 
-        // Compute mean and variance from samples
-        double mean = samples.Average();
-        double variance = samples.Select(s => (s - mean) * (s - mean)).Average();
+        // Compute mean and variance from samples, add back centered mean
+        double mean = samples.Average() + _yMean;
+        double sampleMean = samples.Average();
+        double variance = samples.Select(s => (s - sampleMean) * (s - sampleMean)).Average();
 
         // Add observation noise
         variance = Math.Max(variance, 1e-6);
@@ -652,13 +663,18 @@ internal class DGPLayer<T>
             for (int i = 0; i < targets.Length; i++)
                 y_d[i] = targets[i]; // For last layer, all dims map to the same target
 
-            // If fewer inducing points than targets, project targets onto inducing space
+            // If fewer inducing points than targets, project targets to inducing space.
+            // Use evenly-spaced samples from targets to capture the full range.
             if (m < targets.Length)
             {
-                // Simple: use first m targets as proxy
                 var y_induce = new Vector<T>(m);
                 for (int i = 0; i < m; i++)
-                    y_induce[i] = y_d[i % targets.Length];
+                {
+                    // Map inducing index to evenly-spaced target index
+                    int targetIdx = (int)((double)i / m * targets.Length);
+                    targetIdx = Math.Min(targetIdx, targets.Length - 1);
+                    y_induce[i] = y_d[targetIdx];
+                }
                 y_d = y_induce;
             }
             else if (m > targets.Length)
