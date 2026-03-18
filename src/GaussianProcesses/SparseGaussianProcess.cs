@@ -105,9 +105,12 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
     /// for numerical stability. For most users, the default (Cholesky) works well.
     /// </para>
     /// </remarks>
-    public SparseGaussianProcess(IKernelFunction<T> kernel, MatrixDecompositionType decompositionType = MatrixDecompositionType.Cholesky)
+    private readonly double _noiseVariance;
+
+    public SparseGaussianProcess(IKernelFunction<T> kernel, MatrixDecompositionType decompositionType = MatrixDecompositionType.Cholesky, double noiseVariance = 0.01)
     {
         _kernel = kernel;
+        _noiseVariance = noiseVariance;
         _X = Matrix<T>.Empty();
         _y = Vector<T>.Empty();
         _Kuu = Matrix<T>.Empty();
@@ -254,6 +257,10 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
         // Then variance = Kss - Kus^T * Kuu^{-1} * Kus = Kss - Kus^T * v
         var v = MatrixSolutionHelper.SolveLinearSystem(_Kuu, Kus, _decompositionType);
         var f_var = _numOps.Subtract(Kss, Kus.DotProduct(v));
+
+        // Add observation noise variance
+        if (_noiseVariance > 0)
+            f_var = _numOps.Add(f_var, _numOps.FromDouble(_noiseVariance));
 
         return (f_mean, f_var);
     }
