@@ -10,8 +10,9 @@ public class AffinityPropagationTests : ClusteringModelTestBase
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new AffinityPropagation<double>(new AiDotNet.Clustering.Options.AffinityPropagationOptions<double>
         {
-            Preference = -500.0, // Strong preference for fewer clusters
-            Damping = 0.9, // High damping for stability
+            // No explicit preference — auto-computed from median similarity
+            // works better after normalization
+            Damping = 0.9,
             MaxIterations = 500
         });
 }

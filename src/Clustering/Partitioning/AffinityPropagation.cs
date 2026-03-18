@@ -117,8 +117,28 @@ public class AffinityPropagation<T> : ClusteringBase<T>
             throw new ArgumentException("Need at least 2 samples.");
         }
 
-        // Compute similarity matrix
-        _similarityMatrix = ComputeSimilarityMatrix(x, n);
+        // Normalize features for scale-invariant similarity computation
+        int d = x.Columns;
+        var xNorm = new Matrix<T>(n, d);
+        for (int j = 0; j < d; j++)
+        {
+            double sum = 0, varSum = 0;
+            for (int i = 0; i < n; i++)
+                sum += NumOps.ToDouble(x[i, j]);
+            double mean = sum / n;
+            for (int i = 0; i < n; i++)
+            {
+                double diff = NumOps.ToDouble(x[i, j]) - mean;
+                varSum += diff * diff;
+            }
+            double std = Math.Sqrt(varSum / n);
+            if (std < 1e-10) std = 1.0;
+            for (int i = 0; i < n; i++)
+                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - mean) / std);
+        }
+
+        // Compute similarity matrix on normalized data
+        _similarityMatrix = ComputeSimilarityMatrix(xNorm, n);
 
         // Set preferences (diagonal of similarity matrix)
         T preference = _options.Preference.HasValue
