@@ -705,6 +705,9 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
             writer.Write(modelData.Length);
             writer.Write(modelData);
 
+            // OLS state
+            writer.Write(_useOLS);
+
             return ms.ToArray();
         }
     }
@@ -752,6 +755,9 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
             byte[] timeSeriesModelData = reader.ReadBytes(modelDataLength);
             _timeSeriesModel = TimeSeriesModelFactory<T, Matrix<T>, Vector<T>>.CreateModel(_options.ModelType, _options);
             _timeSeriesModel.Deserialize(timeSeriesModelData);
+
+            // OLS state
+            _useOLS = reader.ReadBoolean();
         }
     }
 
