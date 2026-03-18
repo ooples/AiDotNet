@@ -164,13 +164,13 @@ public class OrthogonalRegression<T> : RegressionBase<T>
 
         // SVD of the augmented matrix: the TLS solution is the last column of V
         Coefficients = new Vector<T>(p);
+        bool svdSucceeded = false;
         try
         {
             var svd = new SvdDecomposition<T>(augmentedMatrix);
-            var vt = svd.Vt; // V transposed: rows are right singular vectors
+            var vt = svd.Vt;
             int lastRow = vt.Rows - 1;
 
-            // TLS solution: beta_j = -V[j, p+1] / V[p+1, p+1]
             T vLast = vt[lastRow, p];
             if (NumOps.GreaterThan(NumOps.Abs(vLast), NumOps.FromDouble(1e-14)))
             {
@@ -179,24 +179,22 @@ public class OrthogonalRegression<T> : RegressionBase<T>
                     T coeff = NumOps.Negate(NumOps.Divide(vt[lastRow, j], vLast));
                     Coefficients[j] = NumOps.Divide(coeff, scaleX[j]);
                 }
-            }
-            else
-            {
-                // V[p,p] ≈ 0: fall back to OLS
-                var xTx = centeredX.Transpose().Multiply(centeredX);
-                var xTy = centeredX.Transpose().Multiply(centeredY);
-                Coefficients = SolveSystem(xTx, xTy);
-                for (int j = 0; j < p; j++)
-                    Coefficients[j] = NumOps.Divide(Coefficients[j], scaleX[j]);
+                svdSucceeded = true;
             }
         }
         catch (Exception)
         {
-            // SVD failed (e.g., bidiagonal decomposition on ill-conditioned matrix).
-            // Fall back to OLS as a robust alternative.
+            // SVD decomposition failed on ill-conditioned matrix
+        }
+
+        if (!svdSucceeded)
+        {
+            // Ridge-regularized OLS: (X'X + λI)^-1 X'y — always solvable
             var xTx = centeredX.Transpose().Multiply(centeredX);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-8));
             var xTy = centeredX.Transpose().Multiply(centeredY);
-            Coefficients = SolveSystem(xTx, xTy);
+            Coefficients = xTx.Inverse().Multiply(xTy);
             for (int j = 0; j < p; j++)
                 Coefficients[j] = NumOps.Divide(Coefficients[j], scaleX[j]);
         }
