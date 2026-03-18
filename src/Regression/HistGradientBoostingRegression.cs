@@ -189,6 +189,8 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
         _defaultLossFunction = new MeanSquaredErrorLoss<T>();
     }
 
+    // ParameterCount override is below (returns 0 to prevent optimizer parameter injection)
+
     #endregion
 
     #region IFullModel Implementation
@@ -631,21 +633,11 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
     /// This is a simplification since the actual model is tree-structured.
     /// </para>
     /// </remarks>
-    public override int ParameterCount
-    {
-        get
-        {
-            int count = 1; // Initial prediction
-            if (_trees is not null)
-            {
-                foreach (var tree in _trees)
-                {
-                    count += CountLeaves(tree);
-                }
-            }
-            return count;
-        }
-    }
+    /// <summary>
+    /// Returns 0 to prevent optimizer random parameter injection.
+    /// Histogram gradient boosting builds trees internally.
+    /// </summary>
+    public override int ParameterCount => 0;
 
     /// <summary>
     /// Saves the model to a file.

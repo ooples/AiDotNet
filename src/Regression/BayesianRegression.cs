@@ -119,6 +119,11 @@ public class BayesianRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
+    /// Bayesian regression computes posterior analytically — random parameter injection is harmful.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>
     /// Trains the Bayesian regression model on the provided input data and target values.
     /// </summary>
     /// <param name="x">The input features matrix where each row is a sample and each column is a feature.</param>
