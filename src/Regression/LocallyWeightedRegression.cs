@@ -296,10 +296,11 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
             coefficients = Regularization.Regularize(coefficients);
         }
 
-        // Make prediction: coefficients[0..p-1] are feature weights, coefficients[p] is intercept
-        T prediction = coefficients[coefficients.Length - 1]; // intercept
+        // Make prediction: AddConstantColumn puts intercept at index 0
+        // coefficients[0] is intercept, coefficients[1..p] are feature weights
+        T prediction = coefficients[0]; // intercept (first column)
         for (int j = 0; j < input.Length; j++)
-            prediction = NumOps.Add(prediction, NumOps.Multiply(input[j], coefficients[j]));
+            prediction = NumOps.Add(prediction, NumOps.Multiply(input[j], coefficients[j + 1]));
         return prediction;
     }
 
