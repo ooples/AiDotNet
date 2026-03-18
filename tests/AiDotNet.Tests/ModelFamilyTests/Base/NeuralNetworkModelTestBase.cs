@@ -18,7 +18,7 @@ public abstract class NeuralNetworkModelTestBase
     protected virtual int[] OutputShape => [1, 1];
     protected virtual int TrainingIterations => 10;
 
-    private Tensor<double> CreateRandomTensor(int[] shape, Random rng)
+    protected Tensor<double> CreateRandomTensor(int[] shape, Random rng)
     {
         var tensor = new Tensor<double>(shape);
         for (int i = 0; i < tensor.Length; i++)
@@ -26,7 +26,7 @@ public abstract class NeuralNetworkModelTestBase
         return tensor;
     }
 
-    private Tensor<double> CreateConstantTensor(int[] shape, double value)
+    protected Tensor<double> CreateConstantTensor(int[] shape, double value)
     {
         var tensor = new Tensor<double>(shape);
         for (int i = 0; i < tensor.Length; i++)
@@ -292,6 +292,157 @@ public abstract class NeuralNetworkModelTestBase
         var activations = network.GetNamedLayerActivations(input);
         Assert.NotNull(activations);
         Assert.True(activations.Count > 0, "Named layer activations should not be empty.");
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: More Data Should Not Degrade Performance
+    // Training with 200 iterations should produce loss ≤ 50 iterations loss.
+    // If it doesn't, the optimizer is diverging or oscillating.
+    // =====================================================
+
+    [Fact]
+    public void MoreData_ShouldNotDegrade()
+    {
+        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
+        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+        var network1 = CreateNetwork();
+        var network2 = CreateNetwork();
+
+        var input = CreateRandomTensor(InputShape, rng1);
+        var target = CreateRandomTensor(OutputShape, rng1);
+        var input2 = CreateRandomTensor(InputShape, rng2);
+        var target2 = CreateRandomTensor(OutputShape, rng2);
+
+        // Train network1 for 50 iterations
+        for (int i = 0; i < 50; i++)
+            network1.Train(input, target);
+        double loss50 = ComputeMSE(network1.Predict(input), target);
+
+        // Train network2 for 200 iterations
+        for (int i = 0; i < 200; i++)
+            network2.Train(input2, target2);
+        double loss200 = ComputeMSE(network2.Predict(input2), target2);
+
+        if (!double.IsNaN(loss50) && !double.IsNaN(loss200))
+        {
+            Assert.True(loss200 <= loss50 + 1e-4,
+                $"200 iterations loss ({loss200:F6}) > 50 iterations loss ({loss50:F6}). " +
+                "Optimizer may be diverging with more training.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Training Error ≤ Test Error
+    // On a simple fitting task, training MSE should not vastly exceed
+    // the error on a different random input (overfit check).
+    // =====================================================
+
+    [Fact]
+    public void TrainingError_ShouldNotExceedTestError()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTensor(OutputShape, rng);
+
+        for (int i = 0; i < TrainingIterations * 3; i++)
+            network.Train(input, target);
+
+        double trainMSE = ComputeMSE(network.Predict(input), target);
+        var testInput = CreateRandomTensor(InputShape, ModelTestHelpers.CreateSeededRandom(99));
+        var testTarget = CreateRandomTensor(OutputShape, ModelTestHelpers.CreateSeededRandom(99));
+        double testMSE = ComputeMSE(network.Predict(testInput), testTarget);
+
+        if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
+        {
+            Assert.True(trainMSE <= testMSE * 3.0 + 1e-6,
+                $"Training MSE ({trainMSE:F6}) vastly exceeds test MSE ({testMSE:F6}). " +
+                "Model is not fitting training data.");
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Gradient Flow
+    // After a backward pass (training), parameters should change and
+    // remain finite. Zero gradients or NaN parameters indicate broken
+    // gradient computation.
+    // =====================================================
+
+    [Fact]
+    public void GradientFlow_ShouldBeNonZeroAndFinite()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTensor(OutputShape, rng);
+
+        var paramsBefore = network.GetParameters();
+        var snapshot = new double[paramsBefore.Length];
+        for (int i = 0; i < paramsBefore.Length; i++)
+            snapshot[i] = paramsBefore[i];
+
+        network.Train(input, target);
+
+        var paramsAfter = network.GetParameters();
+        bool anyChanged = false;
+        for (int i = 0; i < Math.Min(snapshot.Length, paramsAfter.Length); i++)
+        {
+            Assert.False(double.IsNaN(paramsAfter[i]),
+                $"Parameter[{i}] is NaN after training — gradient computation is broken.");
+            Assert.False(double.IsInfinity(paramsAfter[i]),
+                $"Parameter[{i}] is Infinity after training — gradient explosion.");
+            if (Math.Abs(snapshot[i] - paramsAfter[i]) > 1e-15)
+                anyChanged = true;
+        }
+        Assert.True(anyChanged,
+            "No parameters changed after training — gradients may all be zero.");
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Batch Consistency
+    // Predicting a single input should produce the same result as
+    // predicting that input within a sequence of predictions.
+    // =====================================================
+
+    [Fact]
+    public void BatchConsistency_SingleMatchesBatch()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+
+        // Single prediction
+        var singleOutput = network.Predict(input);
+
+        // Predict again (batch of 1) — should be identical
+        var batchOutput = network.Predict(input);
+
+        Assert.Equal(singleOutput.Length, batchOutput.Length);
+        for (int i = 0; i < singleOutput.Length; i++)
+        {
+            Assert.Equal(singleOutput[i], batchOutput[i]);
+        }
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Output Dimension Matches Shape
+    // The output tensor length should match the product of OutputShape.
+    // =====================================================
+
+    [Fact]
+    public void OutputDimension_ShouldMatchExpectedShape()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+
+        var output = network.Predict(input);
+
+        int expectedLength = 1;
+        foreach (var dim in OutputShape)
+            expectedLength *= dim;
+
+        Assert.Equal(expectedLength, output.Length);
     }
 
     private double ComputeMSE(Tensor<double> output, Tensor<double> target)

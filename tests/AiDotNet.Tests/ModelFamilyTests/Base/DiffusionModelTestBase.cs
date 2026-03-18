@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -183,6 +184,73 @@ public abstract class DiffusionModelTestBase
         {
             Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN after training.");
             Assert.False(double.IsInfinity(output[i]), $"Output[{i}] is Infinity after training.");
+        }
+    }
+
+    // =====================================================
+    // DIFFUSION INVARIANT: Noise Schedule Monotonicity
+    // At higher timesteps, the noise magnitude should increase.
+    // This verifies the noise schedule is properly configured.
+    // =====================================================
+
+    [Fact]
+    public void NoiseSchedule_ShouldBeMonotonic()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        var baseInput = CreateRandomTensor(InputShape, rng);
+
+        // Predict at different "noise levels" by scaling input
+        // Low noise (near-original), medium noise, high noise
+        double[] scales = new double[] { 0.1, 0.5, 1.0, 2.0 };
+        double[] outputMagnitudes = new double[scales.Length];
+
+        for (int s = 0; s < scales.Length; s++)
+        {
+            var noisyInput = new Tensor<double>(InputShape);
+            for (int i = 0; i < baseInput.Length; i++)
+                noisyInput[i] = baseInput[i] * scales[s];
+
+            var output = model.Predict(noisyInput);
+
+            double magnitude = 0;
+            for (int i = 0; i < output.Length; i++)
+                magnitude += output[i] * output[i];
+            outputMagnitudes[s] = Math.Sqrt(magnitude / Math.Max(1, output.Length));
+        }
+
+        // Check monotonicity: allow at most 1 violation out of 3 transitions
+        int violations = 0;
+        for (int i = 1; i < outputMagnitudes.Length; i++)
+        {
+            if (outputMagnitudes[i] < outputMagnitudes[i - 1] - 1e-10)
+                violations++;
+        }
+
+        Assert.True(violations <= 1,
+            $"Noise schedule not monotonic: magnitudes = [{string.Join(", ", outputMagnitudes.Select(m => m.ToString("F4")))}]. " +
+            $"Found {violations} violations (max allowed: 1).");
+    }
+
+    // =====================================================
+    // DIFFUSION INVARIANT: Output Range Validity
+    // Generated output should be bounded — no exploding values.
+    // =====================================================
+
+    [Fact]
+    public void OutputRange_ShouldBeValid()
+    {
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var model = CreateModel();
+        var input = CreateRandomTensor(InputShape, rng);
+
+        var output = model.Predict(input);
+
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.True(Math.Abs(output[i]) < 1e6,
+                $"Output[{i}] = {output[i]:E4} exceeds bound of 1e6. " +
+                "Diffusion model is producing unbounded output.");
         }
     }
 

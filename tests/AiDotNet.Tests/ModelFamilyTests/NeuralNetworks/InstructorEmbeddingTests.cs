@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class InstructorEmbeddingTests : NeuralNetworkModelTestBase
+public class InstructorEmbeddingTests : EmbeddingModelTestBase
 {
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new InstructorEmbedding<double>();

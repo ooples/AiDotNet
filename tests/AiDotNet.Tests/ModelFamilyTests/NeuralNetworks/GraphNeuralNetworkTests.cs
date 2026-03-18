@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class GraphNeuralNetworkTests : NeuralNetworkModelTestBase
+public class GraphNeuralNetworkTests : GraphNNModelTestBase
 {
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new GraphNeuralNetwork<double>();

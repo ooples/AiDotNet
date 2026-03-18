@@ -1,4 +1,5 @@
 using AiDotNet.AdversarialRobustness.CertifiedRobustness;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -673,6 +674,7 @@ public class CROWNVerificationTests
     /// <summary>
     /// Simple mock full model for testing.
     /// </summary>
+    [ModelMetadataExempt]
     private class MockFullModel : IFullModel<double, Vector<double>, Vector<double>>
     {
         private readonly int _inputDim;
@@ -730,6 +732,7 @@ public class CROWNVerificationTests
     /// <summary>
     /// Mock model with configurable margin between class scores.
     /// </summary>
+    [ModelMetadataExempt]
     private class MockFullModelWithMargin : IFullModel<double, Vector<double>, Vector<double>>
     {
         private readonly int _inputDim;

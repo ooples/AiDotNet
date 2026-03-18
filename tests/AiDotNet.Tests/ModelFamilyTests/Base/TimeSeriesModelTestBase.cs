@@ -255,6 +255,45 @@ public abstract class TimeSeriesModelTestBase
     }
 
     // =====================================================
+    // MATHEMATICAL INVARIANT: More Data Should Not Degrade R²
+    // Training on 2x data from the same distribution should not
+    // produce worse R² — more data should help, not hurt.
+    // =====================================================
+
+    [Fact]
+    public void MoreData_ShouldNotDegrade_R2()
+    {
+        if (!CanCaptureTrend) return;
+        if (!IsForecastingModel) return;
+
+        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
+        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+
+        // Train with small data
+        var modelSmall = CreateModel();
+        var (trainXSmall, trainYSmall) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength, rng1, noise: 0.5);
+        modelSmall.Train(trainXSmall, trainYSmall);
+        var predSmall = modelSmall.Predict(trainXSmall);
+
+        // Train with 2x data
+        var modelLarge = CreateModel();
+        var (trainXLarge, trainYLarge) = ModelTestHelpers.GenerateTimeSeriesData(TrainLength * 2, rng2, noise: 0.5);
+        modelLarge.Train(trainXLarge, trainYLarge);
+        var predLarge = modelLarge.Predict(trainXLarge);
+
+        if (ModelTestHelpers.AllFinite(predSmall) && predSmall.Length == trainYSmall.Length &&
+            ModelTestHelpers.AllFinite(predLarge) && predLarge.Length == trainYLarge.Length)
+        {
+            double r2Small = ModelTestHelpers.CalculateR2(trainYSmall, predSmall);
+            double r2Large = ModelTestHelpers.CalculateR2(trainYLarge, predLarge);
+
+            Assert.True(r2Large >= r2Small - 0.15,
+                $"R² degraded with more data: R²_small={r2Small:F4}, R²_large={r2Large:F4}. " +
+                "More data from the same distribution should not hurt performance.");
+        }
+    }
+
+    // =====================================================
     // BASIC CONTRACTS: Finite Predictions, Determinism, Output Shape, Clone, Metadata
     // =====================================================
 

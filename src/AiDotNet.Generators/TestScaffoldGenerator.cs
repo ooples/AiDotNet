@@ -9,13 +9,14 @@ namespace AiDotNet.Generators;
 
 /// <summary>
 /// Roslyn incremental source generator that cross-references model classes against test classes
-/// to identify untested models and generate a coverage report.
+/// to identify untested models, auto-generate test scaffolds, and produce a coverage report.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Discovers all concrete IFullModel implementations decorated with [ModelDomain] and checks
-/// for matching test classes. Emits a static <c>TestCoverage</c> class with coverage statistics
-/// and compile-time diagnostics for untested models.
+/// for matching test classes. For untested models, resolves the appropriate test base class
+/// from [ModelCategory]/[ModelTask] metadata and interface hierarchy, then generates a
+/// minimal test class that exercises all inherited invariant tests.
 /// </para>
 /// <para>
 /// Model discovery works in two modes:
@@ -23,25 +24,47 @@ namespace AiDotNet.Generators;
 /// <item>Source mode: finds model classes defined as source in the current compilation (when running in the source project)</item>
 /// <item>Reference mode: finds model classes from referenced assemblies (when running in the test project)</item>
 /// </list>
-/// This allows the generator to correctly compute coverage when referenced from either the
-/// source project or the test project.
 /// </para>
 /// </remarks>
 [Generator]
 public class TestScaffoldGenerator : IIncrementalGenerator
 {
+    // Interface detection prefixes
     private const string IFullModelName = "AiDotNet.Interfaces.IFullModel";
+    private const string INeuralNetworkModelName = "AiDotNet.Interfaces.INeuralNetworkModel";
+    private const string IDiffusionModelName = "AiDotNet.Interfaces.IDiffusionModel";
+    private const string IGaussianProcessPrefix = "AiDotNet.Interfaces.IGaussianProcess<";
+
+    // Attribute metadata names
     private const string ModelDomainAttr = "AiDotNet.Attributes.ModelDomainAttribute";
+    private const string ModelCategoryAttr = "AiDotNet.Attributes.ModelCategoryAttribute";
+    private const string ModelTaskAttr = "AiDotNet.Attributes.ModelTaskAttribute";
+    private const string ModelInputAttr = "AiDotNet.Attributes.ModelInputAttribute";
     private const string ModelMetadataExemptAttr = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
+
+    // ModelCategory enum values (must match AiDotNet.Enums.ModelCategory)
+    private const int CategoryGAN = 4;
+    private const int CategoryDiffusion = 5;
+    private const int CategoryGaussianProcess = 8;
+    private const int CategoryTimeSeriesModel = 13;
+    private const int CategoryGraphNetwork = 17;
+    private const int CategoryEmbeddingModel = 18;
+    private const int CategoryNeuralNetwork = 0;
+    private const int CategoryMetaLearning = 20;
+
+    // ModelTask enum values (must match AiDotNet.Enums.ModelTask)
+    private const int TaskClassification = 0;
+    private const int TaskRegression = 1;
+    private const int TaskClustering = 2;
 
     private static readonly DiagnosticDescriptor UntestedModel = new(
         id: "AIDN040",
         title: "Model has no test coverage",
-        messageFormat: "Model '{0}' has no corresponding test class (expected: '{0}Tests' or similar)",
+        messageFormat: "Model '{0}' has no corresponding test class and could not be auto-generated (missing category/task metadata)",
         category: "AiDotNet.TestCoverage",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Every model class should have at least basic test coverage.");
+        description: "Model has no test coverage and lacks sufficient metadata for auto-generation. Add [ModelCategory] and [ModelTask] attributes, or create a manual test class.");
 
     private static readonly DiagnosticDescriptor CoverageSummary = new(
         id: "AIDN041",
@@ -162,6 +185,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Compilation compilation)
     {
         var domainAttrSymbol = compilation.GetTypeByMetadataName(ModelDomainAttr);
+        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
+        var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
         var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
 
         // Build test class name set for fast lookup
@@ -182,47 +207,83 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (modelClass is null)
                 continue;
 
-            ProcessModelSymbol(modelClass, domainAttrSymbol, exemptAttrSymbol,
-                testNames, testedModels, untestedModels, seen);
+            ProcessModelSymbol(modelClass, domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
+                exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
         }
 
         // Detect if we're in the source project (not the test project).
-        // When running in the source project, test classes live in a separate compilation
-        // and aren't visible, so all models appear untested — skip diagnostics.
-        // Use assembly name heuristic: test projects typically contain "Test" in the name.
         string assemblyName = compilation.AssemblyName ?? string.Empty;
         bool isTestProject = assemblyName.IndexOf("Test", System.StringComparison.OrdinalIgnoreCase) >= 0;
         bool modelsFoundFromSource = seen.Count > 0 && !isTestProject;
 
-        // Second: if no source models were found, discover models from referenced assemblies.
-        // This happens when the generator runs in the test project, where model classes
-        // come from a compiled project reference rather than source files.
+        // Second: if no source models were found, discover from referenced assemblies.
         if (!modelsFoundFromSource)
         {
-            DiscoverModelsFromReferencedAssemblies(compilation, domainAttrSymbol, exemptAttrSymbol,
-                testNames, testedModels, untestedModels, seen);
+            DiscoverModelsFromReferencedAssemblies(compilation, domainAttrSymbol, categoryAttrSymbol,
+                taskAttrSymbol, exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
         }
 
         testedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
         untestedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
 
-        // Only emit diagnostics when running in the test project (models discovered from
-        // referenced assemblies). When running in the source project, test classes live in a
-        // separate compilation and aren't visible, so all models appear untested — skip to
-        // avoid duplicates. The test project will correctly report truly untested models.
+        // Auto-generate test classes for untested models (test project only)
         if (!modelsFoundFromSource)
         {
-            // Emit AIDN040 diagnostic for each untested model
+            var autoGenerated = new List<ModelTestInfo>();
+            var generatedTestNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
             foreach (var model in untestedModels)
             {
-                // Models from referenced assemblies have no source location, so use Location.None
+                var family = ResolveTestBaseClass(model);
+                if (family is null)
+                    continue;
+
+                var testClassName = StripBacktick(model.ClassName) + "Tests";
+
+                // Avoid duplicate test class names and conflicts with existing tests.
+                // A duplicate means this model was already auto-generated (same model
+                // discovered from multiple referenced assemblies) — still count as covered.
+                if (!generatedTestNames.Add(testClassName))
+                {
+                    autoGenerated.Add(model);
+                    testNames.Add(testClassName);
+                    continue;
+                }
+                if (testNames.Contains(testClassName))
+                    continue;
+
+                // Use constructor call if the model has a zero-arg constructor and is type-compatible.
+                // Otherwise, emit a throw so the test compiles but fails at runtime with a clear message.
+                bool canConstruct = model.HasParameterlessConstructor &&
+                                    IsCompatibleWithFamily(model, family.Value);
+
+                EmitGeneratedTestClass(context, model, family.Value, testClassName, canConstruct);
+                autoGenerated.Add(model);
+                testNames.Add(testClassName);
+            }
+
+            // Move auto-generated from untested → tested
+            foreach (var model in autoGenerated)
+            {
+                untestedModels.Remove(model);
+                model.HasTests = true;
+                testedModels.Add(model);
+            }
+
+            // Re-sort after moves
+            testedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
+            untestedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
+
+            // Emit AIDN040 for remaining untested models
+            foreach (var model in untestedModels)
+            {
                 context.ReportDiagnostic(Diagnostic.Create(
                     UntestedModel,
                     Location.None,
                     model.ClassName));
             }
 
-            // Emit AIDN041 summary diagnostic
+            // Emit AIDN041 summary
             var totalCount = testedModels.Count + untestedModels.Count;
             if (totalCount > 0)
             {
@@ -240,11 +301,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Processes a single model type symbol, checking for [ModelDomain] and test coverage.
+    /// Processes a single model type symbol, extracting metadata and checking for test coverage.
     /// </summary>
     private static void ProcessModelSymbol(
         INamedTypeSymbol modelClass,
         INamedTypeSymbol? domainAttrSymbol,
+        INamedTypeSymbol? categoryAttrSymbol,
+        INamedTypeSymbol? taskAttrSymbol,
         INamedTypeSymbol? exemptAttrSymbol,
         HashSet<string> testNames,
         List<ModelTestInfo> testedModels,
@@ -259,25 +322,144 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
             return;
 
-        // Only include models with [ModelDomain] attribute
+        // Extract attributes and detect input/output types
         bool hasModelDomain = false;
         var domains = new List<int>();
-        if (domainAttrSymbol is not null)
+        var categories = new List<int>();
+        var tasks = new List<int>();
+        bool usesTensorInput = false;
+        bool usesMatrixInput = false;
+        bool usesVectorOutput = false;
+
+        foreach (var attr in modelClass.GetAttributes())
         {
-            foreach (var attr in modelClass.GetAttributes())
+            if (attr.AttributeClass is null)
+                continue;
+
+            // Use SymbolEqualityComparer first, fall back to string matching
+            // for cross-assembly scenarios where symbol resolution may differ
+            bool isDomain = (domainAttrSymbol is not null &&
+                SymbolEqualityComparer.Default.Equals(attr.AttributeClass, domainAttrSymbol)) ||
+                attr.AttributeClass.ToDisplayString().EndsWith("ModelDomainAttribute", System.StringComparison.Ordinal);
+            bool isCategory = (categoryAttrSymbol is not null &&
+                SymbolEqualityComparer.Default.Equals(attr.AttributeClass, categoryAttrSymbol)) ||
+                attr.AttributeClass.ToDisplayString().EndsWith("ModelCategoryAttribute", System.StringComparison.Ordinal);
+            bool isTask = (taskAttrSymbol is not null &&
+                SymbolEqualityComparer.Default.Equals(attr.AttributeClass, taskAttrSymbol)) ||
+                attr.AttributeClass.ToDisplayString().EndsWith("ModelTaskAttribute", System.StringComparison.Ordinal);
+            bool isInput = attr.AttributeClass.ToDisplayString().EndsWith("ModelInputAttribute", System.StringComparison.Ordinal);
+
+            if (isDomain)
             {
-                if (attr.AttributeClass is not null &&
-                    SymbolEqualityComparer.Default.Equals(attr.AttributeClass, domainAttrSymbol))
+                hasModelDomain = true;
+                if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int d)
+                    domains.Add(d);
+            }
+            else if (isCategory)
+            {
+                if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int c)
+                    categories.Add(c);
+            }
+            else if (isTask)
+            {
+                if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int t)
+                    tasks.Add(t);
+            }
+            else if (isInput && attr.ConstructorArguments.Length >= 2)
+            {
+                // [ModelInput(typeof(Tensor<>), typeof(Tensor<>))] or [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+                // For metadata types, ConstructorArguments[0].Value is an INamedTypeSymbol
+                var inputTypeSym = attr.ConstructorArguments[0].Value as INamedTypeSymbol;
+                var outputTypeSym = attr.ConstructorArguments[1].Value as INamedTypeSymbol;
+                if (inputTypeSym is not null)
                 {
-                    hasModelDomain = true;
-                    if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int d)
-                        domains.Add(d);
+                    var inputName = inputTypeSym.Name;
+                    if (inputName.Contains("Tensor"))
+                        usesTensorInput = true;
+                    else if (inputName.Contains("Matrix"))
+                        usesMatrixInput = true;
+                }
+                if (outputTypeSym is not null)
+                {
+                    if (outputTypeSym.Name.Contains("Vector"))
+                        usesVectorOutput = true;
                 }
             }
         }
 
         if (!hasModelDomain)
             return;
+
+        // Detect interfaces and refine input types from the type hierarchy
+        bool implementsNeuralNetworkModel = false;
+        bool implementsDiffusionModel = false;
+        bool implementsGaussianProcess = false;
+
+        foreach (var iface in modelClass.AllInterfaces)
+        {
+            if (!iface.IsGenericType)
+                continue;
+
+            var display = iface.OriginalDefinition.ToDisplayString();
+
+            if (display.StartsWith(INeuralNetworkModelName, System.StringComparison.Ordinal))
+            {
+                implementsNeuralNetworkModel = true;
+            }
+            else if (display.StartsWith(IDiffusionModelName, System.StringComparison.Ordinal))
+            {
+                implementsDiffusionModel = true;
+            }
+            else if (display.StartsWith(IGaussianProcessPrefix, System.StringComparison.Ordinal))
+            {
+                implementsGaussianProcess = true;
+            }
+
+            // Detect IFullModel type arguments for input/output types
+            if (display.StartsWith(IFullModelName, System.StringComparison.Ordinal) &&
+                iface.TypeArguments.Length >= 3)
+            {
+                var inputTypeDisplay = iface.TypeArguments[1].ToDisplayString();
+                var outputTypeDisplay = iface.TypeArguments[2].ToDisplayString();
+                if (inputTypeDisplay.Contains("Matrix"))
+                    usesMatrixInput = true;
+                else if (inputTypeDisplay.Contains("Tensor"))
+                    usesTensorInput = true;
+                if (outputTypeDisplay.Contains("Vector"))
+                    usesVectorOutput = true;
+            }
+        }
+
+        // Detect a public constructor callable with zero arguments:
+        // either parameterless, or all parameters have default values.
+        bool hasParameterlessCtor = false;
+        foreach (var ctor in modelClass.InstanceConstructors)
+        {
+            if (ctor.DeclaredAccessibility != Accessibility.Public)
+                continue;
+
+            if (ctor.Parameters.Length == 0)
+            {
+                hasParameterlessCtor = true;
+                break;
+            }
+
+            // Check if all parameters have default values (callable with zero args)
+            bool allOptional = true;
+            foreach (var param in ctor.Parameters)
+            {
+                if (!param.HasExplicitDefaultValue)
+                {
+                    allOptional = false;
+                    break;
+                }
+            }
+            if (allOptional)
+            {
+                hasParameterlessCtor = true;
+                break;
+            }
+        }
 
         var className = modelClass.Name;
         var info = new ModelTestInfo
@@ -286,6 +468,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             FullyQualifiedName = fullName,
             TypeParameterCount = modelClass.TypeParameters.Length,
             Domains = domains,
+            Categories = categories,
+            Tasks = tasks,
+            ImplementsNeuralNetworkModel = implementsNeuralNetworkModel,
+            ImplementsDiffusionModel = implementsDiffusionModel,
+            ImplementsGaussianProcess = implementsGaussianProcess,
+            UsesTensorInput = usesTensorInput,
+            UsesMatrixInput = usesMatrixInput,
+            UsesVectorOutput = usesVectorOutput,
+            HasParameterlessConstructor = hasParameterlessCtor,
             Location = modelClass.Locations.Length > 0 ? modelClass.Locations[0] : null
         };
 
@@ -299,13 +490,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Discovers model classes from referenced assemblies by traversing all public types
-    /// in each referenced assembly and checking if they implement IFullModel.
-    /// Used when the generator runs in the test project where model classes are compiled references.
+    /// Discovers model classes from referenced assemblies by traversing all public types.
     /// </summary>
     private static void DiscoverModelsFromReferencedAssemblies(
         Compilation compilation,
         INamedTypeSymbol? domainAttrSymbol,
+        INamedTypeSymbol? categoryAttrSymbol,
+        INamedTypeSymbol? taskAttrSymbol,
         INamedTypeSymbol? exemptAttrSymbol,
         HashSet<string> testNames,
         List<ModelTestInfo> testedModels,
@@ -317,8 +508,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             var symbol = compilation.GetAssemblyOrModuleSymbol(reference);
             if (symbol is IAssemblySymbol assembly)
             {
-                CollectModelsFromNamespace(assembly.GlobalNamespace, domainAttrSymbol, exemptAttrSymbol,
-                    testNames, testedModels, untestedModels, seen);
+                CollectModelsFromNamespace(assembly.GlobalNamespace, domainAttrSymbol, categoryAttrSymbol,
+                    taskAttrSymbol, exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
             }
         }
     }
@@ -329,6 +520,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static void CollectModelsFromNamespace(
         INamespaceSymbol ns,
         INamedTypeSymbol? domainAttrSymbol,
+        INamedTypeSymbol? categoryAttrSymbol,
+        INamedTypeSymbol? taskAttrSymbol,
         INamedTypeSymbol? exemptAttrSymbol,
         HashSet<string> testNames,
         List<ModelTestInfo> testedModels,
@@ -339,8 +532,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             if (member is INamespaceSymbol childNs)
             {
-                CollectModelsFromNamespace(childNs, domainAttrSymbol, exemptAttrSymbol,
-                    testNames, testedModels, untestedModels, seen);
+                CollectModelsFromNamespace(childNs, domainAttrSymbol, categoryAttrSymbol,
+                    taskAttrSymbol, exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
             }
             else if (member is INamedTypeSymbol type)
             {
@@ -348,8 +541,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     !type.IsAbstract &&
                     ImplementsIFullModel(type))
                 {
-                    ProcessModelSymbol(type, domainAttrSymbol, exemptAttrSymbol,
-                        testNames, testedModels, untestedModels, seen);
+                    ProcessModelSymbol(type, domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
+                        exemptAttrSymbol, testNames, testedModels, untestedModels, seen);
                 }
             }
         }
@@ -371,6 +564,197 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return false;
     }
 
+    /// <summary>
+    /// Resolves the appropriate test family for a model based on its category, task,
+    /// and interface metadata. Returns null if no family can be determined.
+    /// </summary>
+    /// <remarks>
+    /// Priority ordering (first match wins):
+    /// 1. GaussianProcess category → GaussianProcess
+    /// 2. TimeSeriesModel category → TimeSeries
+    /// 3. Diffusion category → Diffusion
+    /// 4. GAN category → GAN
+    /// 5. EmbeddingModel category → Embedding
+    /// 6. GraphNetwork category → GraphNN
+    /// 7. Regression task + Matrix input → Regression
+    /// 8. Classification task + Matrix input → Classification
+    /// 9. Clustering task + Matrix input → Clustering
+    /// 10. Neural network interface or Tensor input → NeuralNetwork
+    /// 11. Matrix input fallback → Regression
+    /// </remarks>
+    private static TestFamily? ResolveTestBaseClass(ModelTestInfo model)
+    {
+        // Priority 1: GaussianProcess
+        if (model.Categories.Contains(CategoryGaussianProcess) || model.ImplementsGaussianProcess)
+            return TestFamily.GaussianProcess;
+
+        // Priority 2: TimeSeriesModel
+        if (model.Categories.Contains(CategoryTimeSeriesModel))
+            return TestFamily.TimeSeries;
+
+        // Priority 3: Diffusion
+        if (model.Categories.Contains(CategoryDiffusion) || model.ImplementsDiffusionModel)
+            return TestFamily.Diffusion;
+
+        // Priority 4: GAN
+        if (model.Categories.Contains(CategoryGAN))
+            return TestFamily.GAN;
+
+        // Priority 5: EmbeddingModel
+        if (model.Categories.Contains(CategoryEmbeddingModel))
+            return TestFamily.Embedding;
+
+        // Priority 6: GraphNetwork
+        if (model.Categories.Contains(CategoryGraphNetwork))
+            return TestFamily.GraphNN;
+
+        // Priority 7: Regression task + Matrix input
+        if (model.Tasks.Contains(TaskRegression) && model.UsesMatrixInput)
+            return TestFamily.Regression;
+
+        // Priority 8: Classification task + Matrix input
+        if (model.Tasks.Contains(TaskClassification) && model.UsesMatrixInput)
+            return TestFamily.Classification;
+
+        // Priority 9: Clustering task + Matrix input
+        if (model.Tasks.Contains(TaskClustering) && model.UsesMatrixInput)
+            return TestFamily.Clustering;
+
+        // Priority 10: Neural network (by interface or Tensor input)
+        if (model.ImplementsNeuralNetworkModel || model.UsesTensorInput)
+            return TestFamily.NeuralNetwork;
+
+        // Priority 11: Matrix input fallback → Regression
+        if (model.UsesMatrixInput)
+            return TestFamily.Regression;
+
+        // Priority 12: NeuralNetwork category (for models where interface detection
+        // failed due to open generic type parameters like <T, TInput, TOutput>)
+        if (model.Categories.Contains(CategoryNeuralNetwork))
+            return TestFamily.NeuralNetwork;
+
+        // Priority 13: MetaLearning category → NeuralNetwork (meta-learning models are NN-based)
+        if (model.Categories.Contains(CategoryMetaLearning))
+            return TestFamily.NeuralNetwork;
+
+        // Cannot determine — skip generation
+        return null;
+    }
+
+    /// <summary>
+    /// Emits a generated test class for a model that has no manual test coverage.
+    /// </summary>
+    /// <param name="canConstruct">
+    /// When true, emits <c>new Model&lt;double&gt;()</c>. When false, emits
+    /// <c>throw new NotImplementedException(...)</c> so the test compiles but
+    /// fails at runtime with a clear message to create a manual test class.
+    /// </param>
+    private static void EmitGeneratedTestClass(
+        SourceProductionContext context,
+        ModelTestInfo model,
+        TestFamily family,
+        string testClassName,
+        bool canConstruct)
+    {
+        var typeName = GeneratorHelpers.StripGenericSuffix(model.FullyQualifiedName);
+        string factoryBody;
+
+        if (canConstruct)
+        {
+            string constructorExpr;
+            if (model.TypeParameterCount == 0)
+            {
+                constructorExpr = $"new {typeName}()";
+            }
+            else if (model.TypeParameterCount == 1)
+            {
+                constructorExpr = $"new {typeName}<double>()";
+            }
+            else
+            {
+                // Multi-type-parameter models (e.g., Model<T, TInput, TOutput>)
+                // Resolve TInput/TOutput from the detected IFullModel type arguments
+                string inputType = model.UsesTensorInput ? "Tensor<double>" : "Matrix<double>";
+                string outputType = model.UsesVectorOutput ? "Vector<double>" :
+                                    model.UsesTensorInput ? "Tensor<double>" : "Vector<double>";
+                constructorExpr = $"new {typeName}<double, {inputType}, {outputType}>()";
+            }
+            factoryBody = $"        => {constructorExpr};";
+        }
+        else
+        {
+            factoryBody = $"        => throw new System.NotImplementedException(" +
+                          $"\"Model '{EscapeString(model.ClassName)}' requires constructor arguments. " +
+                          $"Create a manual test class in ModelFamilyTests/ to replace this auto-generated stub.\");";
+        }
+
+        var baseClassName = GetBaseClassName(family);
+        var factoryMethodName = GetFactoryMethodName(family);
+        var returnTypeCode = GetReturnTypeCode(family);
+
+        var sb = new StringBuilder();
+        // Multi-type-parameter models may need Tensor<> and/or Matrix<>/Vector<> usings
+        bool needsTensorUsing = model.TypeParameterCount > 1 && model.UsesTensorInput;
+        bool needsMatrixUsingForModel = NeedsMatrixUsing(family) ||
+                                        (model.TypeParameterCount > 1 && model.UsesMatrixInput);
+
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// If this model needs constructor arguments, create a manual test class to replace this.");
+        sb.AppendLine("using AiDotNet.Interfaces;");
+        if (needsTensorUsing)
+            sb.AppendLine("using AiDotNet.Tensors;");
+        if (needsMatrixUsingForModel)
+            sb.AppendLine("using AiDotNet.Tensors.LinearAlgebra;");
+        sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine($"public class {testClassName} : {baseClassName}");
+        sb.AppendLine("{");
+        sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
+        sb.AppendLine(factoryBody);
+        sb.AppendLine("}");
+
+        var hintName = GeneratorHelpers.StripGenericSuffix(model.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
+        context.AddSource(hintName, sb.ToString());
+    }
+
+    /// <summary>
+    /// Verifies that the model's actual interfaces are compatible with the resolved test family.
+    /// Prevents generating code that won't compile (e.g., casting to wrong interface).
+    /// </summary>
+    private static bool IsCompatibleWithFamily(ModelTestInfo model, TestFamily family)
+    {
+        switch (family)
+        {
+            // NN-derived families require INeuralNetworkModel interface
+            case TestFamily.GAN:
+            case TestFamily.Embedding:
+            case TestFamily.GraphNN:
+            case TestFamily.NeuralNetwork:
+                return model.ImplementsNeuralNetworkModel;
+
+            // Diffusion family requires IDiffusionModel interface
+            case TestFamily.Diffusion:
+                return model.ImplementsDiffusionModel;
+
+            // GP family requires IGaussianProcess interface
+            case TestFamily.GaussianProcess:
+                return model.ImplementsGaussianProcess;
+
+            // Matrix/Vector families require IFullModel<T, Matrix<T>, Vector<T>>.
+            // Models with Matrix<T> output (multi-label classifiers) won't match.
+            case TestFamily.Regression:
+            case TestFamily.Classification:
+            case TestFamily.Clustering:
+            case TestFamily.TimeSeries:
+                return model.UsesMatrixInput && model.UsesVectorOutput;
+
+            default:
+                return false;
+        }
+    }
+
     private static bool HasTestCoverage(string modelClassName, HashSet<string> testNames)
     {
         // Strip generic arity suffix
@@ -387,18 +771,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (testNames.Contains(baseName + "UnitTests")) return true;
 
         // Check if any test class name contains the model name at a word boundary
-        // (e.g., "RandomForestTests" matches "RandomForest" but "RandomForestClassifierTests"
-        //  should not falsely match "RandomForest" — require the match to be followed by
-        //  "Tests", "Test", end-of-string, or a non-letter to avoid false positives)
         foreach (var testName in testNames)
         {
             int idx = testName.IndexOf(baseName, System.StringComparison.OrdinalIgnoreCase);
             if (idx < 0) continue;
             int afterMatch = idx + baseName.Length;
             if (afterMatch >= testName.Length) return true;
-            // Check what follows the model name in the test class name
             string remainder = testName.Substring(afterMatch);
-            // Accept: "Tests", "Test", "_Tests", "_Test", non-letter separators
             if (remainder.StartsWith("Tests", System.StringComparison.Ordinal) ||
                 remainder.StartsWith("Test", System.StringComparison.Ordinal) ||
                 remainder.StartsWith("_", System.StringComparison.Ordinal) ||
@@ -434,7 +813,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("internal static class TestCoverage");
         sb.AppendLine("{");
 
-        // Constants
         sb.AppendLine($"    /// <summary>Total annotated models tracked.</summary>");
         sb.AppendLine($"    public const int TotalModels = {totalCount};");
         sb.AppendLine();
@@ -448,7 +826,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine($"    public const double CoveragePercent = {coveragePercent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)};");
         sb.AppendLine();
 
-        // TestedModels list (string-based since types from referenced assemblies may not be resolvable via typeof)
         sb.AppendLine("    /// <summary>Names of models that have corresponding test classes.</summary>");
         sb.AppendLine("    public static IReadOnlyList<string> TestedModelNames { get; } = new string[]");
         sb.AppendLine("    {");
@@ -459,7 +836,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("    };");
         sb.AppendLine();
 
-        // UntestedModels list
         sb.AppendLine("    /// <summary>Names of models that do NOT have corresponding test classes.</summary>");
         sb.AppendLine("    public static IReadOnlyList<string> UntestedModelNames { get; } = new string[]");
         sb.AppendLine("    {");
@@ -472,6 +848,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("}");
 
         context.AddSource("TestCoverage.g.cs", sb.ToString());
+    }
+
+    private static string StripBacktick(string name)
+    {
+        var backtick = name.IndexOf('`');
+        return backtick >= 0 ? name.Substring(0, backtick) : name;
     }
 
     private static string EscapeString(string value)
@@ -497,7 +879,124 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public string FullyQualifiedName { get; set; } = string.Empty;
         public int TypeParameterCount { get; set; }
         public List<int> Domains { get; set; } = new List<int>();
+        public List<int> Categories { get; set; } = new List<int>();
+        public List<int> Tasks { get; set; } = new List<int>();
         public bool HasTests { get; set; }
         public Location? Location { get; set; }
+
+        // Interface detection
+        public bool ImplementsNeuralNetworkModel { get; set; }
+        public bool ImplementsDiffusionModel { get; set; }
+        public bool ImplementsGaussianProcess { get; set; }
+
+        // Input type detection (from IFullModel type arguments)
+        public bool UsesTensorInput { get; set; }
+        public bool UsesMatrixInput { get; set; }
+
+        /// <summary>Whether the IFullModel output type is Vector (not Matrix or Tensor).</summary>
+        public bool UsesVectorOutput { get; set; }
+
+        /// <summary>Whether the model has an accessible parameterless constructor.</summary>
+        public bool HasParameterlessConstructor { get; set; }
+    }
+
+    /// <summary>
+    /// Identifies which test base class family a model should use.
+    /// Each value maps to a specific base class, factory method, return type, and using set.
+    /// </summary>
+    private enum TestFamily
+    {
+        GaussianProcess,
+        TimeSeries,
+        Diffusion,
+        GAN,
+        Embedding,
+        GraphNN,
+        Regression,
+        Classification,
+        Clustering,
+        NeuralNetwork
+    }
+
+    /// <summary>
+    /// Returns the base class name for the given test family.
+    /// </summary>
+    private static string GetBaseClassName(TestFamily family)
+    {
+        switch (family)
+        {
+            case TestFamily.GaussianProcess: return "GaussianProcessModelTestBase";
+            case TestFamily.TimeSeries:      return "TimeSeriesModelTestBase";
+            case TestFamily.Diffusion:       return "DiffusionModelTestBase";
+            case TestFamily.GAN:             return "GANModelTestBase";
+            case TestFamily.Embedding:       return "EmbeddingModelTestBase";
+            case TestFamily.GraphNN:         return "GraphNNModelTestBase";
+            case TestFamily.Regression:      return "RegressionModelTestBase";
+            case TestFamily.Classification:  return "ClassificationModelTestBase";
+            case TestFamily.Clustering:      return "ClusteringModelTestBase";
+            case TestFamily.NeuralNetwork:   return "NeuralNetworkModelTestBase";
+            default:                         return "RegressionModelTestBase";
+        }
+    }
+
+    /// <summary>
+    /// Returns the factory method name for the given test family.
+    /// NN-derived families use CreateNetwork(); all others use CreateModel().
+    /// </summary>
+    private static string GetFactoryMethodName(TestFamily family)
+    {
+        switch (family)
+        {
+            case TestFamily.GAN:
+            case TestFamily.Embedding:
+            case TestFamily.GraphNN:
+            case TestFamily.NeuralNetwork:
+                return "CreateNetwork";
+            default:
+                return "CreateModel";
+        }
+    }
+
+    /// <summary>
+    /// Returns the factory method return type code for the given test family.
+    /// </summary>
+    private static string GetReturnTypeCode(TestFamily family)
+    {
+        switch (family)
+        {
+            case TestFamily.GaussianProcess:
+                return "IGaussianProcess<double>";
+            case TestFamily.Diffusion:
+                return "IDiffusionModel<double>";
+            case TestFamily.GAN:
+            case TestFamily.Embedding:
+            case TestFamily.GraphNN:
+            case TestFamily.NeuralNetwork:
+                return "INeuralNetworkModel<double>";
+            case TestFamily.TimeSeries:
+            case TestFamily.Regression:
+            case TestFamily.Classification:
+            case TestFamily.Clustering:
+            default:
+                return "IFullModel<double, Matrix<double>, Vector<double>>";
+        }
+    }
+
+    /// <summary>
+    /// Returns whether the generated test file needs using AiDotNet.Tensors.LinearAlgebra
+    /// (for Matrix/Vector types in the return type).
+    /// </summary>
+    private static bool NeedsMatrixUsing(TestFamily family)
+    {
+        switch (family)
+        {
+            case TestFamily.TimeSeries:
+            case TestFamily.Regression:
+            case TestFamily.Classification:
+            case TestFamily.Clustering:
+                return true;
+            default:
+                return false;
+        }
     }
 }

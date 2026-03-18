@@ -7,6 +7,9 @@
 	  <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
 	  <LangVersion>latest</LangVersion>
+	  <!-- Suppress AIDN001 (missing model metadata) for test mock classes.
+	       Mock/fake IFullModel implementations in tests don't need real metadata. -->
+	  <NoWarn>$(NoWarn);AIDN001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -35,6 +38,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+  </ItemGroup>
+
+  <!-- Source generator for auto-generating test scaffolds for untested models -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AiDotNet.Generators\AiDotNet.Generators.csproj"
+                       OutputItemType="Analyzer"
+                       ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
