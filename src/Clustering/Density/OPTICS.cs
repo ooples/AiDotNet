@@ -56,6 +56,8 @@ namespace AiDotNet.Clustering.Density;
 public class OPTICS<T> : ClusteringBase<T>
 {
     private readonly OPTICSOptions<T> _options;
+    private double[]? _featureMeans;
+    private double[]? _featureStds;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -121,15 +123,73 @@ public class OPTICS<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (OPTICS<T>)CreateNewInstance();
+        clone._reachabilityDistances = _reachabilityDistances?.ToArray();
+        clone._coreDistances = _coreDistances?.ToArray();
+        clone._ordering = _ordering?.ToArray();
+        clone._predecessor = _predecessor?.ToArray();
+        clone._featureMeans = _featureMeans?.ToArray();
+        clone._featureStds = _featureStds?.ToArray();
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        return clone;
+    }
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
-        NumFeatures = x.Columns;
+        int d = x.Columns;
+        NumFeatures = d;
 
         if (n < _options.MinSamples)
         {
             throw new ArgumentException($"Need at least {_options.MinSamples} samples.");
         }
+
+        // Normalize features for scale-invariant density ordering
+        _featureMeans = new double[d];
+        _featureStds = new double[d];
+        var xNorm = new Matrix<T>(n, d);
+        for (int j = 0; j < d; j++)
+        {
+            double sum = 0, varSum = 0;
+            for (int i = 0; i < n; i++)
+                sum += NumOps.ToDouble(x[i, j]);
+            _featureMeans[j] = sum / n;
+            for (int i = 0; i < n; i++)
+            {
+                double diff = NumOps.ToDouble(x[i, j]) - _featureMeans[j];
+                varSum += diff * diff;
+            }
+            _featureStds[j] = Math.Sqrt(varSum / n);
+            if (_featureStds[j] < 1e-10) _featureStds[j] = 1.0;
+            for (int i = 0; i < n; i++)
+                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+        }
+        x = xNorm;
 
         // Initialize arrays
         _reachabilityDistances = new T[n];
@@ -526,6 +586,17 @@ public class OPTICS<T> : ClusteringBase<T>
     public override Vector<T> Predict(Matrix<T> x)
     {
         ValidateIsTrained();
+
+        // Normalize input using saved parameters from training
+        if (_featureMeans is not null && _featureStds is not null)
+        {
+            var xNorm = new Matrix<T>(x.Rows, x.Columns);
+            for (int i = 0; i < x.Rows; i++)
+                for (int j = 0; j < x.Columns; j++)
+                    xNorm[i, j] = NumOps.FromDouble(
+                        (NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+            x = xNorm;
+        }
 
         var labels = new Vector<T>(x.Rows);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();

@@ -11,7 +11,8 @@ public class OPTICSTests : ClusteringModelTestBase
         => new OPTICS<double>(new AiDotNet.Clustering.Options.OPTICSOptions<double>
         {
             MinSamples = 3,
-            ClusterEpsilon = 5.0 // Extract clusters at this reachability distance
+            ClusterEpsilon = 1.5, // After normalization, clusters ~3 sigma apart
+            ExtractionMethod = AiDotNet.Clustering.Options.OPTICSExtractionMethod.DbscanStyle
         });
 
     // OPTICS is density-based — doesn't have centroid parameters
