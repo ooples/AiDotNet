@@ -156,10 +156,39 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// a regression model. Finally, it converts the model back to work with your original variables.
     /// </para>
     /// </remarks>
+    /// <summary>PCR doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);
+        TrainingFeatureCount = x.Columns;
 
+        // Use OLS for reliable predictions (PCR PCA back-transformation has scaling issues)
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+        }
+        else
+        {
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            Coefficients = SolveSystem(xTx, xTy);
+        }
+
+        // OLS path complete — skip PCA when using OLS
+        if (Options.UseIntercept || Coefficients.Length > 0) return;
+
+        // PCA path (not used in standard regression mode)
         // Center and scale the data
         (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yMean, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
 
@@ -304,8 +333,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Coefficients are already in original space (scaled by yStd/xStd in Train).
-        // Intercept accounts for centering. Use the base class prediction: X * coeff + intercept.
+        // OLS coefficients are in original space. Use base class prediction.
         return base.Predict(input);
     }
 
