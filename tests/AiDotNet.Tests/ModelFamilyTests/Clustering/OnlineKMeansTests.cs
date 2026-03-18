@@ -11,8 +11,9 @@ public class OnlineKMeansTests : ClusteringModelTestBase
         => new OnlineKMeans<double>(new AiDotNet.Clustering.Options.OnlineKMeansOptions<double>
         {
             NumClusters = NumClusters,
-            LearningRate = 0.5, // Higher rate for better convergence in single pass
-            DecayLearningRate = false, // Don't decay during single-pass batch training
+            LearningRate = 0.2,
+            DecayLearningRate = false,
+            MaxIterations = 10, // Multiple passes for convergence
             Seed = 42
         });
 }

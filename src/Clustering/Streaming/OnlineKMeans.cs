@@ -174,6 +174,12 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         var labels = new int[n];
         CurrentLearningRate = _options.LearningRate;
 
+        // Multi-pass: when MaxIterations > 1, iterate through the data multiple times
+        // for better convergence. This is standard for batch online KMeans.
+        int numPasses = Math.Max(1, _options.MaxIterations);
+
+        for (int pass = 0; pass < numPasses; pass++)
+        {
         // Process each point
         for (int i = 0; i < n; i++)
         {
@@ -202,6 +208,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
                 );
             }
         }
+        } // end multi-pass loop
 
         // Set results
         ClusterCenters = new Matrix<T>(k, d);
@@ -228,15 +235,51 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         _centers = new T[k, d];
         _clusterCounts = new int[k];
 
-        // Initialize from random data points
-        var indices = Enumerable.Range(0, x.Rows).OrderBy(_ => rand.Next()).Take(k).ToArray();
-        for (int c = 0; c < k; c++)
+        // K-Means++ initialization: select well-separated initial centers
+        // First center: random data point
+        int firstIdx = rand.Next(x.Rows);
+        for (int j = 0; j < d; j++)
+            _centers[0, j] = x[firstIdx, j];
+
+        // Subsequent centers: choose proportional to squared distance from nearest existing center
+        for (int c = 1; c < k; c++)
         {
-            int idx = indices[c];
-            for (int j = 0; j < d; j++)
+            var distances = new double[x.Rows];
+            double totalDist = 0;
+
+            for (int i = 0; i < x.Rows; i++)
             {
-                _centers[c, j] = x[idx, j];
+                double minDist = double.MaxValue;
+                for (int cc = 0; cc < c; cc++)
+                {
+                    double dist = 0;
+                    for (int j = 0; j < d; j++)
+                    {
+                        double diff = NumOps.ToDouble(x[i, j]) - NumOps.ToDouble(_centers[cc, j]);
+                        dist += diff * diff;
+                    }
+                    minDist = Math.Min(minDist, dist);
+                }
+                distances[i] = minDist;
+                totalDist += minDist;
             }
+
+            // Weighted random selection
+            double target = rand.NextDouble() * totalDist;
+            double cumulative = 0;
+            int selectedIdx = 0;
+            for (int i = 0; i < x.Rows; i++)
+            {
+                cumulative += distances[i];
+                if (cumulative >= target)
+                {
+                    selectedIdx = i;
+                    break;
+                }
+            }
+
+            for (int j = 0; j < d; j++)
+                _centers[c, j] = x[selectedIdx, j];
         }
     }
 
