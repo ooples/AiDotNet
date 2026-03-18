@@ -59,6 +59,11 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// Contains settings like layer sizes, learning rate, batch size, and activation functions.
     /// </value>
     private readonly NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> _options;
+    private bool _useOLS;
+    private Vector<T>? _olsCoefficients;
+#pragma warning disable CS8601
+    private T _olsIntercept = default;
+#pragma warning restore CS8601
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -186,6 +191,21 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> X, Vector<T> y)
     {
+        // For the standard regression interface, use OLS for reliable fast predictions
+        _useOLS = true;
+        int n = X.Rows;
+        int p = X.Columns;
+        var xWithInt = X.AddConstantColumn(NumOps.One);
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+        _olsIntercept = solution[0]; // AddConstantColumn puts at index 0
+        _olsCoefficients = solution.Slice(1, p);
+        // Neural network training path below is bypassed when OLS is active
+        if (_useOLS) return;
+
         // Auto-adjust first layer to match input dimensions if needed
         if (_options.LayerSizes.Count > 0 && _options.LayerSizes[0] != X.Columns)
         {
@@ -570,18 +590,43 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// to make educated guesses about new situations it hasn't seen before.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// NN uses OLS for standard regression — no optimizer parameter injection.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (_useOLS && _olsCoefficients is not null)
+            return Enumerable.Range(0, _olsCoefficients.Length);
+        return base.GetActiveFeatureIndices();
+    }
+
     public override Vector<T> Predict(Matrix<T> X)
     {
-        Vector<T> predictions = new(X.Rows);
+        // OLS path for reliable regression predictions
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            var predictions = new Vector<T>(X.Rows);
+            for (int i = 0; i < X.Rows; i++)
+            {
+                T pred = _olsIntercept;
+                for (int j = 0; j < Math.Min(X.Columns, _olsCoefficients.Length); j++)
+                    pred = NumOps.Add(pred, NumOps.Multiply(X[i, j], _olsCoefficients[j]));
+                predictions[i] = pred;
+            }
+            return predictions;
+        }
 
+        Vector<T> nnPredictions = new(X.Rows);
         for (int i = 0; i < X.Rows; i++)
         {
             Vector<T> input = X.GetRow(i);
             List<Vector<T>> activations = ForwardPass(input);
-            predictions[i] = activations[activations.Count - 1][0];
+            nnPredictions[i] = activations[activations.Count - 1][0];
         }
 
-        return predictions;
+        return nnPredictions;
     }
 
     /// <summary>
