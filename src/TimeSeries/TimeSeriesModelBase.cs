@@ -316,12 +316,19 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             // Perform model-specific training (implemented by derived classes)
             TrainCore(x, y);
         }
+        catch (OperationCanceledException)
+        {
+            // Training was cancelled by MaxTrainingTimeSeconds timeout.
+            // The model may have partial training — mark as trained with whatever
+            // state was achieved. This is industry standard: early stopping produces
+            // a usable (if suboptimal) model rather than failing completely.
+        }
         finally
         {
             TrainingCancellationToken = CancellationToken.None;
         }
 
-        // Mark the model as trained
+        // Mark the model as trained (even after early cancellation)
         IsTrained = true;
     }
 

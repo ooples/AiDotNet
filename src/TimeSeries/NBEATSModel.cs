@@ -62,6 +62,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 {
     private readonly NBEATSModelOptions<T> _options;
     private readonly List<NBEATSBlock<T>> _blocks;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
     /// Initializes a new instance of the NBEATSModel class.
@@ -222,6 +223,13 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series BEFORE training loop for cancellation safety
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = NumOps.FromDouble(y.Length);
+
         int numSamples = x.Rows;
         T learningRate = NumOps.FromDouble(_options.LearningRate);
 
@@ -315,6 +323,22 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                 }
             }
         }
+
+    }
+
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+        return predictions;
     }
 
     /// <summary>

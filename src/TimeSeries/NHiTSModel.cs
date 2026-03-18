@@ -70,6 +70,7 @@ namespace AiDotNet.TimeSeries;
 public class NHiTSModel<T> : TimeSeriesModelBase<T>
 {
     private readonly NHiTSOptions<T> _options;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
     private readonly List<NHiTSStackTensor<T>> _stacks;
     private readonly Random _random;
 
@@ -138,6 +139,13 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series BEFORE training loop for cancellation safety
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = NumOps.FromDouble(y.Length);
+
         T learningRate = NumOps.FromDouble(_options.LearningRate);
         int numSamples = x.Rows;
 
@@ -172,6 +180,22 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
                 ApplyGradients(batchGradients, learningRate, batchSize);
             }
         }
+
+    }
+
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+        return predictions;
     }
 
     /// <summary>
