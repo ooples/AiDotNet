@@ -10,5 +10,5 @@ public class DeepGaussianProcessTests : GaussianProcessModelTestBase
     protected override IGaussianProcess<double> CreateModel()
         => new DeepGaussianProcess<double>(
             [new GaussianKernel<double>(), new GaussianKernel<double>()],
-            [4]);
+            [8]); // More inducing points for better approximation
 }
