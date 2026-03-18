@@ -806,8 +806,18 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
-        var clone = new MultilayerPerceptronRegression<T>(null, Regularization);
-        clone.Deserialize(Serialize());
+        var clone = new MultilayerPerceptronRegression<T>(_options, Regularization);
+        clone._useOLS = _useOLS;
+        clone._olsIntercept = _olsIntercept;
+        if (_olsCoefficients is not null)
+            clone._olsCoefficients = new Vector<T>(_olsCoefficients);
+        // Copy neural network weights and biases
+        clone._weights.Clear();
+        foreach (var w in _weights)
+            clone._weights.Add(w.Clone());
+        clone._biases.Clear();
+        foreach (var b in _biases)
+            clone._biases.Add(new Vector<T>(b));
         return clone;
     }
 

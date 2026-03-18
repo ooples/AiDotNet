@@ -1025,6 +1025,34 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         }
     }
 
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        // Clone each base model
+        var clonedModels = new List<IFullModel<T, Matrix<T>, Vector<T>>>();
+        foreach (var model in _baseModels)
+            clonedModels.Add(model.Clone());
+
+        var clone = new SuperLearner<T>(clonedModels, _options, Regularization);
+        if (SupportVectors.Rows > 0)
+            clone.SupportVectors = SupportVectors.Clone();
+        if (Alphas.Length > 0)
+            clone.Alphas = new Vector<T>(Alphas);
+        clone.B = B;
+        clone._metaIntercept = _metaIntercept;
+        clone._numFeatures = _numFeatures;
+        if (_metaWeights is not null)
+            clone._metaWeights = new Vector<T>(_metaWeights);
+        if (_cvPerformance is not null)
+            clone._cvPerformance = new Vector<T>(_cvPerformance);
+        if (_predMeans is not null)
+            clone._predMeans = new Vector<T>(_predMeans);
+        if (_predStds is not null)
+            clone._predStds = new Vector<T>(_predStds);
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     /// <inheritdoc/>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
