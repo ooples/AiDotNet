@@ -79,6 +79,10 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// The dual coefficients used for making predictions.
     /// </summary>
     private Vector<T> _dualCoefficients;
+    private T _yMean;
+
+    /// <summary>KRR doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
 
     /// <summary>
     /// Gets the configuration options specific to Kernel Ridge Regression.
@@ -128,6 +132,7 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     {
         _gramMatrix = Matrix<T>.Empty();
         _dualCoefficients = Vector<T>.Empty();
+        _yMean = NumOps.Zero;
     }
 
     /// <summary>
@@ -160,6 +165,15 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     protected override void OptimizeModel(Matrix<T> X, Vector<T> y)
     {
         int n = X.Rows;
+
+        // Center y for translation equivariance (predictions get _yMean added back)
+        _yMean = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+            _yMean = NumOps.Add(_yMean, y[i]);
+        _yMean = NumOps.Divide(_yMean, NumOps.FromDouble(n));
+        var yCentered = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            yCentered[i] = NumOps.Subtract(y[i], _yMean);
 
         // Auto-tune Gamma if using the default value and RBF/Laplacian kernel.
         // The default Gamma=1.0 is too large for features with range >> 1, causing
@@ -221,13 +235,18 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
             }
         }
 
-        // Solve (K + λI)a = y
-        _dualCoefficients = MatrixSolutionHelper.SolveLinearSystem(_gramMatrix, y, Options.DecompositionType);
+        // Solve (K + λI)a = y_centered
+        _dualCoefficients = MatrixSolutionHelper.SolveLinearSystem(_gramMatrix, yCentered, Options.DecompositionType);
 
         // Store X as support vectors for prediction
         SupportVectors = X;
         Alphas = _dualCoefficients;
     }
+
+    /// <summary>
+    /// KRR uses all training points — skip SVR-style sparsification.
+    /// </summary>
+    protected override void ExtractModelParameters() { }
 
     /// <summary>
     /// Predicts the target value for a single input feature vector.
@@ -256,7 +275,7 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
-        T result = NumOps.Zero;
+        T result = _yMean; // Add back the y-mean for proper centering
         for (int i = 0; i < SupportVectors.Rows; i++)
         {
             Vector<T> supportVector = SupportVectors.GetRow(i);
@@ -369,6 +388,9 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
             writer.Write(Convert.ToDouble(_dualCoefficients[i]));
         }
 
+        // Serialize _yMean
+        writer.Write(Convert.ToDouble(_yMean));
+
         return ms.ToArray();
     }
 
@@ -443,6 +465,10 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         {
             _dualCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+
+        // Deserialize _yMean
+        if (ms.Position < ms.Length)
+            _yMean = NumOps.FromDouble(reader.ReadDouble());
     }
 
     /// <summary>
@@ -467,6 +493,22 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// you'd want each test to use a model with identical settings.
     /// </para>
     /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new KernelRidgeRegression<T>((KernelRidgeRegressionOptions)Options, Regularization);
+        if (SupportVectors.Rows > 0)
+            clone.SupportVectors = SupportVectors.Clone();
+        if (Alphas.Length > 0)
+            clone.Alphas = new Vector<T>(Alphas);
+        clone.B = B;
+        clone._gramMatrix = _gramMatrix.Rows > 0 ? _gramMatrix.Clone() : Matrix<T>.Empty();
+        clone._dualCoefficients = _dualCoefficients.Length > 0 ? new Vector<T>(_dualCoefficients) : Vector<T>.Empty();
+        clone._yMean = _yMean;
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new KernelRidgeRegression<T>((KernelRidgeRegressionOptions)Options, Regularization);
