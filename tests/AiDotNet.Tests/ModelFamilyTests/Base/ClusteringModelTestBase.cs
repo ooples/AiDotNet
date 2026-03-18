@@ -506,8 +506,8 @@ public abstract class ClusteringModelTestBase
         var model1 = CreateModel();
         var model2 = CreateModel();
 
-        var (x1, y1) = GenerateData(rng1);
-        var (x2, y2) = GenerateData(rng2);
+        var (x1, y1) = GenerateData(TrainSamples, NumClusters, Features, rng1);
+        var (x2, y2) = GenerateData(TrainSamples, NumClusters, Features, rng2);
 
         model1.Train(x1, y1);
         model2.Train(x2, y2);
