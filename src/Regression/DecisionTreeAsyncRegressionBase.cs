@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Regression;
@@ -108,7 +109,10 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <summary>
     /// Random number generator used for tree building and sampling.
     /// </summary>
-    protected Random Random => new(Options.Seed ?? Environment.TickCount);
+    private Random? _random;
+    protected Random Random => _random ??= Options.Seed.HasValue
+        ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
+        : RandomHelper.CreateSeededRandom(42);
 
     /// <summary>
     /// Gets or sets the feature names.
