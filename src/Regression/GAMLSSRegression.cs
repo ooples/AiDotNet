@@ -226,7 +226,11 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         {
             // Denormalize: prediction = standardized_mean * yStd + yMean
             double mean = NumOps.ToDouble(distributions[i].Mean);
-            predictions[i] = NumOps.FromDouble(mean * _yStd + _yMean);
+            double pred = mean * _yStd + _yMean;
+            // Guard against NaN/Infinity from degenerate data (e.g., collinear features)
+            if (double.IsNaN(pred) || double.IsInfinity(pred))
+                pred = _yMean;
+            predictions[i] = NumOps.FromDouble(pred);
         }
 
         return predictions;
@@ -576,16 +580,23 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private IParametricDistribution<T> CreateDistribution(T location, T scale, T shape)
     {
+        // Clamp variance to a minimum positive value to prevent exceptions from collinear/degenerate data
+        T minVariance = NumOps.FromDouble(1e-10);
+        T variance = NumOps.Multiply(scale, scale);
+        double varianceD = NumOps.ToDouble(variance);
+        if (double.IsNaN(varianceD) || double.IsInfinity(varianceD) || varianceD <= 0)
+            variance = minVariance;
+
         return _options.DistributionFamily switch
         {
-            GAMLSSDistributionFamily.Normal => new NormalDistribution<T>(location, NumOps.Multiply(scale, scale)),
-            GAMLSSDistributionFamily.Laplace => new LaplaceDistribution<T>(location, scale),
-            GAMLSSDistributionFamily.StudentT => new StudentTDistribution<T>(location, scale, shape),
+            GAMLSSDistributionFamily.Normal => new NormalDistribution<T>(location, variance),
+            GAMLSSDistributionFamily.Laplace => new LaplaceDistribution<T>(location, NumOps.LessThanOrEquals(scale, NumOps.Zero) ? NumOps.FromDouble(1e-5) : scale),
+            GAMLSSDistributionFamily.StudentT => new StudentTDistribution<T>(location, NumOps.LessThanOrEquals(scale, NumOps.Zero) ? NumOps.FromDouble(1e-5) : scale, shape),
             GAMLSSDistributionFamily.Gamma => new GammaDistribution<T>(shape, NumOps.Divide(shape, location)),
-            GAMLSSDistributionFamily.LogNormal => new LogNormalDistribution<T>(location, NumOps.Multiply(scale, scale)),
+            GAMLSSDistributionFamily.LogNormal => new LogNormalDistribution<T>(location, variance),
             GAMLSSDistributionFamily.Poisson => new PoissonDistribution<T>(location),
             GAMLSSDistributionFamily.NegativeBinomial => new NegativeBinomialDistribution<T>(location, shape),
-            _ => new NormalDistribution<T>(location, NumOps.Multiply(scale, scale))
+            _ => new NormalDistribution<T>(location, variance)
         };
     }
 

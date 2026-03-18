@@ -227,15 +227,14 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
                 xTx[j, i] = avg;
             }
 
-        // Add ridge regularization to the diagonal if strength is specified
+        // Always add minimum ridge regularization for numerical stability (prevents
+        // Cholesky failure on collinear/degenerate data)
         var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
-        if (regularizationStrength > 0)
+        var effectiveReg = Math.Max(regularizationStrength, 1e-6);
+        T regTerm = NumOps.FromDouble(effectiveReg);
+        for (int i = 0; i < xTx.Rows; i++)
         {
-            T regTerm = NumOps.FromDouble(regularizationStrength);
-            for (int i = 0; i < xTx.Rows; i++)
-            {
-                xTx[i, i] = NumOps.Add(xTx[i, i], regTerm);
-            }
+            xTx[i, i] = NumOps.Add(xTx[i, i], regTerm);
         }
 
         var xTy = basisFunctions.Transpose().Multiply(y);
