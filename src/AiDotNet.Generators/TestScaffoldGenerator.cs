@@ -433,14 +433,44 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Walk the base type chain to detect mid-level hierarchy bases
         bool extendsAudioNN = false, extendsDocumentNN = false, extendsVisionLanguage = false;
         bool extendsSegmentation = false, extendsVideoNN = false;
+        bool extendsTts = false, extendsFinancial = false, extendsNER = false, extendsCode = false;
         bool extendsLatentDiffusion = false, extendsNonLinearRegression = false;
         bool extendsProbabilisticClassifier = false;
+        // Phase B leaf-level
+        bool extendsVideoDiffusion = false, extendsAudioDiffusion = false;
+        bool extendsFrameInterpolation = false, extendsVideoSR = false, extendsVideoDenoising = false;
+        bool extendsAudioClassifier = false, extendsOpticalFlow = false, extendsSpeakerRecognition = false;
+        bool extendsEnsembleClassifier = false, extendsNaiveBayes = false, extendsSVM = false;
 
         var baseType = modelClass.BaseType;
         while (baseType is not null)
         {
             var baseName = baseType.Name;
-            if (baseName.StartsWith("AudioNeuralNetworkBase", System.StringComparison.Ordinal))
+            // Phase B leaf-level checks (most specific first)
+            if (baseName.StartsWith("VideoDiffusionModelBase", System.StringComparison.Ordinal))
+                extendsVideoDiffusion = true;
+            else if (baseName.StartsWith("AudioDiffusionModelBase", System.StringComparison.Ordinal))
+                extendsAudioDiffusion = true;
+            else if (baseName.StartsWith("FrameInterpolationBase", System.StringComparison.Ordinal))
+                extendsFrameInterpolation = true;
+            else if (baseName.StartsWith("VideoSuperResolutionBase", System.StringComparison.Ordinal))
+                extendsVideoSR = true;
+            else if (baseName.StartsWith("VideoDenoisingBase", System.StringComparison.Ordinal))
+                extendsVideoDenoising = true;
+            else if (baseName.StartsWith("AudioClassifierBase", System.StringComparison.Ordinal))
+                extendsAudioClassifier = true;
+            else if (baseName.StartsWith("OpticalFlowBase", System.StringComparison.Ordinal))
+                extendsOpticalFlow = true;
+            else if (baseName.StartsWith("SpeakerRecognitionBase", System.StringComparison.Ordinal))
+                extendsSpeakerRecognition = true;
+            else if (baseName.StartsWith("EnsembleClassifierBase", System.StringComparison.Ordinal))
+                extendsEnsembleClassifier = true;
+            else if (baseName.StartsWith("NaiveBayesBase", System.StringComparison.Ordinal))
+                extendsNaiveBayes = true;
+            else if (baseName.StartsWith("SVMBase", System.StringComparison.Ordinal))
+                extendsSVM = true;
+            // Phase A mid-level checks
+            else if (baseName.StartsWith("AudioNeuralNetworkBase", System.StringComparison.Ordinal))
                 extendsAudioNN = true;
             else if (baseName.StartsWith("DocumentNeuralNetworkBase", System.StringComparison.Ordinal))
                 extendsDocumentNN = true;
@@ -452,6 +482,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (baseName.StartsWith("VideoNeuralNetworkBase", System.StringComparison.Ordinal) ||
                      baseName.EndsWith("VideoBase", System.StringComparison.Ordinal))
                 extendsVideoNN = true;
+            else if (baseName.StartsWith("TtsModelBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("AcousticModelBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("VocoderBase", System.StringComparison.Ordinal))
+                extendsTts = true;
+            else if (baseName.StartsWith("FinancialModelBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("ForecastingModelBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("TimeSeriesFoundationModelBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("RiskModelBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("PortfolioOptimizerBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("FinancialNLPModelBase", System.StringComparison.Ordinal))
+                extendsFinancial = true;
+            else if (baseName.StartsWith("NERNeuralNetworkBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("SequenceLabelingNERBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("SpanBasedNERBase", System.StringComparison.Ordinal) ||
+                     baseName.StartsWith("TransformerNERBase", System.StringComparison.Ordinal))
+                extendsNER = true;
+            else if (baseName.StartsWith("CodeModelBase", System.StringComparison.Ordinal))
+                extendsCode = true;
             else if (baseName.StartsWith("LatentDiffusionModelBase", System.StringComparison.Ordinal))
                 extendsLatentDiffusion = true;
             else if (baseName.StartsWith("NonLinearRegressionBase", System.StringComparison.Ordinal))
@@ -514,6 +562,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsVisionLanguageModelBase = extendsVisionLanguage,
             ExtendsSegmentationModelBase = extendsSegmentation,
             ExtendsVideoNeuralNetworkBase = extendsVideoNN,
+            ExtendsTtsModelBase = extendsTts,
+            ExtendsFinancialModelBase = extendsFinancial,
+            ExtendsNERNeuralNetworkBase = extendsNER,
+            ExtendsCodeModelBase = extendsCode,
+            ExtendsVideoDiffusionModelBase = extendsVideoDiffusion,
+            ExtendsAudioDiffusionModelBase = extendsAudioDiffusion,
+            ExtendsFrameInterpolationBase = extendsFrameInterpolation,
+            ExtendsVideoSuperResolutionBase = extendsVideoSR,
+            ExtendsVideoDenoisingBase = extendsVideoDenoising,
+            ExtendsAudioClassifierBase = extendsAudioClassifier,
+            ExtendsOpticalFlowBase = extendsOpticalFlow,
+            ExtendsSpeakerRecognitionBase = extendsSpeakerRecognition,
+            ExtendsEnsembleClassifierBase = extendsEnsembleClassifier,
+            ExtendsNaiveBayesBase = extendsNaiveBayes,
+            ExtendsSVMBase = extendsSVM,
             ExtendsLatentDiffusionModelBase = extendsLatentDiffusion,
             ExtendsNonLinearRegressionBase = extendsNonLinearRegression,
             ExtendsProbabilisticClassifierBase = extendsProbabilisticClassifier,
@@ -634,7 +697,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.Categories.Contains(CategoryTimeSeriesModel))
             return TestFamily.TimeSeries;
 
-        // Priority 3: Latent Diffusion (more specific than plain Diffusion)
+        // Priority 3a: Video Diffusion (most specific diffusion subtype)
+        if (model.ExtendsVideoDiffusionModelBase)
+            return TestFamily.VideoDiffusion;
+
+        // Priority 3b: Audio Diffusion
+        if (model.ExtendsAudioDiffusionModelBase)
+            return TestFamily.AudioDiffusion;
+
+        // Priority 3c: Latent Diffusion (more specific than plain Diffusion)
         if (model.ExtendsLatentDiffusionModelBase)
             return TestFamily.LatentDiffusion;
 
@@ -656,6 +727,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         // === TIER 2: Mid-level NN hierarchy (base class chain detection) ===
 
+        // Priority 8a: Audio Classifier (leaf of AudioNN)
+        if (model.ExtendsAudioClassifierBase)
+            return TestFamily.AudioClassifier;
+
+        // Priority 8b: Speaker Recognition (leaf of AudioNN)
+        if (model.ExtendsSpeakerRecognitionBase)
+            return TestFamily.SpeakerRecognition;
+
         // Priority 8: Audio NN
         if (model.ExtendsAudioNeuralNetworkBase)
             return TestFamily.AudioNN;
@@ -672,9 +751,41 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ExtendsSegmentationModelBase)
             return TestFamily.Segmentation;
 
+        // Priority 12a: Frame Interpolation (leaf of VideoNN)
+        if (model.ExtendsFrameInterpolationBase)
+            return TestFamily.FrameInterpolation;
+
+        // Priority 12b: Video Super-Resolution (leaf of VideoNN)
+        if (model.ExtendsVideoSuperResolutionBase)
+            return TestFamily.VideoSuperResolution;
+
+        // Priority 12c: Video Denoising (leaf of VideoNN)
+        if (model.ExtendsVideoDenoisingBase)
+            return TestFamily.VideoDenoising;
+
+        // Priority 12d: Optical Flow (leaf of VideoNN)
+        if (model.ExtendsOpticalFlowBase)
+            return TestFamily.OpticalFlow;
+
         // Priority 12: Video NN
         if (model.ExtendsVideoNeuralNetworkBase)
             return TestFamily.VideoNN;
+
+        // Priority 13: TTS
+        if (model.ExtendsTtsModelBase)
+            return TestFamily.TTS;
+
+        // Priority 14: Financial
+        if (model.ExtendsFinancialModelBase)
+            return TestFamily.Financial;
+
+        // Priority 15: NER
+        if (model.ExtendsNERNeuralNetworkBase)
+            return TestFamily.NER;
+
+        // Priority 16: Code
+        if (model.ExtendsCodeModelBase)
+            return TestFamily.CodeModel;
 
         // === TIER 3: Matrix/Vector model families ===
 
@@ -682,9 +793,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ExtendsNonLinearRegressionBase)
             return TestFamily.NonLinearRegression;
 
-        // Priority 14: Probabilistic Classifier (more specific than Classification)
+        // Priority 14a: SVM (leaf of ProbabilisticClassifier)
+        if (model.ExtendsSVMBase)
+            return TestFamily.SVM;
+
+        // Priority 14b: NaiveBayes (leaf of ProbabilisticClassifier)
+        if (model.ExtendsNaiveBayesBase)
+            return TestFamily.NaiveBayes;
+
+        // Priority 14: Probabilistic Classifier
         if (model.ExtendsProbabilisticClassifierBase)
             return TestFamily.ProbabilisticClassifier;
+
+        // Priority 14c: Ensemble Classifier
+        if (model.ExtendsEnsembleClassifierBase)
+            return TestFamily.EnsembleClassifier;
 
         // Priority 15: Regression task + Matrix input
         if (model.Tasks.Contains(TaskRegression) && model.UsesMatrixInput)
@@ -815,12 +938,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.VisionLanguage:
             case TestFamily.Segmentation:
             case TestFamily.VideoNN:
+            case TestFamily.TTS:
+            case TestFamily.Financial:
+            case TestFamily.NER:
+            case TestFamily.CodeModel:
+            case TestFamily.FrameInterpolation:
+            case TestFamily.VideoSuperResolution:
+            case TestFamily.VideoDenoising:
+            case TestFamily.AudioClassifier:
+            case TestFamily.OpticalFlow:
+            case TestFamily.SpeakerRecognition:
             case TestFamily.NeuralNetwork:
                 return model.ImplementsNeuralNetworkModel;
 
             // Diffusion families require IDiffusionModel interface
             case TestFamily.Diffusion:
             case TestFamily.LatentDiffusion:
+            case TestFamily.VideoDiffusion:
+            case TestFamily.AudioDiffusion:
                 return model.ImplementsDiffusionModel;
 
             // GP family requires IGaussianProcess interface
@@ -832,6 +967,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.NonLinearRegression:
             case TestFamily.Classification:
             case TestFamily.ProbabilisticClassifier:
+            case TestFamily.EnsembleClassifier:
+            case TestFamily.NaiveBayes:
+            case TestFamily.SVM:
             case TestFamily.Clustering:
             case TestFamily.TimeSeries:
                 return model.UsesMatrixInput && model.UsesVectorOutput;
@@ -992,6 +1130,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsSegmentationModelBase { get; set; }
         public bool ExtendsVideoNeuralNetworkBase { get; set; }
         public bool ExtendsLatentDiffusionModelBase { get; set; }
+        public bool ExtendsTtsModelBase { get; set; }
+        public bool ExtendsFinancialModelBase { get; set; }
+        public bool ExtendsNERNeuralNetworkBase { get; set; }
+        public bool ExtendsCodeModelBase { get; set; }
+        // Phase B: Leaf-level hierarchy
+        public bool ExtendsVideoDiffusionModelBase { get; set; }
+        public bool ExtendsAudioDiffusionModelBase { get; set; }
+        public bool ExtendsFrameInterpolationBase { get; set; }
+        public bool ExtendsVideoSuperResolutionBase { get; set; }
+        public bool ExtendsVideoDenoisingBase { get; set; }
+        public bool ExtendsAudioClassifierBase { get; set; }
+        public bool ExtendsOpticalFlowBase { get; set; }
+        public bool ExtendsSpeakerRecognitionBase { get; set; }
+        public bool ExtendsEnsembleClassifierBase { get; set; }
+        public bool ExtendsNaiveBayesBase { get; set; }
+        public bool ExtendsSVMBase { get; set; }
         public bool ExtendsNonLinearRegressionBase { get; set; }
         public bool ExtendsProbabilisticClassifierBase { get; set; }
     }
@@ -1014,6 +1168,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         VisionLanguage,
         Segmentation,
         VideoNN,
+        TTS,
+        Financial,
+        NER,
+        CodeModel,
+        VideoDiffusion,
+        AudioDiffusion,
+        FrameInterpolation,
+        VideoSuperResolution,
+        VideoDenoising,
+        AudioClassifier,
+        OpticalFlow,
+        SpeakerRecognition,
+        EnsembleClassifier,
+        NaiveBayes,
+        SVM,
         Regression,
         NonLinearRegression,
         Classification,
@@ -1041,6 +1210,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.VisionLanguage:        return "VisionLanguageTestBase";
             case TestFamily.Segmentation:          return "SegmentationTestBase";
             case TestFamily.VideoNN:               return "VideoNNModelTestBase";
+            case TestFamily.TTS:                   return "TTSModelTestBase";
+            case TestFamily.Financial:             return "FinancialModelTestBase";
+            case TestFamily.NER:                   return "NERModelTestBase";
+            case TestFamily.CodeModel:             return "CodeModelTestBase";
+            case TestFamily.VideoDiffusion:        return "VideoDiffusionTestBase";
+            case TestFamily.AudioDiffusion:        return "AudioDiffusionTestBase";
+            case TestFamily.FrameInterpolation:    return "FrameInterpolationTestBase";
+            case TestFamily.VideoSuperResolution:  return "VideoSuperResolutionTestBase";
+            case TestFamily.VideoDenoising:        return "VideoDenoisingTestBase";
+            case TestFamily.AudioClassifier:       return "AudioClassifierTestBase";
+            case TestFamily.OpticalFlow:           return "OpticalFlowTestBase";
+            case TestFamily.SpeakerRecognition:    return "SpeakerRecognitionTestBase";
+            case TestFamily.EnsembleClassifier:    return "EnsembleClassifierTestBase";
+            case TestFamily.NaiveBayes:            return "NaiveBayesTestBase";
+            case TestFamily.SVM:                   return "SVMTestBase";
             case TestFamily.Regression:            return "RegressionModelTestBase";
             case TestFamily.NonLinearRegression:   return "NonLinearRegressionTestBase";
             case TestFamily.Classification:        return "ClassificationModelTestBase";
@@ -1067,6 +1251,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.VisionLanguage:
             case TestFamily.Segmentation:
             case TestFamily.VideoNN:
+            case TestFamily.TTS:
+            case TestFamily.Financial:
+            case TestFamily.NER:
+            case TestFamily.CodeModel:
+            case TestFamily.FrameInterpolation:
+            case TestFamily.VideoSuperResolution:
+            case TestFamily.VideoDenoising:
+            case TestFamily.AudioClassifier:
+            case TestFamily.OpticalFlow:
+            case TestFamily.SpeakerRecognition:
             case TestFamily.NeuralNetwork:
                 return "CreateNetwork";
             default:
@@ -1085,6 +1279,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "IGaussianProcess<double>";
             case TestFamily.Diffusion:
             case TestFamily.LatentDiffusion:
+            case TestFamily.VideoDiffusion:
+            case TestFamily.AudioDiffusion:
                 return "IDiffusionModel<double>";
             case TestFamily.GAN:
             case TestFamily.Embedding:
@@ -1094,6 +1290,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.VisionLanguage:
             case TestFamily.Segmentation:
             case TestFamily.VideoNN:
+            case TestFamily.TTS:
+            case TestFamily.Financial:
+            case TestFamily.NER:
+            case TestFamily.CodeModel:
+            case TestFamily.FrameInterpolation:
+            case TestFamily.VideoSuperResolution:
+            case TestFamily.VideoDenoising:
+            case TestFamily.AudioClassifier:
+            case TestFamily.OpticalFlow:
+            case TestFamily.SpeakerRecognition:
             case TestFamily.NeuralNetwork:
                 return "INeuralNetworkModel<double>";
             case TestFamily.TimeSeries:
@@ -1120,6 +1326,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.NonLinearRegression:
             case TestFamily.Classification:
             case TestFamily.ProbabilisticClassifier:
+            case TestFamily.EnsembleClassifier:
+            case TestFamily.NaiveBayes:
+            case TestFamily.SVM:
             case TestFamily.Clustering:
                 return true;
             default:
