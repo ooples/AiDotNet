@@ -88,6 +88,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private readonly List<Tensor<T>> _layerInputs;
     private readonly List<Tensor<T>> _layerOutputs;
     private Tensor<T> _attentionInput;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
     /// Initializes a new instance of the TemporalFusionTransformer class.
@@ -198,6 +199,13 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series BEFORE training loop for cancellation safety
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = NumOps.FromDouble(y.Length);
+
         T learningRate = NumOps.FromDouble(_options.LearningRate);
         int numSamples = x.Rows;
 
@@ -934,6 +942,21 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Predicts a single value (median quantile, first horizon step).
     /// </summary>
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+        return predictions;
+    }
+
     public override T PredictSingle(Vector<T> input)
     {
         var inputTensor = new Tensor<T>([input.Length]);
