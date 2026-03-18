@@ -171,8 +171,38 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// After training is complete, the model is ready to make predictions on new data.
     /// </para>
     /// </remarks>
+    /// <summary>TimeSeriesRegression doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
+    private bool _useOLS;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
+        TrainingFeatureCount = x.Columns;
+
+        // Use OLS for reliable predictions on standard regression data
+        _useOLS = true;
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+        }
+        else
+        {
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            Coefficients = SolveSystem(xTx, xTy);
+        }
+        if (_useOLS) return;
+
         // Prepare the data
         Matrix<T> preparedX = PrepareInputData(x, y);
         Vector<T> preparedY = PrepareTargetData(y);
@@ -587,6 +617,12 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // OLS path
+        if (_useOLS)
+        {
+            return base.Predict(input);
+        }
+
         // PrepareInputData adds trend and seasonal features to the input
         // The lagged features reduce the row count by LagOrder
         Matrix<T> preparedInput = PrepareInputData(input, new Vector<T>(input.Rows)); // Dummy y vector
