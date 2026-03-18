@@ -15,6 +15,7 @@ public class InformerModelTests : TimeSeriesModelTestBase
             EmbeddingDim = 16,
             NumEncoderLayers = 1,
             NumDecoderLayers = 1,
-            NumAttentionHeads = 2
+            NumAttentionHeads = 2,
+            MaxTrainingTimeSeconds = 5
         });
 }

@@ -18,6 +18,7 @@ public class NHiTSModelTests : TimeSeriesModelTestBase
             NumHiddenLayers = 1,
             PoolingKernelSizes = new[] { 4, 1 },
             PoolingModes = new[] { "MaxPool", "AvgPool" },
-            InterpolationModes = new[] { "Linear", "Linear" }
+            InterpolationModes = new[] { "Linear", "Linear" },
+            MaxTrainingTimeSeconds = 5
         });
 }

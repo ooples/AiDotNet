@@ -15,6 +15,7 @@ public class NBEATSModelTests : TimeSeriesModelTestBase
             LookbackWindow = 10,
             ForecastHorizon = 5,
             HiddenLayerSize = 16,
-            NumHiddenLayers = 1
+            NumHiddenLayers = 1,
+            MaxTrainingTimeSeconds = 5
         });
 }
