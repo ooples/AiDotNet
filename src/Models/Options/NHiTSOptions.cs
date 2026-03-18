@@ -3,6 +3,28 @@ using System;
 namespace AiDotNet.Models.Options;
 
 /// <summary>
+/// Pooling strategy for downsampling in N-HiTS stacks.
+/// </summary>
+public enum NHiTSPoolingMode
+{
+    /// <summary>Keeps the maximum value in each pooling window.</summary>
+    MaxPool,
+    /// <summary>Averages values in each pooling window.</summary>
+    AvgPool
+}
+
+/// <summary>
+/// Interpolation method for upsampling forecasts in N-HiTS stacks.
+/// </summary>
+public enum NHiTSInterpolationMode
+{
+    /// <summary>Linear interpolation between known points.</summary>
+    Linear,
+    /// <summary>Cubic spline interpolation for smoother results.</summary>
+    Cubic
+}
+
+/// <summary>
 /// Configuration options for the N-HiTS (Neural Hierarchical Interpolation for Time Series) model.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (typically double or float).</typeparam>
@@ -40,8 +62,8 @@ public class NHiTSOptions<T> : TimeSeriesRegressionOptions<T>
 
         NumStacks = other.NumStacks;
         NumBlocksPerStack = other.NumBlocksPerStack;
-        PoolingModes = other.PoolingModes != null ? (string[])other.PoolingModes.Clone() : new string[] { "MaxPool", "AvgPool", "AvgPool" };
-        InterpolationModes = other.InterpolationModes != null ? (string[])other.InterpolationModes.Clone() : new string[] { "Linear", "Linear", "Linear" };
+        PoolingModes = other.PoolingModes != null ? (NHiTSPoolingMode[])other.PoolingModes.Clone() : new[] { NHiTSPoolingMode.MaxPool, NHiTSPoolingMode.AvgPool, NHiTSPoolingMode.AvgPool };
+        InterpolationModes = other.InterpolationModes != null ? (NHiTSInterpolationMode[])other.InterpolationModes.Clone() : new[] { NHiTSInterpolationMode.Linear, NHiTSInterpolationMode.Linear, NHiTSInterpolationMode.Linear };
         LookbackWindow = other.LookbackWindow;
         ForecastHorizon = other.ForecastHorizon;
         HiddenLayerSize = other.HiddenLayerSize;
@@ -81,7 +103,7 @@ public class NHiTSOptions<T> : TimeSeriesRegressionOptions<T>
     /// at different time scales. "MaxPool" keeps the maximum values, while "AvgPool" averages values.
     /// </para>
     /// </remarks>
-    public string[] PoolingModes { get; set; } = new string[] { "MaxPool", "AvgPool", "AvgPool" };
+    public NHiTSPoolingMode[] PoolingModes { get; set; } = new[] { NHiTSPoolingMode.MaxPool, NHiTSPoolingMode.AvgPool, NHiTSPoolingMode.AvgPool };
 
     /// <summary>
     /// Gets or sets the interpolation modes for each stack.
@@ -93,7 +115,7 @@ public class NHiTSOptions<T> : TimeSeriesRegressionOptions<T>
     /// methods like "Cubic" use curves for smoother results.
     /// </para>
     /// </remarks>
-    public string[] InterpolationModes { get; set; } = new string[] { "Linear", "Linear", "Linear" };
+    public NHiTSInterpolationMode[] InterpolationModes { get; set; } = new[] { NHiTSInterpolationMode.Linear, NHiTSInterpolationMode.Linear, NHiTSInterpolationMode.Linear };
 
     /// <summary>
     /// Gets or sets the lookback window size (number of historical time steps used as input).

@@ -145,12 +145,12 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// <summary>
     /// Pooling modes for each stack.
     /// </summary>
-    private string[] _poolingModes;
+    private NHiTSPoolingMode[] _poolingModes;
 
     /// <summary>
     /// Interpolation modes for each stack.
     /// </summary>
-    private string[] _interpolationModes;
+    private NHiTSInterpolationMode[] _interpolationModes;
 
     /// <summary>
     /// Dropout rate for regularization.

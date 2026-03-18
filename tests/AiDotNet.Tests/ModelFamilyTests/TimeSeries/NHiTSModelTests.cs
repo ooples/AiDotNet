@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 using AiDotNet.TimeSeries;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.ModelFamilyTests.Base;
@@ -17,8 +18,8 @@ public class NHiTSModelTests : TimeSeriesModelTestBase
             HiddenLayerSize = 16,
             NumHiddenLayers = 1,
             PoolingKernelSizes = new[] { 4, 1 },
-            PoolingModes = new[] { "MaxPool", "AvgPool" },
-            InterpolationModes = new[] { "Linear", "Linear" },
+            PoolingModes = new[] { NHiTSPoolingMode.MaxPool, NHiTSPoolingMode.AvgPool },
+            InterpolationModes = new[] { NHiTSInterpolationMode.Linear, NHiTSInterpolationMode.Linear },
             MaxTrainingTimeSeconds = 5
         });
 }
