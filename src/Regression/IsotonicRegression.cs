@@ -289,7 +289,10 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     protected override T PredictSingle(Vector<T> input)
     {
         var x = input[0]; // Isotonic regression typically works with 1D input
+        if (Alphas.Length == 0)
+            return NumOps.Zero;
         int index = FindNearestIndex(x);
+        index = Math.Max(0, Math.Min(index, Alphas.Length - 1));
         return Alphas[index];
     }
 
