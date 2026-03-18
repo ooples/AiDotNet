@@ -433,6 +433,7 @@ public class AdversarialRobustnessIntegrationTests
         }
 
         public int ParameterCount => _weights.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(
             Vector<double> parameters)

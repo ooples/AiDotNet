@@ -2103,6 +2103,7 @@ public class DistributedTrainingIntegrationTests
         }
 
         public int ParameterCount => _parameterCount;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 

@@ -63,7 +63,7 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
     {
         ApplyTimeSeriesOptions(options);
         _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
-        if (!double.IsFinite(_correlationThreshold) || _correlationThreshold < 0 || _correlationThreshold > 1)
+        if (double.IsNaN(_correlationThreshold) || double.IsInfinity(_correlationThreshold) || _correlationThreshold < 0 || _correlationThreshold > 1)
             throw new ArgumentException("CorrelationThreshold must be a finite value between 0 and 1.");
     }
 

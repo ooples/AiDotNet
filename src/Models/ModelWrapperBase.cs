@@ -73,6 +73,9 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     public virtual int ParameterCount => BaseModel.ParameterCount;
 
     /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
     public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);
 
     // --- ICloneable ---

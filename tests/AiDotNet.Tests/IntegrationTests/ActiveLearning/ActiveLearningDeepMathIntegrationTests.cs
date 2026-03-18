@@ -728,6 +728,7 @@ public class ActiveLearningDeepMathIntegrationTests
         public Vector<double> GetParameters() => _parameters;
         public void SetParameters(Vector<double> parameters) { }
         public int ParameterCount => _parameters.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> p) => this;
         public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
         public void SetActiveFeatureIndices(IEnumerable<int> indices) => _activeFeatures = indices.ToList();

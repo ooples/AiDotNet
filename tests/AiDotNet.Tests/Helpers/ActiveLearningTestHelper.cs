@@ -173,6 +173,7 @@ public class MockFullModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     }
 
     public int ParameterCount => _numParameters;
+    public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {

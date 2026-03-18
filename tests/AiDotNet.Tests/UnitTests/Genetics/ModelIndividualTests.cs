@@ -81,6 +81,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
                 get { return _parameters.Length; }
             }
 
+            public bool SupportsParameterInitialization => ParameterCount > 0;
+
             public IFullModel<double, double[], double[]> WithParameters(Vector<double> parameters)
             {
                 var newModel = new MockModel(_parameterCount);

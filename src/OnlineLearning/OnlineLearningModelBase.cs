@@ -86,6 +86,9 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// </summary>
     public virtual int ParameterCount => NumFeatures;
 
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <summary>
     /// Gets whether JIT compilation is supported.
     /// </summary>

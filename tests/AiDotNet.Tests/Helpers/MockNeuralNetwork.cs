@@ -200,6 +200,7 @@ public class MockNeuralNetwork : INeuralNetwork<double>
     }
 
     public int ParameterCount => _parameters.Length;
+    public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> parameters)
     {

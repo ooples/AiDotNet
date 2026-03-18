@@ -71,6 +71,9 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// </summary>
     public virtual int ParameterCount => NumFeatures;
 
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <summary>
     /// Gets whether JIT compilation is supported.
     /// </summary>

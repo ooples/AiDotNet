@@ -69,6 +69,7 @@ public class AdversarialTrainingTests
         public void SetParameters(Vector<double> parameters) { }
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters) => new MockClassificationModel(_numClasses, _inputDim);
         public int ParameterCount => _inputDim * _numClasses;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
         public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
         public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);

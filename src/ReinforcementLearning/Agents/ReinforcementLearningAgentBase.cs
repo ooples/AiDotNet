@@ -208,6 +208,9 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// </remarks>
     public abstract int ParameterCount { get; }
 
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <summary>
     /// Gets the number of input features (state dimensions).
     /// </summary>

@@ -1275,6 +1275,7 @@ public class PipelineParallelismIntegrationTests
         }
 
         public int ParameterCount => _parameterCount;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
         public bool SupportsJitCompilation => false;
 
@@ -1427,6 +1428,7 @@ public class PipelineParallelismIntegrationTests
         }
 
         public int ParameterCount => _parameterCount;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
         public bool SupportsJitCompilation => false;
 

@@ -100,6 +100,7 @@ public class FineTuningIntegrationTests
         public Vector<double> GetParameters() => _weights;
         public void SetParameters(Vector<double> parameters) { _weights = parameters; }
         public int ParameterCount => _weights.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public Vector<double> GetParameterGradients() => new Vector<double>(ParameterCount);
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters)
         {

@@ -95,6 +95,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc />
     public abstract int ParameterCount { get; }
 
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <inheritdoc />
     public ILossFunction<T> DefaultLossFunction => LossFunction;
 

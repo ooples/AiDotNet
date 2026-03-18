@@ -187,6 +187,9 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <inheritdoc />
     public virtual int ParameterCount => GetParameters().Length;
 
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <inheritdoc />
     public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 

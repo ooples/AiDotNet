@@ -311,6 +311,9 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     public virtual int ParameterCount
         => _parameterCountCache ??= _innerModel.GetParameters()?.Length ?? 0;
 
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))

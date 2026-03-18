@@ -345,6 +345,9 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         public int ParameterCount => _inner.ParameterCount;
 
         /// <inheritdoc/>
+        public bool SupportsParameterInitialization => ParameterCount > 0;
+
+        /// <inheritdoc/>
         public bool SupportsJitCompilation => _inner.SupportsJitCompilation;
 
         /// <inheritdoc/>

@@ -604,6 +604,9 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     public virtual int ParameterCount => ExpectedParameterCount;
 
     /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
     public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <inheritdoc/>

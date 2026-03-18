@@ -1640,6 +1640,7 @@ public class QuantizationIntegrationTests
         }
 
         public int ParameterCount => _parameters.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public IFullModel<T, T[], T[]> WithParameters(Vector<T> parameters)
         {

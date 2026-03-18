@@ -45,7 +45,11 @@ public interface IParameterizable<T, TInput, TOutput>
     /// property to decide whether to call <see cref="SetParameters"/> during random initialization.
     /// The default implementation returns <c>true</c> when <see cref="ParameterCount"/> is greater than zero.
     /// </remarks>
+#if NETFRAMEWORK
+    bool SupportsParameterInitialization { get; }
+#else
     bool SupportsParameterInitialization => ParameterCount > 0;
+#endif
 
     /// <summary>
     /// Creates a new instance with the specified parameters.

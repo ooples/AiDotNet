@@ -60,6 +60,7 @@ public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>
     }
 
     public int ParameterCount => _parameters.Length;
+    public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {

@@ -1015,6 +1015,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     }
 
     /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
         return new[] { SupportVectors.Columns };

@@ -2826,6 +2826,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
     }
 
+    /// <inheritdoc/>
+    public bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>

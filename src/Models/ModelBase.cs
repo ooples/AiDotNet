@@ -56,6 +56,9 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     public virtual int ParameterCount => GetParameters().Length;
 
     /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
     public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);
 
     // --- ICloneable ---

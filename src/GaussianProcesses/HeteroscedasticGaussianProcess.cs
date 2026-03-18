@@ -151,7 +151,7 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
         IKernelFunction<T> meanKernel,
         IKernelFunction<T>? noiseKernel = null,
         double noisePriorMean = -2.302585, // log(0.1)
-        double noisePriorVariance = 0.01,
+        double noisePriorVariance = 1.0,
         int maxIterations = 50,
         double tolerance = 1e-4,
         double jitter = 1e-6)

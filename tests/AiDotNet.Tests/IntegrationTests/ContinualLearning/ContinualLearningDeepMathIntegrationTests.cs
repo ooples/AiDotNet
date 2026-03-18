@@ -851,6 +851,7 @@ public class ContinualLearningDeepMathIntegrationTests
                 _parameters[i] = parameters[i];
         }
         public int ParameterCount => _parameters.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> p)
         {
             var m = new CLMockModel(p.Length);

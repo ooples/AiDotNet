@@ -747,6 +747,9 @@ namespace AiDotNet.AutoML
     /// </summary>
     public virtual int ParameterCount => BestModel?.ParameterCount ?? 0;
 
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <summary>
     /// Creates a new instance with the given parameters
     /// </summary>

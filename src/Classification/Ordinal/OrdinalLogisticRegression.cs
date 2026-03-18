@@ -124,9 +124,9 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     {
         if (maxIterations < 1)
             throw new ArgumentOutOfRangeException(nameof(maxIterations), "Must be >= 1.");
-        if (!double.IsFinite(tolerance) || tolerance <= 0)
+        if (double.IsNaN(tolerance) || double.IsInfinity(tolerance) || tolerance <= 0)
             throw new ArgumentOutOfRangeException(nameof(tolerance), "Must be a positive finite number.");
-        if (!double.IsFinite(regularization) || regularization < 0)
+        if (double.IsNaN(regularization) || double.IsInfinity(regularization) || regularization < 0)
             throw new ArgumentOutOfRangeException(nameof(regularization), "Must be a non-negative finite number.");
 
         _maxIterations = maxIterations;

@@ -73,7 +73,7 @@ public abstract class MetaClassifierBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    public bool SupportsParameterInitialization => false;
+    public override bool SupportsParameterInitialization => false;
 
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)

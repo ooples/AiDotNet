@@ -886,6 +886,9 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     }
 
     /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
     /// <remarks>
     /// <para>
     /// For regression models, the default loss function is Mean Squared Error (MSE), which measures

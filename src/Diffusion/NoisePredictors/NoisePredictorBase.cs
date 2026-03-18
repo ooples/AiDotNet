@@ -65,6 +65,9 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
     /// <inheritdoc />
     public abstract int ParameterCount { get; }
 
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <inheritdoc />
     public abstract bool SupportsCFG { get; }
 
