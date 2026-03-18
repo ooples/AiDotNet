@@ -80,6 +80,8 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// </summary>
     private Vector<T> _dualCoefficients;
     private T _yMean;
+    private Vector<T>? _linearCoefficients;
+    private T _linearIntercept;
 
     /// <summary>KRR doesn't benefit from optimizer parameter injection.</summary>
     public override int ParameterCount => 0;
@@ -133,6 +135,7 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         _gramMatrix = Matrix<T>.Empty();
         _dualCoefficients = Vector<T>.Empty();
         _yMean = NumOps.Zero;
+        _linearIntercept = NumOps.Zero;
     }
 
     /// <summary>
@@ -241,6 +244,22 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         // Store X as support vectors for prediction
         SupportVectors = X;
         Alphas = _dualCoefficients;
+
+        // Compute OLS coefficients on original (uncentered) data for extrapolation
+        var xWithBias = new Matrix<T>(n, X.Columns + 1);
+        for (int i = 0; i < n; i++)
+        {
+            xWithBias[i, 0] = NumOps.One; // bias
+            for (int j = 0; j < X.Columns; j++)
+                xWithBias[i, j + 1] = X[i, j];
+        }
+        var xbTxb = xWithBias.Transpose().Multiply(xWithBias);
+        var xbTy = xWithBias.Transpose().Multiply(y); // use original y, not centered
+        for (int i = 0; i < xbTxb.Rows; i++)
+            xbTxb[i, i] = NumOps.Add(xbTxb[i, i], NumOps.FromDouble(1e-10));
+        var olsSolution = MatrixSolutionHelper.SolveLinearSystem(xbTxb, xbTy, Options.DecompositionType);
+        _linearIntercept = olsSolution[0];
+        _linearCoefficients = olsSolution.Slice(1, X.Columns);
     }
 
     /// <summary>
@@ -275,13 +294,34 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
-        T result = _yMean; // Add back the y-mean for proper centering
+        // Kernel prediction (centered)
+        T kernelPred = NumOps.Zero;
+        double maxK = 0;
         for (int i = 0; i < SupportVectors.Rows; i++)
         {
             Vector<T> supportVector = SupportVectors.GetRow(i);
-            result = NumOps.Add(result, NumOps.Multiply(Alphas[i], KernelFunction(input, supportVector)));
+            T k = KernelFunction(input, supportVector);
+            double kd = NumOps.ToDouble(k);
+            if (kd > maxK) maxK = kd;
+            kernelPred = NumOps.Add(kernelPred, NumOps.Multiply(Alphas[i], k));
         }
-        return result;
+
+        // OLS linear prediction (uncentered — includes own intercept)
+        T linearPred = _linearIntercept;
+        if (_linearCoefficients is not null)
+        {
+            for (int j = 0; j < Math.Min(input.Length, _linearCoefficients.Length); j++)
+                linearPred = NumOps.Add(linearPred, NumOps.Multiply(input[j], _linearCoefficients[j]));
+        }
+
+        // Blend: maxK near 1.0 means interpolation (use kernel+yMean), near 0 means extrapolation (use OLS)
+        double kernelWeight = Math.Min(1.0, maxK);
+        T kernelResult = NumOps.Add(_yMean, kernelPred);
+        T blended = NumOps.Add(
+            NumOps.Multiply(NumOps.FromDouble(kernelWeight), kernelResult),
+            NumOps.Multiply(NumOps.FromDouble(1.0 - kernelWeight), linearPred));
+
+        return blended;
     }
 
     /// <summary>
@@ -504,6 +544,9 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         clone._gramMatrix = _gramMatrix.Rows > 0 ? _gramMatrix.Clone() : Matrix<T>.Empty();
         clone._dualCoefficients = _dualCoefficients.Length > 0 ? new Vector<T>(_dualCoefficients) : Vector<T>.Empty();
         clone._yMean = _yMean;
+        clone._linearIntercept = _linearIntercept;
+        if (_linearCoefficients is not null)
+            clone._linearCoefficients = new Vector<T>(_linearCoefficients);
         return clone;
     }
 

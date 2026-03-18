@@ -363,7 +363,8 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Matrix<T> ComputeRBFFeatures(Matrix<T> x)
     {
-        var rbfFeatures = new Matrix<T>(x.Rows, _centers.Rows + 1);
+        int p = x.Columns;
+        var rbfFeatures = new Matrix<T>(x.Rows, _centers.Rows + 1 + p);
 
         for (int i = 0; i < x.Rows; i++)
         {
@@ -396,15 +397,19 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Vector<T> ComputeRBFFeaturesSingle(Vector<T> x)
     {
-        var features = new Vector<T>(_centers.Rows + 1)
-        {
-            [0] = NumOps.One // Bias term
-        };
+        // Features: [1 (bias), x1, x2, ..., xp (linear), rbf1, rbf2, ..., rbfK]
+        int p = x.Length;
+        var features = new Vector<T>(_centers.Rows + 1 + p);
+        features[0] = NumOps.One; // Bias term
+
+        // Add linear features for extrapolation capability
+        for (int j = 0; j < p; j++)
+            features[1 + j] = x[j];
 
         for (int i = 0; i < _centers.Rows; i++)
         {
             T distance = VectorHelper.EuclideanDistance(x, _centers.GetRow(i));
-            features[i + 1] = RbfKernel(distance);
+            features[1 + p + i] = RbfKernel(distance);
         }
 
         return features;

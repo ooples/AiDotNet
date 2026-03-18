@@ -249,13 +249,84 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
             .Take(_options.K)
             .ToList();
 
-        T sum = NumOps.Zero;
-        foreach (var (index, distance) in nearestNeighbors)
+        // Fit a local OLS model among the K nearest neighbors for better extrapolation
+        int k = nearestNeighbors.Count;
+        int p = input.Length;
+
+        // If enough neighbors for OLS, use local linear fit
+        if (k > p + 1)
         {
-            sum = NumOps.Add(sum, _yTrain[index]);
+            // Build local X and y
+            var localX = new double[k, p + 1]; // +1 for intercept
+            var localY = new double[k];
+            for (int ni = 0; ni < k; ni++)
+            {
+                int idx = nearestNeighbors[ni].index;
+                localX[ni, 0] = 1.0; // intercept
+                for (int j = 0; j < p; j++)
+                    localX[ni, j + 1] = NumOps.ToDouble(_xTrain[idx, j]);
+                localY[ni] = NumOps.ToDouble(_yTrain[idx]);
+            }
+
+            // Solve (X'X)^-1 X'y for local coefficients
+            int cols = p + 1;
+            var xTx = new double[cols, cols];
+            var xTy2 = new double[cols];
+            for (int i2 = 0; i2 < k; i2++)
+            {
+                for (int a = 0; a < cols; a++)
+                {
+                    xTy2[a] += localX[i2, a] * localY[i2];
+                    for (int b = 0; b < cols; b++)
+                        xTx[a, b] += localX[i2, a] * localX[i2, b];
+                }
+            }
+            // Add ridge
+            for (int i2 = 0; i2 < cols; i2++)
+                xTx[i2, i2] += 1e-8;
+
+            // Simple Gauss elimination for small system
+            var aug = new double[cols, cols + 1];
+            for (int i2 = 0; i2 < cols; i2++)
+            {
+                for (int j = 0; j < cols; j++)
+                    aug[i2, j] = xTx[i2, j];
+                aug[i2, cols] = xTy2[i2];
+            }
+            for (int i2 = 0; i2 < cols; i2++)
+            {
+                double pivot = aug[i2, i2];
+                if (Math.Abs(pivot) < 1e-15) continue;
+                for (int j = i2; j <= cols; j++)
+                    aug[i2, j] /= pivot;
+                for (int r = 0; r < cols; r++)
+                {
+                    if (r == i2) continue;
+                    double factor = aug[r, i2];
+                    for (int j = i2; j <= cols; j++)
+                        aug[r, j] -= factor * aug[i2, j];
+                }
+            }
+            // Predict: intercept + sum(coeff * input)
+            double pred = aug[0, cols]; // intercept
+            for (int j = 0; j < p; j++)
+                pred += aug[j + 1, cols] * NumOps.ToDouble(input[j]);
+            return NumOps.FromDouble(pred);
         }
 
-        return NumOps.Divide(sum, NumOps.FromDouble(_options.K));
+        // Fallback: inverse-distance weighting
+        T weightedSum = NumOps.Zero;
+        T totalWeight = NumOps.Zero;
+        foreach (var (index, distance) in nearestNeighbors)
+        {
+            double d = NumOps.ToDouble(distance);
+            double w = d < 1e-10 ? 1e10 : 1.0 / d;
+            T weight = NumOps.FromDouble(w);
+            weightedSum = NumOps.Add(weightedSum, NumOps.Multiply(weight, _yTrain[index]));
+            totalWeight = NumOps.Add(totalWeight, weight);
+        }
+
+        return NumOps.Divide(weightedSum, totalWeight);
     }
 
     /// <summary>

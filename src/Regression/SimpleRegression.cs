@@ -129,49 +129,17 @@ public class SimpleRegression<T> : RegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
-        // Simple regression uses only the first feature column
-        if (x.Columns > 1)
-        {
-            TrainingFeatureCount = 1;
-            var singleCol = new Matrix<T>(x.Rows, 1);
-            for (int i = 0; i < x.Rows; i++)
-                singleCol[i, 0] = x[i, 0];
-            x = singleCol;
-        }
+        TrainingFeatureCount = x.Columns;
 
-        if (Options.UseIntercept)
-            x = x.AddConstantColumn(NumOps.One);
-
-        var xTx = x.Transpose().Multiply(x);
-        var regularizedXTx = xTx.Add(Regularization.Regularize(xTx));
-        var xTy = x.Transpose().Multiply(y);
-
-        var solution = SolveSystem(regularizedXTx, xTy);
-
-        if (Options.UseIntercept)
-        {
-            Intercept = solution[0];
-            Coefficients = new Vector<T>([solution[1]]);
-        }
-        else
-        {
-            Coefficients = new Vector<T>([solution[0]]);
-        }
-    }
-
-    /// <summary>
-    /// Predicts using only the first feature column for multi-feature inputs.
-    /// </summary>
-    public override Vector<T> Predict(Matrix<T> input)
-    {
-        if (input.Columns > 1)
-        {
-            var singleCol = new Matrix<T>(input.Rows, 1);
-            for (int i = 0; i < input.Rows; i++)
-                singleCol[i, 0] = input[i, 0];
-            return base.Predict(singleCol);
-        }
-        return base.Predict(input);
+        // Use OLS for all data (handles both single and multi-feature input)
+        var xWithInt = x.AddConstantColumn(NumOps.One);
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = SolveSystem(xTx, xTy);
+        Intercept = solution[0];
+        Coefficients = solution.Slice(1, x.Columns);
     }
 
     /// <summary>
