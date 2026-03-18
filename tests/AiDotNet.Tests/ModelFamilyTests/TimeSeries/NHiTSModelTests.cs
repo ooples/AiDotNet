@@ -15,6 +15,9 @@ public class NHiTSModelTests : TimeSeriesModelTestBase
             LookbackWindow = 20,
             ForecastHorizon = 5,
             HiddenLayerSize = 16,
-            NumHiddenLayers = 1
+            NumHiddenLayers = 1,
+            PoolingKernelSizes = new[] { 4, 1 },
+            PoolingModes = new[] { "MaxPool", "AvgPool" },
+            InterpolationModes = new[] { "Linear", "Linear" }
         });
 }
