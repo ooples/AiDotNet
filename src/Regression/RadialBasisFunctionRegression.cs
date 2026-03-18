@@ -137,8 +137,21 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// </summary>
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
-        return Enumerable.Range(0, SupportVectors.Columns > 0 ? SupportVectors.Columns : 0);
+        int numFeatures = _centers.Columns > 0 ? _centers.Columns : 0;
+        return Enumerable.Range(0, numFeatures);
     }
+
+    /// <summary>
+    /// Deep copy via serialization to preserve private _centers and _weights.
+    /// </summary>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new RadialBasisFunctionRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
