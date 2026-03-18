@@ -837,6 +837,11 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         SerializeTensor(writer, _finalLayerNormBeta);
         SerializeTensor(writer, _outputProjection);
         SerializeTensor(writer, _outputBias);
+
+        // Serialize training series (needed for Predict to work correctly)
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
@@ -888,6 +893,15 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         _finalLayerNormBeta = DeserializeTensor(reader);
         _outputProjection = DeserializeTensor(reader);
         _outputBias = DeserializeTensor(reader);
+
+        // Deserialize training series if present
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
 
         InitializeGradientAccumulators();
     }
