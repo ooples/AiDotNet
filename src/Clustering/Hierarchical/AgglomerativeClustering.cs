@@ -213,53 +213,15 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
             nextClusterId++;
         }
 
-        // Post-merge: collapse clusters with near-zero distance (degenerate data)
-        // This handles the case where data forms fewer natural clusters than requested.
-        bool merged = true;
-        while (merged && active.Count > 1)
-        {
-            merged = false;
-            var (mergeI, mergeJ, mergeDist) = FindClosestPair(distMatrix, active, clusterSizes, centroids, x.Columns);
-            // Merge clusters whose distance is < 1% of the data's overall spread
-            double dataSpread = 0;
-            foreach (var cId in active)
-            {
-                for (int d = 0; d < x.Columns; d++)
-                {
-                    double v = NumOps.ToDouble(centroids[cId, d]);
-                    dataSpread += v * v;
-                }
-            }
-            dataSpread = Math.Sqrt(dataSpread / Math.Max(1, active.Count));
-            double mergeThreshold = Math.Max(1e-6, dataSpread * 0.01);
-
-            if (mergeI >= 0 && mergeJ >= 0 && NumOps.LessThan(mergeDist, NumOps.FromDouble(mergeThreshold)))
-            {
-                int newSize = clusterSizes[mergeI] + clusterSizes[mergeJ];
-                _dendrogram.Add((mergeI, mergeJ, mergeDist, newSize));
-                T sizeI = NumOps.FromDouble(clusterSizes[mergeI]);
-                T sizeJ = NumOps.FromDouble(clusterSizes[mergeJ]);
-                T newSz = NumOps.FromDouble(newSize);
-                for (int d = 0; d < x.Columns; d++)
-                    centroids[nextClusterId, d] = NumOps.Divide(
-                        NumOps.Add(NumOps.Multiply(centroids[mergeI, d], sizeI),
-                                   NumOps.Multiply(centroids[mergeJ, d], sizeJ)), newSz);
-                clusterSizes[nextClusterId] = newSize;
-                UpdateDistanceMatrix(distMatrix, active, mergeI, mergeJ, nextClusterId, clusterSizes);
-                active.Remove(mergeI);
-                active.Remove(mergeJ);
-                active.Add(nextClusterId);
-                nextClusterId++;
-                merged = true;
-            }
-        }
-
         // Assign final cluster labels
         Labels = AssignLabels(n, active);
         NumClusters = active.Count;
 
         // Compute cluster centers
         ComputeClusterCenters(x);
+
+        // Merge degenerate clusters (handles single natural cluster split into K)
+        MergeDegenerateClusters(x);
 
         IsTrained = true;
     }

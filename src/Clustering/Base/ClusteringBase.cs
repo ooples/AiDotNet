@@ -629,4 +629,86 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     }
 
     #endregion
+
+    /// <summary>
+    /// Merges clusters whose centers are within a small distance of each other.
+    /// Call this after Train to handle degenerate data (e.g., single natural cluster
+    /// split into multiple by a fixed-K algorithm).
+    /// </summary>
+    /// <param name="x">The training data matrix.</param>
+    protected void MergeDegenerateClusters(Matrix<T> x)
+    {
+        if (Labels is null || ClusterCenters is null || NumClusters <= 1) return;
+
+        // Compute data spread for relative threshold
+        double dataSpread = 0;
+        for (int k = 0; k < ClusterCenters.Rows; k++)
+        {
+            for (int j = 0; j < ClusterCenters.Columns; j++)
+            {
+                double v = NumOps.ToDouble(ClusterCenters[k, j]);
+                dataSpread += v * v;
+            }
+        }
+        dataSpread = Math.Sqrt(dataSpread / Math.Max(1, ClusterCenters.Rows));
+        double mergeThreshold = Math.Max(1e-6, dataSpread * 0.01);
+
+        // Build merge map: for each cluster, find earliest equivalent cluster
+        var mergedId = Enumerable.Range(0, NumClusters).ToArray();
+        for (int a = 0; a < NumClusters; a++)
+        {
+            for (int b = a + 1; b < NumClusters; b++)
+            {
+                if (mergedId[b] != b) continue;
+                double dist = 0;
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                {
+                    double d = NumOps.ToDouble(ClusterCenters[a, j]) - NumOps.ToDouble(ClusterCenters[b, j]);
+                    dist += d * d;
+                }
+                if (Math.Sqrt(dist) < mergeThreshold)
+                    mergedId[b] = mergedId[a];
+            }
+        }
+
+        // Compact IDs and remap labels
+        var uniqueMerged = mergedId.Distinct().OrderBy(x2 => x2).ToList();
+        if (uniqueMerged.Count < NumClusters)
+        {
+            var compactMap = new Dictionary<int, int>();
+            for (int i = 0; i < uniqueMerged.Count; i++)
+                compactMap[uniqueMerged[i]] = i;
+
+            for (int i = 0; i < Labels.Length; i++)
+            {
+                int oldCluster = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+                if (oldCluster >= 0 && oldCluster < mergedId.Length)
+                    Labels[i] = NumOps.FromDouble(compactMap[mergedId[oldCluster]]);
+            }
+            NumClusters = uniqueMerged.Count;
+
+            // Recompute cluster centers
+            var newCenters = new Matrix<T>(NumClusters, x.Columns);
+            var counts = new int[NumClusters];
+            for (int i = 0; i < x.Rows; i++)
+            {
+                int c = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+                if (c >= 0 && c < NumClusters)
+                {
+                    for (int j = 0; j < x.Columns; j++)
+                        newCenters[c, j] = NumOps.Add(newCenters[c, j], x[i, j]);
+                    counts[c]++;
+                }
+            }
+            for (int c = 0; c < NumClusters; c++)
+            {
+                if (counts[c] > 0)
+                {
+                    for (int j = 0; j < x.Columns; j++)
+                        newCenters[c, j] = NumOps.Divide(newCenters[c, j], NumOps.FromDouble(counts[c]));
+                }
+            }
+            ClusterCenters = newCenters;
+        }
+    }
 }

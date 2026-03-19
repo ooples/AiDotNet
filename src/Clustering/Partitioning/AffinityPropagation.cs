@@ -233,7 +233,7 @@ public class AffinityPropagation<T> : ClusteringBase<T>
 
         // Set cluster centers as exemplar points
         ClusterCenters = new Matrix<T>(NumClusters, x.Columns);
-        for (int k = 0; k < NumClusters; k++)
+        for (int k = 0; k < Math.Min(NumClusters, _exemplarIndices.Length); k++)
         {
             int exemplarIdx = _exemplarIndices[k];
             for (int j = 0; j < x.Columns; j++)
@@ -241,6 +241,9 @@ public class AffinityPropagation<T> : ClusteringBase<T>
                 ClusterCenters[k, j] = x[exemplarIdx, j];
             }
         }
+
+        // Merge degenerate clusters (handles single natural cluster with many exemplars)
+        MergeDegenerateClusters(x);
 
         IsTrained = true;
     }
