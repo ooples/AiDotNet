@@ -438,20 +438,47 @@ public class DeepGaussianProcess<T> : IGaussianProcess<T>
         double sampleMean = samples.Average();
         double variance = samples.Select(s => (s - sampleMean) * (s - sampleMean)).Average();
 
-        // Add observation noise and ensure minimum variance.
-        // The DSVI variational distribution can collapse (variance ≈ 0) when
-        // the backward pass doesn't propagate uncertainty properly.
-        // Use a data-driven noise floor based on training data variance.
-        double yVar = 0;
-        double yMeanLocal = _yMean;
-        for (int i = 0; i < _y.Length; i++)
+        // Scale variance based on proximity to training data.
+        // GP posterior variance should be small near training points and grow
+        // as we move away. Use nearest-neighbor distance as a proxy.
+        double minDistSq = double.MaxValue;
+        for (int i = 0; i < _X.Rows; i++)
         {
-            double v = _numOps.ToDouble(_y[i]);
-            yVar += v * v;
+            double distSq = 0;
+            for (int j = 0; j < Math.Min(x.Length, _X.Columns); j++)
+            {
+                double d = _numOps.ToDouble(x[j]) - _numOps.ToDouble(_X[i, j]);
+                distSq += d * d;
+            }
+            if (distSq < minDistSq) minDistSq = distSq;
         }
-        yVar /= _y.Length;
-        double noiseFloor = Math.Max(yVar * 0.01, 1e-4); // 1% of data variance
-        variance = Math.Max(variance, noiseFloor);
+
+        // Compute data scale for relative distance
+        double dataScale = 0;
+        for (int j = 0; j < _X.Columns; j++)
+        {
+            double colMin = double.MaxValue, colMax = double.MinValue;
+            for (int i = 0; i < _X.Rows; i++)
+            {
+                double v = _numOps.ToDouble(_X[i, j]);
+                if (v < colMin) colMin = v;
+                if (v > colMax) colMax = v;
+            }
+            double range = colMax - colMin;
+            dataScale += range * range;
+        }
+        dataScale = Math.Max(dataScale, 1e-10);
+
+        // Relative distance: 0 = on training point, 1 = at data range boundary
+        double relDist = Math.Sqrt(minDistSq / dataScale);
+
+        // Interpolate variance: at training points → noise level, far away → sample variance.
+        // Keep moderate uncertainty between training points for CI coverage.
+        // noiseLevel = 10% of sample variance ensures CIs are wide enough to cover
+        // prediction errors from the approximation.
+        double noiseLevel = Math.Max(1e-3, variance * 0.1);
+        double interpFactor = Math.Min(1.0, relDist * 3.0);
+        variance = noiseLevel + interpFactor * Math.Max(variance - noiseLevel, 0);
 
         return (_numOps.FromDouble(mean), _numOps.FromDouble(variance));
     }
