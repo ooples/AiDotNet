@@ -698,11 +698,14 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         var lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
         Backpropagate(Tensor<T>.FromVector(lossGradient));
 
-        // Update parameters via Engine-accelerated layer updates
-        foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
-        {
-            layer.UpdateParameters(_learningRate);
-        }
+        // Use Adam optimizer for gradient-scaled parameter updates.
+        // Raw SGD (layer.UpdateParameters(T)) fails on deep ResNets because
+        // gradients vanish through many layers — Adam's adaptive learning rate handles this.
+        var paramGradients = GetParameterGradients();
+        var currentParams = GetParameters();
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var updatedParams = optimizer.UpdateParameters(currentParams, paramGradients);
+        UpdateParameters(updatedParams);
     }
 
     /// <summary>
