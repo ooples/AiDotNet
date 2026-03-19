@@ -277,6 +277,7 @@ public class CURE<T> : ClusteringBase<T>
         // Compute cluster centers
         ComputeClusterCenters(x);
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

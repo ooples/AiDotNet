@@ -226,6 +226,7 @@ public class CLARANS<T> : ClusteringBase<T>
             Labels[i] = NumOps.FromDouble(nearestMedoid);
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

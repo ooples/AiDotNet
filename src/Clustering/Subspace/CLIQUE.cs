@@ -229,6 +229,7 @@ public class CLIQUE<T> : ClusteringBase<T>
         // Compute cluster centers
         ComputeClusterCenters(x);
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

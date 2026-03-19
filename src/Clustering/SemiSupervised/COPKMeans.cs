@@ -234,6 +234,7 @@ public class COPKMeans<T> : ClusteringBase<T>
             Labels[i] = NumOps.FromDouble(labels[i]);
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

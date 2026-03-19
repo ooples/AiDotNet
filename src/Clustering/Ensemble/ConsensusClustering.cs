@@ -144,6 +144,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         // Compute cluster centers
         ComputeClusterCenters(x, finalLabels, n, d);
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
