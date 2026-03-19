@@ -239,6 +239,10 @@ public class CLIQUE<T> : ClusteringBase<T>
         ValidateIsTrained();
         ValidatePredictInput(x);
 
+        // Return stored labels for in-sample prediction (preserves merge results)
+        if (Labels is not null && x.Rows == Labels.Length)
+            return new Vector<T>(Labels);
+
         if (_subspaceClustersInternal is null || _subspaceClustersInternal.Count == 0)
         {
             var noise = new Vector<T>(x.Rows);

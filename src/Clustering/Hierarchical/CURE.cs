@@ -287,6 +287,10 @@ public class CURE<T> : ClusteringBase<T>
         ValidateIsTrained();
         ValidatePredictInput(x);
 
+        // Return stored labels for in-sample prediction (preserves merge results)
+        if (Labels is not null && x.Rows == Labels.Length)
+            return new Vector<T>(Labels);
+
         int n = x.Rows;
         int d = x.Columns;
         var labels = new Vector<T>(n);
