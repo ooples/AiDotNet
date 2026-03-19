@@ -311,7 +311,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                 var (br, bc) = FindBMU(sample2, d);
                 neuronIdx2 = br * width + bc;
                 int oldLabel = _neuronLabels[neuronIdx2];
-                int newLabel = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+                int newLabel = Labels is not null ? (int)Math.Round(NumOps.ToDouble(Labels[i])) : 0;
                 labelMap[oldLabel] = newLabel;
             }
 
@@ -586,6 +586,10 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     public override Vector<T> Predict(Matrix<T> x)
     {
         ValidateIsTrained();
+
+        // Return stored labels for in-sample prediction (preserves merge results)
+        if (Labels is not null && x.Rows == Labels.Length)
+            return new Vector<T>(Labels);
 
         int n = x.Rows;
         int d = NumFeatures;
