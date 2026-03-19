@@ -174,6 +174,11 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private DenseLayer<T>? _adaln_modulation;
 
+    // Lazy initialization state
+    private int _numClasses;
+    private List<DiTBlock>? _customBlocks;
+    private bool _layersInitialized;
+
     /// <summary>
     /// Position embeddings (learnable).
     /// </summary>
@@ -280,8 +285,21 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         _latentSpatialSize = latentSpatialSize;
 
         _blocks = new List<DiTBlock>();
+        _numClasses = numClasses;
+        _customBlocks = customBlocks;
+        // Defer heavy layer allocation to first use (lazy initialization)
+    }
 
-        InitializeLayers(architecture, numClasses, customBlocks);
+    /// <summary>
+    /// Ensures layers are initialized (lazy init on first use).
+    /// </summary>
+    private void EnsureLayersInitialized()
+    {
+        if (!_layersInitialized)
+        {
+            InitializeLayers(_architecture, _numClasses, _customBlocks);
+            _layersInitialized = true;
+        }
     }
 
     /// <summary>
@@ -420,6 +438,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        EnsureLayersInitialized();
         _lastInput = noisySample;
 
         // Get timestep embedding
@@ -942,6 +961,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureLayersInitialized();
         var allParams = new List<T>();
 
         // Collect from patch embed
@@ -994,6 +1014,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureLayersInitialized();
         int offset = 0;
 
         // Set patch embed
@@ -1049,6 +1070,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         get
         {
+            EnsureLayersInitialized();
             int count = 0;
 
             if (_patchEmbed != null) count += _patchEmbed.ParameterCount;

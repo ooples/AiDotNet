@@ -482,10 +482,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeWeights(Tensor<T> weights)
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (weights.Shape[0] * weights.Shape[1] * weights.Shape[2])));
-        for (int i = 0; i < weights.Length; i++)
+        double scale = Math.Sqrt(2.0 / (weights.Shape[0] * weights.Shape[1] * weights.Shape[2]));
+        var span = weights.AsWritableSpan();
+        for (int i = 0; i < span.Length; i++)
         {
-            weights[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            span[i] = NumOps.FromDouble((Random.NextDouble() - 0.5) * scale);
         }
     }
 

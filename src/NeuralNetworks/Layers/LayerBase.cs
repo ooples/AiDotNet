@@ -3278,4 +3278,56 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     }
 
     #endregion
+
+    #region Shared Weight Initialization
+
+    /// <summary>
+    /// Initializes a tensor with Xavier/Glorot uniform random values using direct span access.
+    /// Eliminates per-element tensor indexing overhead and combines scale multiplication
+    /// with random generation in a single pass.
+    /// </summary>
+    /// <param name="tensor">The tensor to initialize in-place.</param>
+    /// <param name="fanIn">Number of input units (for scale calculation).</param>
+    /// <param name="fanOut">Number of output units (for scale calculation).</param>
+    protected static void InitializeXavier(Tensor<T> tensor, int fanIn, int fanOut)
+    {
+        double scale = Math.Sqrt(6.0 / (fanIn + fanOut));
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var span = tensor.AsWritableSpan();
+        for (int i = 0; i < span.Length; i++)
+            span[i] = numOps.FromDouble((Random.NextDouble() * 2.0 - 1.0) * scale);
+    }
+
+    /// <summary>
+    /// Initializes a tensor with He/Kaiming uniform random values.
+    /// </summary>
+    protected static void InitializeKaiming(Tensor<T> tensor, int fanIn)
+    {
+        double scale = Math.Sqrt(2.0 / fanIn);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var span = tensor.AsWritableSpan();
+        for (int i = 0; i < span.Length; i++)
+            span[i] = numOps.FromDouble((Random.NextDouble() - 0.5) * scale);
+    }
+
+    /// <summary>
+    /// Initializes a tensor with uniform random values in [-scale, scale].
+    /// </summary>
+    protected static void InitializeUniform(Tensor<T> tensor, double scale)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var span = tensor.AsWritableSpan();
+        for (int i = 0; i < span.Length; i++)
+            span[i] = numOps.FromDouble((Random.NextDouble() - 0.5) * scale);
+    }
+
+    /// <summary>
+    /// Zeros all elements of a tensor using direct span access.
+    /// </summary>
+    protected static void InitializeZero(Tensor<T> tensor)
+    {
+        tensor.AsWritableSpan().Clear();
+    }
+
+    #endregion
 }

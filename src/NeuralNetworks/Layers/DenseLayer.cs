@@ -521,27 +521,23 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // === Vectorized Xavier/Glorot Initialization (Phase B: US-GPU-015) ===
-        // Initialize weights with random values scaled by Xavier initialization
-        // Initialize biases to zero using vectorized operation
+        // === High-Performance Xavier/Glorot Initialization ===
+        // Use Span-based direct memory access to avoid per-element bounds checking
+        // and minimize NumOps.FromDouble calls in the hot loop.
 
-        T scaleT = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputShape[0] + OutputShape[0])));
-        var scale = Convert.ToDouble(scaleT);
+        double scale = Math.Sqrt(2.0 / (InputShape[0] + OutputShape[0]));
+        double halfScale = scale / 2.0;
 
-        // Initialize weights (still requires loop for individual random values)
-        for (int i = 0; i < _weights.Shape[0]; i++)
+        // Direct span access eliminates tensor indexing overhead (bounds checks)
+        var weightSpan = _weights.AsWritableSpan();
+        for (int i = 0; i < weightSpan.Length; i++)
         {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                _weights[i, j] = NumOps.FromDouble(Random.NextDouble() * scale - scale / 2);
-            }
+            weightSpan[i] = NumOps.FromDouble(Random.NextDouble() * scale - halfScale);
         }
 
-        // Vectorized bias initialization - set all biases to zero at once
-        for (int i = 0; i < _biases.Shape[0]; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
+        // Zero biases via span (single pass, no per-element indexing)
+        var biasSpan = _biases.AsWritableSpan();
+        biasSpan.Clear();
     }
 
     /// <summary>

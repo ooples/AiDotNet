@@ -341,9 +341,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> InitializeTensor(int[] shape, T scale)
     {
         var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
+        double scaleD = NumOps.ToDouble(scale);
+        var span = tensor.AsWritableSpan();
+        for (int i = 0; i < span.Length; i++)
         {
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+            span[i] = NumOps.FromDouble((Random.NextDouble() - 0.5) * scaleD);
         }
 
         return tensor;

@@ -346,17 +346,17 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Initialize weights and biases (e.g., Xavier/Glorot initialization)
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_weights.Shape[0] + _weights.Shape[1])));
 
-        // Vectorized weight initialization using Engine operations
-        for (int i = 0; i < _weights.Shape[0]; i++)
+        // High-performance weight initialization using direct span access
+        double scaleD = NumOps.ToDouble(scale);
+        var weightSpan = _weights.AsWritableSpan();
+        for (int i = 0; i < weightSpan.Length; i++)
         {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                // Xavier/Glorot uniform: sample in [-scale, scale]
-                _weights[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() * 2.0 - 1.0), scale);
-            }
+            weightSpan[i] = NumOps.FromDouble((Random.NextDouble() * 2.0 - 1.0) * scaleD);
         }
 
-        // Initialize biases to zero
+        // Zero biases via span clear
+        _biases.AsWritableSpan().Clear();
+        // Ensure NumOps.Zero is set (Clear sets to default(T) which equals zero for numeric types)
         for (int i = 0; i < _biases.Shape[0]; i++)
         {
             _biases[i] = NumOps.Zero;
