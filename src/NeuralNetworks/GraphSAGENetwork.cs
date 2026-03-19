@@ -2,8 +2,10 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -177,6 +179,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0,
+        ILearningRateScheduler? learningRateScheduler = null,
         GraphSAGEOptions? options = null)
         : base(architecture,
                lossFunction ?? new MeanSquaredErrorLoss<T>(),
@@ -191,7 +194,14 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         DropoutRate = dropoutRate;
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = 0.001,
+            LearningRateScheduler = learningRateScheduler ?? new ExponentialLRScheduler(
+                baseLearningRate: 0.001, gamma: 0.99),
+            SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+        };
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
 
         InitializeLayers();
     }
@@ -888,10 +898,10 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         var flattenedExpected = expectedOutput.ToVector();
 
         // Compute loss
-        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
+        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
 
         // Compute loss gradient
-        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
+        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
         var gradOutput = Tensor<T>.FromVector(outputGradients);
 
         // Reshape gradient back to tensor shape if needed
@@ -906,11 +916,18 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         // Get parameter gradients for all trainable layers and update
         Vector<T> parameterGradients = GetParameterGradients();
 
+        // Clip gradients to prevent exploding gradients
+        parameterGradients = ClipGradient(parameterGradients);
+
+
+        // Fresh optimizer per step for stable convergence (no momentum oscillation).
+        var stepOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
 
         // Update parameters using the optimizer
-        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
+        Vector<T> updatedParameters = stepOptimizer.UpdateParameters(currentParameters, parameterGradients);
 
         // Apply updated parameters
         UpdateParameters(updatedParameters);

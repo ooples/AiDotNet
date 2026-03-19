@@ -3,7 +3,9 @@ using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -216,6 +218,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0,
+        ILearningRateScheduler? learningRateScheduler = null,
         GraphGenerationModelOptions? options = null)
         : base(CreateArchitecture(inputFeatures, hiddenDim, latentDim, numEncoderLayers),
                lossFunction ?? new BinaryCrossEntropyLoss<T>(),
@@ -232,7 +235,14 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         KLWeight = klWeight;
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = 0.001,
+            LearningRateScheduler = learningRateScheduler ?? new ExponentialLRScheduler(
+                baseLearningRate: 0.001, gamma: 0.99),
+            SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+        };
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
         _random = RandomHelper.CreateSeededRandom(42);
 
         // Initialize variational layer weights
@@ -992,11 +1002,14 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         // Collect all parameter gradients (encoder layers + variational weights)
         Vector<T> parameterGradients = GetParameterGradients();
 
+        // Fresh optimizer per step for stable convergence (no momentum oscillation).
+        var stepOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
 
         // Update all parameters using the optimizer
-        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
+        Vector<T> updatedParameters = stepOptimizer.UpdateParameters(currentParameters, parameterGradients);
 
         // Apply updated parameters (includes encoder layers + variational weights)
         UpdateParameters(updatedParameters);
