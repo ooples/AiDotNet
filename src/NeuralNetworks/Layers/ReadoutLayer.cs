@@ -160,9 +160,12 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// The layer starts with small random weights and zero biases that will be refined during training.
     /// </para>
     /// </remarks>
-    public ReadoutLayer(int inputSize, int outputSize, IActivationFunction<T> scalarActivation)
+    public ReadoutLayer(int inputSize, int outputSize, IActivationFunction<T> scalarActivation,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize], scalarActivation)
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         _weights = new Tensor<T>([outputSize, inputSize]);
         _bias = new Tensor<T>([outputSize]);
         _weightGradients = new Tensor<T>([outputSize, inputSize]);
@@ -202,9 +205,12 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// The layer starts with small random weights and zero biases that will be refined during training.
     /// </para>
     /// </remarks>
-    public ReadoutLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation)
+    public ReadoutLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize], vectorActivation)
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         _weights = new Tensor<T>([outputSize, inputSize]);
         _bias = new Tensor<T>([outputSize]);
         _weightGradients = new Tensor<T>([outputSize, inputSize]);
@@ -975,17 +981,8 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters(int inputSize, int outputSize)
     {
-        // Initialize weights with small random values centered around zero
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                _weights[i, j] = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.1);
-            }
-        }
-
-        // Initialize biases to zero
-        _bias.Fill(NumOps.Zero);
+        InitializeLayerWeights(_weights, outputSize, inputSize);
+        InitializeLayerBiases(_bias);
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

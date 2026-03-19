@@ -150,9 +150,12 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int mlpHiddenDim = -1,
         bool learnEpsilon = true,
         double epsilon = 0.0,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         _inputFeatures = inputFeatures;
         _outputFeatures = outputFeatures;
         _mlpHiddenDim = mlpHiddenDim > 0 ? mlpHiddenDim : outputFeatures;
@@ -186,15 +189,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     private void InitializeTensor(Tensor<T> tensor, int fanIn, int fanOut)
     {
-        // Xavier/Glorot initialization: fully vectorized
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
-        var halfTensor = new Tensor<T>(tensor.Shape);
-        Engine.TensorFill(halfTensor, NumOps.FromDouble(0.5));
-        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
-        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
-        // Copy result using vectorized operation
-        Engine.TensorCopy(scaled, tensor);
+        InitializeLayerWeights(tensor, fanIn, fanOut);
     }
 
     /// <inheritdoc/>

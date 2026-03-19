@@ -518,9 +518,11 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public SqueezeAndExcitationLayer(int channels, int reductionRatio,
         IActivationFunction<T>? firstActivation = null,
-        IActivationFunction<T>? secondActivation = null)
+        IActivationFunction<T>? secondActivation = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([[channels]], [channels])
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastChannelAttentionLoss = NumOps.Zero;
 
@@ -565,9 +567,11 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public SqueezeAndExcitationLayer(int channels, int reductionRatio,
         IVectorActivationFunction<T>? firstVectorActivation = null,
-        IVectorActivationFunction<T>? secondVectorActivation = null)
+        IVectorActivationFunction<T>? secondVectorActivation = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([[channels]], [channels])
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastChannelAttentionLoss = NumOps.Zero;
 
@@ -621,15 +625,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="scale">The scaling factor for the random values.</param>
     private void InitializeTensor2D(Tensor<T> tensor, T scale)
     {
-        int rows = tensor.Shape[0];
-        int cols = tensor.Shape[1];
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                tensor[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
-        }
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <summary>
@@ -639,11 +635,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="scale">The scaling factor for the random values.</param>
     private void InitializeTensor1D(Tensor<T> tensor, T scale)
     {
-        int length = tensor.Shape[0];
-        for (int i = 0; i < length; i++)
-        {
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
+        InitializeLayerBiases(tensor);
     }
 
     /// <summary>

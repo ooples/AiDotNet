@@ -109,9 +109,12 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         PNAAggregator[]? aggregators = null,
         PNAScaler[]? scalers = null,
         double avgDegree = 1.0,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         _inputFeatures = inputFeatures;
         _outputFeatures = outputFeatures;
 
@@ -171,25 +174,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
     private void InitializeTensor(Tensor<T> tensor, int fanIn, int fanOut)
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-
-        // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
-
-        // Shift to [-0.5, 0.5] range
-        var halfTensor = new Tensor<T>(tensor.Shape);
-        halfTensor.Fill(NumOps.FromDouble(0.5));
-        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
-
-        // Scale by the Xavier factor
-        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
-
-        // Copy to tensor using Engine operations
-        var result = Engine.TensorAdd(tensor, scaled);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = result.GetFlat(i);
-        }
+        InitializeLayerWeights(tensor, fanIn, fanOut);
     }
 
     /// <inheritdoc/>
