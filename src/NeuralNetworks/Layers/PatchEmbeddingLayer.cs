@@ -206,7 +206,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _projectionWeights = new Tensor<T>([patchDim, _embeddingDim]);
         _projectionBias = new Tensor<T>([_embeddingDim]);
 
-        _initStrategy = initializationStrategy;
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         InitializeParameters();
 
         // Register trainable parameters for GPU memory persistence
@@ -217,13 +217,11 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// Initializes the weights and biases of the layer using Xavier initialization.
     /// </summary>
-    private IInitializationStrategy<T>? _initStrategy;
-
     private void InitializeParameters()
     {
         int patchDim = _channels * _patchSize * _patchSize;
-        InitializeWeights(_projectionWeights, patchDim, _embeddingDim, _initStrategy);
-        InitializeBiases(_projectionBias);
+        InitializeLayerWeights(_projectionWeights, patchDim, _embeddingDim);
+        InitializeLayerBiases(_projectionBias);
     }
 
     /// <summary>

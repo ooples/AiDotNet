@@ -358,7 +358,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _transformActivation = transformActivation ?? new TanhActivation<T>();
         _gateActivation = gateActivation ?? new SigmoidActivation<T>();
-        _initStrategy = initializationStrategy;
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
 
         InitializeParameters();
 
@@ -439,14 +439,12 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// These initialization choices help the network train more effectively from the beginning.
     /// </para>
     /// </remarks>
-    private IInitializationStrategy<T>? _initStrategy;
-
     private void InitializeParameters()
     {
         int inputDimension = _transformWeights.Shape[0];
-        InitializeWeights(_transformWeights, inputDimension, inputDimension, _initStrategy);
-        InitializeWeights(_gateWeights, inputDimension, inputDimension, _initStrategy);
-        InitializeBiases(_transformBias);
+        InitializeLayerWeights(_transformWeights, inputDimension, inputDimension);
+        InitializeLayerWeights(_gateWeights, inputDimension, inputDimension);
+        InitializeLayerBiases(_transformBias);
 
         // Gate bias initialized to -1.0 (not zero) to allow information flow initially
         var gateBiasSpan = _gateBias.AsWritableSpan();

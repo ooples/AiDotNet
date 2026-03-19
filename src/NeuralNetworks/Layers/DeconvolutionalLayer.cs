@@ -464,8 +464,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        InitializeWeights(_kernels, InputDepth, OutputDepth);
-        InitializeBiases(_biases);
+        InitializeLayerWeights(_kernels, InputDepth, OutputDepth);
+        InitializeLayerBiases(_biases);
     }
 
     /// <summary>

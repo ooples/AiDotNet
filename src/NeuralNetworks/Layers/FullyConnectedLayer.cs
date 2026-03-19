@@ -342,8 +342,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        InitializeWeights(_weights, _weights.Shape[0], _weights.Shape[1]);
-        InitializeBiases(_biases);
+        InitializeLayerWeights(_weights, _weights.Shape[0], _weights.Shape[1]);
+        InitializeLayerBiases(_biases);
     }
 
     /// <summary>

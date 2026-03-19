@@ -521,9 +521,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Use shared high-performance initialization from LayerBase
-        InitializeWeights(_weights, InputShape[0], OutputShape[0]);
-        InitializeBiases(_biases);
+        InitializeLayerWeights(_weights, InputShape[0], OutputShape[0]);
+        InitializeLayerBiases(_biases);
     }
 
     /// <summary>

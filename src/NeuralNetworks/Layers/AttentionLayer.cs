@@ -270,14 +270,16 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _inputSize = inputSize;
         _attentionSize = attentionSize;
+        // Set strategy on base property — defaults to Xavier for attention layers
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         _Wq = new Tensor<T>(new[] { _attentionSize, _inputSize });
         _Wk = new Tensor<T>(new[] { _attentionSize, _inputSize });
         _Wv = new Tensor<T>(new[] { _attentionSize, _inputSize });
         _Wo = new Tensor<T>(new[] { _inputSize, _attentionSize });
-        InitializeWeights(_Wq, _inputSize, _attentionSize, initializationStrategy);
-        InitializeWeights(_Wk, _inputSize, _attentionSize, initializationStrategy);
-        InitializeWeights(_Wv, _inputSize, _attentionSize, initializationStrategy);
-        InitializeWeights(_Wo, _attentionSize, _inputSize, initializationStrategy);
+        InitializeLayerWeights(_Wq, _inputSize, _attentionSize);
+        InitializeLayerWeights(_Wk, _inputSize, _attentionSize);
+        InitializeLayerWeights(_Wv, _inputSize, _attentionSize);
+        InitializeLayerWeights(_Wo, _attentionSize, _inputSize);
 
         // Register trainable parameters for GPU memory optimization
         RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);

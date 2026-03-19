@@ -3290,30 +3290,31 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <param name="fanIn">Number of input units.</param>
     /// <param name="fanOut">Number of output units.</param>
     /// <param name="strategy">Optional strategy. If null, uses Xavier uniform (industry standard default).</param>
-    // Cached default strategies (singletons for performance)
-    private static readonly Lazy<IInitializationStrategy<T>> XavierDefault =
+    // Cached default strategy (Xavier/Glorot — industry standard for sigmoid/tanh)
+    private static readonly Lazy<IInitializationStrategy<T>> DefaultStrategy =
         new(() => new Initialization.EagerInitializationStrategy<T>());
-    private static readonly Lazy<IInitializationStrategy<T>> HeDefault =
-        new(() => new Initialization.HeInitializationStrategy<T>(useNormal: true));
 
     /// <summary>
-    /// Initializes weights using the provided strategy, or an industry-standard
-    /// default based on the layer type.
+    /// Initializes weights using this layer's <see cref="InitializationStrategy"/>,
+    /// falling back to Xavier/Glorot normal if none was set.
+    /// Layers should set <see cref="InitializationStrategy"/> in their constructor
+    /// to the appropriate default for their activation function.
     /// </summary>
-    protected static void InitializeWeights(Tensor<T> tensor, int fanIn, int fanOut,
-        IInitializationStrategy<T>? strategy = null)
+    protected void InitializeLayerWeights(Tensor<T> tensor, int fanIn, int fanOut)
     {
-        (strategy ?? XavierDefault.Value).InitializeWeights(tensor, fanIn, fanOut);
+        (InitializationStrategy ?? DefaultStrategy.Value).InitializeWeights(tensor, fanIn, fanOut);
     }
 
     /// <summary>
-    /// Initializes weights with a strategy appropriate for ReLU-family activations (He init).
-    /// Call this from layers that use ReLU, GELU, SiLU, etc.
+    /// Initializes biases using this layer's <see cref="InitializationStrategy"/>,
+    /// falling back to zero initialization if none was set.
     /// </summary>
-    protected static void InitializeWeightsForReLU(Tensor<T> tensor, int fanIn, int fanOut,
-        IInitializationStrategy<T>? strategy = null)
+    protected void InitializeLayerBiases(Tensor<T> tensor)
     {
-        (strategy ?? HeDefault.Value).InitializeWeights(tensor, fanIn, fanOut);
+        if (InitializationStrategy is not null)
+            InitializationStrategy.InitializeBiases(tensor);
+        else
+            tensor.AsWritableSpan().Clear();
     }
 
     /// <summary>
