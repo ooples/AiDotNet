@@ -1070,6 +1070,11 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         SerializeTensor(writer, _keyWeight);
         SerializeTensor(writer, _valueWeight);
         SerializeTensor(writer, _outputWeight);
+
+        // Training series for Clone
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
@@ -1098,6 +1103,16 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         _keyWeight = DeserializeTensor(reader);
         _valueWeight = DeserializeTensor(reader);
         _outputWeight = DeserializeTensor(reader);
+
+        // Training series
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            var numOps = MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = numOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)

@@ -763,6 +763,11 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         {
             layer.Serialize(writer, WriteTensor);
         }
+
+        // Write training series for Clone support
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     /// <summary>
@@ -847,6 +852,16 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         foreach (var layer in _decoderLayers)
         {
             layer.Deserialize(reader, ReadTensor);
+        }
+
+        // Deserialize training series if present
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            var numOps = MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = numOps.FromDouble(reader.ReadDouble());
         }
 
         // Initialize gradient accumulators

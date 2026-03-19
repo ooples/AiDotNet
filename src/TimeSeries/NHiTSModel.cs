@@ -404,6 +404,16 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
     public override T PredictSingle(Vector<T> input)
     {
+        // If input is shorter than lookback window, construct from training series tail
+        if (input.Length < _options.LookbackWindow && _trainingSeries.Length >= _options.LookbackWindow)
+        {
+            var lookback = new Vector<T>(_options.LookbackWindow);
+            int start = _trainingSeries.Length - _options.LookbackWindow;
+            for (int j = 0; j < _options.LookbackWindow; j++)
+                lookback[j] = _trainingSeries[start + j];
+            input = lookback;
+        }
+
         var forecast = ForecastHorizon(input);
         return forecast[0]; // Return first step
     }
@@ -508,6 +518,20 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
             return total;
         }
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new NHiTSModel<T>(_options);
+        clone._stacks.Clear();
+        clone._stacks.AddRange(_stacks);
+        if (_trainingSeries.Length > 0)
+            clone._trainingSeries = new Vector<T>(_trainingSeries);
+        if (ModelParameters is not null && ModelParameters.Length > 0)
+            clone.ModelParameters = new Vector<T>(ModelParameters);
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }
 
 /// <summary>
