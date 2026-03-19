@@ -280,6 +280,10 @@ public class BisectingKMeans<T> : ClusteringBase<T>
 
         // Compute final inertia
         Inertia = ComputeInertia(x, Labels, ClusterCenters);
+
+        // Merge degenerate clusters (single natural cluster split into K)
+        MergeDegenerateClusters(x);
+
         IsTrained = true;
     }
 
