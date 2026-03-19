@@ -464,17 +464,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Xavier/Glorot initialization
-        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputDepth + OutputDepth)));
-        for (int i = 0; i < _kernels.Length; i++)
-        {
-            _kernels[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
-
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
+        InitializeWeights(_kernels, InputDepth, OutputDepth);
+        InitializeBiases(_biases);
     }
 
     /// <summary>

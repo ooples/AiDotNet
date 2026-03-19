@@ -3282,49 +3282,36 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     #region Shared Weight Initialization
 
     /// <summary>
-    /// Initializes a tensor with Xavier/Glorot uniform random values using direct span access.
-    /// Eliminates per-element tensor indexing overhead and combines scale multiplication
-    /// with random generation in a single pass.
+    /// Initializes a weight tensor using the given strategy, or Xavier uniform by default.
+    /// Uses the IInitializationStrategy pattern for extensibility — users can provide
+    /// any custom strategy (He, LeCun, Orthogonal, etc.) via the layer constructor.
     /// </summary>
     /// <param name="tensor">The tensor to initialize in-place.</param>
-    /// <param name="fanIn">Number of input units (for scale calculation).</param>
-    /// <param name="fanOut">Number of output units (for scale calculation).</param>
-    protected static void InitializeXavier(Tensor<T> tensor, int fanIn, int fanOut)
+    /// <param name="fanIn">Number of input units.</param>
+    /// <param name="fanOut">Number of output units.</param>
+    /// <param name="strategy">Optional strategy. If null, uses Xavier uniform (industry standard default).</param>
+    protected static void InitializeWeights(Tensor<T> tensor, int fanIn, int fanOut,
+        IInitializationStrategy<T>? strategy = null)
     {
-        double scale = Math.Sqrt(6.0 / (fanIn + fanOut));
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var span = tensor.AsWritableSpan();
-        for (int i = 0; i < span.Length; i++)
-            span[i] = numOps.FromDouble((Random.NextDouble() * 2.0 - 1.0) * scale);
+        if (strategy is not null)
+        {
+            strategy.InitializeWeights(tensor, fanIn, fanOut);
+        }
+        else
+        {
+            // Default: Xavier/Glorot uniform via direct span (high performance)
+            double scale = Math.Sqrt(6.0 / (fanIn + fanOut));
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var span = tensor.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++)
+                span[i] = numOps.FromDouble((Random.NextDouble() * 2.0 - 1.0) * scale);
+        }
     }
 
     /// <summary>
-    /// Initializes a tensor with He/Kaiming uniform random values.
+    /// Initializes a bias tensor to zero using direct span access.
     /// </summary>
-    protected static void InitializeKaiming(Tensor<T> tensor, int fanIn)
-    {
-        double scale = Math.Sqrt(2.0 / fanIn);
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var span = tensor.AsWritableSpan();
-        for (int i = 0; i < span.Length; i++)
-            span[i] = numOps.FromDouble((Random.NextDouble() - 0.5) * scale);
-    }
-
-    /// <summary>
-    /// Initializes a tensor with uniform random values in [-scale, scale].
-    /// </summary>
-    protected static void InitializeUniform(Tensor<T> tensor, double scale)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var span = tensor.AsWritableSpan();
-        for (int i = 0; i < span.Length; i++)
-            span[i] = numOps.FromDouble((Random.NextDouble() - 0.5) * scale);
-    }
-
-    /// <summary>
-    /// Zeros all elements of a tensor using direct span access.
-    /// </summary>
-    protected static void InitializeZero(Tensor<T> tensor)
+    protected static void InitializeBiases(Tensor<T> tensor)
     {
         tensor.AsWritableSpan().Clear();
     }

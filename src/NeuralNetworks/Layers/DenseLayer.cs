@@ -521,23 +521,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // === High-Performance Xavier/Glorot Initialization ===
-        // Use Span-based direct memory access to avoid per-element bounds checking
-        // and minimize NumOps.FromDouble calls in the hot loop.
-
-        double scale = Math.Sqrt(2.0 / (InputShape[0] + OutputShape[0]));
-        double halfScale = scale / 2.0;
-
-        // Direct span access eliminates tensor indexing overhead (bounds checks)
-        var weightSpan = _weights.AsWritableSpan();
-        for (int i = 0; i < weightSpan.Length; i++)
-        {
-            weightSpan[i] = NumOps.FromDouble(Random.NextDouble() * scale - halfScale);
-        }
-
-        // Zero biases via span (single pass, no per-element indexing)
-        var biasSpan = _biases.AsWritableSpan();
-        biasSpan.Clear();
+        // Use shared high-performance initialization from LayerBase
+        InitializeWeights(_weights, InputShape[0], OutputShape[0]);
+        InitializeBiases(_biases);
     }
 
     /// <summary>

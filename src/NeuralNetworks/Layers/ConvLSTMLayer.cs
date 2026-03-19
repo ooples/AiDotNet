@@ -510,12 +510,9 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// most neural network architectures.
     /// </para>
     /// </remarks>
-    private void InitializeBiases(Tensor<T> biases)
+    private void InitializeBiasesToZero(Tensor<T> biases)
     {
-        for (int i = 0; i < biases.Length; i++)
-        {
-            biases[i] = NumOps.Zero;
-        }
+        InitializeBiases(biases);
     }
 
     /// <summary>

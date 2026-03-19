@@ -342,25 +342,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // === Vectorized Weight/Bias Initialization (Phase B: US-GPU-015) ===
-        // Initialize weights and biases (e.g., Xavier/Glorot initialization)
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_weights.Shape[0] + _weights.Shape[1])));
-
-        // High-performance weight initialization using direct span access
-        double scaleD = NumOps.ToDouble(scale);
-        var weightSpan = _weights.AsWritableSpan();
-        for (int i = 0; i < weightSpan.Length; i++)
-        {
-            weightSpan[i] = NumOps.FromDouble((Random.NextDouble() * 2.0 - 1.0) * scaleD);
-        }
-
-        // Zero biases via span clear
-        _biases.AsWritableSpan().Clear();
-        // Ensure NumOps.Zero is set (Clear sets to default(T) which equals zero for numeric types)
-        for (int i = 0; i < _biases.Shape[0]; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
+        InitializeWeights(_weights, _weights.Shape[0], _weights.Shape[1]);
+        InitializeBiases(_biases);
     }
 
     /// <summary>

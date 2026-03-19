@@ -161,11 +161,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     /// <param name="biases">The biases tensor to initialize.</param>
     protected void ZeroInitializeBiases(Tensor<T> biases)
     {
-        var zero = NumOps.Zero;
-        for (int i = 0; i < biases.Length; i++)
-        {
-            biases.Data.Span[i] = zero;
-        }
+        biases.AsWritableSpan().Clear();
     }
 
     /// <summary>
