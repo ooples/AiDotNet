@@ -4,6 +4,7 @@ using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
 using AiDotNet.JitCompiler.Memory;
 using AiDotNet.JitCompiler.Optimizations;
+using TensorPool = AiDotNet.JitCompiler.Memory.TensorPool;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.JitCompiler;
