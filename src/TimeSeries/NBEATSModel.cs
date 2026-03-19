@@ -262,6 +262,14 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
                     for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
                     {
+                        // Ensure residual matches lookback window length
+                        if (residual.Length != _options.LookbackWindow)
+                        {
+                            var padded = new Vector<T>(_options.LookbackWindow);
+                            for (int j = 0; j < Math.Min(residual.Length, _options.LookbackWindow); j++)
+                                padded[j] = residual[j];
+                            residual = padded;
+                        }
                         var inputTensor = new Tensor<T>(new[] { _options.LookbackWindow }, residual);
                         var outputTensor = _blocks[blockIdx].Forward(inputTensor);
 
