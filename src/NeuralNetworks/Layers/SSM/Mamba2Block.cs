@@ -231,12 +231,15 @@ public class Mamba2Block<T> : LayerBase<T>
         int expandFactor = 2,
         int convKernelSize = 4,
         int chunkSize = 64,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (modelDimension <= 0)
             throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
         if (stateDimension <= 0)
@@ -328,15 +331,7 @@ public class Mamba2Block<T> : LayerBase<T>
 
     private void InitializeTensor(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.Multiply(
-                NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <inheritdoc />

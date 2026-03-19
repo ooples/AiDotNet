@@ -176,12 +176,14 @@ public class ABCLayer<T> : LayerBase<T>
         int modelDimension = 256,
         int numSlots = 32,
         int numHeads = 4,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
         if (modelDimension <= 0)
@@ -230,19 +232,12 @@ public class ABCLayer<T> : LayerBase<T>
 
     private void InitializeTensor2D(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     private void InitializeSlotKeys()
     {
-        // Xavier-like initialization for slot key embeddings
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numSlots + _headDimension)));
-        for (int i = 0; i < _slotKeys.Length; i++)
-            _slotKeys[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(_slotKeys, _numSlots, _headDimension);
     }
 
     /// <inheritdoc />

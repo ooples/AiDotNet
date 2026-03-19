@@ -195,12 +195,15 @@ public class RWKV7Block<T> : LayerBase<T>
         int modelDimension = 256,
         int numHeads = 4,
         double ffnMultiplier = 3.5,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
         if (modelDimension <= 0)
@@ -296,11 +299,7 @@ public class RWKV7Block<T> : LayerBase<T>
 
     private void InitializeProjection(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <inheritdoc />
