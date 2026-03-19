@@ -935,8 +935,11 @@ public static class LayerHelper<T>
             }
         }
 
-        // Final output layer
-        yield return new DenseLayer<T>(currentSize, architecture.OutputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Final output layer — use softmax for classification, identity for regression
+        IActivationFunction<T> finalActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? new SoftmaxActivation<T>()
+            : new IdentityActivation<T>();
+        yield return new DenseLayer<T>(currentSize, architecture.OutputSize, finalActivation);
     }
 
     /// <summary>

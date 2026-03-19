@@ -694,7 +694,8 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
                 var batchY = expectedOutput.Slice(batchStart, 0, batchEnd, expectedOutput.Shape[1]);
 
                 // Reset gradients at the start of each batch
-                var totalGradient = new Tensor<T>([GetParameterCount()], Vector<T>.CreateDefault(GetParameterCount(), NumOps.Zero));
+                int paramCount = GetParameterCount();
+                var totalGradientVec = new Vector<T>(paramCount);
 
                 // Accumulate gradients for each example in the batch
                 for (int i = 0; i < actualBatchSize; i++)
@@ -702,13 +703,8 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
                     var x = batchX.GetRow(i);
                     var y = batchY.GetRow(i);
 
-                    // Convert input vector to tensor once before forward pass
-                    var xTensor = Tensor<T>.FromVector(x);
-
                     // Forward pass with memory to save intermediate states
-                    var prediction = ForwardWithMemory(xTensor);
-
-                    // Cache prediction vector to avoid repeated conversions
+                    var prediction = ForwardWithMemory(Tensor<T>.FromVector(x));
                     Vector<T> predictionVector = prediction.ToVector();
 
                     // Calculate main loss
@@ -717,43 +713,29 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
                     // Add auxiliary loss if enabled
                     if (UseAuxiliaryLoss)
                     {
-                        // Cache expected output for auxiliary classifiers
                         _lastExpectedOutput = y;
                         T auxLoss = ComputeAuxiliaryLoss();
-                        T weightedAuxLoss = NumOps.Multiply(AuxiliaryLossWeight, auxLoss);
-                        loss = NumOps.Add(loss, weightedAuxLoss);
+                        loss = NumOps.Add(loss, NumOps.Multiply(AuxiliaryLossWeight, auxLoss));
                     }
 
                     totalLoss = NumOps.Add(totalLoss, loss);
 
-                    // Calculate output gradients
-                    Vector<T> outputGradients = LossFunction.CalculateDerivative(predictionVector, y);
-
-                    // Convert output gradients to tensor once before backpropagation
-                    var outputGradientsTensor = Tensor<T>.FromVector(outputGradients);
-
                     // Backpropagate to compute gradients for all parameters
-                    Backpropagate(outputGradientsTensor);
+                    var outputGradients = LossFunction.CalculateDerivative(predictionVector, y);
+                    Backpropagate(Tensor<T>.FromVector(outputGradients));
 
-                    // Accumulate gradients - convert once before adding
+                    // Accumulate gradients using Engine-accelerated vector addition
                     var gradients = GetParameterGradients();
-                    var gradientsTensor = Tensor<T>.FromVector(gradients);
-                    totalGradient = totalGradient.Add(gradientsTensor);
+                    totalGradientVec = (Vector<T>)Engine.Add(totalGradientVec, gradients);
                 }
 
-                // Average the gradients across the batch
-                totalGradient = new Tensor<T>(totalGradient.Shape, totalGradient.ToVector().Divide(NumOps.FromDouble(actualBatchSize)));
-
-                // Update parameters with averaged gradients
+                // Average gradients and compute parameter update using Engine ops
+                var avgGradient = (Vector<T>)Engine.Divide(totalGradientVec,
+                    Vector<T>.CreateDefault(paramCount, NumOps.FromDouble(actualBatchSize)));
+                var scaledGradient = (Vector<T>)Engine.Multiply(avgGradient,
+                    Vector<T>.CreateDefault(paramCount, _learningRate));
                 var currentParams = GetParameters();
-                var updatedParams = new Vector<T>(currentParams.Length);
-                for (int j = 0; j < currentParams.Length; j++)
-                {
-                    updatedParams[j] = NumOps.Subtract(
-                        currentParams[j],
-                        NumOps.Multiply(_learningRate, totalGradient.ToVector()[j]));
-                }
-
+                var updatedParams = (Vector<T>)Engine.Subtract(currentParams, scaledGradient);
                 UpdateParameters(updatedParams);
             }
 

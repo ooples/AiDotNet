@@ -634,9 +634,24 @@ public class ResidualLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    public override int ParameterCount => _innerLayer?.ParameterCount ?? 0;
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        return _innerLayer?.GetParameterGradients() ?? new Vector<T>(0);
+    }
+
     public override Vector<T> GetParameters()
     {
         return _innerLayer?.GetParameters() ?? Vector<T>.Empty();
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _innerLayer?.SetParameters(parameters);
     }
 
     /// <summary>
