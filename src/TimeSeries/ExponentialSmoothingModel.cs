@@ -532,42 +532,30 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new Vector<T>(input.Rows);
-        T level = _initialValues[0];
-        T trend = EsOptions.UseTrend ? _initialValues[1] : NumOps.Zero;
-        Vector<T> seasonalFactors = Options.SeasonalPeriod > 0 ? new Vector<T>([.. _initialValues.Skip(2)]) : Vector<T>.Empty();
+        int steps = input.Rows;
+        Vector<T> predictions = new Vector<T>(steps);
 
-        for (int i = 0; i < predictions.Length; i++)
+        // Use trained state to forecast ahead
+        T level = _trainedLevel;
+        T trend = EsOptions.UseTrend ? _trainedTrend : NumOps.Zero;
+        Vector<T> seasonalFactors = _trainedSeasonalFactors.Length > 0
+            ? new Vector<T>(_trainedSeasonalFactors)
+            : Vector<T>.Empty();
+
+        for (int i = 0; i < steps; i++)
         {
             T prediction;
-            if (Options.SeasonalPeriod > 0)
+            if (seasonalFactors.Length > 0)
             {
-                prediction = NumOps.Multiply(NumOps.Add(level, trend), seasonalFactors[i % Options.SeasonalPeriod]);
+                prediction = NumOps.Multiply(NumOps.Add(level, NumOps.Multiply(trend, NumOps.FromDouble(i + 1))),
+                    seasonalFactors[i % seasonalFactors.Length]);
             }
             else
             {
-                prediction = NumOps.Add(level, trend);
+                prediction = NumOps.Add(level, NumOps.Multiply(trend, NumOps.FromDouble(i + 1)));
             }
 
             predictions[i] = prediction;
-
-            // Update level, trend, and seasonal factors
-            T oldLevel = level;
-            level = NumOps.Add(NumOps.Multiply(_alpha, prediction), NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend)));
-
-            if (EsOptions.UseTrend)
-            {
-                trend = NumOps.Add(NumOps.Multiply(_beta, NumOps.Subtract(level, oldLevel)), NumOps.Multiply(NumOps.Subtract(NumOps.One, _beta), trend));
-            }
-
-            if (Options.SeasonalPeriod > 0)
-            {
-                int seasonIndex = i % Options.SeasonalPeriod;
-                seasonalFactors[seasonIndex] = NumOps.Add(
-                    NumOps.Multiply(_gamma, NumOps.Divide(prediction, NumOps.Add(oldLevel, trend))),
-                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _gamma), seasonalFactors[seasonIndex])
-                );
-            }
         }
 
         return predictions;
