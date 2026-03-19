@@ -266,7 +266,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             double minDist = double.MaxValue;
             int nearest = 0;
 
-            for (int k = 0; k < _options.NumClusters; k++)
+            for (int k = 0; k < centers.Rows; k++)
             {
                 var center = GetRow(centers, k);
                 T dist = distanceMetric.Compute(point, center);
