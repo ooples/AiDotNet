@@ -205,16 +205,24 @@ public class SpectralClustering<T> : ClusteringBase<T>
             gammaValue = totalVar > 1e-10 ? 1.0 / totalVar : 1.0 / x.Columns;
         }
         T gamma = NumOps.FromDouble(gammaValue);
+        int d = x.Columns;
+
+        // Cache rows as arrays for allocation-free distance
+        var rowArrays = new T[n][];
+        for (int i = 0; i < n; i++)
+        {
+            rowArrays[i] = new T[d];
+            for (int c = 0; c < d; c++)
+                rowArrays[i][c] = x[i, c];
+        }
 
         for (int i = 0; i < n; i++)
         {
-            affinity[i, i] = NumOps.One; // Self-similarity
-            var pointI = GetRow(x, i);
+            affinity[i, i] = NumOps.One;
 
             for (int j = i + 1; j < n; j++)
             {
-                var pointJ = GetRow(x, j);
-                T dist = metric.Compute(pointI, pointJ);
+                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
                 T distSq = NumOps.Multiply(dist, dist);
 
                 T similarity = NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, distSq)));
@@ -237,16 +245,23 @@ public class SpectralClustering<T> : ClusteringBase<T>
             for (int j = 0; j < n; j++)
                 affinity[i, j] = NumOps.Zero;
 
-        // Compute all pairwise distances
+        // Compute all pairwise distances with allocation-free inline metric
+        int d2 = x.Columns;
+        var nnRowArrays = new T[n][];
+        for (int i = 0; i < n; i++)
+        {
+            nnRowArrays[i] = new T[d2];
+            for (int c = 0; c < d2; c++)
+                nnRowArrays[i][c] = x[i, c];
+        }
+
         var distances = new T[n, n];
         for (int i = 0; i < n; i++)
         {
-            var pointI = GetRow(x, i);
             distances[i, i] = NumOps.Zero;
             for (int j = i + 1; j < n; j++)
             {
-                var pointJ = GetRow(x, j);
-                T dist = metric.Compute(pointI, pointJ);
+                T dist = metric.ComputeInline(nnRowArrays[i], nnRowArrays[j], d2);
                 distances[i, j] = dist;
                 distances[j, i] = dist;
             }
@@ -595,10 +610,13 @@ public class SpectralClustering<T> : ClusteringBase<T>
 
         var labels = new Vector<T>(x.Rows);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        int dims = x.Columns;
+        var pointArr = new T[dims];
+        var centerArr = new T[dims];
 
         for (int i = 0; i < x.Rows; i++)
         {
-            var point = GetRow(x, i);
+            for (int j = 0; j < dims; j++) pointArr[j] = x[i, j];
             T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
@@ -606,8 +624,8 @@ public class SpectralClustering<T> : ClusteringBase<T>
             {
                 for (int k = 0; k < NumClusters; k++)
                 {
-                    var center = GetRow(ClusterCenters, k);
-                    T dist = metric.Compute(point, center);
+                    for (int j = 0; j < dims; j++) centerArr[j] = ClusterCenters[k, j];
+                    T dist = metric.ComputeInline(pointArr, centerArr, dims);
 
                     if (NumOps.LessThan(dist, minDist))
                     {

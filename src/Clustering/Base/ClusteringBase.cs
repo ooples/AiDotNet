@@ -169,7 +169,15 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     protected virtual T ComputeDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
-        return VectorHelper.EuclideanDistance(x.GetRow(sampleIndex), centers.GetRow(clusterIndex));
+        // Inline Euclidean distance to avoid Vector allocation in hot loops
+        int d = x.Columns;
+        T sumSq = NumOps.Zero;
+        for (int j = 0; j < d; j++)
+        {
+            T diff = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
+        }
+        return NumOps.Sqrt(sumSq);
     }
 
     /// <summary>
@@ -177,9 +185,14 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     protected T ComputeSquaredDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
-        var engine = AiDotNetEngine.Current;
-        var diff = engine.Subtract(x.GetRow(sampleIndex), centers.GetRow(clusterIndex));
-        return engine.DotProduct(diff, diff);
+        int d = x.Columns;
+        T sumSq = NumOps.Zero;
+        for (int j = 0; j < d; j++)
+        {
+            T diff = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
+        }
+        return sumSq;
     }
 
     /// <summary>
