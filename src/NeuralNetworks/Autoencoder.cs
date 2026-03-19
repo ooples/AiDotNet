@@ -731,6 +731,12 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Normalize to 2D [batch, features] if needed
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+        if (expectedOutput.Rank == 1)
+            expectedOutput = expectedOutput.Reshape([1, expectedOutput.Shape[0]]);
+
         // Basic validation
         if (input.Shape[1] != Layers[0].GetInputShape()[0])
         {
@@ -751,8 +757,20 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             for (int i = 0; i < input.Shape[0]; i += _batchSize)
             {
                 int currentBatchSize = Math.Min(_batchSize, input.Shape[0] - i);
-                var batchInput = input.Slice(0, i, 0, i + currentBatchSize);
-                var batchExpected = expectedOutput.Slice(0, i, 0, i + currentBatchSize);
+                Tensor<T> batchInput;
+                Tensor<T> batchExpected;
+                if (input.Shape[0] == 1 || currentBatchSize == input.Shape[0])
+                {
+                    // Single sample or full batch — use as-is
+                    batchInput = input;
+                    batchExpected = expectedOutput;
+                }
+                else
+                {
+                    // Mini-batch: slice rows [i, i+batchSize) across all features
+                    batchInput = input.Slice(i, 0, i + currentBatchSize, input.Shape[1]);
+                    batchExpected = expectedOutput.Slice(i, 0, i + currentBatchSize, expectedOutput.Shape[1]);
+                }
 
                 // Forward pass
                 var current = batchInput;
