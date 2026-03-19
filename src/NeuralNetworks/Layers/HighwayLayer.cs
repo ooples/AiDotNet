@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.Initialization;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -343,7 +344,8 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - Negative biases for the gates (initially favoring the transform path)
     /// </para>
     /// </remarks>
-    public HighwayLayer(int inputDimension, IActivationFunction<T>? transformActivation = null, IActivationFunction<T>? gateActivation = null)
+    public HighwayLayer(int inputDimension, IActivationFunction<T>? transformActivation = null, IActivationFunction<T>? gateActivation = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputDimension], [inputDimension], transformActivation ?? new TanhActivation<T>())
     {
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
@@ -356,6 +358,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _transformActivation = transformActivation ?? new TanhActivation<T>();
         _gateActivation = gateActivation ?? new SigmoidActivation<T>();
+        _initStrategy = initializationStrategy;
 
         InitializeParameters();
 
@@ -436,18 +439,19 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// These initialization choices help the network train more effectively from the beginning.
     /// </para>
     /// </remarks>
+    private IInitializationStrategy<T>? _initStrategy;
+
     private void InitializeParameters()
     {
         int inputDimension = _transformWeights.Shape[0];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (inputDimension + inputDimension)));
-        InitializeTensor(_transformWeights, scale);
-        InitializeTensor(_gateWeights, scale);
+        InitializeWeights(_transformWeights, inputDimension, inputDimension, _initStrategy);
+        InitializeWeights(_gateWeights, inputDimension, inputDimension, _initStrategy);
+        InitializeBiases(_transformBias);
 
-        for (int i = 0; i < _transformBias.Length; i++)
-        {
-            _transformBias[i] = NumOps.Zero;
-            _gateBias[i] = NumOps.FromDouble(-1.0); // Initialize gate bias to negative values to allow more information flow initially
-        }
+        // Gate bias initialized to -1.0 (not zero) to allow information flow initially
+        var gateBiasSpan = _gateBias.AsWritableSpan();
+        for (int i = 0; i < gateBiasSpan.Length; i++)
+            gateBiasSpan[i] = NumOps.FromDouble(-1.0);
     }
 
     /// <summary>
