@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Initialization;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -174,7 +175,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         int channels,
         int patchSize,
         int embeddingDim,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [channels, imageHeight, imageWidth],
             [(imageHeight / patchSize) * (imageWidth / patchSize), embeddingDim],
@@ -204,6 +206,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _projectionWeights = new Tensor<T>([patchDim, _embeddingDim]);
         _projectionBias = new Tensor<T>([_embeddingDim]);
 
+        _initStrategy = initializationStrategy;
         InitializeParameters();
 
         // Register trainable parameters for GPU memory persistence
@@ -214,23 +217,13 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// Initializes the weights and biases of the layer using Xavier initialization.
     /// </summary>
+    private IInitializationStrategy<T>? _initStrategy;
+
     private void InitializeParameters()
     {
         int patchDim = _channels * _patchSize * _patchSize;
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (patchDim + _embeddingDim)));
-
-        for (int i = 0; i < _projectionWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _projectionWeights.Shape[1]; j++)
-            {
-                _projectionWeights[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
-        }
-
-        for (int i = 0; i < _projectionBias.Shape[0]; i++)
-        {
-            _projectionBias[i] = NumOps.Zero;
-        }
+        InitializeWeights(_projectionWeights, patchDim, _embeddingDim, _initStrategy);
+        InitializeBiases(_projectionBias);
     }
 
     /// <summary>

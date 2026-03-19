@@ -3290,22 +3290,30 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <param name="fanIn">Number of input units.</param>
     /// <param name="fanOut">Number of output units.</param>
     /// <param name="strategy">Optional strategy. If null, uses Xavier uniform (industry standard default).</param>
+    // Cached default strategies (singletons for performance)
+    private static readonly Lazy<IInitializationStrategy<T>> XavierDefault =
+        new(() => new Initialization.EagerInitializationStrategy<T>());
+    private static readonly Lazy<IInitializationStrategy<T>> HeDefault =
+        new(() => new Initialization.HeInitializationStrategy<T>(useNormal: true));
+
+    /// <summary>
+    /// Initializes weights using the provided strategy, or an industry-standard
+    /// default based on the layer type.
+    /// </summary>
     protected static void InitializeWeights(Tensor<T> tensor, int fanIn, int fanOut,
         IInitializationStrategy<T>? strategy = null)
     {
-        if (strategy is not null)
-        {
-            strategy.InitializeWeights(tensor, fanIn, fanOut);
-        }
-        else
-        {
-            // Default: Xavier/Glorot uniform via direct span (high performance)
-            double scale = Math.Sqrt(6.0 / (fanIn + fanOut));
-            var numOps = MathHelper.GetNumericOperations<T>();
-            var span = tensor.AsWritableSpan();
-            for (int i = 0; i < span.Length; i++)
-                span[i] = numOps.FromDouble((Random.NextDouble() * 2.0 - 1.0) * scale);
-        }
+        (strategy ?? XavierDefault.Value).InitializeWeights(tensor, fanIn, fanOut);
+    }
+
+    /// <summary>
+    /// Initializes weights with a strategy appropriate for ReLU-family activations (He init).
+    /// Call this from layers that use ReLU, GELU, SiLU, etc.
+    /// </summary>
+    protected static void InitializeWeightsForReLU(Tensor<T> tensor, int fanIn, int fanOut,
+        IInitializationStrategy<T>? strategy = null)
+    {
+        (strategy ?? HeDefault.Value).InitializeWeights(tensor, fanIn, fanOut);
     }
 
     /// <summary>

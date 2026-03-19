@@ -2,6 +2,7 @@ using System.Linq;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Initialization;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -260,7 +261,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is useful when you want to treat each attention score separately.
     /// </para>
     /// </remarks>
-    public AttentionLayer(int inputSize, int attentionSize, IActivationFunction<T>? activation = null)
+    public AttentionLayer(int inputSize, int attentionSize, IActivationFunction<T>? activation = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [inputSize], activation ?? new SoftmaxActivation<T>()) // Output size = input size (with Wo projection)
     {
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
@@ -268,12 +270,14 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _inputSize = inputSize;
         _attentionSize = attentionSize;
-        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(1.0, _attentionSize)));
-        _Wq = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
-        _Wk = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
-        _Wv = InitializeTensor(new[] { _attentionSize, _inputSize }, scale);
-        // Output projection Wo: [inputSize, attentionSize] to project attention output back to input dimension
-        _Wo = InitializeTensor(new[] { _inputSize, _attentionSize }, scale);
+        _Wq = new Tensor<T>(new[] { _attentionSize, _inputSize });
+        _Wk = new Tensor<T>(new[] { _attentionSize, _inputSize });
+        _Wv = new Tensor<T>(new[] { _attentionSize, _inputSize });
+        _Wo = new Tensor<T>(new[] { _inputSize, _attentionSize });
+        InitializeWeights(_Wq, _inputSize, _attentionSize, initializationStrategy);
+        InitializeWeights(_Wk, _inputSize, _attentionSize, initializationStrategy);
+        InitializeWeights(_Wv, _inputSize, _attentionSize, initializationStrategy);
+        InitializeWeights(_Wo, _attentionSize, _inputSize, initializationStrategy);
 
         // Register trainable parameters for GPU memory optimization
         RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
