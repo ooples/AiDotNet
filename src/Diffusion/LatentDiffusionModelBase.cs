@@ -338,8 +338,48 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep)
     {
-        // Use noise predictor without conditioning
-        return NoisePredictor.PredictNoise(noisySample, timestep, null);
+        // Ensure the sample has proper 4D [B, C, H, W] shape for the UNet
+        var sample = EnsureLatentShape(noisySample);
+
+        var result = NoisePredictor.PredictNoise(sample, timestep, null);
+
+        // Reshape output back to match input shape if we reshaped the input
+        if (noisySample.Shape.Length < 4 && result.Shape.Length == 4)
+        {
+            return result.Reshape(noisySample.Shape);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Ensures a tensor has proper 4D latent shape [B, C, H, W] for UNet processing.
+    /// Flat or 2D tensors are reshaped to [1, C, H, W] where H*W*C matches the total elements.
+    /// </summary>
+    private Tensor<T> EnsureLatentShape(Tensor<T> tensor)
+    {
+        if (tensor.Shape.Length >= 4)
+            return tensor;
+
+        int totalElements = tensor.Length;
+        int c = LatentChannels;
+
+        // Try to determine spatial dimensions from total elements
+        int spatialElements = totalElements / c;
+        if (spatialElements <= 0 || totalElements % c != 0)
+        {
+            // Can't reshape cleanly — just return as-is and let it fail with a clear error
+            return tensor;
+        }
+
+        int spatialSide = (int)Math.Sqrt(spatialElements);
+        if (spatialSide * spatialSide != spatialElements)
+        {
+            // Non-square spatial — use 1D spatial
+            return tensor.Reshape(1, c, 1, spatialElements);
+        }
+
+        return tensor.Reshape(1, c, spatialSide, spatialSide);
     }
 
     /// <inheritdoc />

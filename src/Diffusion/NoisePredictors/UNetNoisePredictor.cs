@@ -401,11 +401,11 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             var outChannels = _baseChannels * _channelMultipliers[level];
             var useAttention = Array.IndexOf(_attentionResolutions, level) >= 0;
 
-            for (int block = 0; block <= _numResBlocks; block++)
+            // Each level has _numResBlocks decoder blocks that consume skip connections
+            // from the matching encoder level (same spatial resolution)
+            for (int block = 0; block < _numResBlocks; block++)
             {
-                var skipChannels = block == 0 && level < _channelMultipliers.Length - 1
-                    ? _baseChannels * _channelMultipliers[level + 1]
-                    : outChannels;
+                var skipChannels = outChannels;
 
                 _decoderBlocks.Add(new UNetBlock
                 {
