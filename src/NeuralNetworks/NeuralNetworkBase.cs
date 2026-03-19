@@ -2223,6 +2223,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (SupportsTraining)
         {
             IsTrainingMode = isTraining;
+
+            // Propagate training mode to ALL layers so they cache state for backpropagation
+            foreach (var layer in Layers)
+            {
+                layer.SetTrainingMode(isTraining);
+            }
         }
     }
 
