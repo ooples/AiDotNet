@@ -202,11 +202,23 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
             // Predict the noise
             var noisePrediction = PredictNoise(sampleTensor, timestep);
+            var noisePredVec = noisePrediction.ToVector();
+
+            // Ensure noise prediction matches sample length (some predictors
+            // may output different dimensions than input)
+            if (noisePredVec.Length != sample.Length)
+            {
+                var resized = new Vector<T>(sample.Length);
+                int copyLen = Math.Min(noisePredVec.Length, sample.Length);
+                for (int idx = 0; idx < copyLen; idx++)
+                    resized[idx] = noisePredVec[idx];
+                noisePredVec = resized;
+            }
 
             // Perform one denoising step
             // eta=0 for deterministic generation
             sample = _scheduler.Step(
-                noisePrediction.ToVector(),
+                noisePredVec,
                 timestep,
                 sample,
                 NumOps.Zero);
