@@ -54,6 +54,9 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     private readonly GRUOptions _options;
 
     /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     /// <summary>
@@ -208,9 +211,15 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        var current = input;
+        // Reset recurrent layer state for deterministic inference.
+        // GRU layers carry hidden state across calls — must reset for reproducibility.
+        foreach (var layer in Layers)
+        {
+            layer.ResetState();
+            layer.SetTrainingMode(false);
+        }
 
-        // Forward pass through all layers
+        var current = input;
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
@@ -242,34 +251,44 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// through time (across the sequence), but this complexity is handled internally.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Persistent Adam optimizer for stable convergence across Train() calls.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Set network to training mode
         SetTrainingMode(true);
 
-        // Forward pass with memory
-        var predictions = ForwardWithMemory(input);
-
-        // Calculate error/loss
-        var outputGradients = predictions.Subtract(expectedOutput);
-
-        // Backpropagate error
-        Backpropagate(outputGradients);
-
-        // Calculate learning rate - could be more sophisticated in production
-        T learningRate = NumOps.FromDouble(0.001);
-
-        // Update parameters based on gradients
+        // Propagate training mode to all layers for proper state caching
         foreach (var layer in Layers)
         {
-            if (layer.SupportsTraining)
-            {
-                layer.UpdateParameters(learningRate);
-            }
+            layer.SetTrainingMode(true);
         }
 
-        // Calculate and store the loss using the loss function
-        LastLoss = LossFunction.CalculateLoss(predictions.ToVector(), expectedOutput.ToVector());
+        // Single forward/backward pass
+        var output = ForwardWithMemory(input);
+        var outputVector = output.ToVector();
+        var expectedVector = expectedOutput.ToVector();
+
+        // Compute loss
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
+
+        // Backward pass using proper loss gradient, reshaped to match forward output
+        var lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
+        var gradTensor = Tensor<T>.FromVector(lossGradient);
+        if (gradTensor.Rank < output.Rank)
+        {
+            gradTensor = gradTensor.Reshape(output.Shape);
+        }
+        Backpropagate(gradTensor);
+
+        // Persistent Adam optimizer handles vanishing gradients in deep RNNs
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGradients = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGradients);
+        UpdateParameters(updatedParams);
 
         // Set network back to inference mode
         SetTrainingMode(false);
