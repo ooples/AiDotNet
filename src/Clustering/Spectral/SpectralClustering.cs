@@ -399,10 +399,21 @@ public class SpectralClustering<T> : ClusteringBase<T>
                 v[j] = NumOps.Divide(v[j], norm);
             }
 
-            // Power iteration
+            // Shifted power iteration: use (σI - L) to find smallest eigenvalues
+            // as largest eigenvalues of the shifted matrix.
+            // σ = trace(L)/n + 1 is a safe upper bound for Laplacian eigenvalues.
+            double sigma = 0;
+            for (int j = 0; j < n; j++)
+                sigma += NumOps.ToDouble(laplacian[j, j]);
+            sigma = sigma / n + 1.0;
+
             for (int iter = 0; iter < 100; iter++)
             {
-                var newV = MultiplyMatrixVector(laplacian, v, n);
+                // Compute (σI - L) * v instead of L * v
+                var lv = MultiplyMatrixVector(laplacian, v, n);
+                var newV = new T[n];
+                for (int j = 0; j < n; j++)
+                    newV[j] = NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(sigma), v[j]), lv[j]);
 
                 // Orthogonalize against previous eigenvectors
                 for (int prev = 0; prev < vec; prev++)
