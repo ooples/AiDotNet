@@ -6,6 +6,10 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
 public class NeuralNetworkTests : NeuralNetworkModelTestBase
 {
+    // NeuralNetwork default: inputSize=128, outputSize=1
+    protected override int[] InputShape => [128];
+    protected override int[] OutputShape => [1];
+
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new NeuralNetwork<double>();
 }
