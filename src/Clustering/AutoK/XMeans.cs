@@ -123,6 +123,7 @@ public class XMeans<T> : ClusteringBase<T>
         kmeans.Train(x);
         var currentLabels = kmeans.Labels ?? new Vector<T>(n);
         var currentCenters = kmeans.ClusterCenters ?? new Matrix<T>(currentK, d);
+        currentK = currentCenters.Rows; // Sync with actual K after potential degenerate merge
 
         // Iteratively try to split clusters
         bool improved = true;
@@ -388,6 +389,10 @@ public class XMeans<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
+        // Return stored labels for in-sample prediction
+        if (Labels is not null && x.Rows == Labels.Length)
+            return new Vector<T>(Labels);
+
         var labels = new Vector<T>(x.Rows);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
@@ -399,7 +404,7 @@ public class XMeans<T> : ClusteringBase<T>
 
             if (ClusterCenters is not null)
             {
-                for (int c = 0; c < NumClusters; c++)
+                for (int c = 0; c < Math.Min(NumClusters, ClusterCenters.Rows); c++)
                 {
                     var center = GetRow(ClusterCenters, c);
                     T dist = metric.Compute(point, center);
