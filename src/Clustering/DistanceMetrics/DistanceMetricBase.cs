@@ -38,6 +38,23 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
     public abstract T Compute(Vector<T> a, Vector<T> b);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Default implementation uses Euclidean distance inline.
+    /// Override in subclasses for Manhattan, Cosine, etc.
+    /// </remarks>
+    public virtual T ComputeInline(T[] a, T[] b, int length)
+    {
+        // Default: Euclidean distance without any Vector allocation
+        T sumSq = NumOps.Zero;
+        for (int i = 0; i < length; i++)
+        {
+            T diff = NumOps.Subtract(a[i], b[i]);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
+        }
+        return NumOps.Sqrt(sumSq);
+    }
+
+    /// <inheritdoc />
     public virtual Vector<T> ComputeToAll(Vector<T> point, Matrix<T> data)
     {
         if (point.Length != data.Columns)

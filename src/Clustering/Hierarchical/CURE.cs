@@ -404,16 +404,8 @@ public class CURE<T> : ClusteringBase<T>
 
     private T ComputeDistance(T[] a, T[] b)
     {
-        // Inline distance computation to avoid Vector allocations in hot loop.
-        // The IDistanceMetric interface requires Vector<T> args which forces allocation;
-        // for the inner clustering loop we compute Euclidean directly.
-        T sumSq = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.Sqrt(sumSq);
+        // Use allocation-free ComputeInline from the user's chosen distance metric
+        return _distanceMetric.ComputeInline(a, b, a.Length);
     }
 
     private CureCluster MergeClusters(CureCluster c1, CureCluster c2, Matrix<T> data)

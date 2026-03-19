@@ -229,24 +229,29 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
     private T[,] ComputeDistanceMatrix(Matrix<T> x)
     {
         int n = x.Rows;
+        int d = x.Columns;
         var distMatrix = new T[2 * n - 1, 2 * n - 1];
+        bool useWard = _options.Linkage == LinkageMethod.Ward;
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+
+        // Cache rows as arrays for allocation-free ComputeInline
+        var rowArrays = new T[n][];
+        for (int i = 0; i < n; i++)
+        {
+            rowArrays[i] = new T[d];
+            for (int k = 0; k < d; k++)
+                rowArrays[i][k] = x[i, k];
+        }
 
         for (int i = 0; i < n; i++)
         {
-            var rowI = GetRow(x, i);
             distMatrix[i, i] = NumOps.Zero;
 
             for (int j = i + 1; j < n; j++)
             {
-                var rowJ = GetRow(x, j);
-                T dist = metric.Compute(rowI, rowJ);
-
-                // For Ward's method, use squared distance
-                if (_options.Linkage == LinkageMethod.Ward)
-                {
+                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
+                if (useWard)
                     dist = NumOps.Multiply(dist, dist);
-                }
 
                 distMatrix[i, j] = dist;
                 distMatrix[j, i] = dist;

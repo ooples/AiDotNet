@@ -50,6 +50,17 @@ public interface IDistanceMetric<T>
     T Compute(Vector<T> a, Vector<T> b);
 
     /// <summary>
+    /// Computes the distance between two raw arrays without allocating Vector objects.
+    /// This is the hot-path method for clustering algorithms that compute millions
+    /// of pairwise distances.
+    /// </summary>
+    /// <param name="a">The first point as a raw array.</param>
+    /// <param name="b">The second point as a raw array.</param>
+    /// <param name="length">The number of dimensions to consider.</param>
+    /// <returns>The computed distance.</returns>
+    T ComputeInline(T[] a, T[] b, int length);
+
+    /// <summary>
     /// Computes distances from a single point to all rows in a matrix.
     /// </summary>
     /// <param name="point">The reference point.</param>

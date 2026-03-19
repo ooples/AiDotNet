@@ -205,12 +205,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     protected Vector<T> GetRow(Matrix<T> matrix, int rowIndex)
     {
-        var row = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            row[j] = matrix[rowIndex, j];
-        }
-        return row;
+        return matrix.GetRow(rowIndex);
     }
 
     /// <summary>
