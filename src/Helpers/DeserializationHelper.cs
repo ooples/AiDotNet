@@ -496,6 +496,20 @@ public static class DeserializationHelper
         {
             instance = CreateLSTMLayer<T>(type, inputShape, outputShape, additionalParams);
         }
+        else if (genericDef == typeof(ResidualLayer<>))
+        {
+            // ResidualLayer wraps an inner DenseLayer. Reconstruct inner layer from metadata.
+            int innerInputSize = TryGetInt(additionalParams, "InnerInputSize") ?? inputShape[0];
+            int innerOutputSize = TryGetInt(additionalParams, "InnerOutputSize") ?? inputShape[0];
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            var innerLayer = new DenseLayer<T>(innerInputSize, innerOutputSize, innerActivation as IActivationFunction<T>);
+
+            // Create ResidualLayer directly to avoid constructor ambiguity
+            object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = new ResidualLayer<T>(inputShape, innerLayer, residualActivation as IActivationFunction<T>);
+        }
         else if (openGenericType.FullName != null && openGenericType.FullName.Contains("MambaBlock"))
         {
             // MambaBlock(int sequenceLength, int modelDimension, int stateDimension, int expandFactor, int convKernelSize, int dtRank)
