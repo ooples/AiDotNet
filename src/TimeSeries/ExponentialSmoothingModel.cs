@@ -174,6 +174,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// The seasonal factors at the end of training, used as the starting point for forecasting.
     /// </summary>
     private Vector<T> _trainedSeasonalFactors;
+    private Vector<T> _fittedValues = Vector<T>.Empty();
 
     /// <summary>
     /// The number of observations seen during training, used to correctly align
@@ -533,9 +534,13 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         int steps = input.Rows;
-        Vector<T> predictions = new Vector<T>(steps);
 
-        // Use trained state to forecast ahead
+        // If requesting same number of steps as training data, return fitted values
+        if (_fittedValues.Length > 0 && steps == _fittedValues.Length)
+            return new Vector<T>(_fittedValues);
+
+        // Otherwise forecast ahead from trained state
+        Vector<T> predictions = new Vector<T>(steps);
         T level = _trainedLevel;
         T trend = EsOptions.UseTrend ? _trainedTrend : NumOps.Zero;
         Vector<T> seasonalFactors = _trainedSeasonalFactors.Length > 0
@@ -546,15 +551,10 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         {
             T prediction;
             if (seasonalFactors.Length > 0)
-            {
                 prediction = NumOps.Multiply(NumOps.Add(level, NumOps.Multiply(trend, NumOps.FromDouble(i + 1))),
                     seasonalFactors[i % seasonalFactors.Length]);
-            }
             else
-            {
                 prediction = NumOps.Add(level, NumOps.Multiply(trend, NumOps.FromDouble(i + 1)));
-            }
-
             predictions[i] = prediction;
         }
 
@@ -654,6 +654,11 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
             writer.Write(Convert.ToDouble(value));
         }
         writer.Write(_trainingLength);
+
+        // Fitted values for in-sample prediction via Clone
+        writer.Write(_fittedValues.Length);
+        for (int i = 0; i < _fittedValues.Length; i++)
+            writer.Write(Convert.ToDouble(_fittedValues[i]));
     }
 
     /// <summary>
@@ -716,6 +721,15 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
                 _trainedSeasonalFactors[i] = NumOps.FromDouble(reader.ReadDouble());
             }
             _trainingLength = reader.ReadInt32();
+
+            // Fitted values
+            if (reader.BaseStream.Position < reader.BaseStream.Length)
+            {
+                int fittedLen = reader.ReadInt32();
+                _fittedValues = new Vector<T>(fittedLen);
+                for (int i = 0; i < fittedLen; i++)
+                    _fittedValues[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
         }
         else
         {
@@ -939,8 +953,19 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
             ? new Vector<T>([.. _initialValues.Skip(2)])
             : Vector<T>.Empty();
 
+        // Store one-step-ahead fitted values during training replay
+        _fittedValues = new Vector<T>(y.Length);
+
         for (int i = 0; i < y.Length; i++)
         {
+            // Compute one-step-ahead prediction BEFORE observing y[i]
+            T fitted;
+            if (seasonalFactors.Length > 0)
+                fitted = NumOps.Multiply(NumOps.Add(level, trend), seasonalFactors[i % seasonalFactors.Length]);
+            else
+                fitted = NumOps.Add(level, trend);
+            _fittedValues[i] = fitted;
+
             T observation = y[i];
             T oldLevel = level;
 
