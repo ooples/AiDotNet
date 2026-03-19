@@ -352,22 +352,19 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void UpdateOutputLayerWeights(Matrix<T> outputWeights)
     {
-        // Get the last layer (output layer)
-        var outputLayer = Layers[Layers.Count - 1];
+        // Get the output DenseLayer (skip trailing ActivationLayer if present)
+        var outputLayer = Layers[Layers.Count - 1].ParameterCount > 0
+            ? Layers[Layers.Count - 1]
+            : Layers[Layers.Count - 2];
 
-        // Convert the output weights to the format expected by the layer
-        Vector<T> flattenedWeights = new Vector<T>(outputWeights.Rows * outputWeights.Columns);
-        int index = 0;
-        for (int i = 0; i < outputWeights.Rows; i++)
-        {
-            for (int j = 0; j < outputWeights.Columns; j++)
-            {
-                flattenedWeights[index++] = outputWeights[i, j];
-            }
-        }
+        // Build full parameter vector: [weights..., biases...]
+        // DenseLayer stores weights first, then biases
+        var weightsVec = outputWeights.ToVector();
+        int biasCount = outputWeights.Columns; // one bias per output
+        var biasVec = new Vector<T>(biasCount); // zero biases
+        var fullParams = Vector<T>.Concatenate(weightsVec, biasVec);
 
-        // Update the output layer weights
-        outputLayer.UpdateParameters(flattenedWeights);
+        outputLayer.SetParameters(fullParams);
     }
 
     /// <summary>
@@ -525,20 +522,11 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         Matrix<T> transposeH = H.Transpose();
         Matrix<T> hTh = transposeH.Multiply(H);
 
-        // Create identity matrix for regularization
-        Matrix<T> identity = Matrix<T>.CreateIdentity(hTh.Rows);
-
-        // Apply regularization: hTh + λI
+        // Apply regularization: hTh + λI (add λ to diagonal)
         T regFactor = NumOps.FromDouble(regularizationFactor);
-        for (int i = 0; i < identity.Rows; i++)
+        for (int i = 0; i < hTh.Rows; i++)
         {
-            for (int j = 0; j < identity.Columns; j++)
-            {
-                if (i == j)
-                {
-                    hTh[i, j] = NumOps.Add(hTh[i, j], NumOps.Multiply(identity[i, j], regFactor));
-                }
-            }
+            hTh[i, i] = NumOps.Add(hTh[i, i], regFactor);
         }
 
         // Calculate inverse of regularized matrix
