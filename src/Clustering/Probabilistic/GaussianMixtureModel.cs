@@ -302,14 +302,23 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         });
         kmeans.Train(data);
 
-        // Copy means from KMeans
-        if (kmeans.ClusterCenters is not null)
+        // Copy means from KMeans (may have fewer clusters after degenerate merge)
+        if (kmeans.ClusterCenters is not null && _means is not null)
         {
-            for (int c = 0; c < k; c++)
+            int actualK = Math.Min(k, kmeans.ClusterCenters.Rows);
+            for (int c = 0; c < actualK; c++)
             {
                 for (int j = 0; j < d; j++)
                 {
-                    _means![c, j] = kmeans.ClusterCenters[c, j];
+                    _means[c, j] = kmeans.ClusterCenters[c, j];
+                }
+            }
+            // If KMeans returned fewer clusters, fill remaining with slight perturbations
+            for (int c = actualK; c < k; c++)
+            {
+                for (int j = 0; j < d; j++)
+                {
+                    _means[c, j] = NumOps.Add(_means[0, j], NumOps.FromDouble(c * 0.01));
                 }
             }
         }
