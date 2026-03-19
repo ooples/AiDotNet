@@ -382,6 +382,16 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
+        // If input is shorter than lookback window, construct from training series tail
+        if (input.Length < _options.LookbackWindow && _trainingSeries.Length >= _options.LookbackWindow)
+        {
+            var lookback = new Vector<T>(_options.LookbackWindow);
+            int start = _trainingSeries.Length - _options.LookbackWindow;
+            for (int j = 0; j < _options.LookbackWindow; j++)
+                lookback[j] = _trainingSeries[start + j];
+            input = lookback;
+        }
+
         if (input.Length != _options.LookbackWindow)
         {
             throw new ArgumentException(
@@ -743,4 +753,21 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         }
         return weights;
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new NBEATSModel<T>(_options);
+        // Copy trained blocks (read-only after training — safe to share by reference)
+        clone._blocks.Clear();
+        clone._blocks.AddRange(_blocks);
+        // Copy training series
+        if (_trainingSeries.Length > 0)
+            clone._trainingSeries = new Vector<T>(_trainingSeries);
+        // Copy model parameters
+        if (ModelParameters is not null && ModelParameters.Length > 0)
+            clone.ModelParameters = new Vector<T>(ModelParameters);
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }
