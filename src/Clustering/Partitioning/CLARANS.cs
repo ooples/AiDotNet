@@ -232,15 +232,23 @@ public class CLARANS<T> : ClusteringBase<T>
 
     private T[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
     {
+        int d = x.Columns;
         var distMatrix = new T[n, n];
+
+        // Cache rows as arrays for allocation-free distance
+        var rowArrays = new T[n][];
+        for (int i = 0; i < n; i++)
+        {
+            rowArrays[i] = new T[d];
+            for (int c = 0; c < d; c++)
+                rowArrays[i][c] = x[i, c];
+        }
 
         for (int i = 0; i < n; i++)
         {
-            var pointI = GetRow(x, i);
             for (int j = i + 1; j < n; j++)
             {
-                var pointJ = GetRow(x, j);
-                T dist = metric.Compute(pointI, pointJ);
+                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
                 distMatrix[i, j] = dist;
                 distMatrix[j, i] = dist;
             }

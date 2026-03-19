@@ -221,11 +221,14 @@ public class OPTICS<T> : ClusteringBase<T>
                 // Core distance is the distance to the MinSamples-th nearest neighbor
                 var distances = new List<T>();
                 var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+                var queryArr = new T[d];
+                for (int j = 0; j < d; j++) queryArr[j] = x[i, j];
+                var neighborArr = new T[d];
 
                 foreach (int neighborIdx in neighbors)
                 {
-                    var neighbor = GetRow(x, neighborIdx);
-                    T dist = metric.Compute(query, neighbor);
+                    for (int j = 0; j < d; j++) neighborArr[j] = x[neighborIdx, j];
+                    T dist = metric.ComputeInline(queryArr, neighborArr, d);
                     distances.Add(dist);
                 }
 

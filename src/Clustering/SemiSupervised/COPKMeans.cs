@@ -140,10 +140,14 @@ public class COPKMeans<T> : ClusteringBase<T>
             changed = false;
             iterations++;
 
+            // Cache point array for allocation-free distance
+            var pointArr = new T[d];
+
             // Assign points to clusters respecting constraints
             for (int i = 0; i < n; i++)
             {
-                var point = GetRow(x, i);
+                for (int j = 0; j < d; j++)
+                    pointArr[j] = x[i, j];
                 int bestCluster = -1;
                 T bestDist = NumOps.MaxValue;
 
@@ -155,13 +159,7 @@ public class COPKMeans<T> : ClusteringBase<T>
                         continue;
                     }
 
-                    var center = new Vector<T>(d);
-                    for (int j = 0; j < d; j++)
-                    {
-                        center[j] = centers[c][j];
-                    }
-
-                    T dist = metric.Compute(point, center);
+                    T dist = metric.ComputeInline(pointArr, centers[c], d);
                     if (NumOps.LessThan(dist, bestDist))
                     {
                         bestDist = dist;

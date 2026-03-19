@@ -197,19 +197,24 @@ public class MeanShift<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            var point = GetRow(x, i);
+            var pointArr = new T[d];
+            var centerArr = new T[d];
+            for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
             T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             for (int k = 0; k < NumClusters; k++)
             {
-                var center = GetRow(ClusterCenters, k);
-                T dist = metric.Compute(point, center);
-
-                if (NumOps.LessThan(dist, minDist))
+                if (ClusterCenters is not null)
                 {
-                    minDist = dist;
-                    nearestCluster = k;
+                    for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[k, j];
+                    T dist = metric.ComputeInline(pointArr, centerArr, d);
+
+                    if (NumOps.LessThan(dist, minDist))
+                    {
+                        minDist = dist;
+                        nearestCluster = k;
+                    }
                 }
             }
 

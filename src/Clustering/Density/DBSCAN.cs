@@ -232,15 +232,25 @@ public class DBSCAN<T> : ClusteringBase<T>
             var metric = _options.DistanceMetric ?? new AiDotNet.Clustering.DistanceMetrics.EuclideanDistance<T>();
             var kDistances = new List<double>(n);
             int k = _options.MinPoints;
+            int dims = x.Columns;
+
+            // Cache rows as arrays for allocation-free distance computation
+            var rowArrays = new T[n][];
+            for (int ri = 0; ri < n; ri++)
+            {
+                rowArrays[ri] = new T[dims];
+                for (int ci = 0; ci < dims; ci++)
+                    rowArrays[ri][ci] = x[ri, ci];
+            }
+
             for (int i = 0; i < Math.Min(n, 200); i++) // sample for efficiency
             {
                 var dists = new List<double>();
-                var pointI = GetRow(x, i);
                 for (int j = 0; j < n; j++)
                 {
                     if (i != j)
                     {
-                        dists.Add(NumOps.ToDouble(metric.Compute(pointI, GetRow(x, j))));
+                        dists.Add(NumOps.ToDouble(metric.ComputeInline(rowArrays[i], rowArrays[j], dims)));
                     }
                 }
                 dists.Sort();

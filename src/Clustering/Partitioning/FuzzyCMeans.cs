@@ -227,9 +227,14 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
         double exponent = 2.0 / (m - 1);
         T epsilon = NumOps.FromDouble(1e-10);
 
+        // Cache point arrays for allocation-free distance computation
+        var pointArr = new T[d];
+        var centerArr = new T[d];
+
         for (int i = 0; i < n; i++)
         {
-            var point = GetRow(x, i);
+            for (int j = 0; j < d; j++)
+                pointArr[j] = x[i, j];
 
             // Compute distances to all centers
             var distances = new T[k];
@@ -238,13 +243,10 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
 
             for (int c = 0; c < k; c++)
             {
-                var center = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
-                {
-                    center[j] = centers[c, j];
-                }
+                    centerArr[j] = centers[c, j];
 
-                distances[c] = metric.Compute(point, center);
+                distances[c] = metric.ComputeInline(pointArr, centerArr, d);
 
                 if (NumOps.LessThan(distances[c], epsilon))
                 {
