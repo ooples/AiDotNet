@@ -176,6 +176,10 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         ValidateIsTrained();
         ValidatePredictInput(x);
 
+        // Return stored labels for in-sample prediction (preserves merge results)
+        if (Labels is not null && x.Rows == Labels.Length)
+            return new Vector<T>(Labels);
+
         if (ClusterCenters is null)
             throw new InvalidOperationException("MiniBatchKMeans: ClusterCenters not initialized. Call Train() first.");
 
