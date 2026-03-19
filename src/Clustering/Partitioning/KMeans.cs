@@ -316,7 +316,7 @@ public class KMeans<T> : ClusteringBase<T>
             T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
-            for (int k = 0; k < _options.NumClusters; k++)
+            for (int k = 0; k < centers.Rows; k++)
             {
                 var center = GetRow(centers, k);
                 T dist = distanceMetric.Compute(point, center);
@@ -415,7 +415,7 @@ public class KMeans<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            for (int k = 0; k < _options.NumClusters; k++)
+            for (int k = 0; k < centers.Rows; k++)
             {
                 var center = GetRow(centers, k);
                 distances[i, k] = distanceMetric.Compute(point, center);
