@@ -228,9 +228,11 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
             }
 
         // Always add minimum ridge regularization for numerical stability (prevents
-        // Cholesky failure on collinear/degenerate data)
+        // Cholesky failure on collinear/degenerate data).
+        // Use 1e-4 minimum: 1e-6 is insufficient for nearly-perfect collinearity
+        // where off-diagonal values dominate the diagonal.
         var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
-        var effectiveReg = Math.Max(regularizationStrength, 1e-6);
+        var effectiveReg = Math.Max(regularizationStrength, 1e-4);
         T regTerm = NumOps.FromDouble(effectiveReg);
         for (int i = 0; i < xTx.Rows; i++)
         {
@@ -238,7 +240,16 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
         }
 
         var xTy = basisFunctions.Transpose().Multiply(y);
-        _coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
+        try
+        {
+            _coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
+        }
+        catch (ArgumentException)
+        {
+            // Cholesky can still fail on severely ill-conditioned matrices;
+            // fall back to QR decomposition which handles rank deficiency.
+            _coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Qr);
+        }
     }
 
     /// <summary>
