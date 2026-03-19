@@ -48,7 +48,7 @@ public class AffinityPropagationOptions<T> : ClusteringOptions<T>
     /// the algorithm converge when it otherwise would oscillate.
     /// </para>
     /// </remarks>
-    public double Damping { get; set; } = 0.5;
+    public double Damping { get; set; } = 0.8;
 
     /// <summary>
     /// Gets or sets the preference value.
