@@ -677,6 +677,12 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     {
         SetTrainingMode(true);
 
+        // Propagate training mode to all layers including ResidualLayer inner layers
+        foreach (var layer in Layers)
+        {
+            layer.SetTrainingMode(true);
+        }
+
         // Forward pass through all layers
         var output = ForwardWithMemory(input);
         var outputVector = output.ToVector();
