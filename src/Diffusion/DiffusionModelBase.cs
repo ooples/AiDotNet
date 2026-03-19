@@ -194,11 +194,16 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Set up the scheduler for inference
         _scheduler.SetTimesteps(numInferenceSteps);
 
+        // Pre-allocate reusable tensor for the denoising loop to avoid
+        // creating a new Tensor per step (50 allocations → 1)
+        var sampleTensor = new Tensor<T>(shape, sample);
+
         // Iterative denoising loop
         foreach (var timestep in _scheduler.Timesteps)
         {
-            // Convert vector to tensor for noise prediction
-            var sampleTensor = new Tensor<T>(shape, sample);
+            // Update tensor data in-place from sample vector
+            for (int idx = 0; idx < sample.Length; idx++)
+                sampleTensor[idx] = sample[idx];
 
             // Predict the noise
             var noisePrediction = PredictNoise(sampleTensor, timestep);
