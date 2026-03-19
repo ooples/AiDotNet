@@ -187,6 +187,7 @@ public class KMedoids<T> : ClusteringBase<T>
             }
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

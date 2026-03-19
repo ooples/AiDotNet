@@ -250,6 +250,7 @@ public class XMeans<T> : ClusteringBase<T>
         Labels = currentLabels;
         _bic = ComputeTotalBIC(x, currentLabels, currentCenters, n, d, currentK);
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

@@ -250,6 +250,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
             }
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

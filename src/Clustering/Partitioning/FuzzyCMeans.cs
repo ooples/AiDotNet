@@ -175,6 +175,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             Labels[i] = NumOps.FromDouble(bestCluster);
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

@@ -257,6 +257,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         }
 
         Inertia = FinalInertia;
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

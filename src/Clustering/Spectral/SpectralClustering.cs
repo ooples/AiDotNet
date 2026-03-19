@@ -138,6 +138,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
         // Compute cluster centers in original space
         ComputeClusterCenters(x);
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

@@ -271,6 +271,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
             }
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

@@ -227,6 +227,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             Labels[i] = NumOps.FromDouble(labels[i]);
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

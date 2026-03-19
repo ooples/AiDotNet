@@ -147,6 +147,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         ClusterCenters = bestCenters;
         Labels = bestLabels;
         Inertia = bestInertia;
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
