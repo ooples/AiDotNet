@@ -1090,6 +1090,11 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        // Handle 1D gradient: reshape [features] to [1, features] for 2D processing
+        bool was1D = outputGradient.Rank == 1;
+        if (was1D)
+            outputGradient = outputGradient.Reshape([1, outputGradient.Shape[0]]);
+
         // Flatten any-rank gradient to 3D for processing (like forward pass)
         int seqLen = outputGradient.Shape[^2];
         int dim = outputGradient.Shape[^1];
