@@ -387,12 +387,14 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public DilatedConvolutionalLayer(int inputDepth, int outputDepth, int kernelSize, int inputHeight, int inputWidth,
                                      int dilation, int stride = 1, int padding = 0,
-                                     IActivationFunction<T>? activation = null)
+                                     IActivationFunction<T>? activation = null,
+                                     IInitializationStrategy<T>? initializationStrategy = null)
         : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
                CalculateOutputShape(outputDepth, CalculateOutputDimension(inputHeight, kernelSize, stride, padding, dilation),
                    CalculateOutputDimension(inputWidth, kernelSize, stride, padding, dilation)),
                activation ?? new ReLUActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.He;
         _inputDepth = inputDepth;
         _outputDepth = outputDepth;
         _kernelSize = kernelSize;
@@ -489,27 +491,8 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeWeights()
     {
-        // Xavier initialization
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputDepth * _kernelSize * _kernelSize + _outputDepth)));
-
-        for (int i = 0; i < _kernels.Shape[0]; i++)
-        {
-            for (int j = 0; j < _kernels.Shape[1]; j++)
-            {
-                for (int k = 0; k < _kernels.Shape[2]; k++)
-                {
-                    for (int l = 0; l < _kernels.Shape[3]; l++)
-                    {
-                        _kernels[i, j, k, l] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-                    }
-                }
-            }
-        }
-
-        for (int i = 0; i < _biases.Length; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
+        InitializeLayerWeights(_kernels, _inputDepth * _kernelSize * _kernelSize, _outputDepth);
+        InitializeLayerBiases(_biases);
     }
 
     /// <summary>

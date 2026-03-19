@@ -2,7 +2,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
-using AiDotNet.Initialization;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 

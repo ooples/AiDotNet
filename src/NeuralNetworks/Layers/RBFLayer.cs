@@ -195,9 +195,11 @@ public class RBFLayer<T> : LayerBase<T>
     /// Each creates a different pattern of responsiveness around the neuron centers.
     /// </para>
     /// </remarks>
-    public RBFLayer(int inputSize, int outputSize, IRadialBasisFunction<T> rbf)
+    public RBFLayer(int inputSize, int outputSize, IRadialBasisFunction<T> rbf,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize])
     {
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         _inputSize = inputSize;
         _numCenters = outputSize;
         _centers = new Tensor<T>([outputSize, inputSize]);
@@ -606,16 +608,12 @@ public class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numCenters + _inputSize)));
-        for (int i = 0; i < _numCenters; i++)
-        {
-            for (int j = 0; j < _inputSize; j++)
-            {
-                _centers[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
+        InitializeLayerWeights(_centers, _inputSize, _numCenters);
 
-            _widths[i] = NumOps.FromDouble(Random.NextDouble());
-        }
+        // Widths are RBF-specific: random positive values, not Xavier
+        var widthSpan = _widths.AsWritableSpan();
+        for (int i = 0; i < widthSpan.Length; i++)
+            widthSpan[i] = NumOps.FromDouble(Random.NextDouble());
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

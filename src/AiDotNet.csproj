@@ -212,6 +212,7 @@
 	<!-- Global usings for internal helpers -->
 	<ItemGroup>
 	  <Using Include="AiDotNet.Helpers" />
+	  <Using Include="AiDotNet.Initialization" />
 	</ItemGroup>
 
 </Project>
