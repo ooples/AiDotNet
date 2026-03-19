@@ -142,19 +142,14 @@ public class SeededKMeans<T> : ClusteringBase<T>
                     continue;
                 }
 
-                var point = GetRow(x, i);
+                var pointArr = new T[d];
+                for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
                 int bestCluster = 0;
                 T bestDist = NumOps.MaxValue;
 
                 for (int c = 0; c < k; c++)
                 {
-                    var center = new Vector<T>(d);
-                    for (int j = 0; j < d; j++)
-                    {
-                        center[j] = centers[c][j];
-                    }
-
-                    T dist = metric.Compute(point, center);
+                    T dist = metric.ComputeInline(pointArr, centers[c], d);
                     if (NumOps.LessThan(dist, bestDist))
                     {
                         bestDist = dist;

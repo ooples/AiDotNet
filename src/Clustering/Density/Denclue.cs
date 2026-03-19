@@ -420,10 +420,13 @@ public class Denclue<T> : ClusteringBase<T>
 
         var labels = new Vector<T>(x.Rows);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        int d = x.Columns;
 
         for (int i = 0; i < x.Rows; i++)
         {
-            var point = GetRow(x, i);
+            var pointArr = new T[d];
+            var centerArr = new T[d];
+            for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
             T minDist = NumOps.MaxValue;
             int nearestCluster = -1;
 
@@ -431,8 +434,8 @@ public class Denclue<T> : ClusteringBase<T>
             {
                 for (int c = 0; c < NumClusters; c++)
                 {
-                    var center = GetRow(ClusterCenters, c);
-                    T dist = metric.Compute(point, center);
+                    for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[c, j];
+                    T dist = metric.ComputeInline(pointArr, centerArr, d);
 
                     if (NumOps.LessThan(dist, minDist))
                     {
