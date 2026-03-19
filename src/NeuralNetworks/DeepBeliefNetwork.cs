@@ -583,10 +583,14 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Normalize to 2D [batch, features] if needed
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+        if (expectedOutput.Rank == 1)
+            expectedOutput = expectedOutput.Reshape([1, expectedOutput.Shape[0]]);
+
         // Make sure we're in training mode
         SetTrainingMode(true);
-
-        Console.WriteLine("Starting supervised fine-tuning...");
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {

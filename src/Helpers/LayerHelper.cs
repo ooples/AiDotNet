@@ -1356,10 +1356,12 @@ public static class LayerHelper<T>
             yield return new ActivationLayer<T>([hiddenUnits], sigmoidActivation);
         }
 
-        // Add the final output layer
+        // Add the final output layer — use softmax for classification, identity for regression
         int outputSize = layerSizes[layerSizes.Length - 1];
-        yield return new DenseLayer<T>(outputSize, outputSize, softmaxActivation);
-        yield return new ActivationLayer<T>([outputSize], softmaxActivation);
+        IActivationFunction<T> finalActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? softmaxActivation
+            : new IdentityActivation<T>();
+        yield return new DenseLayer<T>(outputSize, outputSize, finalActivation);
     }
 
     /// <summary>
