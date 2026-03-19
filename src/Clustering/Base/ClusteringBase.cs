@@ -640,31 +640,66 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     {
         if (Labels is null || ClusterCenters is null || NumClusters <= 1) return;
 
-        // Compute data spread for relative threshold
-        double dataSpread = 0;
-        for (int k = 0; k < ClusterCenters.Rows; k++)
+        // Compute data range per feature for relative threshold
+        double maxRange = 0;
+        for (int j = 0; j < x.Columns; j++)
         {
-            for (int j = 0; j < ClusterCenters.Columns; j++)
+            double colMin = double.MaxValue, colMax = double.MinValue;
+            for (int i = 0; i < x.Rows; i++)
             {
-                double v = NumOps.ToDouble(ClusterCenters[k, j]);
-                dataSpread += v * v;
+                double v = NumOps.ToDouble(x[i, j]);
+                if (v < colMin) colMin = v;
+                if (v > colMax) colMax = v;
+            }
+            double range = colMax - colMin;
+            if (range > maxRange) maxRange = range;
+        }
+        // Merge clusters whose centers are within 10% of the data range.
+        // This handles degenerate cases where all data points are tightly clustered
+        // but the algorithm still produces multiple clusters.
+        double mergeThreshold = Math.Max(1e-6, maxRange * 0.10);
+
+        // First: identify which clusters actually have data points
+        var clusterPopulations = new int[NumClusters];
+        for (int i = 0; i < Labels.Length; i++)
+        {
+            int c = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+            if (c >= 0 && c < NumClusters)
+                clusterPopulations[c]++;
+        }
+
+        // Build merge map: merge empty clusters into nearest populated one,
+        // and merge nearby populated clusters
+        var mergedId = Enumerable.Range(0, NumClusters).ToArray();
+
+        // Merge empty clusters into the first populated cluster
+        int firstPopulated = -1;
+        for (int c = 0; c < NumClusters; c++)
+        {
+            if (clusterPopulations[c] > 0)
+            {
+                if (firstPopulated < 0) firstPopulated = c;
+            }
+            else
+            {
+                // Empty cluster — merge into first populated
+                if (firstPopulated >= 0)
+                    mergedId[c] = firstPopulated;
             }
         }
-        dataSpread = Math.Sqrt(dataSpread / Math.Max(1, ClusterCenters.Rows));
-        double mergeThreshold = Math.Max(1e-6, dataSpread * 0.01);
 
-        // Build merge map: for each cluster, find earliest equivalent cluster
-        var mergedId = Enumerable.Range(0, NumClusters).ToArray();
+        // Merge nearby populated clusters
         for (int a = 0; a < NumClusters; a++)
         {
+            if (clusterPopulations[a] == 0) continue;
             for (int b = a + 1; b < NumClusters; b++)
             {
-                if (mergedId[b] != b) continue;
+                if (clusterPopulations[b] == 0 || mergedId[b] != b) continue;
                 double dist = 0;
                 for (int j = 0; j < ClusterCenters.Columns; j++)
                 {
-                    double d = NumOps.ToDouble(ClusterCenters[a, j]) - NumOps.ToDouble(ClusterCenters[b, j]);
-                    dist += d * d;
+                    double dd = NumOps.ToDouble(ClusterCenters[a, j]) - NumOps.ToDouble(ClusterCenters[b, j]);
+                    dist += dd * dd;
                 }
                 if (Math.Sqrt(dist) < mergeThreshold)
                     mergedId[b] = mergedId[a];

@@ -271,7 +271,57 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
             }
         }
 
+        // Recompute ClusterCenters from actual data (not neuron weights)
+        // so MergeDegenerateClusters can accurately assess inter-cluster distances
+        var dataCenters = new Matrix<T>(NumClusters, d);
+        var clusterCounts = new int[NumClusters];
+        for (int i = 0; i < n; i++)
+        {
+            int c = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+            if (c >= 0 && c < NumClusters)
+            {
+                for (int j = 0; j < d; j++)
+                    dataCenters[c, j] = NumOps.Add(dataCenters[c, j], x[i, j]);
+                clusterCounts[c]++;
+            }
+        }
+        for (int c = 0; c < NumClusters; c++)
+        {
+            if (clusterCounts[c] > 0)
+            {
+                for (int j = 0; j < d; j++)
+                    dataCenters[c, j] = NumOps.Divide(dataCenters[c, j], NumOps.FromDouble(clusterCounts[c]));
+            }
+        }
+        ClusterCenters = dataCenters;
+
+        int premergeK = NumClusters;
         MergeDegenerateClusters(x);
+
+        // Update _neuronLabels to match merged cluster IDs so Predict() is consistent
+        if (NumClusters < premergeK && _neuronLabels is not null)
+        {
+            // Build mapping from old labels to new labels using the merged Labels vector
+            var labelMap = new Dictionary<int, int>();
+            for (int i = 0; i < n; i++)
+            {
+                int neuronIdx2 = 0;
+                var sample2 = new T[d];
+                for (int j = 0; j < d; j++) sample2[j] = x[i, j];
+                var (br, bc) = FindBMU(sample2, d);
+                neuronIdx2 = br * width + bc;
+                int oldLabel = _neuronLabels[neuronIdx2];
+                int newLabel = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+                labelMap[oldLabel] = newLabel;
+            }
+
+            for (int ni = 0; ni < _neuronLabels.Length; ni++)
+            {
+                if (labelMap.TryGetValue(_neuronLabels[ni], out int mapped))
+                    _neuronLabels[ni] = mapped;
+            }
+        }
+
         IsTrained = true;
     }
 
