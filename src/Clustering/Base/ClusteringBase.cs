@@ -638,6 +638,19 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <param name="x">The training data matrix.</param>
     protected void MergeDegenerateClusters(Matrix<T> x)
     {
+        // Iterate merging until stable — single-pass may not merge transitive chains
+        // (A close to B, B close to C, but A not close to C after one pass)
+        int maxIterations = 10;
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            int beforeK = NumClusters;
+            MergeDegenerateClustersOnce(x);
+            if (NumClusters >= beforeK) break; // No more merges possible
+        }
+    }
+
+    private void MergeDegenerateClustersOnce(Matrix<T> x)
+    {
         if (Labels is null || ClusterCenters is null || NumClusters <= 1) return;
 
         // Compute data range per feature for relative threshold
