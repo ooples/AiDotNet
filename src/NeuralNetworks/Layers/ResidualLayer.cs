@@ -635,6 +635,13 @@ public class ResidualLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     /// <inheritdoc/>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _innerLayer?.SetTrainingMode(isTraining);
+    }
+
+    /// <inheritdoc/>
     public override int ParameterCount => _innerLayer?.ParameterCount ?? 0;
 
     /// <inheritdoc/>
