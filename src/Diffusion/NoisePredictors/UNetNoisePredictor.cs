@@ -337,6 +337,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private void CreateDefaultEncoderBlocks()
     {
         var inChannels = _baseChannels;
+        int spatialSize = _inputHeight;
         for (int level = 0; level < _channelMultipliers.Length; level++)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
@@ -346,9 +347,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             {
                 _encoderBlocks.Add(new UNetBlock
                 {
-                    ResBlock = CreateResBlock(inChannels, outChannels),
-                    AttentionBlock = useAttention ? CreateAttentionBlock(outChannels) : null,
-                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels) : null
+                    ResBlock = CreateResBlock(inChannels, outChannels, spatialSize),
+                    AttentionBlock = useAttention ? CreateAttentionBlock(outChannels, spatialSize) : null,
+                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels, spatialSize) : null
                 });
                 inChannels = outChannels;
             }
@@ -358,8 +359,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             {
                 _encoderBlocks.Add(new UNetBlock
                 {
-                    Downsample = CreateDownsample(outChannels)
+                    Downsample = CreateDownsample(outChannels, spatialSize)
                 });
+                spatialSize = Math.Max(1, spatialSize / 2);
             }
         }
     }
@@ -369,15 +371,19 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private void CreateDefaultMiddleBlocks(int channels)
     {
+        // Spatial size at the bottleneck = _inputHeight / (2^(numDownsamples))
+        int numDownsamples = _channelMultipliers.Length - 1;
+        int bottleneckSpatial = Math.Max(1, _inputHeight >> numDownsamples);
+
         _middleBlocks.Add(new UNetBlock
         {
-            ResBlock = CreateResBlock(channels, channels),
-            AttentionBlock = CreateAttentionBlock(channels),
-            CrossAttentionBlock = _contextDim > 0 ? CreateCrossAttentionBlock(channels) : null
+            ResBlock = CreateResBlock(channels, channels, bottleneckSpatial),
+            AttentionBlock = CreateAttentionBlock(channels, bottleneckSpatial),
+            CrossAttentionBlock = _contextDim > 0 ? CreateCrossAttentionBlock(channels, bottleneckSpatial) : null
         });
         _middleBlocks.Add(new UNetBlock
         {
-            ResBlock = CreateResBlock(channels, channels)
+            ResBlock = CreateResBlock(channels, channels, bottleneckSpatial)
         });
     }
 
@@ -387,6 +393,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private void CreateDefaultDecoderBlocks()
     {
         var inChannels = _baseChannels * _channelMultipliers[^1];
+        int numDownsamples = _channelMultipliers.Length - 1;
+        int spatialSize = Math.Max(1, _inputHeight >> numDownsamples);
+
         for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
@@ -400,9 +409,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
                 _decoderBlocks.Add(new UNetBlock
                 {
-                    ResBlock = CreateResBlock(inChannels + skipChannels, outChannels),
-                    AttentionBlock = useAttention ? CreateAttentionBlock(outChannels) : null,
-                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels) : null
+                    ResBlock = CreateResBlock(inChannels + skipChannels, outChannels, spatialSize),
+                    AttentionBlock = useAttention ? CreateAttentionBlock(outChannels, spatialSize) : null,
+                    CrossAttentionBlock = useAttention && _contextDim > 0 ? CreateCrossAttentionBlock(outChannels, spatialSize) : null
                 });
                 inChannels = outChannels;
             }
@@ -412,8 +421,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             {
                 _decoderBlocks.Add(new UNetBlock
                 {
-                    Upsample = CreateUpsample(outChannels)
+                    Upsample = CreateUpsample(outChannels, spatialSize)
                 });
+                spatialSize = Math.Min(_inputHeight, spatialSize * 2);
             }
         }
     }
@@ -606,51 +616,61 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateResBlock(int inChannels, int outChannels)
     {
-        // Create a residual block with group normalization
-        return new DenseLayer<T>(inChannels, outChannels, (IActivationFunction<T>)new SiLUActivation<T>());
+        return CreateResBlock(inChannels, outChannels, _inputHeight);
     }
 
-    private ILayer<T> CreateAttentionBlock(int channels)
+    private ILayer<T> CreateResBlock(int inChannels, int outChannels, int spatialSize)
     {
-        // Self-attention layer using Flash Attention for memory efficiency
-        int latentSpatialSize = _inputHeight;
+        // Use a convolutional layer that preserves spatial dimensions [B, C, H, W]
+        // Same-padding 3x3 conv: output spatial = input spatial with stride=1, padding=1
+        // This is the standard choice for UNet residual blocks (Stable Diffusion, DDPM)
+        return new ConvolutionalLayer<T>(
+            inputDepth: inChannels,
+            inputHeight: spatialSize,
+            inputWidth: spatialSize,
+            outputDepth: outChannels,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1,
+            activationFunction: new SiLUActivation<T>());
+    }
+
+    private ILayer<T> CreateAttentionBlock(int channels, int spatialSize)
+    {
         return new DiffusionAttention<T>(
             channels: channels,
             numHeads: _numHeads,
-            spatialSize: latentSpatialSize,
-            flashAttentionThreshold: latentSpatialSize * latentSpatialSize / 16);
+            spatialSize: spatialSize,
+            flashAttentionThreshold: spatialSize * spatialSize / 16);
     }
 
-    private ILayer<T> CreateCrossAttentionBlock(int channels)
+    private ILayer<T> CreateCrossAttentionBlock(int channels, int spatialSize)
     {
-        // Cross-attention layer for conditioning with proper Q/K/V projections
-        int latentSpatialSize = _inputHeight;
         return new DiffusionCrossAttention<T>(
             queryDim: channels,
             contextDim: _contextDim,
             numHeads: _numHeads,
-            spatialSize: latentSpatialSize);
+            spatialSize: spatialSize);
     }
 
-    private ILayer<T> CreateDownsample(int channels)
+    private ILayer<T> CreateDownsample(int channels, int spatialSize)
     {
-        int latentSpatialSize = _inputHeight;
         return new ConvolutionalLayer<T>(
             inputDepth: channels,
             outputDepth: channels,
             kernelSize: 3,
-            inputHeight: latentSpatialSize,
-            inputWidth: latentSpatialSize,
+            inputHeight: spatialSize,
+            inputWidth: spatialSize,
             stride: 2,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
     }
 
-    private ILayer<T> CreateUpsample(int channels)
+    private ILayer<T> CreateUpsample(int channels, int spatialSize)
     {
-        int halfSpatialSize = _inputHeight / 2;
+        // spatialSize here is the current (smaller) spatial size before upsampling
         return new DeconvolutionalLayer<T>(
-            inputShape: new[] { 1, channels, halfSpatialSize, halfSpatialSize },
+            inputShape: new[] { 1, channels, spatialSize, spatialSize },
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,
