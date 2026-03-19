@@ -164,7 +164,7 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         double maxGradNorm = 1.0,
         GraphAttentionNetworkOptions? options = null)
         : base(architecture,
-               lossFunction ?? new CrossEntropyLoss<T>(),
+               lossFunction ?? new MeanSquaredErrorLoss<T>(),
                maxGradNorm)
     {
         _options = options ?? new GraphAttentionNetworkOptions();
@@ -174,7 +174,7 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         HiddenDim = 64; // Default hidden dimension
         NumLayers = numLayers;
 
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -192,10 +192,9 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            // Graph networks need per-node softmax, not global softmax.
-            // The default layer helper adds a trailing ActivationLayer with SoftmaxActivation
-            // that applies softmax over ALL elements (nodes × classes), which is incorrect.
-            // Filter it out — the network applies per-node softmax internally during training.
+            // Graph networks need per-node activation, not global softmax.
+            // Filter out trailing SoftmaxActivation — it applies softmax over all
+            // (nodes × classes) elements, which is incorrect for multi-node graph output.
             foreach (var layer in LayerHelper<T>.CreateDefaultGraphAttentionLayers(
                 Architecture, NumHeads, NumLayers, DropoutRate))
             {

@@ -1422,6 +1422,14 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         metadata["NumHeads"] = _numHeads.ToString();
         metadata["Alpha"] = NumOps.ToDouble(_alpha).ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["DropoutRate"] = _dropoutRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        // Store LeakyReLU alpha for proper deserialization
+        if (ScalarActivation is LeakyReLUActivation<T> leakyRelu)
+        {
+            metadata["LeakyReLUAlpha"] = NumOps.ToDouble(leakyRelu.Alpha)
+                .ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         return metadata;
     }
 

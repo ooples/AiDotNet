@@ -371,9 +371,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         }
         else
         {
-            // Graph networks need per-node softmax, not global softmax.
-            // Filter out trailing ActivationLayer (SoftmaxActivation) which applies
-            // softmax over all (nodes × classes) elements — incorrect for graphs.
+            // Graph networks need per-node activation, not global softmax.
+            // Filter out trailing SoftmaxActivation.
             foreach (var layer in LayerHelper<T>.CreateDefaultGNNLayers(Architecture))
             {
                 if (layer is ActivationLayer<T>)

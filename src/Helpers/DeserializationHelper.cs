@@ -271,6 +271,18 @@ public static class DeserializationHelper
                 throw new InvalidOperationException("Cannot find GraphAttentionLayer constructor with expected signature.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+
+            // If the activation is LeakyReLU, restore the alpha parameter
+            double? leakyAlpha = TryGetDouble(additionalParams, "LeakyReLUAlpha");
+            if (leakyAlpha.HasValue && activation != null)
+            {
+                var leakyType = typeof(LeakyReLUActivation<>).MakeGenericType(typeof(T));
+                if (leakyType.IsInstanceOfType(activation))
+                {
+                    activation = Activator.CreateInstance(leakyType, leakyAlpha.Value);
+                }
+            }
+
             instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation });
         }
         else if (genericDef == typeof(GraphConvolutionalLayer<>))

@@ -342,7 +342,15 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     public Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
     {
         // z = mean + std * epsilon, where epsilon ~ N(0, 1)
-        var std = Engine.TensorSqrt(Engine.TensorExp(logVar));
+        // Clamp logVar to prevent exp() overflow (exp(20) ≈ 5e8, exp(40) ≈ 2e17)
+        var clampedLogVar = new Tensor<T>(logVar.Shape);
+        for (int i = 0; i < logVar.Length; i++)
+        {
+            double v = NumOps.ToDouble(logVar.GetFlat(i));
+            v = Math.Max(-20.0, Math.Min(20.0, v));
+            clampedLogVar.SetFlat(i, NumOps.FromDouble(v));
+        }
+        var std = Engine.TensorSqrt(Engine.TensorExp(clampedLogVar));
 
         // Generate standard normal samples
         var epsilon = new Tensor<T>(mean.Shape);
@@ -843,6 +851,43 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Gets all parameter gradients as a vector (encoder layers + variational weights).
+    /// </summary>
+    public override Vector<T> GetParameterGradients()
+    {
+        // Encoder layer gradients
+        var baseGradients = base.GetParameterGradients();
+        var allGrads = new List<T>();
+        for (int i = 0; i < baseGradients.Length; i++)
+            allGrads.Add(baseGradients[i]);
+
+        // Variational layer gradients
+        if (_meanWeightsGradient != null)
+        {
+            for (int i = 0; i < _meanWeightsGradient.Length; i++)
+                allGrads.Add(_meanWeightsGradient.GetFlat(i));
+        }
+        else
+        {
+            for (int i = 0; i < _meanWeights.Length; i++)
+                allGrads.Add(NumOps.Zero);
+        }
+
+        if (_logVarWeightsGradient != null)
+        {
+            for (int i = 0; i < _logVarWeightsGradient.Length; i++)
+                allGrads.Add(_logVarWeightsGradient.GetFlat(i));
+        }
+        else
+        {
+            for (int i = 0; i < _logVarWeights.Length; i++)
+                allGrads.Add(NumOps.Zero);
+        }
+
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    /// <summary>
     /// Gets all parameters as a vector.
     /// </summary>
     public override Vector<T> GetParameters()
@@ -944,22 +989,17 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         // Backward pass
         Backward(reconGrad);
 
-        // Update encoder parameters
-        var lr = NumOps.FromDouble(0.01);
-        foreach (var layer in Layers)
-            layer.UpdateParameters(lr);
+        // Collect all parameter gradients (encoder layers + variational weights)
+        Vector<T> parameterGradients = GetParameterGradients();
 
-        // Update variational layer parameters
-        if (_meanWeightsGradient != null)
-        {
-            _meanWeights = Engine.TensorSubtract(_meanWeights,
-                Engine.TensorMultiplyScalar(_meanWeightsGradient, lr));
-        }
-        if (_logVarWeightsGradient != null)
-        {
-            _logVarWeights = Engine.TensorSubtract(_logVarWeights,
-                Engine.TensorMultiplyScalar(_logVarWeightsGradient, lr));
-        }
+        // Get current parameters
+        Vector<T> currentParameters = GetParameters();
+
+        // Update all parameters using the optimizer
+        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
+
+        // Apply updated parameters (includes encoder layers + variational weights)
+        UpdateParameters(updatedParameters);
     }
 
     /// <summary>

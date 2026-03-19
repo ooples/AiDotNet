@@ -171,7 +171,7 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         double maxGradNorm = 1.0,
         GraphIsomorphismNetworkOptions? options = null)
         : base(architecture,
-               lossFunction ?? new CrossEntropyLoss<T>(),
+               lossFunction ?? new MeanSquaredErrorLoss<T>(),
                maxGradNorm)
     {
         _options = options ?? new GraphIsomorphismNetworkOptions();
@@ -181,7 +181,7 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         MlpHiddenDim = mlpHiddenDim;
         NumLayers = numLayers;
 
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -199,7 +199,8 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            // Graph networks need per-node softmax, not global softmax.
+            // Graph networks need per-node activation, not global softmax.
+            // Filter out trailing SoftmaxActivation.
             foreach (var layer in LayerHelper<T>.CreateDefaultGraphIsomorphismLayers(
                 Architecture, MlpHiddenDim, NumLayers, LearnEpsilon, InitialEpsilon))
             {

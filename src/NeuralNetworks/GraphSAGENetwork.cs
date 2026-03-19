@@ -179,7 +179,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         double maxGradNorm = 1.0,
         GraphSAGEOptions? options = null)
         : base(architecture,
-               lossFunction ?? new CrossEntropyLoss<T>(),
+               lossFunction ?? new MeanSquaredErrorLoss<T>(),
                maxGradNorm)
     {
         _options = options ?? new GraphSAGEOptions();
@@ -190,7 +190,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         NumLayers = numLayers;
         DropoutRate = dropoutRate;
 
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -208,8 +208,8 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            // Graph networks need per-node softmax, not global softmax.
-            // Filter out trailing ActivationLayer which applies softmax over all elements.
+            // Graph networks need per-node activation, not global softmax.
+            // Filter out trailing SoftmaxActivation.
             foreach (var layer in LayerHelper<T>.CreateDefaultGraphSAGELayers(
                 Architecture, AggregatorType, NumLayers, Normalize))
             {
