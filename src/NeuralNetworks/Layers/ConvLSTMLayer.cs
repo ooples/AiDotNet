@@ -321,10 +321,10 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         InitializeWeights(_weightsOh);
 
         // Initialize biases to zero
-        InitializeBiases(_biasF);
-        InitializeBiases(_biasI);
-        InitializeBiases(_biasC);
-        InitializeBiases(_biasO);
+        InitializeLayerBiases(_biasF);
+        InitializeLayerBiases(_biasI);
+        InitializeLayerBiases(_biasC);
+        InitializeLayerBiases(_biasO);
 
         // Register trainable parameters for GPU memory persistence
         RegisterTrainableParameter(_weightsFi, PersistentTensorRole.Weights);
@@ -404,10 +404,10 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         InitializeWeights(_weightsOh);
 
         // Initialize biases to zero
-        InitializeBiases(_biasF);
-        InitializeBiases(_biasI);
-        InitializeBiases(_biasC);
-        InitializeBiases(_biasO);
+        InitializeLayerBiases(_biasF);
+        InitializeLayerBiases(_biasI);
+        InitializeLayerBiases(_biasC);
+        InitializeLayerBiases(_biasO);
 
         // Register trainable parameters for GPU memory persistence
         RegisterTrainableParameter(_weightsFi, PersistentTensorRole.Weights);
@@ -512,7 +512,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeBiasesToZero(Tensor<T> biases)
     {
-        InitializeBiases(biases);
+        InitializeLayerBiases(biases);
     }
 
     /// <summary>

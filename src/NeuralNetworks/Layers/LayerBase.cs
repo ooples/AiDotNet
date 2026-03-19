@@ -3317,13 +3317,5 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             tensor.AsWritableSpan().Clear();
     }
 
-    /// <summary>
-    /// Initializes a bias tensor to zero using direct span access.
-    /// </summary>
-    protected static void InitializeBiases(Tensor<T> tensor)
-    {
-        tensor.AsWritableSpan().Clear();
-    }
-
     #endregion
 }
