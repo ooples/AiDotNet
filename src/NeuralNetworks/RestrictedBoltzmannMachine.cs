@@ -517,15 +517,20 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Visible layer must be 1D or 2D, got {visibleLayer.Rank}D");
         }
 
-        var hiddenActivations = _weights.Multiply(visibleMatrix).Add(_hiddenBiases.ToColumnMatrix());
+        // Use Engine for GPU/CPU accelerated matrix multiplication
+        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+        var visibleTensor = Tensor<T>.FromMatrix(visibleMatrix);
+        var product = Engine.TensorMatMul(weightsTensor, visibleTensor);
+        var biasTensor = Tensor<T>.FromMatrix(_hiddenBiases.ToColumnMatrix());
+        var hiddenTensor = Engine.TensorAdd(product, biasTensor);
 
         if (_vectorActivation != null)
         {
-            return _vectorActivation.Activate(Tensor<T>.FromRowMatrix(hiddenActivations));
+            return _vectorActivation.Activate(hiddenTensor);
         }
         else if (_scalarActivation != null)
         {
-            return Tensor<T>.FromRowMatrix(hiddenActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
+            return hiddenTensor.Transform((x, _) => _scalarActivation.Activate(x));
         }
         else
         {
@@ -778,16 +783,21 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Hidden layer must be 1D or 2D, got {hiddenLayer.Rank}D");
         }
 
-        // We need to transpose the weights matrix for the reverse direction
-        var visibleActivations = _weights.Transpose().Multiply(hiddenMatrix).Add(_visibleBiases.ToColumnMatrix());
+        // Use Engine for GPU/CPU accelerated reverse propagation: W^T * hidden + bias
+        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+        var weightsTransposed = Engine.TensorTranspose(weightsTensor);
+        var hiddenTensor = Tensor<T>.FromMatrix(hiddenMatrix);
+        var product = Engine.TensorMatMul(weightsTransposed, hiddenTensor);
+        var biasTensor = Tensor<T>.FromMatrix(_visibleBiases.ToColumnMatrix());
+        var visibleTensor = Engine.TensorAdd(product, biasTensor);
 
         if (_vectorActivation != null)
         {
-            return _vectorActivation.Activate(Tensor<T>.FromRowMatrix(visibleActivations));
+            return _vectorActivation.Activate(visibleTensor);
         }
         else if (_scalarActivation != null)
         {
-            return Tensor<T>.FromRowMatrix(visibleActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
+            return visibleTensor.Transform((x, _) => _scalarActivation.Activate(x));
         }
         else
         {
