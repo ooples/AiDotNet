@@ -159,7 +159,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
         h = _conv2.Forward(h);
 
         // Add residual in-place — no allocation for the addition result
-        h = Engine.TensorAdd(h, residual);
+        Engine.TensorAddInPlace(h, residual);
         return h;
     }
 
@@ -192,7 +192,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
             {
                 timeProj = timeProj.Reshape(timeProj.Shape[0], _outChannels, 1, 1);
             }
-            h = Engine.TensorAdd(h, timeProj);
+            Engine.TensorBroadcastAddInPlace(h, timeProj);
         }
 
         // Skip connection
@@ -204,7 +204,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
         h = _conv2.Forward(h);
 
         // Add residual in-place — no allocation for the addition result
-        h = Engine.TensorAdd(h, residual);
+        Engine.TensorAddInPlace(h, residual);
         return h;
     }
 

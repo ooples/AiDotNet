@@ -231,6 +231,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasReshaped4D;
 
     /// <summary>
+    /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass.
+    /// </summary>
+    private Tensor<T>? _preAllocatedOutput;
+
+    /// <summary>
     /// The execution engine for GPU-accelerated convolution operations.
     /// </summary>
     /// <remarks>
@@ -927,13 +932,35 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int batchSize_conv = _lastInput.Shape[0];
         int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
 
-        var output = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
+        if (_preAllocatedOutput is null ||
+            _preAllocatedOutput.Shape[0] != batchSize_conv ||
+            _preAllocatedOutput.Shape[2] != outputHeight ||
+            _preAllocatedOutput.Shape[3] != outputWidth)
+        {
+            _preAllocatedOutput = TensorAllocator.Rent<T>(expectedShape);
+        }
 
-        // === In-Place Bias Addition (zero allocation) ===
-        _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
-        output = Engine.TensorAdd(output, _biasReshaped4D);
+        // === Try FusedConv2D: Conv + Bias + Activation in single kernel ===
+        // Eliminates 2 intermediate allocations and enables kernel-level optimization
+        var fusedActivation = GetFusedActivationType();
+        Tensor<T> result;
+        if (fusedActivation != FusedActivationType.None)
+        {
+            // Single fused call: output = activation(conv(input, kernel) + bias)
+            result = Engine.FusedConv2D(_lastInput, _kernels, _biases,
+                Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
+        }
+        else
+        {
+            // Fallback: separate Conv2DInto + in-place bias + activation
+            Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
+            var output = _preAllocatedOutput;
 
-        var result = ApplyActivation(output);
+            _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
+            Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
+
+            result = ApplyActivation(output);
+        }
 
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
