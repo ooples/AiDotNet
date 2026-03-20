@@ -32,7 +32,8 @@ namespace AiDotNet.AutoML;
 ///     trainedModel2,
 ///     trainedModel3
 /// };
-/// var ensemble = new AutoMLEnsembleModel&lt;double&gt;(models);
+/// var ensemble = new AutoMLEnsembleModel&lt;double&gt;(
+///     models, PredictionType.Regression);
 /// Vector&lt;double&gt; predictions = ensemble.Predict(testData);
 /// </code>
 /// </example>
