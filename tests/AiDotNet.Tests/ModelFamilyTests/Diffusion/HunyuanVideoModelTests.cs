@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class HunyuanVideoModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 16, 32, 32];
+    protected override int[] OutputShape => [1, 16, 32, 32];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new HunyuanVideoModel<double>();
+        => new HunyuanVideoModel<double>(seed: 42);
 }

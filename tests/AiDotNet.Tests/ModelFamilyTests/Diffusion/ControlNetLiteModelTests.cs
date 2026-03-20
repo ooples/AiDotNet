@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class ControlNetLiteModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 4, 64, 64];
+    protected override int[] OutputShape => [1, 4, 64, 64];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new ControlNetLiteModel<double>();
+        => new ControlNetLiteModel<double>(seed: 42);
 }

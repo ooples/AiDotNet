@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class SeedEdit3ModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 16, 32, 32];
+    protected override int[] OutputShape => [1, 16, 32, 32];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new SeedEdit3Model<double>();
+        => new SeedEdit3Model<double>(seed: 42);
 }
