@@ -8,7 +8,7 @@ For a production SD15 UNet with 50 denoising steps, the current approach allocat
 
 ## Target Architecture
 
-```
+```text
 Inputs: Tensor<T>[]
     |
     v
@@ -127,8 +127,7 @@ The WorkspaceCodeGenerator builds expression trees that reference:
 
     engine.TensorAddInPlace(slot4, skip_connection);  // residual add
 
-    // slot4 is the output — copy to output array
-    return slot4;
+    // slot4 is the output — caller reads it from workspace.Get(4)
 }
 ```
 

@@ -685,9 +685,10 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
             double range = colMax - colMin;
             if (range > maxRange) maxRange = range;
         }
-        // Merge clusters whose centers are within 50% of the data range.
-        // This aggressively merges degenerate clusters where all data is tightly grouped.
-        double mergeThreshold = Math.Max(1e-6, maxRange * 0.50);
+        // Only merge clusters whose centers are nearly identical (within 1% of the data range).
+        // This catches true degenerate clusters (duplicates/empty splits) without collapsing
+        // legitimate clusters that happen to be somewhat close together.
+        double mergeThreshold = Math.Max(1e-6, maxRange * 0.01);
 
         // First: identify which clusters actually have data points
         var clusterPopulations = new int[NumClusters];
