@@ -315,10 +315,39 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                 labelMap[oldLabel] = newLabel;
             }
 
+            // Remap ALL neurons (not just BMU winners) to valid post-merge labels.
+            // Neurons that never won a BMU could retain stale labels >= NumClusters.
+            int height = _options.GridHeight;
             for (int ni = 0; ni < _neuronLabels.Length; ni++)
             {
                 if (labelMap.TryGetValue(_neuronLabels[ni], out int mapped))
+                {
                     _neuronLabels[ni] = mapped;
+                }
+                else
+                {
+                    // This neuron was never a BMU winner — assign it to the nearest cluster center
+                    int nr = ni / width;
+                    int nc = ni % width;
+                    T[] neuronWeights = _weights![nr, nc];
+                    int bestCluster = 0;
+                    T bestDist = NumOps.MaxValue;
+                    for (int ci = 0; ci < ClusterCenters.Rows; ci++)
+                    {
+                        T dist = NumOps.Zero;
+                        for (int fi = 0; fi < d; fi++)
+                        {
+                            T diff = NumOps.Subtract(neuronWeights[fi], ClusterCenters[ci, fi]);
+                            dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
+                        }
+                        if (NumOps.ToDouble(dist) < NumOps.ToDouble(bestDist))
+                        {
+                            bestDist = dist;
+                            bestCluster = ci;
+                        }
+                    }
+                    _neuronLabels[ni] = bestCluster;
+                }
             }
         }
 

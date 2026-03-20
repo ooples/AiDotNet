@@ -68,12 +68,12 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             {
                 ZsMu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
                 ZtMu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                ZsLogVar[i, k] = NumOps.FromDouble(-4);  // Initialize log-variance (updated during training)
-                ZtLogVar[i, k] = NumOps.FromDouble(-4);
+                ZsLogVar[i, k] = NumOps.FromDouble(InitialLogVariance);
+                ZtLogVar[i, k] = NumOps.FromDouble(InitialLogVariance);
             }
 
-        // KL weight for variational regularization (warm up to prevent posterior collapse)
-        double klWeight = 0.01;
+        // KL warm-up schedule to prevent posterior collapse
+        int warmUpEpochs = UseKlWarmUp ? Math.Max(1, MaxEpochs / 4) : 0;
 
         T lr = NumOps.FromDouble(LearningRate);
         T alpha = NumOps.Zero;
@@ -82,6 +82,11 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
+            // KL weight schedule: ramp from DefaultKlWeight to MaxKlWeight over warmUpEpochs
+            double klWeight = UseKlWarmUp && warmUpEpochs > 0 && epoch < warmUpEpochs
+                ? DefaultKlWeight + (MaxKlWeight - DefaultKlWeight) * epoch / warmUpEpochs
+                : MaxKlWeight;
+
             // Sample embeddings via reparameterization: z = mu + sigma * epsilon
             var Zs = new Matrix<T>(d, embDim);
             var Zt = new Matrix<T>(d, embDim);

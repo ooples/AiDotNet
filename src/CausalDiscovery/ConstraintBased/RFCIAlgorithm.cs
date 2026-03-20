@@ -196,7 +196,7 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
                 {
                     if (!oriented[v, c]) continue;     // v must be parent of c (v → c)
                     if (!adj[b, v]) continue;           // b adjacent to v
-                    if (!oriented[v, b] && !oriented[b, v]) continue; // must be oriented edge
+                    if (!oriented[v, b] && !oriented[b, v] && !bidirected[b, v]) continue; // must be oriented or bidirected edge
                     // v must be a collider: needs an incoming edge from the previous node AND oriented[v,b]
                     // For a 2-node path (path = <a, v, b, c>), v is a collider if a→v and b→v (or bidirected)
 
@@ -214,8 +214,18 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
                             if (sepAC.Contains(b))
                             {
                                 // b is non-collider → orient b → c
-                                if (!oriented[c, b] && !oriented[b, c])
+                                if (oriented[c, b])
+                                {
+                                    // Conflict with existing c→b → bidirected
+                                    bidirected[b, c] = true;
+                                    bidirected[c, b] = true;
+                                    oriented[b, c] = false;
+                                    oriented[c, b] = false;
+                                }
+                                else if (!oriented[b, c])
+                                {
                                     oriented[b, c] = true;
+                                }
                             }
                             else
                             {

@@ -105,13 +105,22 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
     private const string PrepGraphNormalizer = "GraphNormalizer";
     private const string PrepTimeSeriesScaler = "TimeSeriesScaler";
 
-    // Diagnostic for suspicious model/optimizer combinations
+    // Diagnostic for suspicious model/optimizer combinations (reducible overlap)
     private static readonly DiagnosticDescriptor SuspiciousOptimizer = new(
         id: "AIDN030",
         title: "Conflicting optimizer requirements across model categories",
         messageFormat: "Model '{0}' has categories '{1}' with conflicting optimizer requirements. Ensure the model's default optimizer is from the intersection of compatible optimizers for all its categories.",
         category: "AiDotNet.Compatibility",
-        defaultSeverity: DiagnosticSeverity.Warning, // Warning for reducible overlaps; truly impossible = separate diagnostic
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    // Diagnostic for impossible model/optimizer combinations (empty intersection)
+    private static readonly DiagnosticDescriptor ImpossibleOptimizerCombination = new(
+        id: "AIDN031",
+        title: "Impossible optimizer requirements across model categories",
+        messageFormat: "Model '{0}' has categories '{1}' with no common optimizer. The intersection of compatible optimizers is empty, meaning no optimizer can satisfy all categories simultaneously.",
+        category: "AiDotNet.Compatibility",
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -217,21 +226,22 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
 
         entries.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
 
-        // Emit AIDN030 diagnostics for models whose categories have conflicting optimizer
-        // requirements. For example, a model with [NeuralNetwork, GAN] categories: NeuralNetwork
-        // allows all gradient optimizers (including SGD), but GAN restricts to Adam/RMSProp/AdamW.
-        // The intersection removes SGD, and AIDN030 fires to flag the conflict so developers
-        // ensure the model's default optimizer is from the safe intersection set.
+        // Emit diagnostics for models whose categories have conflicting optimizer requirements.
+        // AIDN030 (Warning): intersection is non-empty but smaller than union (reducible overlap).
+        // AIDN031 (Error): intersection is empty (impossible combination, no optimizer works).
         foreach (var entry in entries)
         {
             var (_, _, _, warnings) = GetCompatibilityRules(entry.Categories);
             if (warnings.Count > 0 && entry.Location is not null)
             {
+                var categoryNames = string.Join(", ", entry.Categories.Select(c => GetCategoryName(c, categoryEnumType)));
+                bool isImpossible = warnings.Any(w => w.StartsWith("IMPOSSIBLE:", System.StringComparison.Ordinal));
+
                 context.ReportDiagnostic(Diagnostic.Create(
-                    SuspiciousOptimizer,
+                    isImpossible ? ImpossibleOptimizerCombination : SuspiciousOptimizer,
                     entry.Location,
                     entry.ClassName,
-                    string.Join(", ", entry.Categories.Select(c => GetCategoryName(c, categoryEnumType)))));
+                    categoryNames));
             }
         }
 
@@ -697,11 +707,14 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
             for (int i = 1; i < perCategoryOptimizers.Count; i++)
                 safeSet.IntersectWith(perCategoryOptimizers[i]);
 
-            // Only warn if the intersection actually removed optimizers that are known to be
-            // problematic for certain model types (e.g., SGD removed because GAN category
-            // doesn't include it). We use the intersection as the final optimizer set to
-            // enforce that all categories agree.
-            if (safeSet.Count > 0 && safeSet.Count < optimizers.Count)
+            if (safeSet.Count == 0)
+            {
+                // Empty intersection: no optimizer can satisfy all categories.
+                // Flag as impossible combination but keep the union for the compatibility matrix
+                // so developers can still see what each category would individually support.
+                warnings.Add("IMPOSSIBLE: No common optimizer exists across all categories. The intersection is empty.");
+            }
+            else if (safeSet.Count < optimizers.Count)
             {
                 var removed = new HashSet<string>(optimizers);
                 removed.ExceptWith(safeSet);

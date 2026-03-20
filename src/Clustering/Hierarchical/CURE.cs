@@ -573,31 +573,30 @@ public class CURE<T> : ClusteringBase<T>
         {
             var cluster = new CureCluster
             {
-                Points = new List<T[]>(),
-                RepresentativePoints = new List<T[]>()
+                Points = new List<int>(),
+                Representatives = new List<T[]>()
             };
 
             for (int i = 0; i < Labels.Length; i++)
             {
                 if ((int)NumOps.ToDouble(Labels[i]) == c)
                 {
-                    var point = new T[d];
-                    for (int j = 0; j < d; j++) point[j] = x[i, j];
-                    cluster.Points.Add(point);
+                    cluster.Points.Add(i);
                 }
             }
 
             if (cluster.Points.Count > 0)
             {
-                // Use centroid as representative point
+                // Compute centroid as representative point
                 var centroid = new T[d];
-                foreach (var pt in cluster.Points)
+                foreach (int idx in cluster.Points)
                     for (int j = 0; j < d; j++)
-                        centroid[j] = NumOps.Add(centroid[j], pt[j]);
+                        centroid[j] = NumOps.Add(centroid[j], x[idx, j]);
                 T count = NumOps.FromDouble(cluster.Points.Count);
                 for (int j = 0; j < d; j++)
                     centroid[j] = NumOps.Divide(centroid[j], count);
-                cluster.RepresentativePoints.Add(centroid);
+                cluster.Center = centroid;
+                cluster.Representatives.Add(centroid);
             }
 
             newClusters.Add(cluster);
