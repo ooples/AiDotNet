@@ -252,7 +252,37 @@ public class AffinityPropagation<T> : ClusteringBase<T>
         }
 
         // Merge degenerate clusters (handles single natural cluster with many exemplars)
+        int premergeK = NumClusters;
         MergeDegenerateClusters(x);
+
+        // Rebuild _exemplarIndices after merge to match post-merge cluster IDs
+        if (NumClusters < premergeK && Labels is not null && ClusterCenters is not null)
+        {
+            var newExemplars = new int[NumClusters];
+            for (int k = 0; k < NumClusters; k++)
+            {
+                // Find the training sample closest to the merged center
+                double bestDist = double.MaxValue;
+                int bestIdx = 0;
+                for (int i = 0; i < x.Rows; i++)
+                {
+                    if ((int)Math.Round(NumOps.ToDouble(Labels[i])) != k) continue;
+                    double dist = 0;
+                    for (int j = 0; j < x.Columns; j++)
+                    {
+                        double diff = NumOps.ToDouble(x[i, j]) - NumOps.ToDouble(ClusterCenters[k, j]);
+                        dist += diff * diff;
+                    }
+                    if (dist < bestDist)
+                    {
+                        bestDist = dist;
+                        bestIdx = i;
+                    }
+                }
+                newExemplars[k] = bestIdx;
+            }
+            _exemplarIndices = newExemplars;
+        }
 
         IsTrained = true;
     }

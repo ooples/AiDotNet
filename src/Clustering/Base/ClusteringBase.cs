@@ -117,6 +117,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     public virtual void Fit(Matrix<T> x)
     {
+        TrainingDataRef = x;
         var y = new Vector<T>(x.Rows);
         Train(x, y);
     }

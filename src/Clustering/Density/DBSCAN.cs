@@ -489,6 +489,10 @@ public class DBSCAN<T> : ClusteringBase<T>
         // Normalize input using the same parameters from training
         if (_featureMeans is not null && _featureStds is not null)
         {
+            if (x.Columns != _featureMeans.Length)
+                throw new ArgumentException(
+                    $"Input columns ({x.Columns}) must match training data columns ({_featureMeans.Length}).");
+
             var xNorm = new Matrix<T>(x.Rows, x.Columns);
             for (int i = 0; i < x.Rows; i++)
                 for (int j = 0; j < x.Columns; j++)

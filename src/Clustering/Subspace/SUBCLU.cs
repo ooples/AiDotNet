@@ -149,6 +149,12 @@ public class SUBCLU<T> : ClusteringBase<T>
                     clone.ClusterCenters[i, j] = ClusterCenters[i, j];
         }
 
+        // Copy normalization state so Predict works correctly on the clone
+        if (_normMeans is not null)
+            clone._normMeans = (double[])_normMeans.Clone();
+        if (_normStds is not null)
+            clone._normStds = (double[])_normStds.Clone();
+
         return clone;
     }
 

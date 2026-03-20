@@ -233,6 +233,17 @@ public class COPKMeans<T> : ClusteringBase<T>
         }
 
         MergeDegenerateClusters(x);
+
+        // Recompute constraint status after merge since labels may have changed
+        if (Labels is not null)
+        {
+            var mergedLabels = new int[Labels.Length];
+            for (int i = 0; i < Labels.Length; i++)
+                mergedLabels[i] = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+            ConstraintViolations = CountViolations(mergedLabels);
+            ConstraintsSatisfied = ConstraintViolations == 0;
+        }
+
         IsTrained = true;
     }
 
