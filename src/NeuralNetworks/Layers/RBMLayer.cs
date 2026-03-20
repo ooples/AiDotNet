@@ -999,12 +999,25 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
             new Vector<T>(_weights.ToArray()),
             new Vector<T>(_visibleBiases.ToArray()),
             new Vector<T>(_hiddenBiases.ToArray())
         );
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        // _weights is a 2D Tensor [visibleUnits, hiddenUnits]
+        for (int i = 0; i < _weights.Length; i++)
+            _weights.SetFlat(i, parameters[idx++]);
+        // _visibleBiases is a 1D Tensor [visibleUnits]
+        for (int i = 0; i < _visibleBiases.Length; i++)
+            _visibleBiases.SetFlat(i, parameters[idx++]);
+        // _hiddenBiases is a 1D Tensor [hiddenUnits]
+        for (int i = 0; i < _hiddenBiases.Length; i++)
+            _hiddenBiases.SetFlat(i, parameters[idx++]);
     }
 
     /// <summary>

@@ -844,6 +844,17 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// can be loaded into later.
     /// </para>
     /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var copy = (NeuralNetworkBase<T>)CreateNewInstance();
+        var originalParams = GetParameters();
+        if (originalParams.Length > 0 && originalParams.Length == copy.GetParameters().Length)
+        {
+            copy.UpdateParameters(originalParams);
+        }
+        return copy;
+    }
+
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new DeepBeliefNetwork<T>(
