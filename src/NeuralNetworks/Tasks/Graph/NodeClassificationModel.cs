@@ -69,7 +69,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 ///
 /// // Classify each node using GCN with neighborhood aggregation
 /// var predictions = model.Predict(nodeFeatures);
-/// Console.WriteLine($"Node 0 predicted class: {predictions}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

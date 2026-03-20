@@ -45,7 +45,7 @@ namespace AiDotNet.Regression;
 /// // Predict for new input
 /// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 6 });
 /// var prediction = model.Predict(newFeatures);
-/// Console.WriteLine($"Predicted value: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

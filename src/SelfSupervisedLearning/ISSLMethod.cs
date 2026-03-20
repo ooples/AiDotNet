@@ -25,7 +25,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 ///
 /// // Train for one step
 /// var result = simclr.TrainStep(batch, augmentationContext);
-/// Console.WriteLine($"Loss: {result.Loss}");
+/// // Result is available in the returned value
 ///
 /// // Get learned representations
 /// var embeddings = simclr.Encode(newData);

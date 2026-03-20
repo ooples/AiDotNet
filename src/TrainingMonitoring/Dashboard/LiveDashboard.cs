@@ -17,7 +17,7 @@ namespace AiDotNet.TrainingMonitoring.Dashboard;
 /// <code>
 /// using var dashboard = new LiveDashboard(port: 6006);
 /// dashboard.Start();
-/// Console.WriteLine($"Dashboard running at: {dashboard.Url}");
+/// // Result is available in the returned value
 ///
 /// // During training
 /// for (int epoch = 0; epoch &lt; 100; epoch++)
@@ -28,7 +28,7 @@ namespace AiDotNet.TrainingMonitoring.Dashboard;
 ///     // Dashboard updates in real-time!
 /// }
 ///
-/// Console.WriteLine("Press Enter to stop...");
+/// // Result is available in the returned value
 /// Console.ReadLine();
 /// dashboard.Stop();
 /// </code>

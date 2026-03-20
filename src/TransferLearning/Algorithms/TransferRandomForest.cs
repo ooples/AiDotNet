@@ -270,7 +270,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// // Predict on target domain data using feature mapping
 /// var targetFeatures = Matrix&lt;double&gt;.Build.Dense(1, 5);
 /// var prediction = mappedModel.Predict(targetFeatures);
-/// Console.WriteLine($"Predicted value: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

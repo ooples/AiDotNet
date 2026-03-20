@@ -18,7 +18,7 @@ namespace AiDotNet.Document.Interfaces;
 /// <code>
 /// var recognizer = new TrOCR&lt;float&gt;(architecture);
 /// var result = recognizer.RecognizeText(croppedTextImage);
-/// Console.WriteLine($"Recognized: {result.Text} (confidence: {result.Confidence})");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

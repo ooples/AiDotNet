@@ -26,13 +26,13 @@ namespace AiDotNet.Reasoning.Models;
 /// ReasoningResult&lt;double&gt; result = await strategy.ReasonAsync("What is 15% of 240?");
 ///
 /// // Access the answer
-/// Console.WriteLine($"Answer: {result.FinalAnswer}");  // "36"
+/// // Result is available in the returned value  // "36"
 ///
 /// // Check confidence
-/// Console.WriteLine($"Confidence: {result.OverallConfidence}");  // 0.95
+/// // Result is available in the returned value  // 0.95
 ///
 /// // See how long it took
-/// Console.WriteLine($"Took {result.TotalDuration.TotalSeconds} seconds");
+/// // Result is available in the returned value
 ///
 /// // Review the reasoning steps
 /// foreach (var step in result.ReasoningChain.Steps)
@@ -41,7 +41,7 @@ namespace AiDotNet.Reasoning.Models;
 /// }
 ///
 /// // Get performance metrics
-/// Console.WriteLine($"Used {result.Metrics["llm_calls"]} AI model calls");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

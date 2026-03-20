@@ -437,7 +437,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     ///
     /// // Detect sounds in audio
     /// var result = beats.Detect(audioWaveform);
-    /// Console.WriteLine($"Detected {result.Events.Count} events in {result.TotalDuration:F1}s");
+    /// // Result is available in the returned value
     /// </code>
     ///
     /// The downloaded model is cached locally, so subsequent calls will be fast.
@@ -1227,9 +1227,9 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// For example, you can check whether you loaded the right model:
     /// <code>
     /// var meta = beats.GetModelMetadata();
-    /// Console.WriteLine($"Model: {meta.Name}");
-    /// Console.WriteLine($"Classes: {meta.FeatureCount}");
-    /// Console.WriteLine($"Encoder layers: {meta.AdditionalInfo["NumEncoderLayers"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>

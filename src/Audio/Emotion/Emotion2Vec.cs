@@ -32,7 +32,7 @@ namespace AiDotNet.Audio.Emotion;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 7);
 /// var model = new Emotion2Vec&lt;float&gt;(arch, "emotion2vec.onnx");
 /// var result = model.RecognizeEmotion(speechAudio);
-/// Console.WriteLine($"Emotion: {result.Emotion}, Confidence: {result.Confidence}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

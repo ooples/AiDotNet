@@ -32,7 +32,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 32128);
 /// var model = new Canary&lt;float&gt;(arch, "canary_1b.onnx");
 /// var result = model.Transcribe(audio, "en");
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

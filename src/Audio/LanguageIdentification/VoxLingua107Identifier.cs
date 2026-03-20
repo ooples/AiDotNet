@@ -49,7 +49,7 @@ namespace AiDotNet.Audio.LanguageIdentification;
 /// <code>
 /// var model = new VoxLingua107Identifier&lt;float&gt;(architecture, "voxlingua107.onnx");
 /// var result = model.IdentifyLanguage(audioTensor);
-/// Console.WriteLine($"Language: {result.LanguageName} ({result.Confidence:P0})");
+/// // Result is available in the returned value
 /// // Output: Language: Swedish (85%)
 ///
 /// // Get top 5 predictions

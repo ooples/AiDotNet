@@ -67,7 +67,7 @@ namespace AiDotNet.Classification;
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 2.2; newSample[0, 1] = 1.8;
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted ordinal class: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

@@ -24,8 +24,8 @@ namespace AiDotNet.Interfaces;
 /// var analyzer = new TokenCountAnalyzer();
 /// var metrics = analyzer.Analyze("Translate this text...");
 ///
-/// Console.WriteLine($"Tokens: {metrics.TokenCount}");
-/// Console.WriteLine($"Cost: ${metrics.EstimatedCost}");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 ///
 /// if (metrics.TokenCount > 4000)
 /// {

@@ -58,7 +58,7 @@ namespace AiDotNet.Classification.Boosting;
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 1.1; newSample[0, 1] = 1.0;
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>

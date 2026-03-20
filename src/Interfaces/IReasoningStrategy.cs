@@ -26,8 +26,8 @@ namespace AiDotNet.Interfaces;
 /// // Use Chain-of-Thought strategy for step-by-step reasoning
 /// IReasoningStrategy&lt;double&gt; cotStrategy = new ChainOfThoughtStrategy&lt;double&gt;(chatModel);
 /// var result = await cotStrategy.ReasonAsync("What is 15% of 240?");
-/// Console.WriteLine(result.FinalAnswer); // "36"
-/// Console.WriteLine(result.ReasoningChain); // Shows step-by-step work
+/// // Result is available in the returned value // "36"
+/// // Result is available in the returned value // Shows step-by-step work
 ///
 /// // Use Tree-of-Thoughts for exploring multiple paths
 /// IReasoningStrategy&lt;double&gt; totStrategy = new TreeOfThoughtsStrategy&lt;double&gt;(chatModel);

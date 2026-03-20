@@ -16,7 +16,7 @@ namespace AiDotNet.Document.Interfaces;
 /// Example usage:
 /// <code>
 /// var result = ocrModel.RecognizeText(documentImage);
-/// Console.WriteLine($"Full text: {result.FullText}");
+/// // Result is available in the returned value
 /// foreach (var word in result.Words)
 /// {
 ///     Console.WriteLine($"'{word.Text}' at position ({word.BoundingBox})");

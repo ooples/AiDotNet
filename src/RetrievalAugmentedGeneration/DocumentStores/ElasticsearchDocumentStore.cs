@@ -397,7 +397,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     /// <code>
     /// // Efficiently retrieve all documents
     /// var allDocs = store.GetAll().ToList();
-    /// Console.WriteLine($"Total documents: {allDocs.Count}");
+    /// // Result is available in the returned value
     ///
     /// // Export to JSON
     /// var json = JsonConvert.SerializeObject(allDocs);
@@ -558,7 +558,7 @@ public class ElasticsearchDocumentStore<T> : DocumentStoreBase<T>
     /// Example:
     /// <code>
     /// store.Clear();
-    /// Console.WriteLine($"Documents in index: {store.DocumentCount}"); // 0
+    /// // Result is available in the returned value // 0
     /// </code>
     /// </para>
     /// </remarks>

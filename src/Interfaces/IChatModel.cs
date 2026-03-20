@@ -64,7 +64,7 @@ public interface IChatModel<T> : ILanguageModel<T>
     /// <code>
     /// string prompt = "Explain what a neural network is in simple terms.";
     /// string response = await chatModel.GenerateResponseAsync(prompt);
-    /// Console.WriteLine(response);
+    /// // Result is available in the returned value
     /// </code>
     ///
     /// Implementation notes for developers:

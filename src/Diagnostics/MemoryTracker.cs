@@ -25,7 +25,7 @@ namespace AiDotNet.Diagnostics;
 ///
 /// // Compare
 /// var diff = after.CompareTo(before);
-/// Console.WriteLine($"Memory delta: {diff.TotalMemoryDelta / 1024 / 1024:F2} MB");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

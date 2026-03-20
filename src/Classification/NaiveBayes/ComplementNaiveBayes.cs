@@ -58,7 +58,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// var newSample = new Matrix&lt;double&gt;(1, 3);
 /// newSample[0, 0] = 3; newSample[0, 1] = 0; newSample[0, 2] = 1;
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

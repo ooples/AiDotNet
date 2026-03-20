@@ -61,7 +61,7 @@ namespace AiDotNet.Classification.Ensemble;
 /// // Predict using majority vote across all trees in the forest
 /// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

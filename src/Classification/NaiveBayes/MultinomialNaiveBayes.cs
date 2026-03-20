@@ -54,7 +54,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// // Predict class based on word count likelihoods
 /// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 4, 1, 0 });
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

@@ -348,8 +348,8 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// Example:
     /// ```csharp
     /// var metadata = extraTrees.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Number of trees: {metadata.AdditionalInfo["NumberOfTrees"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>

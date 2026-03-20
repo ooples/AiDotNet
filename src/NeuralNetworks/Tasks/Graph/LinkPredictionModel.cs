@@ -71,7 +71,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 ///
 /// // Predict edge likelihood between node pairs
 /// var scores = model.Predict(nodeFeatures);
-/// Console.WriteLine($"Link score: {scores}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

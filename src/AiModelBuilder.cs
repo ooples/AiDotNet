@@ -839,7 +839,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///     "Explain why this prediction was made and what factors contributed most?",
     ///     ReasoningMode.ChainOfThought
     /// );
-    /// Console.WriteLine(reasoningResult.FinalAnswer);
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>
@@ -3642,7 +3642,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// // After training
     /// var result = builder.Build();
     /// var shapExplanation = result.ExplainWithSHAP(inputInstance, backgroundData);
-    /// Console.WriteLine($"Age contributed: {shapExplanation.ShapValues[0]}");
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>
@@ -4530,7 +4530,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///
     /// var advice = await builder.AskAgentAsync(
     ///     "Should I use Ridge or Lasso regression for my dataset with 50 features?");
-    /// Console.WriteLine(advice);
+    /// // Result is available in the returned value
     /// </code>
     /// </remarks>
     public async Task<string> AskAgentAsync(string question)
@@ -4699,7 +4699,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///
     /// // Access the profiling report
     /// var report = result.ProfilingReport;
-    /// Console.WriteLine(report?.GetFormattedSummary());
+    /// // Result is available in the returned value
     /// </code>
     ///
     /// Features tracked:

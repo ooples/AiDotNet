@@ -79,8 +79,8 @@ namespace AiDotNet.Reasoning.Strategies;
 /// );
 ///
 /// // Result includes the best reasoning path found
-/// Console.WriteLine(result.FinalAnswer);
-/// Console.WriteLine($"Explored {result.Metrics["nodes_explored"]} possibilities");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

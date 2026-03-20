@@ -39,7 +39,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// <code>
 /// var model = new SVTR&lt;float&gt;(architecture);
 /// var result = model.RecognizeText(textImage);
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// <para>

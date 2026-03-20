@@ -22,8 +22,8 @@ namespace AiDotNet.Helpers;
 ///
 /// // Inspect a model file without loading it
 /// var info = ModelLoader.Inspect("model.aimf");
-/// Console.WriteLine($"Model type: {info.TypeName}");
-/// Console.WriteLine($"Input shape: [{string.Join(", ", info.InputShape)}]");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 /// </code>
 ///
 /// All model files must use the AIMF envelope format. Files saved with SaveModel()

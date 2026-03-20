@@ -20,7 +20,7 @@ namespace AiDotNet.Document.Interfaces;
 /// <code>
 /// var classifier = new DocumentTypeClassifier&lt;float&gt;(architecture);
 /// var result = classifier.ClassifyDocument(documentImage);
-/// Console.WriteLine($"Document type: {result.PredictedCategory}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

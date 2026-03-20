@@ -57,7 +57,7 @@ namespace AiDotNet.TimeSeries;
 ///
 /// // Forecast future values using hierarchical interpolation
 /// var forecast = model.Predict(trainingMatrix);
-/// Console.WriteLine($"Next predicted value: {forecast[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

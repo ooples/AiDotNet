@@ -66,7 +66,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// // Predict using combined AdaBoost ensemble
 /// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 5.1, 5.0 });
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>

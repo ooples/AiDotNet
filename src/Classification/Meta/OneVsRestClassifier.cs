@@ -66,7 +66,7 @@ namespace AiDotNet.Classification.Meta;
 /// // Predict class with highest confidence score
 /// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 3.1, 3.0 });
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

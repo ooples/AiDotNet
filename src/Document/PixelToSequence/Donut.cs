@@ -48,7 +48,7 @@ namespace AiDotNet.Document.PixelToSequence;
 /// <code>
 /// var donut = new Donut&lt;float&gt;(architecture);
 /// var result = donut.ParseDocument(documentImage, "invoice");
-/// Console.WriteLine(result.ParsedContent);
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// <para>

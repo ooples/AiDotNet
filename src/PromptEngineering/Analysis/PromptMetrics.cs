@@ -22,10 +22,10 @@ namespace AiDotNet.PromptEngineering.Analysis;
 /// <code>
 /// var metrics = analyzer.Analyze("Translate {text} from English to Spanish");
 ///
-/// Console.WriteLine($"Tokens: {metrics.TokenCount}");        // e.g., 8
-/// Console.WriteLine($"Cost: ${metrics.EstimatedCost}");      // e.g., $0.0001
-/// Console.WriteLine($"Variables: {metrics.VariableCount}");  // e.g., 1
-/// Console.WriteLine($"Patterns: {string.Join(", ", metrics.DetectedPatterns)}");
+/// // Result is available in the returned value        // e.g., 8
+/// // Result is available in the returned value      // e.g., $0.0001
+/// // Result is available in the returned value  // e.g., 1
+/// // Result is available in the returned value
 /// // e.g., "translation, instruction"
 /// </code>
 /// </para>

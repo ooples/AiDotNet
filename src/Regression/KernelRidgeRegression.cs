@@ -349,8 +349,8 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// Example:
     /// ```csharp
     /// var metadata = krr.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Lambda: {metadata.AdditionalInfo["LambdaKRR"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>
