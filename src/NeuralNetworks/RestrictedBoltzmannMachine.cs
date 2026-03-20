@@ -886,12 +886,20 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             // Accumulate updates
             weightUpdates = weightUpdates.Add(sampleWeightUpdates);
 
+            // Helper to access tensor value regardless of orientation
+            T GetVal(Tensor<T> t, int idx)
+            {
+                if (t.Rank == 1) return t[idx];
+                if (t.Shape[0] == 1) return t[0, idx];
+                return t[idx, 0];
+            }
+
             // Update visible bias (visible data - visible reconstruction)
             for (int i = 0; i < VisibleSize; i++)
             {
                 visibleBiasUpdates[i] = NumOps.Add(
                     visibleBiasUpdates[i],
-                    NumOps.Subtract(visibleSample[0, i], visibleReconstruction[0, i])
+                    NumOps.Subtract(GetVal(visibleSample, i), GetVal(visibleReconstruction, i))
                 );
             }
 
@@ -900,7 +908,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             {
                 hiddenBiasUpdates[j] = NumOps.Add(
                     hiddenBiasUpdates[j],
-                    NumOps.Subtract(hiddenActivations[0, j], hiddenReactivations[0, j])
+                    NumOps.Subtract(GetVal(hiddenActivations, j), GetVal(hiddenReactivations, j))
                 );
             }
         }
@@ -946,11 +954,20 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         var associations = new Matrix<T>(HiddenSize, VisibleSize);
 
+        // Handle both [1, size] and [size, 1] tensor orientations
+        T GetValue(Tensor<T> t, int idx)
+        {
+            if (t.Rank == 1) return t[idx];
+            if (t.Shape[0] == 1) return t[0, idx]; // [1, size]
+            return t[idx, 0]; // [size, 1]
+        }
+
         for (int i = 0; i < HiddenSize; i++)
         {
+            T h = GetValue(hidden, i);
             for (int j = 0; j < VisibleSize; j++)
             {
-                associations[i, j] = NumOps.Multiply(hidden[0, i], visible[0, j]);
+                associations[i, j] = NumOps.Multiply(h, GetValue(visible, j));
             }
         }
 
@@ -1054,11 +1071,19 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             // Reconstruct visible layer
             var visibleReconstruction = GetVisibleLayerActivation(hiddenActivations);
 
+            // Helper for tensor access regardless of orientation
+            T GetReconVal(int idx)
+            {
+                if (visibleReconstruction.Rank == 1) return visibleReconstruction[idx];
+                if (visibleReconstruction.Shape[0] == 1) return visibleReconstruction[0, idx];
+                return visibleReconstruction[idx, 0];
+            }
+
             // Compute mean squared error
             T sampleError = NumOps.Zero;
             for (int i = 0; i < VisibleSize; i++)
             {
-                T diff = NumOps.Subtract(visibleSample[0, i], visibleReconstruction[0, i]);
+                T diff = NumOps.Subtract(visibleSample[0, i], GetReconVal(i));
                 sampleError = NumOps.Add(sampleError, NumOps.Multiply(diff, diff));
             }
 
@@ -1342,6 +1367,18 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         }
 
         return hiddenActivations;
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>
+        {
+            ["Input"] = input,
+            ["HiddenActivation"] = GetHiddenLayerActivation(input),
+            ["Output"] = Predict(input)
+        };
+        return activations;
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
