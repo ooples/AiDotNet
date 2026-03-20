@@ -817,6 +817,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             attentionResolutions: _attentionResolutions,
             contextDim: _contextDim,
             numHeads: _numHeads,
+            inputHeight: _inputHeight,
             lossFunction: LossFunction);
 
         clone.SetParameters(GetParameters());

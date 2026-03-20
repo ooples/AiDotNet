@@ -297,9 +297,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
-        // For diffusion models, prediction is generating samples
-        // Use the input shape for generation
-        return Generate(input.Shape, _options.DefaultInferenceSteps);
+        // For diffusion models, prediction is generating samples.
+        // Use a deterministic seed derived from the input so Predict is reproducible
+        // across clones and repeated calls with the same input.
+        int seed = 0;
+        for (int i = 0; i < Math.Min(input.Length, 16); i++)
+        {
+            seed = unchecked(seed * 31 + NumOps.ToDouble(input[i]).GetHashCode());
+        }
+        return Generate(input.Shape, _options.DefaultInferenceSteps, seed);
     }
 
     /// <inheritdoc />
@@ -686,47 +692,58 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             // Fall through to numerical gradients
         }
 
-        // Fallback: SPSA (Simultaneous Perturbation Stochastic Approximation)
-        // Estimates gradient with just 2 forward passes regardless of parameter count,
-        // vs O(n) forward passes for per-parameter finite differences.
-        // Reference: Spall, J.C. "Multivariate Stochastic Approximation Using a
-        // Simultaneous Perturbation Gradient Approximation", IEEE TAC, 1992.
-        var epsilon = NumOps.FromDouble(1e-4);
+        // Fallback: Multi-sample SPSA (Simultaneous Perturbation Stochastic Approximation)
+        // Averages multiple perturbations for more stable gradient estimates.
+        // Each sample requires 2 forward passes; total = 2 * numSamples.
+        // Reference: Spall, J.C., IEEE TAC, 1992.
+        var epsilon = NumOps.FromDouble(1e-3);
         var rng = RandomGenerator;
+        int numSamples = 3;
 
-        // Generate random perturbation vector: each element ±1 (Rademacher distribution)
-        var delta = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
+        for (int s = 0; s < numSamples; s++)
         {
-            delta[i] = NumOps.FromDouble(rng.NextDouble() < 0.5 ? -1.0 : 1.0);
+            // Generate random perturbation vector: each element ±1 (Rademacher distribution)
+            var delta = new Vector<T>(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                delta[i] = NumOps.FromDouble(rng.NextDouble() < 0.5 ? -1.0 : 1.0);
+            }
+
+            // Compute f(x + epsilon * delta)
+            var paramsPlus = new Vector<T>(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                paramsPlus[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
+            }
+            SetParameters(paramsPlus);
+            var predictedPlus = PredictNoise(noisySampleTensor, timestep);
+            var lossPlus = effectiveLossFunction.CalculateLoss(predictedPlus.ToVector(), noiseVector);
+
+            // Compute f(x - epsilon * delta)
+            var paramsMinus = new Vector<T>(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                paramsMinus[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
+            }
+            SetParameters(paramsMinus);
+            var predictedMinus = PredictNoise(noisySampleTensor, timestep);
+            var lossMinus = effectiveLossFunction.CalculateLoss(predictedMinus.ToVector(), noiseVector);
+
+            // Accumulate SPSA gradient estimate: g_i += (f+ - f-) / (2 * epsilon * delta_i)
+            var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+            var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                var sampleGrad = NumOps.Divide(lossDiff, NumOps.Multiply(twoEpsilon, delta[i]));
+                gradients[i] = NumOps.Add(gradients[i], sampleGrad);
+            }
         }
 
-        // Compute f(x + epsilon * delta)
-        var paramsPlus = new Vector<T>(parameters.Length);
+        // Average across samples
+        var invSamples = NumOps.FromDouble(1.0 / numSamples);
         for (int i = 0; i < parameters.Length; i++)
         {
-            paramsPlus[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
-        }
-        SetParameters(paramsPlus);
-        var predictedPlus = PredictNoise(noisySampleTensor, timestep);
-        var lossPlus = effectiveLossFunction.CalculateLoss(predictedPlus.ToVector(), noiseVector);
-
-        // Compute f(x - epsilon * delta)
-        var paramsMinus = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            paramsMinus[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
-        }
-        SetParameters(paramsMinus);
-        var predictedMinus = PredictNoise(noisySampleTensor, timestep);
-        var lossMinus = effectiveLossFunction.CalculateLoss(predictedMinus.ToVector(), noiseVector);
-
-        // SPSA gradient estimate: g_i = (f+ - f-) / (2 * epsilon * delta_i)
-        var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-        var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            gradients[i] = NumOps.Divide(lossDiff, NumOps.Multiply(twoEpsilon, delta[i]));
+            gradients[i] = NumOps.Multiply(gradients[i], invSamples);
         }
 
         // Restore original parameters
