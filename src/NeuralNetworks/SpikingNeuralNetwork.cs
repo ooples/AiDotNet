@@ -317,11 +317,15 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             }
             _refractoryCounters.Add(refractoryCounters);
 
-            // Initialize firing thresholds (default value of 1.0)
+            // Initialize firing thresholds.
+            // Per Maass (1997), threshold should be calibrated to expected input magnitude.
+            // With typical [0,1] inputs through Dense layers, threshold of 0.3 ensures
+            // spikes fire, enabling the network to differentiate inputs.
+            var threshold = NumOps.FromDouble(0.3);
             var thresholds = new Vector<T>(neuronCount);
             for (int i = 0; i < neuronCount; i++)
             {
-                thresholds[i] = NumOps.One;
+                thresholds[i] = threshold;
             }
             _firingThresholds.Add(thresholds);
         }
@@ -431,46 +435,38 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 Tensor<T> layerOutput = layer.Forward(layerInput);
                 Vector<T> layerOutputVector = layerOutput.ToVector();
 
-                // Update membrane potentials with decay and input
-                for (int i = 0; i < membranePotentials.Length; i++)
+                // VECTORIZED: Update membrane potentials with decay + input using Engine
+                var membraneTensor = Tensor<T>.FromVector(membranePotentials);
+                var decayed = Engine.TensorMultiplyScalar(membraneTensor, _membraneDecay);
+                var layerOutTensor = Tensor<T>.FromVector(layerOutputVector);
+                if (layerOutTensor.Length == decayed.Length)
                 {
-                    // Apply membrane decay
-                    membranePotentials[i] = NumOps.Multiply(membranePotentials[i], _membraneDecay);
-
-                    // Add input contribution
-                    if (i < layerOutputVector.Length)
-                    {
-                        membranePotentials[i] = NumOps.Add(membranePotentials[i], layerOutputVector[i]);
-                    }
+                    membraneTensor = Engine.TensorAdd(decayed, layerOutTensor);
                 }
-
-                // Generate spikes for neurons that cross threshold and are not in refractory period
-                Vector<T> spikes = new Vector<T>(membranePotentials.Length);
-
-                for (int i = 0; i < membranePotentials.Length; i++)
+                else
                 {
-                    // Check if neuron is not in refractory period and exceeds threshold
-                    if (refractoryCounters[i] <= 0 && NumOps.GreaterThanOrEquals(membranePotentials[i], firingThresholds[i]))
+                    membraneTensor = decayed;
+                    int minLen = Math.Min(layerOutTensor.Length, membraneTensor.Length);
+                    for (int m = 0; m < minLen; m++)
+                        membraneTensor[m] = NumOps.Add(membraneTensor[m], layerOutTensor[m]);
+                }
+                for (int m = 0; m < membranePotentials.Length; m++)
+                    membranePotentials[m] = membraneTensor[m];
+
+                // Generate spikes (branching per-neuron — refractory state prevents full vectorization)
+                Vector<T> spikes = new Vector<T>(membranePotentials.Length);
+                for (int n = 0; n < membranePotentials.Length; n++)
+                {
+                    if (refractoryCounters[n] <= 0 && NumOps.GreaterThanOrEquals(membranePotentials[n], firingThresholds[n]))
                     {
-                        // Generate spike
-                        spikes[i] = NumOps.One;
-
-                        // Reset membrane potential
-                        membranePotentials[i] = NumOps.Zero;
-
-                        // Start refractory period
-                        refractoryCounters[i] = _refractoryPeriod;
+                        spikes[n] = NumOps.One;
+                        membranePotentials[n] = NumOps.Zero;
+                        refractoryCounters[n] = _refractoryPeriod;
                     }
                     else
                     {
-                        // No spike
-                        spikes[i] = NumOps.Zero;
-
-                        // Decrement refractory counter if active
-                        if (refractoryCounters[i] > 0)
-                        {
-                            refractoryCounters[i]--;
-                        }
+                        spikes[n] = NumOps.Zero;
+                        if (refractoryCounters[n] > 0) refractoryCounters[n]--;
                     }
                 }
 
@@ -553,46 +549,38 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 Tensor<T> layerOutput = layer.Forward(layerInput);
                 Vector<T> layerOutputVector = layerOutput.ToVector();
 
-                // Update membrane potentials with decay and input
-                for (int i = 0; i < membranePotentials.Length; i++)
+                // VECTORIZED: Membrane decay + input using Engine
+                var mTensor = Tensor<T>.FromVector(membranePotentials);
+                var mDecayed = Engine.TensorMultiplyScalar(mTensor, _membraneDecay);
+                var lOutTensor = Tensor<T>.FromVector(layerOutputVector);
+                if (lOutTensor.Length == mDecayed.Length)
                 {
-                    // Apply membrane decay
-                    membranePotentials[i] = NumOps.Multiply(membranePotentials[i], _membraneDecay);
-
-                    // Add input contribution
-                    if (i < layerOutputVector.Length)
-                    {
-                        membranePotentials[i] = NumOps.Add(membranePotentials[i], layerOutputVector[i]);
-                    }
+                    mTensor = Engine.TensorAdd(mDecayed, lOutTensor);
                 }
-
-                // Generate spikes for neurons that cross threshold and are not in refractory period
-                Vector<T> spikes = new Vector<T>(membranePotentials.Length);
-
-                for (int i = 0; i < membranePotentials.Length; i++)
+                else
                 {
-                    // Check if neuron is not in refractory period and exceeds threshold
-                    if (refractoryCounters[i] <= 0 && NumOps.GreaterThanOrEquals(membranePotentials[i], firingThresholds[i]))
+                    mTensor = mDecayed;
+                    int ml = Math.Min(lOutTensor.Length, mTensor.Length);
+                    for (int m = 0; m < ml; m++)
+                        mTensor[m] = NumOps.Add(mTensor[m], lOutTensor[m]);
+                }
+                for (int m = 0; m < membranePotentials.Length; m++)
+                    membranePotentials[m] = mTensor[m];
+
+                // Generate spikes (branching per-neuron)
+                Vector<T> spikes = new Vector<T>(membranePotentials.Length);
+                for (int n = 0; n < membranePotentials.Length; n++)
+                {
+                    if (refractoryCounters[n] <= 0 && NumOps.GreaterThanOrEquals(membranePotentials[n], firingThresholds[n]))
                     {
-                        // Generate spike
-                        spikes[i] = NumOps.One;
-
-                        // Reset membrane potential
-                        membranePotentials[i] = NumOps.Zero;
-
-                        // Start refractory period
-                        refractoryCounters[i] = _refractoryPeriod;
+                        spikes[n] = NumOps.One;
+                        membranePotentials[n] = NumOps.Zero;
+                        refractoryCounters[n] = _refractoryPeriod;
                     }
                     else
                     {
-                        // No spike
-                        spikes[i] = NumOps.Zero;
-
-                        // Decrement refractory counter if active
-                        if (refractoryCounters[i] > 0)
-                        {
-                            refractoryCounters[i]--;
-                        }
+                        spikes[n] = NumOps.Zero;
+                        if (refractoryCounters[n] > 0) refractoryCounters[n]--;
                     }
                 }
 
