@@ -231,6 +231,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasReshaped4D;
 
     /// <summary>
+    /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass to avoid
+    /// allocating a new output tensor (~41MB at 1280 channels, 64x64 spatial) per call.
+    /// Allocated on first forward pass when the batch size is known.
+    /// </summary>
+    private Tensor<T>? _preAllocatedOutput;
+
+    /// <summary>
     /// The execution engine for GPU-accelerated convolution operations.
     /// </summary>
     /// <remarks>
@@ -920,12 +927,25 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         _lastInput = input4D;
 
-        // === GPU/CPU-Accelerated Convolution ===
-        Tensor<T> output = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
+        // === Zero-Allocation Convolution ===
+        // Pre-allocate output buffer on first forward pass, then reuse via Conv2DInto
+        int outputHeight = (_lastInput.Shape[2] + 2 * Padding - KernelSize) / Stride + 1;
+        int outputWidth = (_lastInput.Shape[3] + 2 * Padding - KernelSize) / Stride + 1;
+        int batchSize_conv = _lastInput.Shape[0];
+        int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
+
+        if (_preAllocatedOutput is null ||
+            _preAllocatedOutput.Shape[0] != batchSize_conv ||
+            _preAllocatedOutput.Shape[2] != outputHeight ||
+            _preAllocatedOutput.Shape[3] != outputWidth)
+        {
+            _preAllocatedOutput = TensorAllocator.Rent<T>(expectedShape);
+        }
+
+        Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
+        var output = _preAllocatedOutput;
 
         // === In-Place Bias Addition (zero allocation) ===
-        // TensorBroadcastAddInPlace adds bias [1,C,1,1] directly into output [B,C,H,W]
-        // without allocating a new result tensor. Uses optimized fast path for this pattern.
         _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
         Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
 
