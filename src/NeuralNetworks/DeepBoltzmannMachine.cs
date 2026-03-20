@@ -669,29 +669,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             input = input.Reshape([1, input.Length]);
         }
 
-        T currentLearningRate = _learningRate;
-
-        for (int epoch = 0; epoch < _epochs; epoch++)
-        {
-            T epochLoss = NumOps.Zero;
-            for (int i = 0; i < input.Shape[0]; i += _batchSize)
-            {
-                var batchSize = Math.Min(_batchSize, input.Shape[0] - i);
-                var batch = input.Slice(i, 0, i + batchSize, input.Shape[1]);
-
-                var (_, batchLoss) = TrainOnBatch(batch, currentLearningRate);
-                epochLoss = NumOps.Add(epochLoss, batchLoss);
-            }
-            epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(input.Shape[0]));
-
-            Console.WriteLine($"Epoch {epoch + 1}/{_epochs}, Loss: {epochLoss}, Learning Rate: {currentLearningRate}");
-
-            // Store the current loss
-            LastLoss = epochLoss;
-
-            // Decay learning rate for next epoch
-            currentLearningRate = NumOps.Multiply(currentLearningRate, _learningRateDecay);
-        }
+        // Single-pass contrastive divergence (epoch loops belong in PredictionModelBuilder)
+        var (_, loss) = TrainOnBatch(input, _learningRate);
+        LastLoss = loss;
     }
 
     /// <summary>
@@ -716,25 +696,47 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private (Tensor<T> reconstructed, T loss) TrainOnBatch(Tensor<T> batch, T learningRate)
     {
-        var positivePhase = batch;
-        var negativePhase = batch;
+        int batchSize = batch.Shape[0];
 
-        // Contrastive Divergence
+        // Compute per-layer activations for positive phase (data-driven)
+        var positiveActivations = new List<Tensor<T>> { batch };
+        var current = batch;
+        for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
+        {
+            current = ActivationFunction(current.Multiply(_layerWeights[layer]).Add(_layerBiases[layer + 1]));
+            positiveActivations.Add(current);
+        }
+
+        // Contrastive Divergence: reconstruct and get negative phase activations
+        var negativePhase = batch;
         for (int step = 0; step < _cdSteps; step++)
         {
             negativePhase = Reconstruct(negativePhase);
         }
 
+        var negativeActivations = new List<Tensor<T>> { negativePhase };
+        current = negativePhase;
         for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
         {
-            var positiveAssociations = positivePhase.Transpose([1, 0]).Multiply(PropagateUp(positivePhase));
-            var negativeAssociations = negativePhase.Transpose([1, 0]).Multiply(PropagateUp(negativePhase));
+            current = ActivationFunction(current.Multiply(_layerWeights[layer]).Add(_layerBiases[layer + 1]));
+            negativeActivations.Add(current);
+        }
 
-            var weightGradient = positiveAssociations.Subtract(negativeAssociations).Transform((x, _) => NumOps.Divide(x, NumOps.FromDouble(batch.Shape[0])));
+        // Update weights and biases per layer using layer-specific associations
+        var batchScale = NumOps.FromDouble(batchSize);
+        for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
+        {
+            // Associations: visible^T * hidden for each layer pair
+            var posAssoc = positiveActivations[layer].Transpose([1, 0]).Multiply(positiveActivations[layer + 1]);
+            var negAssoc = negativeActivations[layer].Transpose([1, 0]).Multiply(negativeActivations[layer + 1]);
+
+            var weightGradient = posAssoc.Subtract(negAssoc).Transform((x, _) => NumOps.Divide(x, batchScale));
             _layerWeights[layer] = _layerWeights[layer].Add(weightGradient.Multiply(learningRate));
 
-            var biasGradient = positivePhase.Sum([0]).Subtract(negativePhase.Sum([0])).Transform((x, _) => NumOps.Divide(x, NumOps.FromDouble(batch.Shape[0])));
-            _layerBiases[layer] = _layerBiases[layer].Add(biasGradient.Multiply(learningRate));
+            // Bias update: mean difference of activations at the layer above
+            var biasDiff = positiveActivations[layer + 1].Sum([0]).Subtract(negativeActivations[layer + 1].Sum([0]));
+            var biasGradient = biasDiff.Transform((x, _) => NumOps.Divide(x, batchScale));
+            _layerBiases[layer + 1] = _layerBiases[layer + 1].Add(biasGradient.Multiply(learningRate));
         }
 
         var reconstructed = Reconstruct(batch);
