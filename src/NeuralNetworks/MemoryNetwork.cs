@@ -55,6 +55,9 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     private readonly MemoryNetworkOptions _options;
 
     /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     /// <summary>
@@ -302,11 +305,14 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // Set to inference mode
         SetTrainingMode(false);
 
+        // Ensure 2D input for memory operations (TensorMatMul requires rank >= 2)
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
         // Convert memory matrix to tensor for memory-augmented layers
         var memoryTensor = Tensor<T>.FromMatrix(_memory);
 
         // Flow through all layers sequentially
-        // Each layer handles its own tensor operations (industry standard)
         Tensor<T> current = input;
 
         foreach (var layer in Layers)
@@ -583,34 +589,43 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// - Build up a useful memory of facts and information
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Persistent Adam optimizer for stable training.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Set to training mode
         SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
 
-        // Forward pass to get predictions
-        var predictions = Predict(input);
+        // Ensure 2D input
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
 
-        // Calculate loss using the specified loss function
-        Vector<T> predictedVector = predictions.ToVector();
-        Vector<T> expectedVector = expectedOutput.ToVector();
-        T loss = LossFunction.CalculateLoss(predictedVector, expectedVector);
+        // Forward pass through all layers
+        var output = ForwardWithMemory(input);
+        var outputVector = output.ToVector();
+        var expectedVector = expectedOutput.ToVector();
 
-        // Set the LastLoss property
-        LastLoss = loss;
+        // Calculate loss
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
 
-        // Calculate output gradients using the loss function's derivative
-        var gradientVector = LossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var outputGradients = new Tensor<T>(predictions.Shape, gradientVector);
+        // Backward pass
+        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
+        var gradTensor = Tensor<T>.FromVector(lossGrad);
+        if (gradTensor.Rank < output.Rank)
+            gradTensor = gradTensor.Reshape(output.Shape);
 
-        // Backpropagation
-        BackpropagateMemoryNetwork(outputGradients);
+        Backpropagate(gradTensor);
 
-        // Update parameters
-        UpdateMemoryNetworkParameters();
-
-        // Always update memory during training
-        // This is handled in the Predict method
+        // Persistent Adam optimizer
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
     }
 
     /// <summary>
