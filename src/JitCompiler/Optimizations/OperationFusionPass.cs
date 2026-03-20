@@ -1,6 +1,7 @@
 using System.Linq;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.JitCompiler.Optimizations;
 
@@ -118,6 +119,12 @@ public class OperationFusionPass : IOptimizationPass
 
             // Pattern 14: Add + LayerNorm (common in transformers)
             fusionCount += FuseAddLayerNorm(operations, fusedOps, tensorMapping);
+
+            // Pattern 15: GroupNorm + Activation → FusedGroupNormActivation (diffusion UNet)
+            fusionCount += FuseGroupNormActivation(operations, fusedOps, tensorMapping);
+
+            // Pattern 16: Conv2D + Bias Add + Activation → FusedConv2DBiasActivation
+            fusionCount += FuseConv2DBiasActivation(operations, fusedOps, tensorMapping);
 
             changed = (fusionCount > beforeCount);
             passCount++;
@@ -957,5 +964,141 @@ public class OperationFusionPass : IOptimizationPass
         }
 
         return opportunities;
+    }
+
+    /// <summary>
+    /// Pattern 15: GroupNorm + Activation -> FusedGroupNormActivation.
+    /// The most repeated pattern in diffusion UNets (GroupNorm -> SiLU in every ResBlock).
+    /// </summary>
+    private int FuseGroupNormActivation(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
+    {
+        int count = 0;
+
+        for (int i = 0; i < operations.Count - 1; i++)
+        {
+            if (fusedOps.Contains(operations[i])) continue;
+            if (operations[i] is not GroupNormOp gn) continue;
+
+            var gnOutput = gn.OutputId;
+
+            for (int j = i + 1; j < operations.Count; j++)
+            {
+                if (fusedOps.Contains(operations[j])) continue;
+
+                // OCP: any activation implementing IFusableActivation can be fused
+                if (operations[j] is not IFusableActivation fusable) continue;
+                var activation = fusable.FusedType;
+                if (operations[j].InputIds.Length != 1 || operations[j].InputIds[0] != gnOutput) continue;
+                if (CountUsages(operations, gnOutput, fusedOps) != 1) continue;
+
+                var fusedOp = new FusedGroupNormActivationOp
+                {
+                    OutputId = operations[j].OutputId,
+                    InputIds = gn.InputIds,
+                    OutputType = operations[j].OutputType,
+                    OutputShape = operations[j].OutputShape,
+                    NumGroups = gn.NumGroups,
+                    Epsilon = gn.Epsilon,
+                    Activation = activation
+                };
+
+                operations[i] = fusedOp;
+                fusedOps.Add(gn);
+                fusedOps.Add(operations[j]);
+                tensorMapping[gnOutput] = operations[j].OutputId;
+                count++;
+                break;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Pattern 16: Conv2D + Add(bias) + Activation -> FusedConv2DBiasActivation.
+    /// Maps to IEngine.FusedConv2D for single-kernel execution.
+    /// </summary>
+    private int FuseConv2DBiasActivation(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
+    {
+        int count = 0;
+
+        for (int i = 0; i < operations.Count - 2; i++)
+        {
+            if (fusedOps.Contains(operations[i])) continue;
+            if (operations[i] is not Conv2DOp conv) continue;
+
+            var convOutput = conv.OutputId;
+
+            // Look for Add (bias) consuming conv output
+            for (int j = i + 1; j < operations.Count; j++)
+            {
+                if (fusedOps.Contains(operations[j])) continue;
+                if (operations[j] is not AddOp add) continue;
+                if (!add.InputIds.Contains(convOutput)) continue;
+                if (CountUsages(operations, convOutput, fusedOps) != 1) continue;
+
+                var addOutput = add.OutputId;
+                int biasInputId = add.InputIds[0] == convOutput ? add.InputIds[1] : add.InputIds[0];
+
+                // Look for Activation consuming add output
+                for (int k = j + 1; k < operations.Count; k++)
+                {
+                    if (fusedOps.Contains(operations[k])) continue;
+
+                    // OCP: any activation implementing IFusableActivation can be fused
+                    if (operations[k] is not IFusableActivation fusable) continue;
+                    var activation = fusable.FusedType;
+                    if (operations[k].InputIds.Length != 1 || operations[k].InputIds[0] != addOutput) continue;
+                    if (CountUsages(operations, addOutput, fusedOps) != 1) continue;
+
+                    var fusedOp = new FusedConv2DBiasActivationOp
+                    {
+                        OutputId = operations[k].OutputId,
+                        InputIds = [conv.InputIds[0], conv.InputIds[1], biasInputId],
+                        OutputType = operations[k].OutputType,
+                        OutputShape = operations[k].OutputShape,
+                        Stride = conv.Stride,
+                        Padding = conv.Padding,
+                        Dilation = [1, 1],
+                        Activation = activation
+                    };
+
+                    operations[i] = fusedOp;
+                    fusedOps.Add(conv);
+                    fusedOps.Add(add);
+                    fusedOps.Add(operations[k]);
+                    tensorMapping[convOutput] = operations[k].OutputId;
+                    tensorMapping[addOutput] = operations[k].OutputId;
+                    count++;
+                    goto nextConv;
+                }
+
+                // Conv + Bias without activation — still fuse to FusedConv2DBiasActivation with None
+                if (CountUsages(operations, addOutput, fusedOps) >= 1)
+                {
+                    var fusedOp = new FusedConv2DBiasActivationOp
+                    {
+                        OutputId = add.OutputId,
+                        InputIds = [conv.InputIds[0], conv.InputIds[1], biasInputId],
+                        OutputType = add.OutputType,
+                        OutputShape = add.OutputShape,
+                        Stride = conv.Stride,
+                        Padding = conv.Padding,
+                        Dilation = [1, 1],
+                        Activation = FusedActivationType.None
+                    };
+
+                    operations[i] = fusedOp;
+                    fusedOps.Add(conv);
+                    fusedOps.Add(add);
+                    tensorMapping[convOutput] = add.OutputId;
+                    count++;
+                    goto nextConv;
+                }
+            }
+            nextConv:;
+        }
+
+        return count;
     }
 }

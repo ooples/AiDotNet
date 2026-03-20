@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 namespace AiDotNet.JitCompiler.IR.Operations;
 
 /// <summary>
@@ -17,8 +18,10 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// Similar to sigmoid but centered at zero, often works better than sigmoid.
 /// </para>
 /// </remarks>
-public class TanhOp : IROp
+public class TanhOp : IROp, IFusableActivation
 {
+    public FusedActivationType FusedType => FusedActivationType.Tanh;
+
     public override bool Validate()
     {
         if (!base.Validate()) return false;
