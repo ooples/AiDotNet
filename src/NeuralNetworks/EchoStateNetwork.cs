@@ -1103,12 +1103,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        var result = new Vector<T>(_reservoirSize * _outputSize);
-        int idx = 0;
-        for (int i = 0; i < _reservoirSize; i++)
-            for (int j = 0; j < _outputSize; j++)
-                result[idx++] = _outputWeights[i, j];
-        return result;
+        return _outputWeights.ToVector();
     }
 
     /// <inheritdoc/>
@@ -1332,7 +1327,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Step 5: Compute (X^T X + ?I)^(-1) X^T Y
         Matrix<T> weights = inverse.Multiply(XtY);
 
-        // Update output weights
+        // Update output weights from ridge regression result
         for (int i = 0; i < _reservoirSize; i++)
         {
             for (int j = 0; j < _outputSize; j++)
