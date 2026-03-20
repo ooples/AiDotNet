@@ -699,6 +699,12 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>The controller output.</returns>
     private Tensor<T> ProcessController(Tensor<T> input)
     {
+        // Handle 1D input [features] → [1, features]
+        if (input.Rank == 1)
+        {
+            input = input.Reshape([1, input.Shape[0]]);
+        }
+
         int batchSize = input.Shape[0];
 
         // Read from memories based on previous weights
@@ -814,6 +820,18 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>A vector containing the data for the specified batch element.</returns>
     private Vector<T> ExtractVector(Tensor<T> tensor, int batchIndex)
     {
+        // Handle 1D tensor (no batch dimension)
+        if (tensor.Rank <= 1)
+        {
+            return tensor.Length > 0 ? tensor.ToVector() : new Vector<T>(0);
+        }
+
+        // Handle case where batchIndex exceeds actual batch size
+        if (batchIndex >= tensor.Shape[0])
+        {
+            return new Vector<T>(tensor.Shape[1]);
+        }
+
         int vectorSize = tensor.Shape[1];
         var vector = new Vector<T>(vectorSize);
 

@@ -1342,21 +1342,18 @@ public static class LayerHelper<T>
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
         IActivationFunction<T> softmaxActivation = new SoftmaxActivation<T>();
 
-        // Initialize layers
+        // Initialize layers — RBMLayer applies sigmoid internally,
+        // no extra ActivationLayer needed (double sigmoid compresses output to [0.5, 0.73])
         for (int i = 0; i < layerSizes.Length - 1; i++)
         {
             int visibleUnits = layerSizes[i];
             int hiddenUnits = layerSizes[i + 1];
 
-            // Create and add RBM layer
             yield return new RBMLayer<T>(
                 visibleUnits: visibleUnits,
                 hiddenUnits: hiddenUnits,
                 scalarActivation: sigmoidActivation
             );
-
-            // Add activation layer for each RBM
-            yield return new ActivationLayer<T>([hiddenUnits], sigmoidActivation);
         }
 
         // Add the final output layer — use softmax for classification, identity for regression
@@ -1474,8 +1471,8 @@ public static class LayerHelper<T>
         // Reservoir (recurrent connections, fixed random weights)
         yield return new ReservoirLayer<T>(reservoirSize, reservoirSize, spectralRadius: spectralRadius, connectionProbability: sparsity);
 
-        // Reservoir activation
-        yield return new ActivationLayer<T>([reservoirSize], new TanhActivation<T>() as IVectorActivationFunction<T>);
+        // ReservoirLayer already applies tanh internally per Jaeger (2001).
+        // No extra ActivationLayer needed — double tanh compresses output.
 
         // Output layer (Reservoir to output, trainable)
         yield return new DenseLayer<T>(reservoirSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
@@ -3207,8 +3204,8 @@ public static class LayerHelper<T>
                 recurrentActivation: new SigmoidActivation<T>() as IActivationFunction<T>
             );
 
-            // Add Activation Layer after LSTM
-            yield return new ActivationLayer<T>([_layerHiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
+            // LSTMLayer already applies tanh internally — no extra ActivationLayer
+            // (double tanh compresses output range, causing vanishing gradients)
 
             _currentInputSize = _layerHiddenSize;
         }
