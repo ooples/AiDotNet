@@ -231,13 +231,6 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasReshaped4D;
 
     /// <summary>
-    /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass to avoid
-    /// allocating a new output tensor (~41MB at 1280 channels, 64x64 spatial) per call.
-    /// Allocated on first forward pass when the batch size is known.
-    /// </summary>
-    private Tensor<T>? _preAllocatedOutput;
-
-    /// <summary>
     /// The execution engine for GPU-accelerated convolution operations.
     /// </summary>
     /// <remarks>
@@ -934,16 +927,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int batchSize_conv = _lastInput.Shape[0];
         int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
 
-        if (_preAllocatedOutput is null ||
-            _preAllocatedOutput.Shape[0] != batchSize_conv ||
-            _preAllocatedOutput.Shape[2] != outputHeight ||
-            _preAllocatedOutput.Shape[3] != outputWidth)
-        {
-            _preAllocatedOutput = TensorAllocator.Rent<T>(expectedShape);
-        }
-
-        Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
-        var output = _preAllocatedOutput;
+        var output = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
 
         // === In-Place Bias Addition (zero allocation) ===
         _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
