@@ -966,12 +966,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 1] = result.Shape[3];
             return result.Reshape(outputShape);
         }
-        if (_addedBatchDimension)
-        {
-            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            // Remove the batch dimension we added
-            return result.Reshape([OutputDepth, result.Shape[2], result.Shape[3]]);
-        }
+        // Note: Keep the batch dimension even for 3D input.
+        // Downstream layers (Flatten, Dense) expect consistent 4D [B,C,H,W] format.
+        // Removing batch dim causes FlattenLayer to misinterpret channels as batch.
 
         return result;
     }
