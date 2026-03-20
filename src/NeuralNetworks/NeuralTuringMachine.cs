@@ -565,8 +565,24 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         // For 1D input: treat as single sample, no sequence
         // For 2D input [batch, features]: no sequence dimension
         // For 3D+ input [batch, sequence, ...]: use second dimension as sequence
-        int batchSize = input.Rank >= 1 ? input.Shape[0] : 1;
-        int sequenceLength = input.Rank >= 3 ? input.Shape[1] : 1;
+        // Handle 1D/2D input: treat as single sample with no sequence
+        int batchSize;
+        int sequenceLength;
+        if (input.Rank <= 1)
+        {
+            batchSize = 1;
+            sequenceLength = 1;
+        }
+        else if (input.Rank == 2)
+        {
+            batchSize = input.Shape[0];
+            sequenceLength = 1;
+        }
+        else
+        {
+            batchSize = input.Shape[0];
+            sequenceLength = input.Shape[1];
+        }
 
         // Setup memories for this batch
         SetupBatchMemories(batchSize);
@@ -1060,7 +1076,9 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
                 memoryRow[i] = memory[m, i];
             }
 
-            similarities[m] = StatisticsHelper<T>.CosineSimilarity(key, memoryRow);
+            // CosineSimilarity returns NaN for zero vectors — use 0 for stability
+            var sim = StatisticsHelper<T>.CosineSimilarity(key, memoryRow);
+            similarities[m] = NumOps.IsNaN(sim) ? NumOps.Zero : sim;
         }
 
         // Apply key strength (focus factor)
