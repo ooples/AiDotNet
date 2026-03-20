@@ -308,7 +308,10 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
 
         SetTrainingMode(true);
         foreach (var layer in Layers)
+        {
             layer.SetTrainingMode(true);
+            layer.ResetState(); // Reset hidden state for clean gradient computation
+        }
 
         // Forward pass with memory for backpropagation
         var output = ForwardWithMemory(input);

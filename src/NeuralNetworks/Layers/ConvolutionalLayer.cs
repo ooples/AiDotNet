@@ -927,7 +927,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         // TensorBroadcastAddInPlace adds bias [1,C,1,1] directly into output [B,C,H,W]
         // without allocating a new result tensor. Uses optimized fast path for this pattern.
         _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
-        Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
+        output = Engine.TensorAdd(output, _biasReshaped4D);
 
         var result = ApplyActivation(output);
 
