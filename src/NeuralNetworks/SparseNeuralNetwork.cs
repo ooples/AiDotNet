@@ -141,7 +141,11 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
 
             if (hiddenSizes.Length == 0)
             {
-                Layers.Add(new SparseLinearLayer<T>(inputFeatures, outputFeatures, _sparsity));
+                // Per Mocanu et al. (2018), sparse networks need hidden layers for
+                // sparse-to-sparse connectivity. Single-layer sparse → dead ReLU neurons.
+                int hiddenSize = Math.Max(32, (inputFeatures + outputFeatures) / 2);
+                Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSize, _sparsity));
+                Layers.Add(new SparseLinearLayer<T>(hiddenSize, outputFeatures, _sparsity));
             }
             else
             {
