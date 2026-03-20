@@ -52,6 +52,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private readonly DifferentiableNeuralComputerOptions _options;
 
     /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     /// <summary>
@@ -578,7 +581,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             for (int j = 0; j < _memoryWordSize; j++)
             {
-                _memory[i, j] = NumOps.FromDouble(Random.NextDouble() * 0.1);
+                _memory[i, j] = NumOps.Zero;
             }
 
             _usageFree[i] = NumOps.FromDouble(1.0);
@@ -860,6 +863,11 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
+        // Reset memory and layer state for deterministic inference
+        ResetMemoryState();
+        foreach (var layer in Layers)
+            layer.ResetState();
+
         return ProcessInput(input, false);
     }
 
@@ -887,8 +895,17 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// their memory operations as well as through the neural network components.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Persistent Adam optimizer for stable convergence across Train() calls.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+
         // Process the input through the network
         Tensor<T> output = ProcessInput(input, true);
 
@@ -909,17 +926,14 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Get parameter gradients
         Vector<T> parameterGradients = GetParameterGradients();
 
-        // Apply gradient clipping to prevent exploding gradients
-        parameterGradients = ClipGradient(parameterGradients);
-
-        // Create optimizer (here we use a simple gradient descent optimizer)
-        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Persistent Adam optimizer handles vanishing gradients in deep memory-augmented networks
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
 
-        // Update parameters using the optimizer
-        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+        // Update parameters using persistent Adam optimizer
+        Vector<T> updatedParameters = _trainOptimizer.UpdateParameters(currentParameters, parameterGradients);
 
         // Apply updated parameters
         UpdateParameters(updatedParameters);
@@ -1888,6 +1902,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             writer.Write(Convert.ToDouble(_writeWeighting[i]));
         }
 
+        // Write output weights
+        writer.Write(_outputWeights.Rows);
+        writer.Write(_outputWeights.Columns);
+        for (int i = 0; i < _outputWeights.Rows; i++)
+            for (int j = 0; j < _outputWeights.Columns; j++)
+                writer.Write(Convert.ToDouble(_outputWeights[i, j]));
+
         // Write read weightings
         writer.Write(_readWeightings.Count);
         foreach (var readWeighting in _readWeightings)
@@ -1984,6 +2005,14 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             _writeWeighting[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+
+        // Read output weights
+        int owRows = reader.ReadInt32();
+        int owCols = reader.ReadInt32();
+        _outputWeights = new Matrix<T>(owRows, owCols);
+        for (int i = 0; i < owRows; i++)
+            for (int j = 0; j < owCols; j++)
+                _outputWeights[i, j] = NumOps.FromDouble(reader.ReadDouble());
 
         // Read read weightings
         int readWeightingsCount = reader.ReadInt32();
@@ -2186,7 +2215,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             for (int j = 0; j < _memoryWordSize; j++)
             {
-                _memory[i, j] = NumOps.FromDouble(Random.NextDouble() * 0.1);
+                _memory[i, j] = NumOps.Zero;
             }
         }
 
