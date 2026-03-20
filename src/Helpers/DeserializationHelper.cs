@@ -535,6 +535,18 @@ public static class DeserializationHelper
             int outputSize = outputShape[0];
             instance = new SparseLinearLayer<T>(inputSize, outputSize);
         }
+        else if (genericDef == typeof(OctonionLinearLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            instance = new OctonionLinearLayer<T>(inputSize, outputSize);
+        }
+        else if (genericDef == typeof(HyperbolicLinearLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            instance = new HyperbolicLinearLayer<T>(inputSize, outputSize);
+        }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
             // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
