@@ -534,11 +534,13 @@ public class CodeGenerator
         // GroupNorm(input, gamma, beta, numGroups, epsilon)
         // For now, delegate to a simple implementation via TensorOperations
         // Future: use IEngine.GroupNormInto with workspace slots
+        // TensorOperations.GroupNorm(input, numGroups, gamma?, beta?, epsilon)
         var method = FindMethod<T>("GroupNorm", typeof(ComputationNode<T>),
-            typeof(ComputationNode<T>), typeof(ComputationNode<T>),
-            typeof(int), typeof(double));
-        return Expression.Call(method, inputs[0], inputs[1], inputs[2],
+            typeof(int), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(double));
+        return Expression.Call(method, inputs[0],
             Expression.Constant(op.NumGroups),
+            inputs[1], inputs[2],
             Expression.Constant(op.Epsilon));
     }
 
@@ -548,10 +550,11 @@ public class CodeGenerator
         // The fusion eliminates the intermediate tensor between norm and activation
         // Future: single-pass kernel that computes both in one data traversal
         var gnMethod = FindMethod<T>("GroupNorm", typeof(ComputationNode<T>),
-            typeof(ComputationNode<T>), typeof(ComputationNode<T>),
-            typeof(int), typeof(double));
-        var gnCall = Expression.Call(gnMethod, inputs[0], inputs[1], inputs[2],
+            typeof(int), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(double));
+        var gnCall = Expression.Call(gnMethod, inputs[0],
             Expression.Constant(op.NumGroups),
+            inputs[1], inputs[2],
             Expression.Constant(op.Epsilon));
 
         // Apply the fused activation
@@ -583,10 +586,12 @@ public class CodeGenerator
         // 3-op fusion: GroupNorm(input, gamma, beta) -> Activation -> Conv2D(_, kernel)
         // inputs: [input, gamma, beta, conv_kernel]
         var gnMethod = FindMethod<T>("GroupNorm", typeof(ComputationNode<T>),
-            typeof(ComputationNode<T>), typeof(ComputationNode<T>),
-            typeof(int), typeof(double));
-        var gnCall = Expression.Call(gnMethod, inputs[0], inputs[1], inputs[2],
-            Expression.Constant(op.NumGroups), Expression.Constant(op.Epsilon));
+            typeof(int), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(double));
+        var gnCall = Expression.Call(gnMethod, inputs[0],
+            Expression.Constant(op.NumGroups),
+            inputs[1], inputs[2],
+            Expression.Constant(op.Epsilon));
 
         // Apply activation
         string actName = op.Activation switch
@@ -608,11 +613,12 @@ public class CodeGenerator
             actExpr = gnVar;
         }
 
-        // Conv2D
+        // Conv2D (no bias — bias is handled by outer ResBlock layer)
         var convMethod = FindMethod<T>("Conv2D", typeof(ComputationNode<T>), typeof(ComputationNode<T>),
-            typeof(int[]), typeof(int[]));
+            typeof(ComputationNode<T>), typeof(int[]), typeof(int[]));
         var actVar = Expression.Variable(typeof(ComputationNode<T>), $"fgnac_act_{op.OutputId}");
         var convCall = Expression.Call(convMethod, actVar, inputs[3],
+            Expression.Constant(null, typeof(ComputationNode<T>)),
             Expression.Constant(op.Stride), Expression.Constant(op.Padding));
 
         return Expression.Block(
@@ -630,11 +636,13 @@ public class CodeGenerator
         var addCall = Expression.Call(addMethod, inputs[0], inputs[1]);
 
         var gnMethod = FindMethod<T>("GroupNorm", typeof(ComputationNode<T>),
-            typeof(ComputationNode<T>), typeof(ComputationNode<T>),
-            typeof(int), typeof(double));
+            typeof(int), typeof(ComputationNode<T>), typeof(ComputationNode<T>),
+            typeof(double));
         var addVar = Expression.Variable(typeof(ComputationNode<T>), $"fagn_add_{op.OutputId}");
-        var gnCall = Expression.Call(gnMethod, addVar, inputs[2], inputs[3],
-            Expression.Constant(op.NumGroups), Expression.Constant(op.Epsilon));
+        var gnCall = Expression.Call(gnMethod, addVar,
+            Expression.Constant(op.NumGroups),
+            inputs[2], inputs[3],
+            Expression.Constant(op.Epsilon));
 
         return Expression.Block(
             new[] { addVar },
@@ -645,41 +653,33 @@ public class CodeGenerator
     private Expression GenerateFusedConv2DBiasActivationOp<T>(ParameterExpression[] inputs, FusedConv2DBiasActivationOp op)
     {
         // Fused Conv2D + Bias + Activation
-        // Currently generates: activation(conv2d(input, kernel) + bias)
-        // Future: single IEngine.FusedConv2D call with workspace output
+        // Use TensorOperations.Conv2D(input, kernel, bias, stride, padding) which handles
+        // the bias addition internally
         var conv2dMethod = FindMethod<T>("Conv2D", typeof(ComputationNode<T>), typeof(ComputationNode<T>),
-            typeof(int[]), typeof(int[]));
-        var convCall = Expression.Call(conv2dMethod, inputs[0], inputs[1],
+            typeof(ComputationNode<T>), typeof(int[]), typeof(int[]));
+        var convCall = Expression.Call(conv2dMethod, inputs[0], inputs[1], inputs[2],
             Expression.Constant(op.Stride), Expression.Constant(op.Padding));
-
-        // Add bias
-        var addMethod = FindMethod<T>("Add", typeof(ComputationNode<T>), typeof(ComputationNode<T>));
-        var tempVar = Expression.Variable(typeof(ComputationNode<T>), $"fcba_temp_{op.OutputId}");
-        var addCall = Expression.Call(addMethod,
-            Expression.Assign(tempVar, convCall),
-            inputs[2]);
 
         if (op.Activation == FusedActivationType.None)
         {
-            return Expression.Block(new[] { tempVar }, addCall);
+            return convCall;
         }
 
-        // Apply activation
+        // Apply activation to the conv+bias result
+        var tempVar = Expression.Variable(typeof(ComputationNode<T>), $"fcba_temp_{op.OutputId}");
         string activationMethodName = op.Activation switch
         {
             FusedActivationType.Swish => "Swish",
             FusedActivationType.ReLU => "ReLU",
             FusedActivationType.Sigmoid => "Sigmoid",
             FusedActivationType.GELU => "GELU",
-            _ => "Identity"
+            _ => "Swish" // fallback
         };
-
         var actMethod = FindMethod<T>(activationMethodName, typeof(ComputationNode<T>));
-        var biasVar = Expression.Variable(typeof(ComputationNode<T>), $"fcba_bias_{op.OutputId}");
         return Expression.Block(
-            new[] { tempVar, biasVar },
-            Expression.Assign(biasVar, addCall),
-            Expression.Call(actMethod, biasVar));
+            new[] { tempVar },
+            Expression.Assign(tempVar, convCall),
+            Expression.Call(actMethod, tempVar));
     }
 
     /// <summary>
