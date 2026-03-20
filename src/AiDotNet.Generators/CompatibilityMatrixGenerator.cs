@@ -364,8 +364,6 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         sb.AppendLine("            if (string.Equals(compat, optimizerName, StringComparison.OrdinalIgnoreCase))");
         sb.AppendLine("                return true;");
-        sb.AppendLine("            if (optimizerName.IndexOf(compat, StringComparison.OrdinalIgnoreCase) >= 0)");
-        sb.AppendLine("                return true;");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        return false;");
@@ -391,8 +389,6 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         sb.AppendLine("        foreach (var compat in info.CompatibleLossFunctions)");
         sb.AppendLine("        {");
         sb.AppendLine("            if (string.Equals(compat, lossName, StringComparison.OrdinalIgnoreCase))");
-        sb.AppendLine("                return true;");
-        sb.AppendLine("            if (lossName.IndexOf(compat, StringComparison.OrdinalIgnoreCase) >= 0)");
         sb.AppendLine("                return true;");
         sb.AppendLine("        }");
         sb.AppendLine();

@@ -159,6 +159,7 @@ public class DBSCAN<T> : ClusteringBase<T>
         clone.NumClusters = NumClusters;
         clone.NumFeatures = NumFeatures;
         clone.IsTrained = IsTrained;
+        clone._fittedEpsilon = _fittedEpsilon;
 
         return clone;
     }
