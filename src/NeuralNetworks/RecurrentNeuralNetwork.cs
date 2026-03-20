@@ -245,9 +245,13 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
         }
 
-        // Support any rank tensors - RNNs can handle variable sequence lengths and dimensions
-        // The recurrent layers will internally adapt to the input dimensions
-        // This is industry standard behavior for flexible neural networks
+        // Reset recurrent layer hidden states for deterministic single-sample inference.
+        // Without reset, hidden state from previous Predict call bleeds through,
+        // causing identical outputs for different inputs.
+        foreach (var layer in Layers)
+        {
+            layer.ResetState();
+        }
 
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

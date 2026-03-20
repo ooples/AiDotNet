@@ -550,6 +550,11 @@ public static class DeserializationHelper
             double curvature = TryGetDouble(additionalParams, "Curvature") ?? -1.0;
             instance = new HyperbolicLinearLayer<T>(inputSize, outputSize, curvature);
         }
+        else if (genericDef == typeof(SequenceLastLayer<>))
+        {
+            int featureSize = inputShape.Length > 0 ? inputShape[^1] : outputShape[0];
+            instance = new SequenceLastLayer<T>(featureSize);
+        }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
             // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
