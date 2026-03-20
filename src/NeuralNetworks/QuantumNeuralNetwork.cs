@@ -501,17 +501,18 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void UpdateQuantumParameters(List<Tensor<T>> gradients)
     {
-        if (gradients.Count != Layers.Count)
-            throw new ArgumentException("Number of gradient tensors must match number of layers.");
-
-        for (int i = 0; i < Layers.Count; i++)
+        // Use standard per-layer parameter gradients (from Backward) with Adam optimizer
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        if (paramGrads.Length > 0 && currentParams.Length == paramGrads.Length)
         {
-            if (Layers[i].ParameterCount > 0 && gradients[i].Length > 0)
-            {
-                Layers[i].UpdateParameters(gradients[i].ToVector());
-            }
+            var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+            UpdateParameters(updatedParams);
         }
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <summary>
     /// Converts a real-valued tensor to a complex-valued tensor.
