@@ -678,8 +678,25 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         var totalLoss = NumOps.Add(reconstructionLoss, auxiliaryLoss);
         LastLoss = totalLoss;
 
-        // Backpropagation
-        var gradient = CalculateGradient(totalLoss);
+        // Backpropagation using proper reconstruction loss derivative
+        var reconstructionGradient = LossFunction.CalculateDerivative(inputVector, reconstructed);
+        var gradTensor = Tensor<T>.FromVector(reconstructionGradient);
+
+        // Backward through decoder layers
+        for (int i = Layers.Count - 1; i >= Layers.Count / 2; i--)
+        {
+            gradTensor = Layers[i].Backward(gradTensor);
+        }
+
+        // Backward through latent space (KL gradient per Kingma & Welling §2.4)
+        var (meanGrad, logVarGrad) = CalculateLatentGradients(gradTensor);
+
+        // Backward through encoder layers
+        var encoderGrad = meanGrad;
+        for (int i = (Layers.Count / 2) - 1; i >= 0; i--)
+        {
+            encoderGrad = Layers[i].Backward(encoderGrad);
+        }
 
         // Update parameters using the optimizer
         _optimizer.UpdateParameters(Layers);

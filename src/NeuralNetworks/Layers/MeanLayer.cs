@@ -534,6 +534,13 @@ public class MeanLayer<T> : LayerBase<T>
     /// This is different from layers like Dense layers, which would return their weights and biases.
     /// </para>
     /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Axis"] = Axis.ToString();
+        return metadata;
+    }
+
     public override Vector<T> GetParameters()
     {
         // MeanLayer has no trainable parameters

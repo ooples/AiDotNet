@@ -496,6 +496,12 @@ public static class DeserializationHelper
         {
             instance = CreateLSTMLayer<T>(type, inputShape, outputShape, additionalParams);
         }
+        else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
+        {
+            // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
+            int axis = TryGetInt(additionalParams, "Axis") ?? 0;
+            instance = Activator.CreateInstance(type, inputShape, axis);
+        }
         else if (genericDef == typeof(ResidualLayer<>))
         {
             // ResidualLayer wraps an inner DenseLayer. Reconstruct inner layer from metadata.

@@ -662,6 +662,13 @@ public class LogVarianceLayer<T> : LayerBase<T>
     /// - Other layers, like those with weights, would return those weights
     /// </para>
     /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Axis"] = Axis.ToString();
+        return metadata;
+    }
+
     public override Vector<T> GetParameters()
     {
         // LogVarianceLayer has no trainable parameters
