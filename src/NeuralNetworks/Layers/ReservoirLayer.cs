@@ -277,7 +277,7 @@ public class ReservoirLayer<T> : LayerBase<T>
             ? input.Reshape([1, _inputSize])
             : input.Reshape([flatBatch, _inputSize]);
 
-        var outputs = new Tensor<T>([flatBatch, _reservoirSize]);
+        var outputs = TensorAllocator.Rent<T>([flatBatch, _reservoirSize]);
         T inputScale = NumOps.FromDouble(_inputScaling);
 
         for (int i = 0; i < flatBatch; i++)
