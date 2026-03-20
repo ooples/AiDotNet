@@ -2508,8 +2508,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // For clustering/density models, use full data (not split) since cluster
             // structure depends on having all points. For TS models, use XTrain (split).
             bool useFullData = model is Clustering.Base.ClusteringBase<T>;
-            var directX = useFullData ? x : XTrain;
-            var directY = useFullData ? y : yTrain;
+            // Use preprocessed data (not raw x/y) so models operate in the same
+            // coordinate space as the validation/test predictions
+            var directX = useFullData ? preprocessedX : XTrain;
+            var directY = useFullData ? preprocessedY : yTrain;
             model.Train(directX, directY);
 
             // Compute evaluation metrics
