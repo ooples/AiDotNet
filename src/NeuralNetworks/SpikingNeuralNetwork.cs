@@ -767,7 +767,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void ResetState()
     {
-        // Reset membrane potentials to zero
+        // Reset SNN-level state
         for (int layer = 0; layer < _membranePotentials.Count; layer++)
         {
             for (int i = 0; i < _membranePotentials[layer].Length; i++)
@@ -775,14 +775,18 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 _membranePotentials[layer][i] = NumOps.Zero;
             }
         }
-
-        // Reset refractory counters to zero
         for (int layer = 0; layer < _refractoryCounters.Count; layer++)
         {
             for (int i = 0; i < _refractoryCounters[layer].Length; i++)
             {
                 _refractoryCounters[layer][i] = 0;
             }
+        }
+
+        // Reset SpikingLayer internal states (membrane, spikes, refractory)
+        foreach (var layer in Layers)
+        {
+            layer.ResetState();
         }
     }
 
