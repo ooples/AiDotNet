@@ -523,6 +523,12 @@ public static class DeserializationHelper
             int numCenters = TryGetInt(additionalParams, "NumCenters") ?? outputShape[0];
             instance = new RBFLayer<T>(inputSize, numCenters, new GaussianRBF<T>());
         }
+        else if (genericDef == typeof(RecurrentLayer<>))
+        {
+            int inputSize = inputShape.Length > 0 ? inputShape[^1] : 128;
+            int hiddenSize = outputShape.Length > 0 ? outputShape[^1] : 64;
+            instance = new RecurrentLayer<T>(inputSize, hiddenSize, (IActivationFunction<T>?)null);
+        }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
             // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)

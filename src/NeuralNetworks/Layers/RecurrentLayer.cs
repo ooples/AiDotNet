@@ -623,9 +623,14 @@ public class RecurrentLayer<T> : LayerBase<T>
         // Normalize outputGradient to 3D to match Forward's any-rank handling
         var outGrad3D = outputGradient;
         int origRank = _originalInputShape?.Length ?? 3;
-        if (_originalInputShape != null && origRank == 2)
+        if (outputGradient.Rank == 1)
         {
-            // 2D output gradient -> add batch dim
+            // 1D gradient [hiddenSize] -> [1, 1, hiddenSize]
+            outGrad3D = outputGradient.Reshape([1, 1, outputGradient.Length]);
+        }
+        else if (outputGradient.Rank == 2)
+        {
+            // 2D gradient [seq, hidden] -> [seq, 1, hidden]
             outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], 1, outputGradient.Shape[1]]);
         }
         else if (_originalInputShape != null && origRank > 3)
@@ -744,9 +749,14 @@ public class RecurrentLayer<T> : LayerBase<T>
         // Normalize outputGradient to 3D to match Forward's any-rank handling
         var outGrad3D = outputGradient;
         int origRank = _originalInputShape?.Length ?? 3;
-        if (_originalInputShape != null && origRank == 2)
+        if (outputGradient.Rank == 1)
         {
-            // 2D output gradient -> add batch dim
+            // 1D gradient [hiddenSize] -> [1, 1, hiddenSize]
+            outGrad3D = outputGradient.Reshape([1, 1, outputGradient.Length]);
+        }
+        else if (outputGradient.Rank == 2)
+        {
+            // 2D gradient [seq, hidden] -> [seq, 1, hidden]
             outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], 1, outputGradient.Shape[1]]);
         }
         else if (_originalInputShape != null && origRank > 3)
@@ -1134,6 +1144,15 @@ public class RecurrentLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_inputWeights);
         Engine.InvalidatePersistentTensor(_hiddenWeights);
         Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InputSize"] = _inputWeights.Shape[1].ToString();
+        metadata["HiddenSize"] = _inputWeights.Shape[0].ToString();
+        return metadata;
     }
 
     /// <summary>
