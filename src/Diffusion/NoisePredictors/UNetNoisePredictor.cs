@@ -428,6 +428,86 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         }
     }
 
+    /// <summary>
+    /// JIT-compiled forward pass function backed by TensorWorkspace.
+    /// When non-null, PredictNoise uses this for zero-allocation execution.
+    /// </summary>
+    private Action<Tensor<T>[], IEngine>? _compiledForward;
+
+    /// <summary>
+    /// Pre-allocated workspace for compiled forward pass intermediates.
+    /// </summary>
+    private TensorWorkspace<T>? _compiledWorkspace;
+
+    /// <summary>
+    /// Which workspace slot contains the output after compiled execution.
+    /// </summary>
+    private int _compiledOutputSlot;
+
+    /// <summary>
+    /// Gets whether the UNet forward pass has been JIT-compiled.
+    /// </summary>
+    public bool IsCompiled => _compiledForward is not null;
+
+    /// <summary>
+    /// Compiles the UNet forward pass into an optimized executable function.
+    /// After compilation, PredictNoise uses the compiled function automatically.
+    /// </summary>
+    /// <param name="sampleInput">Sample input tensor to trace computation graph shapes.</param>
+    /// <param name="sampleTimeEmbed">Sample time embedding tensor.</param>
+    public void CompileForward(Tensor<T> sampleInput, Tensor<T> sampleTimeEmbed)
+    {
+        var jit = new JitCompiler.JitCompiler();
+
+        // Build computation graph from the UNet layers
+        var inputNode = Autodiff.TensorOperations<T>.Variable(sampleInput, "input");
+        var timeNode = Autodiff.TensorOperations<T>.Variable(sampleTimeEmbed, "time_embed");
+        var inputNodes = new List<Autodiff.ComputationNode<T>> { inputNode, timeNode };
+
+        // Chain through input conv -> encoder -> middle -> decoder -> output conv
+        Autodiff.ComputationNode<T> current = inputNode;
+
+        if (_inputConv is not null)
+            current = _inputConv.ExportComputationGraph([current]);
+
+        foreach (var block in _encoderBlocks)
+        {
+            if (block.ResBlock is not null)
+                current = block.ResBlock.ExportComputationGraph([current]);
+            if (block.AttentionBlock is not null)
+                current = block.AttentionBlock.ExportComputationGraph([current]);
+            if (block.Downsample is not null)
+                current = block.Downsample.ExportComputationGraph([current]);
+        }
+
+        foreach (var block in _middleBlocks)
+        {
+            if (block.ResBlock is not null)
+                current = block.ResBlock.ExportComputationGraph([current]);
+            if (block.AttentionBlock is not null)
+                current = block.AttentionBlock.ExportComputationGraph([current]);
+        }
+
+        foreach (var block in _decoderBlocks)
+        {
+            if (block.ResBlock is not null)
+                current = block.ResBlock.ExportComputationGraph([current]);
+            if (block.AttentionBlock is not null)
+                current = block.AttentionBlock.ExportComputationGraph([current]);
+            if (block.Upsample is not null)
+                current = block.Upsample.ExportComputationGraph([current]);
+        }
+
+        if (_outputConv is not null)
+            current = _outputConv.ExportComputationGraph([current]);
+
+        // Compile with workspace — zero-allocation execution backed by TensorWorkspace
+        var (execute, workspace, outputSlot) = jit.CompileWithWorkspace<T>(current, inputNodes);
+        _compiledForward = execute;
+        _compiledWorkspace = workspace;
+        _compiledOutputSlot = outputSlot;
+    }
+
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
@@ -437,7 +517,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        // Forward pass through U-Net
+        // Use compiled forward if available — zero allocation via TensorWorkspace
+        if (_compiledForward is not null && _compiledWorkspace is not null)
+        {
+            _compiledForward([noisySample, timeEmbed], Engine);
+            var result = _compiledWorkspace.Get(_compiledOutputSlot);
+            _lastOutput = result;
+            return result;
+        }
+
+        // Interpreted forward pass
         var output = ForwardUNet(noisySample, timeEmbed, conditioning);
 
         _lastOutput = output;

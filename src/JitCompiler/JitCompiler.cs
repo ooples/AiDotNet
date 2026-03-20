@@ -238,6 +238,42 @@ public class JitCompiler : IDisposable
     }
 
     /// <summary>
+    /// Compiles a computation graph into a zero-allocation executable backed by TensorWorkspace.
+    /// This is the preferred compilation method for inference — all intermediate tensors are
+    /// pre-allocated in a single contiguous buffer and reused across forward passes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for tensor elements.</typeparam>
+    /// <param name="outputNode">The output node of the computation graph.</param>
+    /// <param name="inputs">The input nodes to the computation graph.</param>
+    /// <returns>
+    /// A compiled result containing:
+    /// - Execute: the zero-allocation function to call with inputs and engine
+    /// - Workspace: the pre-allocated workspace (reuse across calls)
+    /// - OutputSlot: which workspace slot contains the output after execution
+    /// </returns>
+    public (Action<Tensor<T>[], IEngine> Execute, TensorWorkspace<T> Workspace, int OutputSlot)
+        CompileWithWorkspace<T>(ComputationNode<T> outputNode, List<ComputationNode<T>> inputs)
+    {
+        if (outputNode == null)
+            throw new ArgumentNullException(nameof(outputNode));
+        if (inputs == null)
+            throw new ArgumentNullException(nameof(inputs));
+
+        var irBuilder = new IRBuilder();
+
+        // Build IR graph
+        var irGraph = irBuilder.Build(outputNode, inputs);
+
+        // Apply optimization passes (fusion, constant folding, dead code elimination)
+        // MemoryPlanningPass runs LAST and stores the tensor-to-slot mapping in graph metadata
+        var optimizedGraph = ApplyOptimizations(irGraph);
+
+        // Generate workspace-backed code
+        var wsCodeGen = new WorkspaceCodeGenerator();
+        return wsCodeGen.Compile<T>(optimizedGraph);
+    }
+
+    /// <summary>
     /// Compiles a computation graph and returns compilation statistics.
     /// </summary>
     /// <typeparam name="T">The numeric type for tensor elements.</typeparam>

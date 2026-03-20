@@ -126,6 +126,12 @@ public class OperationFusionPass : IOptimizationPass
             // Pattern 16: Conv2D + Bias Add + Activation → FusedConv2DBiasActivation
             fusionCount += FuseConv2DBiasActivation(operations, fusedOps, tensorMapping);
 
+            // Pattern 17: FusedGroupNormActivation + Conv2D → FusedGroupNormActivationConv2D
+            fusionCount += FuseGroupNormActivationConv2D(operations, fusedOps, tensorMapping);
+
+            // Pattern 18: Add + GroupNorm → FusedAddGroupNorm
+            fusionCount += FuseAddGroupNorm(operations, fusedOps, tensorMapping);
+
             changed = (fusionCount > beforeCount);
             passCount++;
         }
@@ -1018,6 +1024,102 @@ public class OperationFusionPass : IOptimizationPass
     /// Pattern 16: Conv2D + Add(bias) + Activation -> FusedConv2DBiasActivation.
     /// Maps to IEngine.FusedConv2D for single-kernel execution.
     /// </summary>
+    /// <summary>
+    /// Pattern 17: FusedGroupNormActivation + Conv2D → FusedGroupNormActivationConv2D.
+    /// Fuses the entire first half of a DiffusionResBlock into a single operation.
+    /// </summary>
+    private int FuseGroupNormActivationConv2D(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
+    {
+        int count = 0;
+
+        for (int i = 0; i < operations.Count - 1; i++)
+        {
+            if (fusedOps.Contains(operations[i])) continue;
+            if (operations[i] is not FusedGroupNormActivationOp gnAct) continue;
+
+            var gnActOutput = gnAct.OutputId;
+
+            // Look for Conv2D consuming the fused GN+Act output
+            for (int j = i + 1; j < operations.Count; j++)
+            {
+                if (fusedOps.Contains(operations[j])) continue;
+                if (operations[j] is not Conv2DOp conv) continue;
+                if (conv.InputIds.Length < 2 || conv.InputIds[0] != gnActOutput) continue;
+                if (CountUsages(operations, gnActOutput, fusedOps) != 1) continue;
+
+                var fusedOp = new FusedGroupNormActivationConv2DOp
+                {
+                    OutputId = conv.OutputId,
+                    // input, gamma, beta from GN+Act, plus conv kernel
+                    InputIds = [gnAct.InputIds[0], gnAct.InputIds[1], gnAct.InputIds[2], conv.InputIds[1]],
+                    OutputType = conv.OutputType,
+                    OutputShape = conv.OutputShape,
+                    NumGroups = gnAct.NumGroups,
+                    Epsilon = gnAct.Epsilon,
+                    Activation = gnAct.Activation,
+                    Stride = conv.Stride,
+                    Padding = conv.Padding
+                };
+
+                operations[i] = fusedOp;
+                fusedOps.Add(gnAct);
+                fusedOps.Add(conv);
+                tensorMapping[gnActOutput] = conv.OutputId;
+                count++;
+                break;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Pattern 18: Add + GroupNorm → FusedAddGroupNorm.
+    /// Fuses the residual add with the next block's GroupNorm.
+    /// </summary>
+    private int FuseAddGroupNorm(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
+    {
+        int count = 0;
+
+        for (int i = 0; i < operations.Count - 1; i++)
+        {
+            if (fusedOps.Contains(operations[i])) continue;
+            if (operations[i] is not AddOp add) continue;
+
+            var addOutput = add.OutputId;
+
+            // Look for GroupNorm consuming the add output
+            for (int j = i + 1; j < operations.Count; j++)
+            {
+                if (fusedOps.Contains(operations[j])) continue;
+                if (operations[j] is not GroupNormOp gn) continue;
+                if (gn.InputIds.Length < 3 || gn.InputIds[0] != addOutput) continue;
+                if (CountUsages(operations, addOutput, fusedOps) != 1) continue;
+
+                var fusedOp = new FusedAddGroupNormOp
+                {
+                    OutputId = gn.OutputId,
+                    // a, b from add, gamma, beta from groupnorm
+                    InputIds = [add.InputIds[0], add.InputIds[1], gn.InputIds[1], gn.InputIds[2]],
+                    OutputType = gn.OutputType,
+                    OutputShape = gn.OutputShape,
+                    NumGroups = gn.NumGroups,
+                    Epsilon = gn.Epsilon
+                };
+
+                operations[i] = fusedOp;
+                fusedOps.Add(add);
+                fusedOps.Add(gn);
+                tensorMapping[addOutput] = gn.OutputId;
+                count++;
+                break;
+            }
+        }
+
+        return count;
+    }
+
+    //
     private int FuseConv2DBiasActivation(List<IROp> operations, HashSet<IROp> fusedOps, Dictionary<int, int> tensorMapping)
     {
         int count = 0;
