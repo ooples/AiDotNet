@@ -197,7 +197,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <b>For Beginners:</b> Not all neural networks can learn. Some are designed only for making predictions
     /// with pre-set parameters. This property tells you if the network can learn from data.
     /// </remarks>
-    public virtual bool SupportsTraining => false;
+    public virtual bool SupportsTraining => Layers.Count > 0;
 
     /// <summary>
     /// Gets whether all layers in the network support GPU-resident training.

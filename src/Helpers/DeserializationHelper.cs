@@ -517,6 +517,12 @@ public static class DeserializationHelper
             int reservoirSize = outputShape[0];
             instance = new ReservoirLayer<T>(inputSize, reservoirSize);
         }
+        else if (genericDef == typeof(RBFLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int numCenters = TryGetInt(additionalParams, "NumCenters") ?? outputShape[0];
+            instance = new RBFLayer<T>(inputSize, numCenters, new GaussianRBF<T>());
+        }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
             // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
