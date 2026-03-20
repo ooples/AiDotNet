@@ -175,14 +175,17 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
 
                         // Log-variance gradient via reparameterization:
                         // dL/d(logvar_s) = dL/dz_s * epsilon_s * 0.5 * exp(0.5*logvar_s)
+                        // Chain rule: ∂L/∂logvar_s = gradScale * z_t[j,k] * ε_s[i,k] * 0.5 * std_s
                         T stdS = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZsLogVar[i, k])));
                         gradZsLogVar[i, k] = NumOps.Add(gradZsLogVar[i, k],
-                            NumOps.Multiply(gradScale, NumOps.Multiply(epsilonS[i, k],
-                            NumOps.Multiply(NumOps.FromDouble(0.5), stdS))));
+                            NumOps.Multiply(gradScale, NumOps.Multiply(Zt[j, k],
+                            NumOps.Multiply(epsilonS[i, k],
+                            NumOps.Multiply(NumOps.FromDouble(0.5), stdS)))));
                         T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[j, k])));
                         gradZtLogVar[j, k] = NumOps.Add(gradZtLogVar[j, k],
-                            NumOps.Multiply(gradScale, NumOps.Multiply(epsilonT[j, k],
-                            NumOps.Multiply(NumOps.FromDouble(0.5), stdT))));
+                            NumOps.Multiply(gradScale, NumOps.Multiply(Zs[i, k],
+                            NumOps.Multiply(epsilonT[j, k],
+                            NumOps.Multiply(NumOps.FromDouble(0.5), stdT)))));
                     }
                 }
 

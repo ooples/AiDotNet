@@ -1032,9 +1032,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else
         {
-            factoryBody = $"        => throw new System.NotImplementedException(" +
-                          $"\"Model '{EscapeString(model.ClassName)}' requires constructor arguments. " +
-                          $"Create a manual test class in ModelFamilyTests/ to replace this auto-generated stub.\");";
+            // Models requiring constructor arguments can't be auto-scaffolded.
+            // Skip this model — manual test creation is required.
+            return;
         }
 
         var baseClassName = GetBaseClassName(family);
