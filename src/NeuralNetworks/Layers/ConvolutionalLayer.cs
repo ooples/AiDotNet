@@ -942,14 +942,27 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             _preAllocatedOutput = TensorAllocator.Rent<T>(expectedShape);
         }
 
-        Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
-        var output = _preAllocatedOutput;
+        // === Try FusedConv2D: Conv + Bias + Activation in single kernel ===
+        // Eliminates 2 intermediate allocations and enables kernel-level optimization
+        var fusedActivation = GetFusedActivationType();
+        Tensor<T> result;
+        if (fusedActivation != FusedActivationType.None)
+        {
+            // Single fused call: output = activation(conv(input, kernel) + bias)
+            result = Engine.FusedConv2D(_lastInput, _kernels, _biases,
+                Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
+        }
+        else
+        {
+            // Fallback: separate Conv2DInto + in-place bias + activation
+            Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
+            var output = _preAllocatedOutput;
 
-        // === In-Place Bias Addition (zero allocation) ===
-        _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
-        Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
+            _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
+            Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
 
-        var result = ApplyActivation(output);
+            result = ApplyActivation(output);
+        }
 
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
