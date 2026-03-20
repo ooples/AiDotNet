@@ -180,6 +180,12 @@ public class LogVarianceLayer<T> : LayerBase<T>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int axis)
     {
+        if (inputShape.Length <= 1)
+        {
+            // Reducing a 1D tensor produces a scalar — represent as [1]
+            return [1];
+        }
+
         var outputShape = new int[inputShape.Length - 1];
         int outputIndex = 0;
         for (int i = 0; i < inputShape.Length; i++)
