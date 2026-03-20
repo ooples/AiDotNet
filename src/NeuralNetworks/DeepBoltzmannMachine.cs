@@ -568,14 +568,20 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> PropagateUp(Tensor<T> visible)
     {
         // Ensure input is 2D for matrix multiplication
-        // 1D [features] -> 2D [1, features]
         var hidden = visible.Shape.Length == 1
             ? visible.Reshape([1, visible.Shape[0]])
             : visible;
 
         for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
         {
-            hidden = ActivationFunction(hidden.Multiply(_layerWeights[layer]).Add(_layerBiases[layer + 1]));
+            // Use Engine for GPU/CPU accelerated matrix multiply + bias add
+            var product = Engine.TensorMatMul(hidden, _layerWeights[layer]);
+            var biasUp = _layerBiases[layer + 1];
+            var bias = biasUp.Rank < product.Rank
+                ? new Tensor<T>([1, biasUp.Length], biasUp.ToVector())
+                : biasUp;
+            var withBias = Engine.TensorAdd(product, bias);
+            hidden = ActivationFunction(withBias);
         }
 
         return hidden;
@@ -596,8 +602,15 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         var visible = hidden;
         for (int layer = _layerSizes.Count - 2; layer >= 0; layer--)
         {
-            // Use the correct overload of Transpose
-            visible = ActivationFunction(visible.Multiply(_layerWeights[layer].Transpose([1, 0])).Add(_layerBiases[layer]));
+            // Use Engine for GPU/CPU accelerated operations
+            var transposed = Engine.TensorTranspose(_layerWeights[layer]);
+            var product = Engine.TensorMatMul(visible, transposed);
+            var biasDown = _layerBiases[layer];
+            var bias = biasDown.Rank < product.Rank
+                ? new Tensor<T>([1, biasDown.Length], biasDown.ToVector())
+                : biasDown;
+            var withBias = Engine.TensorAdd(product, bias);
+            visible = ActivationFunction(withBias);
         }
 
         return visible;
@@ -630,9 +643,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private T CalculateLoss(Tensor<T> original, Tensor<T> reconstructed)
     {
-        var squaredDifferences = original.Subtract(reconstructed).Transform((x, _) => NumOps.Multiply(x, x));
-        var sumOfSquaredDifferences = squaredDifferences.Sum();
-        T scalarSum = sumOfSquaredDifferences[0];
+        // MSE loss using Engine-accelerated operations
+        var diff = Engine.TensorSubtract(original, reconstructed);
+        var squaredDiff = Engine.TensorMultiply(diff, diff);
+        var sumTensor = squaredDiff.Sum();
+        T scalarSum = sumTensor[0];
 
         return NumOps.Divide(scalarSum, NumOps.FromDouble(original.Length));
     }
@@ -703,7 +718,15 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         var current = batch;
         for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
         {
-            current = ActivationFunction(current.Multiply(_layerWeights[layer]).Add(_layerBiases[layer + 1]));
+            var prod = Engine.TensorMatMul(current, _layerWeights[layer]);
+            // Reshape bias to match product rank for broadcasting
+            // Create a 2D view for broadcasting without modifying the stored bias
+            var biasData = _layerBiases[layer + 1];
+            var bias = biasData.Rank < prod.Rank
+                ? new Tensor<T>([1, biasData.Length], biasData.ToVector())
+                : biasData;
+            var withBias = Engine.TensorAdd(prod, bias);
+            current = ActivationFunction(withBias);
             positiveActivations.Add(current);
         }
 
@@ -718,25 +741,46 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         current = negativePhase;
         for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
         {
-            current = ActivationFunction(current.Multiply(_layerWeights[layer]).Add(_layerBiases[layer + 1]));
+            var prod = Engine.TensorMatMul(current, _layerWeights[layer]);
+            // Create a 2D view for broadcasting without modifying the stored bias
+            var biasData = _layerBiases[layer + 1];
+            var bias = biasData.Rank < prod.Rank
+                ? new Tensor<T>([1, biasData.Length], biasData.ToVector())
+                : biasData;
+            var withBias = Engine.TensorAdd(prod, bias);
+            current = ActivationFunction(withBias);
             negativeActivations.Add(current);
         }
 
-        // Update weights and biases per layer using layer-specific associations
+        // Update weights and biases per layer using Engine-accelerated associations
         var batchScale = NumOps.FromDouble(batchSize);
         for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
         {
             // Associations: visible^T * hidden for each layer pair
-            var posAssoc = positiveActivations[layer].Transpose([1, 0]).Multiply(positiveActivations[layer + 1]);
-            var negAssoc = negativeActivations[layer].Transpose([1, 0]).Multiply(negativeActivations[layer + 1]);
+            var posLayerT = Engine.TensorTranspose(positiveActivations[layer]);
+            var posAssoc = Engine.TensorMatMul(posLayerT, positiveActivations[layer + 1]);
+            var negLayerT = Engine.TensorTranspose(negativeActivations[layer]);
+            var negAssoc = Engine.TensorMatMul(negLayerT, negativeActivations[layer + 1]);
 
-            var weightGradient = posAssoc.Subtract(negAssoc).Transform((x, _) => NumOps.Divide(x, batchScale));
-            _layerWeights[layer] = _layerWeights[layer].Add(weightGradient.Multiply(learningRate));
+            var assocDiff = Engine.TensorSubtract(posAssoc, negAssoc);
+            var weightGradient = Engine.TensorDivideScalar(assocDiff, batchScale);
+            var scaledGradient = Engine.TensorMultiplyScalar(weightGradient, learningRate);
+            _layerWeights[layer] = Engine.TensorAdd(_layerWeights[layer], scaledGradient);
 
             // Bias update: mean difference of activations at the layer above
-            var biasDiff = positiveActivations[layer + 1].Sum([0]).Subtract(negativeActivations[layer + 1].Sum([0]));
-            var biasGradient = biasDiff.Transform((x, _) => NumOps.Divide(x, batchScale));
-            _layerBiases[layer + 1] = _layerBiases[layer + 1].Add(biasGradient.Multiply(learningRate));
+            var posBiasSum = positiveActivations[layer + 1].Sum([0]);
+            var negBiasSum = negativeActivations[layer + 1].Sum([0]);
+            // Flatten to 1D to match bias shape
+            if (posBiasSum.Rank > 1) posBiasSum = posBiasSum.Reshape([posBiasSum.Length]);
+            if (negBiasSum.Rank > 1) negBiasSum = negBiasSum.Reshape([negBiasSum.Length]);
+            var biasDiff = Engine.TensorSubtract(posBiasSum, negBiasSum);
+            var biasGradient = Engine.TensorDivideScalar(biasDiff, batchScale);
+            var scaledBiasGrad = Engine.TensorMultiplyScalar(biasGradient, learningRate);
+            // Ensure bias stays 1D after update
+            var currentBias = _layerBiases[layer + 1];
+            if (currentBias.Rank > 1) currentBias = currentBias.Reshape([currentBias.Length]);
+            if (scaledBiasGrad.Rank > 1) scaledBiasGrad = scaledBiasGrad.Reshape([scaledBiasGrad.Length]);
+            _layerBiases[layer + 1] = Engine.TensorAdd(currentBias, scaledBiasGrad);
         }
 
         var reconstructed = Reconstruct(batch);
