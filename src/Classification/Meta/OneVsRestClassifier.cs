@@ -49,24 +49,13 @@ namespace AiDotNet.Classification.Meta;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create One-vs-Rest classifier for multi-class classification
-/// var options = new OneVsRestClassifierOptions&lt;double&gt;();
-/// var classifier = new OneVsRestClassifier&lt;double&gt;(options);
+/// // Use AiModelBuilder facade for onevsrestclassifier classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new OneVsRestClassifier&lt;double&gt;(
+///         new OneVsRestClassifierOptions&lt;double&gt;()));
 ///
-/// // Prepare multi-class training data
-/// var features = Matrix&lt;double&gt;.Build.Dense(9, 2, new double[] {
-///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
-///     3.0, 3.1,  3.2, 2.9,  2.8, 3.0,
-///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
-/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1, 2, 2, 2 });
-///
-/// // Train K binary classifiers (class vs all others)
-/// classifier.Train(features, labels);
-///
-/// // Predict class with highest confidence score
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 3.1, 3.0 });
-/// var prediction = classifier.Predict(newSample);
-/// // Result is available in the returned value
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

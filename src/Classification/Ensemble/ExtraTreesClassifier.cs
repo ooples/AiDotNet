@@ -40,23 +40,13 @@ namespace AiDotNet.Classification.Ensemble;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create Extra Trees classifier with fully randomized splits
-/// var options = new ExtraTreesClassifierOptions&lt;double&gt;();
-/// var classifier = new ExtraTreesClassifier&lt;double&gt;(options);
+/// // Use AiModelBuilder facade for Extra Trees classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ExtraTreesClassifier&lt;double&gt;(
+///         new ExtraTreesClassifierOptions&lt;double&gt;()));
 ///
-/// // Prepare training data
-/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
-///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
-///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
-/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
-///
-/// // Train with random split points for maximum diversity
-/// classifier.Train(features, labels);
-///
-/// // Predict using majority vote across all trees
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
-/// var prediction = classifier.Predict(newSample);
-/// // Result is available in the returned value
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
