@@ -407,81 +407,30 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Reset network state
+        // Reset network state (clears SpikingLayer internal states)
         ResetState();
 
-        // Convert input to appropriate format
-        Vector<T> inputVector = input.ToVector();
+        // SpikingLayers handle their own LIF dynamics (membrane, spikes, refractory).
+        // We run the simulation for multiple timesteps, feeding the same input each step
+        // and letting SpikingLayers accumulate membrane potential and generate spikes.
+        // The output layer's spike rates over time form the final prediction.
 
-        // Create storage for output layer spike train
         List<Vector<T>> outputSpikeTrain = new List<Vector<T>>(_simulationSteps);
 
-        // Run simulation for the specified number of time steps
         for (int step = 0; step < _simulationSteps; step++)
         {
-            // Process through layers
-            Vector<T> currentInput = inputVector;
-
-            for (int layerIndex = 0; layerIndex < Layers.Count; layerIndex++)
+            // Forward through all layers — each SpikingLayer handles its own LIF
+            Tensor<T> current = input;
+            for (int i = 0; i < Layers.Count; i++)
             {
-                // Get current layer and its state
-                var layer = Layers[layerIndex];
-                var membranePotentials = _membranePotentials[layerIndex];
-                var refractoryCounters = _refractoryCounters[layerIndex];
-                var firingThresholds = _firingThresholds[layerIndex];
-
-                // Process input through layer
-                Tensor<T> layerInput = Tensor<T>.FromVector(currentInput);
-                Tensor<T> layerOutput = layer.Forward(layerInput);
-                Vector<T> layerOutputVector = layerOutput.ToVector();
-
-                // VECTORIZED: Update membrane potentials with decay + input using Engine
-                var membraneTensor = Tensor<T>.FromVector(membranePotentials);
-                var decayed = Engine.TensorMultiplyScalar(membraneTensor, _membraneDecay);
-                var layerOutTensor = Tensor<T>.FromVector(layerOutputVector);
-                if (layerOutTensor.Length == decayed.Length)
-                {
-                    membraneTensor = Engine.TensorAdd(decayed, layerOutTensor);
-                }
-                else
-                {
-                    membraneTensor = decayed;
-                    int minLen = Math.Min(layerOutTensor.Length, membraneTensor.Length);
-                    for (int m = 0; m < minLen; m++)
-                        membraneTensor[m] = NumOps.Add(membraneTensor[m], layerOutTensor[m]);
-                }
-                for (int m = 0; m < membranePotentials.Length; m++)
-                    membranePotentials[m] = membraneTensor[m];
-
-                // Generate spikes (branching per-neuron — refractory state prevents full vectorization)
-                Vector<T> spikes = new Vector<T>(membranePotentials.Length);
-                for (int n = 0; n < membranePotentials.Length; n++)
-                {
-                    if (refractoryCounters[n] <= 0 && NumOps.GreaterThanOrEquals(membranePotentials[n], firingThresholds[n]))
-                    {
-                        spikes[n] = NumOps.One;
-                        membranePotentials[n] = NumOps.Zero;
-                        refractoryCounters[n] = _refractoryPeriod;
-                    }
-                    else
-                    {
-                        spikes[n] = NumOps.Zero;
-                        if (refractoryCounters[n] > 0) refractoryCounters[n]--;
-                    }
-                }
-
-                // Set spikes as input to next layer
-                currentInput = spikes;
-
-                // Store output layer spikes
-                if (layerIndex == Layers.Count - 1)
-                {
-                    outputSpikeTrain.Add(spikes);
-                }
+                current = Layers[i].Forward(current);
             }
+
+            // Store output spikes from last layer
+            outputSpikeTrain.Add(current.ToVector());
         }
 
-        // Aggregate spike train to final output
+        // Aggregate spike train to final output (average spike rate)
         Vector<T> finalOutput = AggregateSpikeTrainToOutput(outputSpikeTrain);
 
         return Tensor<T>.FromVector(finalOutput);
