@@ -363,10 +363,9 @@ public class RecurrentLayer<T> : LayerBase<T>
                 nameof(input));
         }
 
-        var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
+        // Rent tensors to reduce GC pressure (output is fully overwritten, hidden needs zero init)
+        var output = TensorAllocator.Rent<T>([sequenceLength, batchSize, hiddenSize]);
         var hiddenState = new Tensor<T>([sequenceLength + 1, batchSize, hiddenSize]);
-
-        // Initialize the first hidden state with zeros (vectorized)
         hiddenState.Fill(NumOps.Zero);
 
         // Process sequence using tensor operations
