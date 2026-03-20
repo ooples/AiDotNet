@@ -117,28 +117,37 @@ public class AffinityPropagation<T> : ClusteringBase<T>
             throw new ArgumentException("Need at least 2 samples.");
         }
 
-        // Normalize features for scale-invariant similarity computation
-        int d = x.Columns;
-        var xNorm = new Matrix<T>(n, d);
-        for (int j = 0; j < d; j++)
+        // Skip normalization for precomputed similarity matrices — the input IS the similarity matrix
+        Matrix<T> xForSimilarity;
+        if (_options.AffinityType == AffinityPropagationAffinityType.Precomputed)
         {
-            double sum = 0, varSum = 0;
-            for (int i = 0; i < n; i++)
-                sum += NumOps.ToDouble(x[i, j]);
-            double mean = sum / n;
-            for (int i = 0; i < n; i++)
+            xForSimilarity = x;
+        }
+        else
+        {
+            // Normalize features for scale-invariant similarity computation
+            int d = x.Columns;
+            xForSimilarity = new Matrix<T>(n, d);
+            for (int j = 0; j < d; j++)
             {
-                double diff = NumOps.ToDouble(x[i, j]) - mean;
-                varSum += diff * diff;
+                double sum = 0, varSum = 0;
+                for (int i = 0; i < n; i++)
+                    sum += NumOps.ToDouble(x[i, j]);
+                double mean = sum / n;
+                for (int i = 0; i < n; i++)
+                {
+                    double diff = NumOps.ToDouble(x[i, j]) - mean;
+                    varSum += diff * diff;
+                }
+                double std = Math.Sqrt(varSum / n);
+                if (std < 1e-10) std = 1.0;
+                for (int i = 0; i < n; i++)
+                    xForSimilarity[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - mean) / std);
             }
-            double std = Math.Sqrt(varSum / n);
-            if (std < 1e-10) std = 1.0;
-            for (int i = 0; i < n; i++)
-                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - mean) / std);
         }
 
-        // Compute similarity matrix on normalized data
-        _similarityMatrix = ComputeSimilarityMatrix(xNorm, n);
+        // Compute similarity matrix
+        _similarityMatrix = ComputeSimilarityMatrix(xForSimilarity, n);
 
         // Set preferences (diagonal of similarity matrix)
         T preference = _options.Preference.HasValue

@@ -56,6 +56,8 @@ namespace AiDotNet.Clustering.Subspace;
 public class SUBCLU<T> : ClusteringBase<T>
 {
     private readonly SUBCLUOptions<T> _options;
+    private double[]? _normMeans;
+    private double[]? _normStds;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -194,6 +196,10 @@ public class SUBCLU<T> : ClusteringBase<T>
             if (featureStds[j] < 1e-10) featureStds[j] = 1.0;
         }
 
+        // Store normalization parameters for prediction consistency
+        _normMeans = featureMeans;
+        _normStds = featureStds;
+
         var xNorm = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
             for (int j = 0; j < d; j++)
@@ -325,6 +331,17 @@ public class SUBCLU<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
         ValidatePredictInput(x);
+
+        // Normalize prediction input using the same parameters as training
+        if (_normMeans is not null && _normStds is not null && !ReferenceEquals(x, TrainingDataRef))
+        {
+            int d = x.Columns;
+            var xNorm = new Matrix<T>(x.Rows, d);
+            for (int i = 0; i < x.Rows; i++)
+                for (int j = 0; j < d; j++)
+                    xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _normMeans[j]) / _normStds[j]);
+            x = xNorm;
+        }
 
         if (_subspaceClusterInfos is null || _subspaceClusterInfos.Count == 0 || _trainingData is null)
         {
