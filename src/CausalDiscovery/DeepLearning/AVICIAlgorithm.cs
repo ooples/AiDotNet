@@ -321,7 +321,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
         }
 
         // Final inference using trained parameters
-        var result = new Matrix<T>(d, d);
+        var learnedP = new double[d, d];
         // Re-run forward pass with trained Wq, Wk, Wv, Wo
         var Qf = new Matrix<T>(d * d, headDim);
         var Kf = new Matrix<T>(d * d, headDim);
@@ -378,19 +378,10 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     logit = NumOps.Add(logit, NumOps.Multiply(att[k], Wo[k, 0]));
                 double sv2 = NumOps.ToDouble(logit);
                 double prob = sv2 > 20 ? 1.0 : sv2 < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv2));
-                if (prob > 0.5)
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(0.1)))
-                            result[i, j] = weight;
-                    }
-                }
+                learnedP[i, j] = prob;
             }
 
-        return result;
+        return BuildFinalAdjacency(learnedP, cov, d);
     }
 
 }

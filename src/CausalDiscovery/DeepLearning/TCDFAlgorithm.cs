@@ -187,45 +187,31 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
             }
         }
 
-        // Final: compute attention weights and threshold
-        var result = new Matrix<T>(d, d);
-        T threshold = NumOps.FromDouble(1.0 / d + 0.1); // above uniform attention
-
+        // Final: compute attention weights as learned edge probabilities
+        var learnedP = new double[d, d];
         for (int j = 0; j < d; j++)
         {
-            // Compute final softmax attention
-            T maxVal = NumOps.FromDouble(-1e10);
-            var finalAttn = new T[d];
+            double maxVal = double.MinValue;
+            var finalAttn = new double[d];
             for (int i = 0; i < d; i++)
             {
                 double sv = NumOps.ToDouble(attnLogits[i, j]);
-                finalAttn[i] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-                if (NumOps.GreaterThan(finalAttn[i], maxVal)) maxVal = finalAttn[i];
+                finalAttn[i] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
+                if (finalAttn[i] > maxVal) maxVal = finalAttn[i];
             }
-            T sumExp = NumOps.Zero;
+            double sumExp = 0;
             for (int i = 0; i < d; i++)
             {
-                finalAttn[i] = NumOps.FromDouble(Math.Exp(
-                    Math.Min(20, NumOps.ToDouble(NumOps.Subtract(finalAttn[i], maxVal)))));
-                sumExp = NumOps.Add(sumExp, finalAttn[i]);
+                finalAttn[i] = Math.Exp(Math.Min(20, finalAttn[i] - maxVal));
+                sumExp += finalAttn[i];
             }
             for (int i = 0; i < d; i++)
             {
-                finalAttn[i] = NumOps.Divide(finalAttn[i], NumOps.Add(sumExp, eps));
                 if (i == j) continue;
-                if (NumOps.GreaterThan(finalAttn[i], threshold))
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(0.1)))
-                            result[i, j] = weight;
-                    }
-                }
+                learnedP[i, j] = finalAttn[i] / (sumExp + 1e-10);
             }
         }
 
-        return result;
+        return BuildFinalAdjacency(learnedP, cov, d);
     }
 }
