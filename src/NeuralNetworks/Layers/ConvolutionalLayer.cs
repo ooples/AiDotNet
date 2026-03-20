@@ -231,9 +231,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasReshaped4D;
 
     /// <summary>
-    /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass to avoid
-    /// allocating a new output tensor (~41MB at 1280 channels, 64x64 spatial) per call.
-    /// Allocated on first forward pass when the batch size is known.
+    /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass.
     /// </summary>
     private Tensor<T>? _preAllocatedOutput;
 
