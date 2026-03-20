@@ -335,16 +335,18 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Initialize biases to zero using Fill
+        // Initialize biases to zero
         _visibleBiases.Fill(NumOps.Zero);
         _hiddenBiases.Fill(NumOps.Zero);
 
-        // Initialize weights with small random values using Engine operations
-        // Create random tensor [0, 1], scale to [0, 0.1], shift to [-0.05, 0.05]
+        // Initialize weights: U(-0.1, 0.1) scaled by 1/sqrt(visibleUnits).
+        // Standard U(-0.05, 0.05) is too narrow for large layers.
+        // This gives wider initialization while remaining stable for sigmoid.
+        double range = 2.0 / Math.Sqrt(_visibleUnits);
         var randomTensor = Tensor<T>.CreateRandom(_hiddenUnits, _visibleUnits);
-        var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(0.1));
+        var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(range));
         var shiftTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
-        shiftTensor.Fill(NumOps.FromDouble(0.05));
+        shiftTensor.Fill(NumOps.FromDouble(range / 2.0));
         _weights = Engine.TensorSubtract(scaledTensor, shiftTensor);
     }
 
