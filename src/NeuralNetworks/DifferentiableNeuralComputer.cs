@@ -371,6 +371,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// The output weight matrix for combining controller output with read vectors.
     /// </summary>
     private Matrix<T> _outputWeights;
+    private Vector<T>? _lastCombinedVector;
 
     private ILossFunction<T> _lossFunction;
 
@@ -922,25 +923,31 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Calculate gradients from the loss
         Vector<T> outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
 
-        // Backpropagate the error through the network
+        // Backpropagate the error through the layers
         Tensor<T> inputGradientsTensor = Backpropagate(Tensor<T>.FromVector(outputGradients));
-        Vector<T> inputGradients = inputGradientsTensor.ToVector();
 
-        // Get parameter gradients
-        Vector<T> parameterGradients = GetParameterGradients();
-
-        // Persistent Adam optimizer handles vanishing gradients in deep memory-augmented networks
+        // Update layer parameters via persistent Adam
         _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0001 });
-
-        // Get current parameters
-        Vector<T> currentParameters = GetParameters();
-
-        // Update parameters using persistent Adam optimizer
-        Vector<T> updatedParameters = _trainOptimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        // Apply updated parameters
+        var parameterGradients = GetParameterGradients();
+        var currentParameters = GetParameters();
+        var updatedParameters = _trainOptimizer.UpdateParameters(currentParameters, parameterGradients);
         UpdateParameters(updatedParameters);
+
+        // Update _outputWeights directly (outside layer system, gradient computed manually).
+        // Output y[i] = Σ_j W[j,i] * combined[j], so ∂L/∂W[j,i] = combined[j] * ∂L/∂y[i]
+        if (_lastCombinedVector != null)
+        {
+            T lr = NumOps.FromDouble(0.0001);
+            for (int j = 0; j < _outputWeights.Rows; j++)
+            {
+                for (int i = 0; i < _outputWeights.Columns; i++)
+                {
+                    T grad = NumOps.Multiply(_lastCombinedVector[j], outputGradients[i]);
+                    _outputWeights[j, i] = NumOps.Subtract(_outputWeights[j, i], NumOps.Multiply(lr, grad));
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -1383,6 +1390,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 combinedVector[offset++] = readVectors[i][j];
             }
         }
+
+        // Cache combined vector for backward pass (output weight gradient computation)
+        _lastCombinedVector = combinedVector;
 
         // Apply learnable output matrix to combined vector
         for (int i = 0; i < outputSize; i++)
