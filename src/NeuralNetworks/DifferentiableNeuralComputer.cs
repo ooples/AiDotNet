@@ -906,6 +906,9 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
+        // Reset memory for clean training pass (prevents stale memory from previous calls)
+        ResetMemoryState();
+
         // Process the input through the network
         Tensor<T> output = ProcessInput(input, true);
 
@@ -927,7 +930,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Vector<T> parameterGradients = GetParameterGradients();
 
         // Persistent Adam optimizer handles vanishing gradients in deep memory-augmented networks
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0001 });
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
