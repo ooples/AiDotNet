@@ -1053,11 +1053,16 @@ public class LSTMLayer<T> : LayerBase<T>
         int batchSize;
         int timeSteps;
 
-        if (rank == 2)
+        if (rank == 1)
         {
-            // 2D input for LSTM is always interpreted as [timeSteps, features] with batchSize=1
-            // This is the standard sequence format for LSTM processing.
-            // If users want batch processing, they should provide 3D input [batchSize, timeSteps, features]
+            // 1D input [features]: treat as single timestep, single batch → [1, 1, features]
+            batchSize = 1;
+            timeSteps = 1;
+            input3D = input.Reshape([1, 1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            // 2D input [timeSteps, features]: single batch
             batchSize = 1;
             timeSteps = input.Shape[0];
             int featureSize = input.Shape[1];
