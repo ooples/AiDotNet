@@ -155,6 +155,15 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
         int? seed = null)
         : base()
     {
+        if (double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Must be a positive finite number.");
+        if (maxIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxIterations), "Must be >= 1.");
+        if (double.IsNaN(tolerance) || double.IsInfinity(tolerance) || tolerance <= 0)
+            throw new ArgumentOutOfRangeException(nameof(tolerance), "Must be a positive finite number.");
+        if (double.IsNaN(regularization) || double.IsInfinity(regularization) || regularization < 0)
+            throw new ArgumentOutOfRangeException(nameof(regularization), "Must be a non-negative finite number.");
+
         _learningRate = learningRate;
         _maxIterations = maxIterations;
         _tolerance = tolerance;

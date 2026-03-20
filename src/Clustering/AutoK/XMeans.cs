@@ -252,6 +252,13 @@ public class XMeans<T> : ClusteringBase<T>
         _bic = ComputeTotalBIC(x, currentLabels, currentCenters, n, d, currentK);
 
         MergeDegenerateClusters(x);
+
+        // Recompute BIC after merge since cluster count and assignments may have changed
+        if (NumClusters < currentK && ClusterCenters is not null && Labels is not null)
+        {
+            _bic = ComputeTotalBIC(x, Labels, ClusterCenters, n, d, NumClusters);
+        }
+
         IsTrained = true;
     }
 

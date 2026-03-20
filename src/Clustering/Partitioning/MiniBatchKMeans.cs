@@ -44,10 +44,12 @@ namespace AiDotNet.Clustering.Partitioning;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new MiniBatchKMeansOptions&lt;double&gt;();
-/// var miniBatchKMeans = new MiniBatchKMeans&lt;double&gt;(options);
-/// miniBatchKMeans.Fit(dataMatrix);
-/// int[] labels = miniBatchKMeans.Labels;
+/// // Use AiModelBuilder facade for mini-batch K-Means clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new MiniBatchKMeans&lt;double&gt;(new MiniBatchKMeansOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

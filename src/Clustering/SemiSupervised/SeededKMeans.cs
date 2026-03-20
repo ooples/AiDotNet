@@ -46,10 +46,12 @@ namespace AiDotNet.Clustering.SemiSupervised;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new SeededKMeansOptions&lt;double&gt;();
-/// var seededKMeans = new SeededKMeans&lt;double&gt;(options);
-/// seededKMeans.Train(dataMatrix);
-/// Vector<double> labels = seededKMeans.Labels;
+/// // Use AiModelBuilder facade for seeded K-Means clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SeededKMeans&lt;double&gt;(new SeededKMeansOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

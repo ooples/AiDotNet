@@ -44,6 +44,10 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
     /// </remarks>
     public virtual T ComputeInline(T[] a, T[] b, int length)
     {
+        if (length < 0 || length > a.Length || length > b.Length)
+            throw new ArgumentOutOfRangeException(nameof(length),
+                $"Length ({length}) must be non-negative and within bounds of both arrays (a={a.Length}, b={b.Length}).");
+
         // Default: Euclidean distance without any Vector allocation
         T sumSq = NumOps.Zero;
         for (int i = 0; i < length; i++)

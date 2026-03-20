@@ -52,22 +52,19 @@ namespace AiDotNet.Audio.Enhancement;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Conv-TasNet model for audio source separation
+/// // Use AiModelBuilder facade for audio source separation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 16000,
 ///     outputSize: 16000);
 ///
-/// var model = new ConvTasNet&lt;float&gt;(
-///     architecture: architecture,
-///     modelPath: "conv_tasnet.onnx",
-///     sampleRate: 8000,
-///     numSources: 2);
+/// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ConvTasNet&lt;float&gt;(architecture, "conv_tasnet.onnx", 8000, 2));
 ///
-/// // Separate mixed audio into individual sources
-/// var mixedAudioTensor = new Tensor&lt;float&gt;(new[] { 1, 1, 8000 }); // 1 second of mono audio
-/// Tensor&lt;float&gt;[] sources = model.Separate(mixedAudioTensor);
+/// // Build and use the model through the facade
+/// var result = builder.Build(trainingData, trainingLabels);
+/// var prediction = result.Predict(mixedAudioTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
