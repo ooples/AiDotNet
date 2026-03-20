@@ -3204,8 +3204,8 @@ public static class LayerHelper<T>
                 recurrentActivation: new SigmoidActivation<T>() as IActivationFunction<T>
             );
 
-            // Add Activation Layer after LSTM
-            yield return new ActivationLayer<T>([_layerHiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
+            // LSTMLayer already applies tanh internally — no extra ActivationLayer
+            // (double tanh compresses output range, causing vanishing gradients)
 
             _currentInputSize = _layerHiddenSize;
         }
