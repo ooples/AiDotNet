@@ -596,7 +596,8 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         _lastInput = input5D;
 
-        var output = new Tensor<T>([batchSize, timeSteps, height, width, _filters]);
+        // Rent output (fully overwritten), states need zero init for initial timestep
+        var output = TensorAllocator.Rent<T>([batchSize, timeSteps, height, width, _filters]);
         _lastHiddenState = new Tensor<T>([batchSize, height, width, _filters]);
         _lastCellState = new Tensor<T>([batchSize, height, width, _filters]);
 
@@ -1692,7 +1693,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         int batchSize = lastInput.Shape[0];
         int timeSteps = lastInput.Shape[1];
 
-        var dInput = new Tensor<T>(lastInput.Shape);
+        var dInput = TensorAllocator.Rent<T>(lastInput.Shape);
         var dWeightsFi = new Tensor<T>(_weightsFi.Shape);
         var dWeightsIi = new Tensor<T>(_weightsIi.Shape);
         var dWeightsCi = new Tensor<T>(_weightsCi.Shape);
