@@ -117,6 +117,20 @@ public class JitCompilerOptions
     public bool EnableMemoryPlanning { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether to enable tile scheduling optimization.
+    /// When enabled, Conv2D and MatMul operations are annotated with cache-optimal tile sizes.
+    /// Default: true.
+    /// </summary>
+    public bool EnableTileScheduling { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to enable operator reordering.
+    /// When enabled, independent operations are reordered to maximize cache line reuse.
+    /// Default: true.
+    /// </summary>
+    public bool EnableOperatorReordering { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the maximum number of tensor buffers to keep per shape.
     /// Default: 10.
     /// </summary>

@@ -93,6 +93,13 @@ public abstract class IROp
     public int[] InputIds { get; set; } = Array.Empty<int>();
 
     /// <summary>
+    /// Arbitrary metadata for optimization passes to annotate operations.
+    /// Used by TileSchedulingPass (TileH, TileW, TileM, TileN, TileK),
+    /// OperatorReorderingPass (Priority, CacheLocality), etc.
+    /// </summary>
+    public Dictionary<string, object> Metadata { get; } = new();
+
+    /// <summary>
     /// Gets or sets the data type of the output tensor.
     /// </summary>
     /// <remarks>

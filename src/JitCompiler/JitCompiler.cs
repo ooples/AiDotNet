@@ -147,8 +147,18 @@ public class JitCompiler : IDisposable
             _optimizationPasses.Add(new AutoTuningPass());
         }
 
-        // Memory planning runs LAST — after all fusion/optimization passes —
-        // because it needs the final operation list to compute tensor lifetimes.
+        if (_options.EnableTileScheduling)
+        {
+            _optimizationPasses.Add(new TileSchedulingPass());
+        }
+
+        if (_options.EnableOperatorReordering)
+        {
+            _optimizationPasses.Add(new OperatorReorderingPass());
+        }
+
+        // Memory planning runs LAST — after all fusion/optimization/reordering passes —
+        // because it needs the final operation order to compute tensor lifetimes.
         if (_options.EnableMemoryPlanning)
         {
             _optimizationPasses.Add(new MemoryPlanningPass());
