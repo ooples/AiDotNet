@@ -104,6 +104,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                 features[idx, 3] = cov[j, j];
             }
 
+        double prevHW = (double)d; // initial h(W) = tr(I) - d = 0, but use d as conservative start
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
             // Compute Q, K, V for each pair
@@ -249,9 +250,12 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     T pij = P[i, j];
                     T absCorr2 = NumOps.Abs(corr[i, j]);
                     T dataGrad2 = NumOps.Subtract(pij, absCorr2);
-                    // Include acyclicity gradient so NOTEARS constraint reaches Q/K weights
-                    T acycGrad2 = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
-                        NumOps.FromDouble(2));
+                    // NOTEARS acyclicity gradient: (α + ρ·h(W)) · ∂h/∂W_ij
+                    // where ∂h/∂W_ij = 2·W_ij·[e^{W⊙W}]_ji (Zheng et al. 2018)
+                    // Approximation: use 2·pij as proxy for ∂h/∂W_ij (ignores matrix exponential)
+                    T acycGrad2 = NumOps.Multiply(
+                        NumOps.Add(alpha, NumOps.Multiply(rho, NumOps.FromDouble(prevHW))),
+                        NumOps.Multiply(NumOps.FromDouble(2), pij));
                     T totalGrad2 = NumOps.Add(dataGrad2, acycGrad2);
                     T sigDeriv2 = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
                     T dLogit2 = NumOps.Multiply(totalGrad2, sigDeriv2);
@@ -306,6 +310,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             for (int i = 0; i < d; i++)
                 hVal = NumOps.Add(hVal, expPSq[i, i]);
             hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
+            prevHW = NumOps.ToDouble(hVal);
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
             if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
             {
