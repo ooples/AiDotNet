@@ -1114,8 +1114,10 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize)
     {
         var biasReshaped = bias.Reshape(1, 1, _embeddingDimension);
-        var zeros = new Tensor<T>(new[] { batchSize, _sequenceLength, _embeddingDimension });
-        return Engine.TensorBroadcastAdd(zeros, biasReshaped);
+        // Rent and zero-fill for broadcast (used as broadcast target, needs zeros)
+        var target = TensorAllocator.Rent<T>(new[] { batchSize, _sequenceLength, _embeddingDimension });
+        target.Fill(NumOps.Zero);
+        return Engine.TensorBroadcastAdd(target, biasReshaped);
     }
 
     /// <summary>
