@@ -46,10 +46,12 @@ namespace AiDotNet.Clustering.Density;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new HDBSCANOptions&lt;double&gt;();
-/// var hDBSCAN = new HDBSCAN&lt;double&gt;(options);
-/// hDBSCAN.Train(dataMatrix);
-/// Vector<double> labels = hDBSCAN.Labels;
+/// // Use AiModelBuilder facade for HDBSCAN clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new HDBSCAN&lt;double&gt;(new HDBSCANOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
