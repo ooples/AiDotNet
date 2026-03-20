@@ -438,7 +438,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> GetParameters()
     {
-        int totalParameterCount = ParameterCount;
+        // Recompute total to avoid stale cache issues (layers may initialize lazily)
+        int totalParameterCount = Layers.Sum(l => l.ParameterCount);
         var parameters = new Vector<T>(totalParameterCount);
 
         int currentIndex = 0;
