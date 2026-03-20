@@ -99,6 +99,12 @@ public class SpikingLayer<T> : LayerBase<T>
     private double _refractoryPeriod;
 
     /// <summary>
+    /// Firing threshold for spike generation. Default 0.5 (calibrated for
+    /// typical [0,1] input magnitudes through Dense-like weight transforms).
+    /// </summary>
+    private double _threshold = 0.5;
+
+    /// <summary>
     /// Connection weights between input and output neurons.
     /// </summary>
     /// <remarks>
@@ -957,10 +963,9 @@ public class SpikingLayer<T> : LayerBase<T>
         var refractoryDecrement = Engine.TensorMultiply(onesTensor, inRefractoryMask);
         _refractoryCountdown = Engine.TensorSubtract(_refractoryCountdown, refractoryDecrement);
 
-        // Generate spikes: where membrane potential >= 1.0
-        var thresholdTensor = new Tensor<T>([_membranePotential.Length]);
-        thresholdTensor.Fill(NumOps.FromDouble(1.0));
-        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(0.9999));
+        // Generate spikes: where membrane potential >= threshold
+        // Threshold calibrated for typical input magnitudes from Dense layers
+        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(_threshold - 0.0001));
 
         // Reset membrane potential where spikes occurred
         var resetMask = Engine.TensorSubtract(onesTensor, _spikes);
@@ -1020,7 +1025,7 @@ public class SpikingLayer<T> : LayerBase<T>
         _refractoryCountdown = Engine.TensorSubtract(_refractoryCountdown, refractoryDecrement);
 
         // Generate spikes where membrane potential >= 1.0
-        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(0.9999));
+        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(_threshold - 0.0001));
 
         // Reset membrane potential where spikes occurred
         var resetMask = Engine.TensorSubtract(onesTensor, _spikes);
@@ -1842,7 +1847,7 @@ public class SpikingLayer<T> : LayerBase<T>
 
         // 3. Apply surrogate spike function (tanh-based surrogate for differentiability)
         // The forward pass uses hard threshold, but autodiff uses soft surrogate
-        double threshold = 1.0;
+        double threshold = _threshold;
         double surrogateBeta = 1.0 / _tau;
         var output = TensorOperations<T>.SurrogateSpike(withBias, threshold, surrogateBeta);
 
@@ -2004,7 +2009,7 @@ public class SpikingLayer<T> : LayerBase<T>
 
         // Apply surrogate spike function with threshold
         // Default threshold is typically 1.0 for normalized inputs
-        double threshold = 1.0;
+        double threshold = _threshold;
         double surrogateBeta = 1.0 / _tau; // Use tau to scale surrogate sharpness
         var spikes = TensorOperations<T>.SurrogateSpike(membranePotential, threshold, surrogateBeta);
 

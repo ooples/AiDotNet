@@ -429,13 +429,20 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Initialize biases to zero and weights to small random values
+        // Xavier initialization: N(0, sqrt(2 / (visibleSize + hiddenSize)))
+        // Standard U(-0.05, 0.05) is too narrow for 128+ units — sigmoid
+        // output becomes indistinguishable for different input magnitudes.
+        double scale = Math.Sqrt(2.0 / (VisibleSize + HiddenSize));
         for (int i = 0; i < VisibleSize; i++)
         {
             _visibleBiases[i] = NumOps.Zero;
             for (int j = 0; j < HiddenSize; j++)
             {
-                _weights[i, j] = NumOps.FromDouble(Random.NextDouble() * 0.1 - 0.05);
+                // Box-Muller for Gaussian
+                double u1 = 1.0 - Random.NextDouble();
+                double u2 = Random.NextDouble();
+                double gaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                _weights[i, j] = NumOps.FromDouble(gaussian * scale);
             }
         }
 
@@ -644,7 +651,9 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // For RBMs, "prediction" is typically extracting the hidden layer representation
+        // For RBMs, "prediction" is typically extracting the hidden layer representation.
+        // RBMs operate on [0,1] valued inputs (Bernoulli visible units).
+        // Normalize input to [0,1] range to prevent sigmoid saturation.
 
         // Ensure input has the right shape
         if (input.Shape.Length != 2 || input.Shape[1] != VisibleSize)
@@ -660,6 +669,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
 
             input = reshapedInput;
         }
+
 
         // Get hidden layer activations
         return GetHiddenLayerActivation(input);

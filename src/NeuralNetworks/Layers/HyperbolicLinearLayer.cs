@@ -250,9 +250,11 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
                 inputVec[i] = inputTensor[b, i];
             }
 
-            // Project input to Poincare ball (ensure valid point)
-            var epsilon = _numOps.FromDouble(1e-5);
-            var projectedInput = _engine.PoincareProject(inputVec, _curvature, epsilon);
+            // Map Euclidean input to Poincaré ball via exponential map from origin.
+            // Per Nickel & Kiela (2017), this preserves magnitude differences unlike
+            // PoincareProject which clips to the boundary (losing scale information).
+            var origin = CreateOriginVector(InputFeatures);
+            var projectedInput = _engine.PoincareExpMap(origin, inputVec, _curvature);
 
             // For each output feature
             for (int o = 0; o < OutputFeatures; o++)
@@ -273,14 +275,15 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
 
                 // Compute hyperbolic linear transformation:
                 // 1. Apply exponential map from origin with weight as tangent vector
-                var origin = CreateOriginVector(InputFeatures);
-                var weightPoint = _engine.PoincareExpMap(origin, weightVec, _curvature);
+                var originForWeight = CreateOriginVector(InputFeatures);
+                var weightPoint = _engine.PoincareExpMap(originForWeight, weightVec, _curvature);
 
                 // 2. Mobius addition of input with weight point
                 var transformed = _engine.MobiusAdd(projectedInput, weightPoint, _curvature);
 
-                // 3. Mobius addition with bias
-                var biasProjected = _engine.PoincareProject(biasVec, _curvature, epsilon);
+                // 3. Mobius addition with bias (map bias to ball via exp map)
+                var originForBias = CreateOriginVector(InputFeatures);
+                var biasProjected = _engine.PoincareExpMap(originForBias, biasVec, _curvature);
                 var withBias = _engine.MobiusAdd(transformed, biasProjected, _curvature);
 
                 // 4. Compute output as distance from origin (scalar output)

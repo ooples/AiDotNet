@@ -2545,14 +2545,12 @@ public static class LayerHelper<T>
         // Input layer
         yield return new InputLayer<T>(inputSize);
 
-        // First RNN Layer
+        // First RNN Layer (RecurrentLayer applies tanh internally — no extra ActivationLayer)
         yield return new RecurrentLayer<T>(
             inputSize: inputSize,
             hiddenSize: hiddenSize,
             activationFunction: new TanhActivation<T>()
         );
-
-        yield return new ActivationLayer<T>([hiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
 
         // Additional RNN layers if needed
         for (int i = 1; i < recurrentLayerCount; i++)
@@ -2562,8 +2560,6 @@ public static class LayerHelper<T>
                 hiddenSize: hiddenSize,
                 activationFunction: new TanhActivation<T>()
             );
-
-            yield return new ActivationLayer<T>([hiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
         }
 
         // Extract the last timestep from the sequence for classification tasks
@@ -2577,8 +2573,16 @@ public static class LayerHelper<T>
             activationFunction: null
         );
 
-        // Add the final Activation Layer (typically Softmax for classification tasks)
-        yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Task-appropriate final activation
+        if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IActivationFunction<T>);
+        }
+        // Regression: no final activation (identity)
     }
 
     /// <summary>
@@ -2992,7 +2996,7 @@ public static class LayerHelper<T>
     /// <param name="connectionProbability">The probability of connection between neurons in the reservoir. Default is 0.1 (10%).</param>
     /// <param name="spectralRadius">Controls the stability of the reservoir dynamics. Default is 0.9.</param>
     /// <param name="inputScaling">Scaling factor for input connections. Default is 1.0.</param>
-    /// <param name="leakingRate">Controls how quickly the reservoir responds to new inputs. Default is 1.0.</param>
+    /// <param name="leakingRate">Controls how quickly the reservoir responds to new inputs. Default is 0.3 per Jaeger &amp; Haas (2004).</param>
     /// <returns>A collection of layers configured for a Liquid State Machine.</returns>
     /// <remarks>
     /// <para>
@@ -3017,7 +3021,7 @@ public static class LayerHelper<T>
         double connectionProbability = 0.1,
         double spectralRadius = 0.9,
         double inputScaling = 1.0,
-        double leakingRate = 1.0)
+        double leakingRate = 0.3)
     {
         // Validate input
         if (architecture == null)

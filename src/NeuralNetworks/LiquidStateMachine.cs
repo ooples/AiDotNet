@@ -249,7 +249,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         double connectionProbability = 0.1,
         double spectralRadius = 0.9,
         double inputScaling = 1.0,
-        double leakingRate = 1.0,
+        double leakingRate = 0.3, // Jaeger & Haas (2004): leakingRate < 1 for temporal dynamics
         ILossFunction<T>? lossFunction = null,
         LiquidStateMachineOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
