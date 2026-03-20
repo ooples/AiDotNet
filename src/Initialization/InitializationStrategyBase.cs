@@ -66,11 +66,33 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected void XavierUniformInitialize(Tensor<T> weights, int fanIn, int fanOut)
     {
         var limit = Math.Sqrt(6.0 / (fanIn + fanOut));
+        var span = weights.Data.Span;
+        var rng = Random;
 
-        for (int i = 0; i < weights.Length; i++)
+        // Fast path: avoid NumOps.FromDouble virtual dispatch for double/float
+        if (typeof(T) == typeof(double))
         {
-            var value = Random.NextDouble() * 2 * limit - limit;
-            weights.Data.Span[i] = NumOps.FromDouble(value);
+            for (int i = 0; i < span.Length; i++)
+            {
+                double value = rng.NextDouble() * 2 * limit - limit;
+                span[i] = System.Runtime.CompilerServices.Unsafe.As<double, T>(ref value);
+            }
+            return;
+        }
+
+        if (typeof(T) == typeof(float))
+        {
+            for (int i = 0; i < span.Length; i++)
+            {
+                float value = (float)(rng.NextDouble() * 2 * limit - limit);
+                span[i] = System.Runtime.CompilerServices.Unsafe.As<float, T>(ref value);
+            }
+            return;
+        }
+
+        for (int i = 0; i < span.Length; i++)
+        {
+            span[i] = NumOps.FromDouble(rng.NextDouble() * 2 * limit - limit);
         }
     }
 
@@ -92,17 +114,39 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     {
         var stddev = Math.Sqrt(2.0 / (fanIn + fanOut));
         var clipBound = 2.0 * stddev;
+        var span = weights.Data.Span;
 
-        for (int i = 0; i < weights.Length; i++)
+        if (typeof(T) == typeof(double))
         {
-            var value = SampleGaussian(0, stddev);
-            // Truncated normal: re-sample values outside [-2*stddev, 2*stddev]
-            // This follows TensorFlow/Keras convention for weight initialization
-            while (Math.Abs(value) > clipBound)
+            for (int i = 0; i < span.Length; i++)
             {
-                value = SampleGaussian(0, stddev);
+                double value;
+                do { value = SampleGaussian(0, stddev); }
+                while (Math.Abs(value) > clipBound);
+                span[i] = System.Runtime.CompilerServices.Unsafe.As<double, T>(ref value);
             }
-            weights.Data.Span[i] = NumOps.FromDouble(value);
+            return;
+        }
+
+        if (typeof(T) == typeof(float))
+        {
+            for (int i = 0; i < span.Length; i++)
+            {
+                double value;
+                do { value = SampleGaussian(0, stddev); }
+                while (Math.Abs(value) > clipBound);
+                float fv = (float)value;
+                span[i] = System.Runtime.CompilerServices.Unsafe.As<float, T>(ref fv);
+            }
+            return;
+        }
+
+        for (int i = 0; i < span.Length; i++)
+        {
+            double value;
+            do { value = SampleGaussian(0, stddev); }
+            while (Math.Abs(value) > clipBound);
+            span[i] = NumOps.FromDouble(value);
         }
     }
 
@@ -123,12 +167,31 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected void HeUniformInitialize(Tensor<T> weights, int fanIn)
     {
         var limit = Math.Sqrt(6.0 / fanIn);
+        var span = weights.Data.Span;
+        var rng = Random;
 
-        for (int i = 0; i < weights.Length; i++)
+        if (typeof(T) == typeof(double))
         {
-            var value = Random.NextDouble() * 2 * limit - limit;
-            weights.Data.Span[i] = NumOps.FromDouble(value);
+            for (int i = 0; i < span.Length; i++)
+            {
+                double value = rng.NextDouble() * 2 * limit - limit;
+                span[i] = System.Runtime.CompilerServices.Unsafe.As<double, T>(ref value);
+            }
+            return;
         }
+
+        if (typeof(T) == typeof(float))
+        {
+            for (int i = 0; i < span.Length; i++)
+            {
+                float value = (float)(rng.NextDouble() * 2 * limit - limit);
+                span[i] = System.Runtime.CompilerServices.Unsafe.As<float, T>(ref value);
+            }
+            return;
+        }
+
+        for (int i = 0; i < span.Length; i++)
+            span[i] = NumOps.FromDouble(rng.NextDouble() * 2 * limit - limit);
     }
 
     /// <summary>
@@ -147,12 +210,30 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected void HeNormalInitialize(Tensor<T> weights, int fanIn)
     {
         var stddev = Math.Sqrt(2.0 / fanIn);
+        var span = weights.Data.Span;
 
-        for (int i = 0; i < weights.Length; i++)
+        if (typeof(T) == typeof(double))
         {
-            var value = SampleGaussian(0, stddev);
-            weights.Data.Span[i] = NumOps.FromDouble(value);
+            for (int i = 0; i < span.Length; i++)
+            {
+                double value = SampleGaussian(0, stddev);
+                span[i] = System.Runtime.CompilerServices.Unsafe.As<double, T>(ref value);
+            }
+            return;
         }
+
+        if (typeof(T) == typeof(float))
+        {
+            for (int i = 0; i < span.Length; i++)
+            {
+                float value = (float)SampleGaussian(0, stddev);
+                span[i] = System.Runtime.CompilerServices.Unsafe.As<float, T>(ref value);
+            }
+            return;
+        }
+
+        for (int i = 0; i < span.Length; i++)
+            span[i] = NumOps.FromDouble(SampleGaussian(0, stddev));
     }
 
     /// <summary>

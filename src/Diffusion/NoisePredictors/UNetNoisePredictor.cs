@@ -710,50 +710,51 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new List<T>();
+        // Collect all sublayer parameter vectors first (each layer allocates its own)
+        var layerParams = new List<Vector<T>>();
+        int totalCount = 0;
 
-        // Collect parameters from all layers
-        AddLayerParameters(parameters, _inputConv);
-        AddLayerParameters(parameters, _timeEmbedMlp1);
-        AddLayerParameters(parameters, _timeEmbedMlp2);
+        CollectLayerParams(layerParams, ref totalCount, _inputConv);
+        CollectLayerParams(layerParams, ref totalCount, _timeEmbedMlp1);
+        CollectLayerParams(layerParams, ref totalCount, _timeEmbedMlp2);
 
-        foreach (var block in _encoderBlocks)
+        for (int i = 0; i < _encoderBlocks.Count; i++)
+            CollectBlockParams(layerParams, ref totalCount, _encoderBlocks[i]);
+        for (int i = 0; i < _middleBlocks.Count; i++)
+            CollectBlockParams(layerParams, ref totalCount, _middleBlocks[i]);
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+            CollectBlockParams(layerParams, ref totalCount, _decoderBlocks[i]);
+
+        CollectLayerParams(layerParams, ref totalCount, _outputConv);
+
+        // Single allocation at exact size, then copy from cached sublayer vectors
+        var parameters = new Vector<T>(totalCount);
+        int idx = 0;
+        for (int v = 0; v < layerParams.Count; v++)
         {
-            AddBlockParameters(parameters, block);
+            var p = layerParams[v];
+            for (int i = 0; i < p.Length; i++)
+                parameters[idx++] = p[i];
         }
 
-        foreach (var block in _middleBlocks)
-        {
-            AddBlockParameters(parameters, block);
-        }
-
-        foreach (var block in _decoderBlocks)
-        {
-            AddBlockParameters(parameters, block);
-        }
-
-        AddLayerParameters(parameters, _outputConv);
-
-        return new Vector<T>(parameters.ToArray());
+        return parameters;
     }
 
-    private void AddLayerParameters(List<T> parameters, ILayer<T>? layer)
+    private static void CollectLayerParams(List<Vector<T>> dest, ref int totalCount, ILayer<T>? layer)
     {
         if (layer == null) return;
-        var layerParams = layer.GetParameters();
-        for (int i = 0; i < layerParams.Length; i++)
-        {
-            parameters.Add(layerParams[i]);
-        }
+        var p = layer.GetParameters();
+        dest.Add(p);
+        totalCount += p.Length;
     }
 
-    private void AddBlockParameters(List<T> parameters, UNetBlock block)
+    private static void CollectBlockParams(List<Vector<T>> dest, ref int totalCount, UNetBlock block)
     {
-        AddLayerParameters(parameters, block.ResBlock);
-        AddLayerParameters(parameters, block.AttentionBlock);
-        AddLayerParameters(parameters, block.CrossAttentionBlock);
-        AddLayerParameters(parameters, block.Downsample);
-        AddLayerParameters(parameters, block.Upsample);
+        CollectLayerParams(dest, ref totalCount, block.ResBlock);
+        CollectLayerParams(dest, ref totalCount, block.AttentionBlock);
+        CollectLayerParams(dest, ref totalCount, block.CrossAttentionBlock);
+        CollectLayerParams(dest, ref totalCount, block.Downsample);
+        CollectLayerParams(dest, ref totalCount, block.Upsample);
     }
 
     /// <inheritdoc />
