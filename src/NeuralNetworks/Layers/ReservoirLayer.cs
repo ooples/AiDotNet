@@ -210,7 +210,7 @@ public class ReservoirLayer<T> : LayerBase<T>
         double inputScaling = 1.0,
         double leakingRate = 1.0,
         IInitializationStrategy<T>? initializationStrategy = null)
-        : base([inputSize], [reservoirSize])
+        : base([inputSize], [reservoirSize], new TanhActivation<T>() as IActivationFunction<T>)
     {
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
