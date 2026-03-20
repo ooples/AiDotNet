@@ -317,7 +317,6 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
 
             // Remap ALL neurons (not just BMU winners) to valid post-merge labels.
             // Neurons that never won a BMU could retain stale labels >= NumClusters.
-            int height = _options.GridHeight;
             for (int ni = 0; ni < _neuronLabels.Length; ni++)
             {
                 if (labelMap.TryGetValue(_neuronLabels[ni], out int mapped))

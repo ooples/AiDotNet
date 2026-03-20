@@ -432,17 +432,12 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// JIT-compiled forward pass function backed by TensorWorkspace.
     /// When non-null, PredictNoise uses this for zero-allocation execution.
     /// </summary>
-    private Action<Tensor<T>[], IEngine>? _compiledForward;
+    private Func<Tensor<T>[], Tensor<T>[]>? _compiledForward;
 
-    /// <summary>
-    /// Pre-allocated workspace for compiled forward pass intermediates.
-    /// </summary>
-    private TensorWorkspace<T>? _compiledWorkspace;
-
-    /// <summary>
-    /// Which workspace slot contains the output after compiled execution.
-    /// </summary>
-    private int _compiledOutputSlot;
+    // TensorWorkspace support is pending NuGet release of AiDotNet.Tensors with TensorWorkspace<T>.
+    // Uncomment when available:
+    // private TensorWorkspace<T>? _compiledWorkspace;
+    // private int _compiledOutputSlot;
 
     /// <summary>
     /// Gets whether the UNet forward pass has been JIT-compiled.
@@ -501,11 +496,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         if (_outputConv is not null)
             current = _outputConv.ExportComputationGraph([current]);
 
-        // Compile with workspace — zero-allocation execution backed by TensorWorkspace
-        var (execute, workspace, outputSlot) = jit.CompileWithWorkspace<T>(current, inputNodes);
-        _compiledForward = execute;
-        _compiledWorkspace = workspace;
-        _compiledOutputSlot = outputSlot;
+        // TensorWorkspace compilation pending NuGet release. Using standard compile for now.
+        _compiledForward = jit.Compile<T>(current, inputNodes);
     }
 
     /// <inheritdoc />
@@ -517,13 +509,15 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         var timeEmbed = GetTimestepEmbedding(timestep);
         timeEmbed = ProjectTimeEmbedding(timeEmbed);
 
-        // Use compiled forward if available — zero allocation via TensorWorkspace
-        if (_compiledForward is not null && _compiledWorkspace is not null)
+        // Use compiled forward if available
+        if (_compiledForward is not null)
         {
-            _compiledForward([noisySample, timeEmbed], Engine);
-            var result = _compiledWorkspace.Get(_compiledOutputSlot);
-            _lastOutput = result;
-            return result;
+            var outputs = _compiledForward([noisySample, timeEmbed]);
+            if (outputs.Length > 0)
+            {
+                _lastOutput = outputs[0];
+                return outputs[0];
+            }
         }
 
         // Interpreted forward pass
