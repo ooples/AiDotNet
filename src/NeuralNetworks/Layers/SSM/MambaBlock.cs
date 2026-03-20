@@ -548,7 +548,7 @@ internal class MambaBlock<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         var bias2D = _convBias.Reshape(1, _innerDimension);
 
         // Pre-compute weight slices for each kernel position: [innerDim] -> [1, innerDim]
@@ -588,7 +588,7 @@ internal class MambaBlock<T> : LayerBase<T>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
 
         // Per-kernel-position weight gradient accumulators
