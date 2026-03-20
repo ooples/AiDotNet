@@ -539,7 +539,7 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
         var vaeCount = _audioVAE.ParameterCount;
 
         if (parameters.Length != unetCount + vaeCount)

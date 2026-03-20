@@ -487,12 +487,13 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // Input convolution
         x = _inputConv.Forward(x);
 
-        // Store skip connections
-        var skips = new List<Tensor<T>>();
+        // Store skip connections — pre-allocate capacity to avoid List resizing
+        var skips = new List<Tensor<T>>(_encoderBlocks.Count);
 
         // Encoder
-        foreach (var block in _encoderBlocks)
+        for (int i = 0; i < _encoderBlocks.Count; i++)
         {
+            var block = _encoderBlocks[i];
             if (block.Downsample != null)
             {
                 x = block.Downsample.Forward(x);
@@ -513,8 +514,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         }
 
         // Middle
-        foreach (var block in _middleBlocks)
+        for (int i = 0; i < _middleBlocks.Count; i++)
         {
+            var block = _middleBlocks[i];
             x = ApplyResBlock(block.ResBlock, x, timeEmbed);
             if (block.AttentionBlock != null)
             {
@@ -528,8 +530,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
         // Decoder
         var skipIdx = skips.Count - 1;
-        foreach (var block in _decoderBlocks)
+        for (int i = 0; i < _decoderBlocks.Count; i++)
         {
+            var block = _decoderBlocks[i];
             if (block.Upsample != null)
             {
                 x = block.Upsample.Forward(x);
