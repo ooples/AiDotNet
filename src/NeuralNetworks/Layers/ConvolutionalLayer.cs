@@ -399,8 +399,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
         else
         {
-            // Eager initialization - allocate and initialize immediately
-            _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            // Eager initialization — use RentUninitialized for kernels since InitializeWeights
+            // overwrites all elements (skips zero-fill, saving ~117MB write at 1280 channels)
+            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
             _biases = new Tensor<T>([OutputDepth]);
             // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
             _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
@@ -475,8 +476,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
         else
         {
-            // Eager initialization - allocate and initialize immediately
-            _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            // Eager initialization — use RentUninitialized for kernels since InitializeWeights
+            // overwrites all elements (skips zero-fill, saving ~117MB write at 1280 channels)
+            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
             _biases = new Tensor<T>([OutputDepth]);
             // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
             _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
@@ -705,8 +707,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Stride = reader.ReadInt32();
         Padding = reader.ReadInt32();
 
-        // Deserialize _kernels
-        _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        // Deserialize _kernels — RentUninitialized since all elements are immediately overwritten
+        _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         for (int i = 0; i < _kernels.Shape[0]; i++)
         {
             for (int j = 0; j < _kernels.Shape[1]; j++)
@@ -809,8 +811,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         {
             if (_isInitialized) return;
 
-            // Allocate kernels and biases
-            _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            // Allocate kernels — RentUninitialized since InitializeWeights overwrites all elements
+            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
             _biases = new Tensor<T>([OutputDepth]);
             // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
             _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
