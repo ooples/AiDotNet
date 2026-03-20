@@ -1350,6 +1350,10 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <param name="expectedOutput">The expected output tensor.</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Handle 1D input/output: reshape to [1, features]
+        if (input.Rank == 1) input = input.Reshape([1, input.Length]);
+        if (expectedOutput.Rank == 1) expectedOutput = expectedOutput.Reshape([1, expectedOutput.Length]);
+
         if (input.Shape[0] != expectedOutput.Shape[0])
         {
             throw new ArgumentException("Input and expected output must have the same batch size");
