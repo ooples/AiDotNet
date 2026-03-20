@@ -547,7 +547,8 @@ public static class DeserializationHelper
         {
             int inputSize = inputShape[0];
             int outputSize = outputShape[0];
-            instance = new HyperbolicLinearLayer<T>(inputSize, outputSize);
+            double curvature = TryGetDouble(additionalParams, "Curvature") ?? -1.0;
+            instance = new HyperbolicLinearLayer<T>(inputSize, outputSize, curvature);
         }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
