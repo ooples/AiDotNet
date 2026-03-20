@@ -658,23 +658,18 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         int batchSize = hiddenState.Shape[0];
         int inputSize = input.Shape[1];
 
-        // Create concatenated input (input + hidden state) for all gates
-        var combinedInput = new Tensor<T>([batchSize, inputSize + hiddenSize]);
+        // Rent concatenated input tensor to avoid GC pressure in hot loop
+        var combinedInput = TensorAllocator.Rent<T>([batchSize, inputSize + hiddenSize]);
 
-        // Concatenate input and hidden state along feature dimension
+        // Concatenate input and hidden state along feature dimension using Span
+        var combinedSpan = combinedInput.Data.Span;
+        var inputSpan = input.Data.Span;
+        var hiddenSpan = hiddenState.Data.Span;
         for (int b = 0; b < batchSize; b++)
         {
-            // Copy input values
-            for (int i = 0; i < inputSize; i++)
-            {
-                combinedInput[b, i] = input[b, i];
-            }
-
-            // Copy hidden state values
-            for (int h = 0; h < hiddenSize; h++)
-            {
-                combinedInput[b, inputSize + h] = hiddenState[b, h];
-            }
+            int combinedOffset = b * (inputSize + hiddenSize);
+            inputSpan.Slice(b * inputSize, inputSize).CopyTo(combinedSpan.Slice(combinedOffset, inputSize));
+            hiddenSpan.Slice(b * hiddenSize, hiddenSize).CopyTo(combinedSpan.Slice(combinedOffset + inputSize, hiddenSize));
         }
 
         // Forward through the layer to get all gate values
@@ -687,23 +682,27 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                 $"Expected gate outputs of size {4 * hiddenSize}, but got {gateOutputs.Shape[1]}");
         }
 
-        // Create tensors for each gate
-        var forgetGate = new Tensor<T>([batchSize, hiddenSize]);
-        var inputGate = new Tensor<T>([batchSize, hiddenSize]);
-        var cellGate = new Tensor<T>([batchSize, hiddenSize]);
-        var outputGate = new Tensor<T>([batchSize, hiddenSize]);
+        // Rent gate tensors to avoid GC pressure in hot loop
+        var forgetGate = TensorAllocator.Rent<T>([batchSize, hiddenSize]);
+        var inputGate = TensorAllocator.Rent<T>([batchSize, hiddenSize]);
+        var cellGate = TensorAllocator.Rent<T>([batchSize, hiddenSize]);
+        var outputGate = TensorAllocator.Rent<T>([batchSize, hiddenSize]);
 
-        // Extract and split gate values using efficient per-row copying
+        // Extract gate values using Span for zero-copy slicing
+        var gateSpan = gateOutputs.Data.Span;
+        var fgSpan = forgetGate.Data.Span;
+        var igSpan = inputGate.Data.Span;
+        var cgSpan = cellGate.Data.Span;
+        var ogSpan = outputGate.Data.Span;
+        int gateStride = 4 * hiddenSize;
         for (int b = 0; b < batchSize; b++)
         {
-            for (int h = 0; h < hiddenSize; h++)
-            {
-                // Extract gates from the combined output
-                forgetGate[b, h] = gateOutputs[b, h];
-                inputGate[b, h] = gateOutputs[b, hiddenSize + h];
-                cellGate[b, h] = gateOutputs[b, 2 * hiddenSize + h];
-                outputGate[b, h] = gateOutputs[b, 3 * hiddenSize + h];
-            }
+            int gateOffset = b * gateStride;
+            int hOffset = b * hiddenSize;
+            gateSpan.Slice(gateOffset, hiddenSize).CopyTo(fgSpan.Slice(hOffset, hiddenSize));
+            gateSpan.Slice(gateOffset + hiddenSize, hiddenSize).CopyTo(igSpan.Slice(hOffset, hiddenSize));
+            gateSpan.Slice(gateOffset + 2 * hiddenSize, hiddenSize).CopyTo(cgSpan.Slice(hOffset, hiddenSize));
+            gateSpan.Slice(gateOffset + 3 * hiddenSize, hiddenSize).CopyTo(ogSpan.Slice(hOffset, hiddenSize));
         }
 
         // Apply appropriate activations to each gate
@@ -712,9 +711,9 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         cellGate = NeuralNetworkHelper<T>.ApplyActivation(cellGate, CellGateActivation, CellGateVectorActivation);
         outputGate = NeuralNetworkHelper<T>.ApplyActivation(outputGate, OutputGateActivation, OutputGateVectorActivation);
 
-        // Create new cell state and hidden state tensors
-        var newCellState = new Tensor<T>(cellState.Shape);
-        var newHiddenState = new Tensor<T>(hiddenState.Shape);
+        // Rent new state tensors
+        var newCellState = TensorAllocator.Rent<T>(cellState.Shape);
+        var newHiddenState = TensorAllocator.Rent<T>(hiddenState.Shape);
 
         // Efficiently handle vector or scalar activation
         if (VectorActivation != null)
