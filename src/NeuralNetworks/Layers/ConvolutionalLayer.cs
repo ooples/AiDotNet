@@ -225,6 +225,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
 
     /// <summary>
+    /// Cached reshape of _biases to [1, OutputDepth, 1, 1] for broadcast addition.
+    /// Avoids allocating a new view tensor on every forward pass.
+    /// </summary>
+    private Tensor<T>? _biasReshaped4D;
+
+    /// <summary>
     /// The execution engine for GPU-accelerated convolution operations.
     /// </summary>
     /// <remarks>
@@ -918,10 +924,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Tensor<T> output = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
 
         // === GPU-Accelerated Bias Addition with Broadcasting ===
-        // Reshape bias from [OutputDepth] to [1, OutputDepth, 1, 1] for broadcasting
-        // Then use TensorBroadcastAdd which has specialized GPU kernel for Conv2D bias pattern
-        var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
-        output = Engine.TensorBroadcastAdd(output, biasReshaped);
+        // Use cached reshape to avoid allocating a new view tensor every forward pass
+        _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
+        output = Engine.TensorBroadcastAdd(output, _biasReshaped4D);
 
         var result = ApplyActivation(output);
 

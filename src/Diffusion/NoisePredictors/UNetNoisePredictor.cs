@@ -710,50 +710,69 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new List<T>();
+        // Pre-compute total parameter count to avoid List resizing and double allocation
+        int totalCount = CountLayerParams(_inputConv)
+                       + CountLayerParams(_timeEmbedMlp1)
+                       + CountLayerParams(_timeEmbedMlp2);
 
-        // Collect parameters from all layers
-        AddLayerParameters(parameters, _inputConv);
-        AddLayerParameters(parameters, _timeEmbedMlp1);
-        AddLayerParameters(parameters, _timeEmbedMlp2);
+        for (int i = 0; i < _encoderBlocks.Count; i++)
+            totalCount += CountBlockParams(_encoderBlocks[i]);
+        for (int i = 0; i < _middleBlocks.Count; i++)
+            totalCount += CountBlockParams(_middleBlocks[i]);
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+            totalCount += CountBlockParams(_decoderBlocks[i]);
 
-        foreach (var block in _encoderBlocks)
-        {
-            AddBlockParameters(parameters, block);
-        }
+        totalCount += CountLayerParams(_outputConv);
 
-        foreach (var block in _middleBlocks)
-        {
-            AddBlockParameters(parameters, block);
-        }
+        // Single allocation at exact size
+        var parameters = new Vector<T>(totalCount);
+        int idx = 0;
 
-        foreach (var block in _decoderBlocks)
-        {
-            AddBlockParameters(parameters, block);
-        }
+        CopyLayerParams(parameters, ref idx, _inputConv);
+        CopyLayerParams(parameters, ref idx, _timeEmbedMlp1);
+        CopyLayerParams(parameters, ref idx, _timeEmbedMlp2);
 
-        AddLayerParameters(parameters, _outputConv);
+        for (int i = 0; i < _encoderBlocks.Count; i++)
+            CopyBlockParams(parameters, ref idx, _encoderBlocks[i]);
+        for (int i = 0; i < _middleBlocks.Count; i++)
+            CopyBlockParams(parameters, ref idx, _middleBlocks[i]);
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+            CopyBlockParams(parameters, ref idx, _decoderBlocks[i]);
 
-        return new Vector<T>(parameters.ToArray());
+        CopyLayerParams(parameters, ref idx, _outputConv);
+
+        return parameters;
     }
 
-    private void AddLayerParameters(List<T> parameters, ILayer<T>? layer)
+    private static int CountLayerParams(ILayer<T>? layer)
+    {
+        return layer?.ParameterCount ?? 0;
+    }
+
+    private static int CountBlockParams(UNetBlock block)
+    {
+        return CountLayerParams(block.ResBlock)
+             + CountLayerParams(block.AttentionBlock)
+             + CountLayerParams(block.CrossAttentionBlock)
+             + CountLayerParams(block.Downsample)
+             + CountLayerParams(block.Upsample);
+    }
+
+    private static void CopyLayerParams(Vector<T> dest, ref int idx, ILayer<T>? layer)
     {
         if (layer == null) return;
-        var layerParams = layer.GetParameters();
-        for (int i = 0; i < layerParams.Length; i++)
-        {
-            parameters.Add(layerParams[i]);
-        }
+        var p = layer.GetParameters();
+        for (int i = 0; i < p.Length; i++)
+            dest[idx++] = p[i];
     }
 
-    private void AddBlockParameters(List<T> parameters, UNetBlock block)
+    private static void CopyBlockParams(Vector<T> dest, ref int idx, UNetBlock block)
     {
-        AddLayerParameters(parameters, block.ResBlock);
-        AddLayerParameters(parameters, block.AttentionBlock);
-        AddLayerParameters(parameters, block.CrossAttentionBlock);
-        AddLayerParameters(parameters, block.Downsample);
-        AddLayerParameters(parameters, block.Upsample);
+        CopyLayerParams(dest, ref idx, block.ResBlock);
+        CopyLayerParams(dest, ref idx, block.AttentionBlock);
+        CopyLayerParams(dest, ref idx, block.CrossAttentionBlock);
+        CopyLayerParams(dest, ref idx, block.Downsample);
+        CopyLayerParams(dest, ref idx, block.Upsample);
     }
 
     /// <inheritdoc />

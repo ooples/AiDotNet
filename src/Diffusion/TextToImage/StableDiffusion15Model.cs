@@ -351,7 +351,7 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
             baseChannels: 320,
             channelMultipliers: [1, 2, 4, 4],
             numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
+            attentionResolutions: [1, 2, 3],
             contextDim: SD15_CROSS_ATTENTION_DIM,
             seed: seed);
 
