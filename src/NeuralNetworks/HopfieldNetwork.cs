@@ -197,18 +197,18 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void InitializeWeights()
     {
+        // Initialize with small symmetric random weights (Xavier-like scaling).
+        // Zero weights make the network unable to distinguish any inputs.
+        // Symmetric weights (w_ij = w_ji) preserve the energy function property.
+        var scale = 1.0 / Math.Sqrt(_size);
         for (int i = 0; i < _size; i++)
         {
-            for (int j = 0; j < _size; j++)
+            _weights[i, i] = NumOps.Zero; // No self-connections
+            for (int j = i + 1; j < _size; j++)
             {
-                if (i != j)
-                {
-                    _weights[i, j] = NumOps.Zero;
-                }
-                else
-                {
-                    _weights[i, j] = NumOps.Zero;
-                }
+                var w = NumOps.FromDouble((Random.NextDouble() * 2.0 - 1.0) * scale);
+                _weights[i, j] = w;
+                _weights[j, i] = w; // Symmetric
             }
         }
     }
@@ -477,8 +477,27 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Input vector length ({inputVector.Length}) does not match network size ({_size})");
         }
 
-        // Perform pattern recall
-        Vector<T> recalledPattern = Recall(inputVector);
+        // Normalize input to bipolar [-1, +1] range.
+        // Hopfield networks operate on bipolar patterns; raw [0,1] inputs
+        // all have the same sign and produce identical sign() output.
+        // Standard normalization: x_bipolar = 2*x - 1 maps [0,1] → [-1,+1]
+        var bipolarInput = new Vector<T>(inputVector.Length);
+        var two = NumOps.FromDouble(2.0);
+        for (int i = 0; i < inputVector.Length; i++)
+        {
+            bipolarInput[i] = NumOps.Subtract(NumOps.Multiply(two, inputVector[i]), NumOps.One);
+        }
+
+        // Perform pattern recall on bipolar input
+        Vector<T> bipolarResult = Recall(bipolarInput);
+
+        // Denormalize back to [0,1] range: x = (x_bipolar + 1) / 2
+        var half = NumOps.FromDouble(0.5);
+        Vector<T> recalledPattern = new Vector<T>(bipolarResult.Length);
+        for (int i = 0; i < bipolarResult.Length; i++)
+        {
+            recalledPattern[i] = NumOps.Multiply(NumOps.Add(bipolarResult[i], NumOps.One), half);
+        }
 
         // Convert the recalled pattern back to a tensor with the same shape as the input
         Tensor<T> result = Tensor<T>.FromVector(recalledPattern);
@@ -526,7 +545,9 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
-        // Extract patterns from the input tensor
+        // Extract patterns and normalize to bipolar [-1, +1] range.
+        // Hopfield networks learn bipolar patterns via Hebbian rule.
+        var two = NumOps.FromDouble(2.0);
         List<Vector<T>> patterns = new List<Vector<T>>();
 
         for (int i = 0; i < input.Shape[0]; i++)
@@ -534,7 +555,8 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
             var pattern = new Vector<T>(_size);
             for (int j = 0; j < _size; j++)
             {
-                pattern[j] = input[i, j];
+                // x_bipolar = 2*x - 1 maps [0,1] → [-1,+1]
+                pattern[j] = NumOps.Subtract(NumOps.Multiply(two, input[i, j]), NumOps.One);
             }
 
             patterns.Add(pattern);
