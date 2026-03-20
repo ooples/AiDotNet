@@ -947,7 +947,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         if (fusedActivation != FusedActivationType.None)
         {
             // Single fused call: output = activation(conv(input, kernel) + bias)
-            result = Engine.FusedConv2D(_lastInput, _kernels, _biases,
+            // Reshape bias to [1, C, 1, 1] for proper broadcasting with conv output [B, C, H, W]
+            _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
+            result = Engine.FusedConv2D(_lastInput, _kernels, _biasReshaped4D,
                 Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
         }
         else
