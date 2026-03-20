@@ -58,15 +58,36 @@ public abstract class UnsupervisedAutoMLBase<T>
     /// </summary>
     public int TrialsEvaluated { get; protected set; }
 
+    private int _maxTrials = 100;
+    private TimeSpan _timeLimit = TimeSpan.FromMinutes(30);
+
     /// <summary>
     /// Gets or sets the maximum number of trials to run.
     /// </summary>
-    public int MaxTrials { get; set; } = 100;
+    public int MaxTrials
+    {
+        get => _maxTrials;
+        set
+        {
+            if (value < 1)
+                throw new ArgumentOutOfRangeException(nameof(MaxTrials), "Must be >= 1.");
+            _maxTrials = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the time limit for the search.
     /// </summary>
-    public TimeSpan TimeLimit { get; set; } = TimeSpan.FromMinutes(30);
+    public TimeSpan TimeLimit
+    {
+        get => _timeLimit;
+        set
+        {
+            if (value <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(TimeLimit), "Must be a positive duration.");
+            _timeLimit = value;
+        }
+    }
 
     /// <summary>
     /// Determines whether a new score is better than the current best.

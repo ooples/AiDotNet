@@ -969,11 +969,13 @@ namespace AiDotNet.AutoML
 
         /// <summary>
         /// Feature selection is not applicable to diffusion models. All latent dimensions
-        /// are required for coherent generation. This method intentionally does nothing.
+        /// are required for coherent generation.
         /// </summary>
+        /// <exception cref="NotSupportedException">Always thrown. Diffusion models require all latent dimensions.</exception>
         public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
         {
-            _ = featureIndices;
+            throw new NotSupportedException(
+                "Feature selection is not supported for diffusion models. All latent dimensions are required for coherent generation.");
         }
 
         public override ModelMetadata<T> GetModelMetadata()
