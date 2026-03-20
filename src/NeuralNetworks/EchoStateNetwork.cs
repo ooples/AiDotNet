@@ -497,7 +497,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _outputWeights = new Matrix<T>(_reservoirSize, _outputSize);
         _reservoirBias = new Vector<T>(_reservoirSize);
         _outputBias = new Vector<T>(_outputSize);
-        _currentState = new Vector<T>(_inputSize);
+        _currentState = new Vector<T>(_reservoirSize); // Must match reservoir size, not input size
 
         // Initialize activation functions
         _reservoirInputVectorActivation = reservoirInputVectorActivation;
@@ -581,7 +581,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _outputWeights = new Matrix<T>(_reservoirSize, _outputSize);
         _reservoirBias = new Vector<T>(_reservoirSize);
         _outputBias = new Vector<T>(_outputSize);
-        _currentState = new Vector<T>(_inputSize);
+        _currentState = new Vector<T>(_reservoirSize); // Must match reservoir size, not input size
 
         // Initialize activation functions
         _reservoirInputScalarActivation = reservoirInputScalarActivation;
