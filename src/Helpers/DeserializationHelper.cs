@@ -537,15 +537,18 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(OctonionLinearLayer<>))
         {
-            int inputSize = inputShape[0];
-            int outputSize = outputShape[0];
-            instance = new OctonionLinearLayer<T>(inputSize, outputSize);
+            // OctonionLinearLayer stores shapes as features*8 in base class
+            // Divide by 8 to get actual octonion feature counts
+            int inputFeatures = inputShape[0] / 8;
+            int outputFeatures = outputShape[0] / 8;
+            instance = new OctonionLinearLayer<T>(inputFeatures, outputFeatures);
         }
         else if (genericDef == typeof(HyperbolicLinearLayer<>))
         {
             int inputSize = inputShape[0];
             int outputSize = outputShape[0];
-            instance = new HyperbolicLinearLayer<T>(inputSize, outputSize);
+            double curvature = TryGetDouble(additionalParams, "Curvature") ?? -1.0;
+            instance = new HyperbolicLinearLayer<T>(inputSize, outputSize, curvature);
         }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {

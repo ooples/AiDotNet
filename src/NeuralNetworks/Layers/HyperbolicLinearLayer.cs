@@ -854,6 +854,14 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         return gradients;
     }
 
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Curvature"] = Convert.ToDouble(_curvature).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
