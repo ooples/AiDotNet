@@ -79,6 +79,7 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
         T alpha = NumOps.Zero;
         T rho = NumOps.One;
         T lambda1 = NumOps.FromDouble(0.1);
+        double prevHVal = double.MaxValue;
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
@@ -86,6 +87,18 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             double klWeight = UseKlWarmUp && warmUpEpochs > 0 && epoch < warmUpEpochs
                 ? DefaultKlWeight + (MaxKlWeight - DefaultKlWeight) * epoch / warmUpEpochs
                 : MaxKlWeight;
+
+            // Precompute bounded std values for numerical stability
+            var stdSArr = new double[d, embDim];
+            var stdTArr = new double[d, embDim];
+            for (int i = 0; i < d; i++)
+                for (int k = 0; k < embDim; k++)
+                {
+                    double logVarS = Math.Max(-10, Math.Min(10, NumOps.ToDouble(ZsLogVar[i, k])));
+                    double logVarT = Math.Max(-10, Math.Min(10, NumOps.ToDouble(ZtLogVar[i, k])));
+                    stdSArr[i, k] = Math.Exp(0.5 * logVarS);
+                    stdTArr[i, k] = Math.Exp(0.5 * logVarT);
+                }
 
             // Sample embeddings via reparameterization: z = mu + sigma * epsilon
             var Zs = new Matrix<T>(d, embDim);
@@ -95,10 +108,10 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
                 {
-                    T stdS = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZsLogVar[i, k])));
+                    T stdS = NumOps.FromDouble(stdSArr[i, k]);
                     epsilonS[i, k] = NumOps.FromDouble(SampleStandardNormal(rng));
                     Zs[i, k] = NumOps.Add(ZsMu[i, k], NumOps.Multiply(stdS, epsilonS[i, k]));
-                    T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[i, k])));
+                    T stdT = NumOps.FromDouble(stdTArr[i, k]);
                     epsilonT[i, k] = NumOps.FromDouble(SampleStandardNormal(rng));
                     Zt[i, k] = NumOps.Add(ZtMu[i, k], NumOps.Multiply(stdT, epsilonT[i, k]));
                 }
@@ -221,14 +234,17 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                     ZtLogVar[i, k] = NumOps.Subtract(ZtLogVar[i, k], NumOps.Multiply(lr, gradZtLogVar[i, k]));
                 }
 
-            // Update augmented Lagrangian with rho clamped before assignment
+            // Update augmented Lagrangian per NOTEARS: increase rho when h(W) hasn't
+            // decreased sufficiently (less than 25% reduction), not on absolute threshold.
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            T rhoMax = NumOps.FromDouble(1e+16);
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            double hValDouble = NumOps.ToDouble(hVal);
+            T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
+            if (hValDouble > prevHVal * 0.25)
             {
                 T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
                 rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
             }
+            prevHVal = hValDouble;
         }
 
         // Final output using trained embeddings

@@ -65,6 +65,11 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     protected bool UseKlWarmUp { get; set; } = true;
 
     /// <summary>
+    /// Maximum penalty parameter (rho_max) for augmented Lagrangian methods.
+    /// </summary>
+    protected double MaxPenaltyValue { get; set; } = 1e+16;
+
+    /// <summary>
     /// Applies deep learning options.
     /// </summary>
     protected void ApplyDeepOptions(Models.Options.CausalDiscoveryOptions? options)
@@ -84,6 +89,7 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
         if (options.DefaultKlWeight.HasValue) DefaultKlWeight = options.DefaultKlWeight.Value;
         if (options.MaxKlWeight.HasValue) MaxKlWeight = options.MaxKlWeight.Value;
         if (options.UseKlWarmUp.HasValue) UseKlWarmUp = options.UseKlWarmUp.Value;
+        if (options.MaxPenalty.HasValue) MaxPenaltyValue = options.MaxPenalty.Value;
     }
 
 }

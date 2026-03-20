@@ -69,11 +69,19 @@ public class MemoryBenchmarks
 
     [Benchmark(Description = "TensorAllocator.Rent([1,256,16,16])")]
     public Tensor<double> Alloc_Rent()
-        => TensorAllocator.Rent<double>([1, 256, 16, 16]);
+    {
+        var t = TensorAllocator.Rent<double>([1, 256, 16, 16]);
+        TensorAllocator.Return(t);
+        return t;
+    }
 
     [Benchmark(Description = "TensorAllocator.RentUninitialized([1,256,16,16])")]
     public Tensor<double> Alloc_RentUninitialized()
-        => TensorAllocator.RentUninitialized<double>([1, 256, 16, 16]);
+    {
+        var t = TensorAllocator.RentUninitialized<double>([1, 256, 16, 16]);
+        TensorAllocator.Return(t);
+        return t;
+    }
 
     [Benchmark(Description = "Conv2D 256ch 16x16 (allocating)")]
     public Tensor<double> Conv2D_Allocating()
