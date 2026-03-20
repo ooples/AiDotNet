@@ -458,7 +458,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         var inputData = input.Data.Span;
         var scaleData = scale.Data.Span;
         var shiftData = shift.Data.Span;
-        var outputData = new T[inputData.Length];
+
+        // Rent output tensor (fully overwritten) and write via Span
+        var output = TensorAllocator.Rent<T>(input.Shape);
+        var outputData = output.Data.Span;
 
         for (int n = 0; n < batch; n++)
         {
@@ -477,7 +480,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             }
         }
 
-        return new Tensor<T>(input.Shape, new Vector<T>(outputData));
+        return output;
     }
 
     /// <summary>
