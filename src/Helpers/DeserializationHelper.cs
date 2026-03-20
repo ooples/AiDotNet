@@ -529,6 +529,12 @@ public static class DeserializationHelper
             int hiddenSize = outputShape.Length > 0 ? outputShape[^1] : 64;
             instance = new RecurrentLayer<T>(inputSize, hiddenSize, (IActivationFunction<T>?)null);
         }
+        else if (genericDef == typeof(SparseLinearLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            instance = new SparseLinearLayer<T>(inputSize, outputSize);
+        }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
             // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)

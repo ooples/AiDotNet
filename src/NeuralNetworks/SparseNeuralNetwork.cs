@@ -134,11 +134,10 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
         else
         {
             var inputShape = Architecture.GetInputShape();
-            var outputShape = Architecture.GetOutputShape();
             var hiddenSizes = Architecture.GetHiddenLayerSizes();
 
             int inputFeatures = inputShape[0];
-            int outputFeatures = outputShape[0];
+            int outputFeatures = Architecture.OutputSize;
 
             if (hiddenSizes.Length == 0)
             {

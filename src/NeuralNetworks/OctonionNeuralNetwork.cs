@@ -115,7 +115,7 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             // Create default octonion layers based on architecture
             var inputShape = Architecture.GetInputShape();
-            var outputShape = Architecture.GetOutputShape();
+            var outputShape = new[] { Architecture.OutputSize };
             var hiddenSizes = Architecture.GetHiddenLayerSizes();
 
             // Validate dimensions are divisible by 8 for octonion representation
