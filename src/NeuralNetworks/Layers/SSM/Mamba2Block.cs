@@ -444,7 +444,7 @@ public class Mamba2Block<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
 
         // Pre-compute A = -exp(A_log) per head: [numHeads]
         var negAPerHead = new T[_numHeads];
