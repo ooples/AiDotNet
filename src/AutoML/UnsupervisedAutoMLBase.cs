@@ -48,7 +48,10 @@ public abstract class UnsupervisedAutoMLBase<T>
     /// <summary>
     /// Gets the best score achieved during the search.
     /// </summary>
-    public double BestScore { get; protected set; } = double.NegativeInfinity;
+    /// <remarks>
+    /// Initialized lazily based on HigherIsBetter: -Infinity for maximization, +Infinity for minimization.
+    /// </remarks>
+    public double BestScore { get; protected set; } = double.NaN;
 
     /// <summary>
     /// Gets the total number of trials evaluated.
@@ -70,6 +73,7 @@ public abstract class UnsupervisedAutoMLBase<T>
     /// </summary>
     protected bool IsBetterScore(double newScore)
     {
+        if (double.IsNaN(BestScore)) return true; // first score always wins
         return HigherIsBetter ? newScore > BestScore : newScore < BestScore;
     }
 

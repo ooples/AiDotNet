@@ -63,6 +63,7 @@ namespace AiDotNet.Clustering.Density;
 public class DBSCAN<T> : ClusteringBase<T>
 {
     private readonly DBSCANOptions<T> _options;
+    private double _fittedEpsilon;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -226,8 +227,7 @@ public class DBSCAN<T> : ClusteringBase<T>
         // Uses k-distance method: compute the MinPoints-nearest-neighbor distance for each point,
         // then use the mean * scaling factor as epsilon.
         double effectiveEpsilon = _options.Epsilon;
-        // Always auto-estimate when normalizing (user's epsilon was for original scale)
-        if (true)
+        // Auto-estimate epsilon on normalized data since user's epsilon was for original scale
         {
             var metric = _options.DistanceMetric ?? new AiDotNet.Clustering.DistanceMetrics.EuclideanDistance<T>();
             var kDistances = new List<double>(n);
@@ -269,6 +269,8 @@ public class DBSCAN<T> : ClusteringBase<T>
                 effectiveEpsilon = mean * 2.5;
             }
         }
+
+        _fittedEpsilon = effectiveEpsilon;
 
         // Find neighbors for each point and identify core points
         var neighbors = new List<int>[n];

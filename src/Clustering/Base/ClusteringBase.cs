@@ -32,6 +32,12 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
+    /// Reference to the training data matrix. Used for safe in-sample prediction
+    /// checks via ReferenceEquals (not row count which is unreliable).
+    /// </summary>
+    protected Matrix<T>? TrainingDataRef { get; set; }
+
+    /// <summary>
     /// Gets the clustering options.
     /// </summary>
     protected ClusteringOptions<T> Options { get; private set; }
@@ -120,6 +126,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     public virtual void Train(Matrix<T> x)
     {
+        TrainingDataRef = x;
         var y = new Vector<T>(x.Rows);
         Train(x, y);
     }

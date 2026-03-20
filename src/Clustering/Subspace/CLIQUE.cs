@@ -240,7 +240,7 @@ public class CLIQUE<T> : ClusteringBase<T>
         ValidatePredictInput(x);
 
         // Return stored labels for in-sample prediction (preserves merge results)
-        if (Labels is not null && x.Rows == Labels.Length)
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
             return new Vector<T>(Labels);
 
         if (_subspaceClustersInternal is null || _subspaceClustersInternal.Count == 0)

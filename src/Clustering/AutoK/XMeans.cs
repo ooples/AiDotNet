@@ -390,7 +390,7 @@ public class XMeans<T> : ClusteringBase<T>
         ValidateIsTrained();
 
         // Return stored labels for in-sample prediction
-        if (Labels is not null && x.Rows == Labels.Length)
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
             return new Vector<T>(Labels);
 
         var labels = new Vector<T>(x.Rows);

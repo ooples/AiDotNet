@@ -419,6 +419,10 @@ public class GMeans<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
+        if (ClusterCenters is not null && x.Columns != ClusterCenters.Columns)
+            throw new ArgumentException(
+                $"Input has {x.Columns} features but model was trained with {ClusterCenters.Columns} features.");
+
         var labels = new Vector<T>(x.Rows);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
         int d = x.Columns;
