@@ -48,6 +48,9 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     private readonly ExtremeLearningMachineOptions _options;
 
     /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     /// <summary>
@@ -252,42 +255,8 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Check if the network structure matches the ELM requirements
-        if (Layers.Count < 3)
-        {
-            throw new InvalidOperationException("ELM requires at least 3 layers: input projection, activation, and output.");
-        }
-
-        // STEP 1: Get the hidden layer activations by projecting the input through the fixed random weights
-        Tensor<T> hiddenActivations = input;
-
-        // Process through all layers except the last one (which is the output layer)
-        for (int i = 0; i < Layers.Count - 1; i++)
-        {
-            hiddenActivations = Layers[i].Forward(hiddenActivations);
-        }
-
-        // STEP 2: Calculate the optimal output weights using pseudo-inverse
-        // We'll use the Moore-Penrose pseudoinverse: OutputWeights = (H+ × T)
-        // where H+ is the pseudoinverse of H (hidden activations) and T is the target output
-
-        // Convert hidden activations and expected output to matrices for the calculation
-        Matrix<T> H = hiddenActivations.ConvertToMatrix();
-        Matrix<T> T = expectedOutput.ConvertToMatrix();
-
-        // Calculate pseudoinverse of H 
-        Matrix<T> HPseudoInverse = CalculatePseudoInverse(H);
-
-        // Calculate output weights
-        Matrix<T> outputWeights = HPseudoInverse.Multiply(T);
-
-        // STEP 3: Update only the last layer (output layer) with the calculated weights
-        // In an ELM, only the output layer is trained
-        UpdateOutputLayerWeights(outputWeights);
-
-        // STEP 4: Calculate and store the loss after training
-        Tensor<T> prediction = Predict(input);
-        LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+        // Use regularized training (adds λI for numerical stability with small samples)
+        TrainWithRegularization(input, expectedOutput, regularizationFactor: 0.01);
     }
 
     /// <summary>
@@ -506,17 +475,30 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
         // STEP 1: Get the hidden layer activations by projecting the input through the fixed random weights
         Tensor<T> hiddenActivations = input;
 
-        // Process through all layers except the last one (which is the output layer)
-        for (int i = 0; i < Layers.Count - 1; i++)
+        // Process through encoder layers only (skip output DenseLayer + output ActivationLayer).
+        // ELM layers: [DenseLayer(in→hidden), ActivationLayer, DenseLayer(hidden→out), ActivationLayer]
+        // We need activations AFTER the hidden activation (layer 1), not after output dense (layer 2).
+        int encoderEnd = Layers.Count - 2; // Skip last 2 layers (output dense + output activation)
+        for (int i = 0; i < encoderEnd; i++)
         {
             hiddenActivations = Layers[i].Forward(hiddenActivations);
         }
 
         // STEP 2: Calculate the optimal output weights using regularized pseudoinverse
 
-        // Convert hidden activations and expected output to matrices for the calculation
-        Matrix<T> H = hiddenActivations.ConvertToMatrix();
-        Matrix<T> T = expectedOutput.ConvertToMatrix();
+        // Convert to matrices: H = [numSamples, hiddenSize], T = [numSamples, outputSize]
+        // ConvertToMatrix on 1D tensor gives column [N,1], but we need row [1,N] for single sample
+        Matrix<T> H;
+        if (hiddenActivations.Rank == 1)
+            H = hiddenActivations.Reshape([1, hiddenActivations.Shape[0]]).ToMatrix();
+        else
+            H = hiddenActivations.ConvertToMatrix();
+
+        Matrix<T> T;
+        if (expectedOutput.Rank == 1)
+            T = expectedOutput.Reshape([1, expectedOutput.Shape[0]]).ToMatrix();
+        else
+            T = expectedOutput.ConvertToMatrix();
 
         // Calculate regularized pseudoinverse: (H^T * H + λI)^(-1) * H^T
         Matrix<T> transposeH = H.Transpose();
@@ -537,6 +519,15 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
 
         // Calculate output weights
         Matrix<T> outputWeights = regularizedPseudoInverse.Multiply(T);
+
+        // Debug: verify dimensions
+        if (outputWeights.Rows * outputWeights.Columns < 3)
+        {
+            throw new InvalidOperationException(
+                $"ELM outputWeights too small: [{outputWeights.Rows},{outputWeights.Columns}]. " +
+                $"H=[{H.Rows},{H.Columns}], T=[{T.Rows},{T.Columns}], " +
+                $"hTh=[{hTh.Rows},{hTh.Columns}], pseudo=[{regularizedPseudoInverse.Rows},{regularizedPseudoInverse.Columns}]");
+        }
 
         // STEP 3: Update only the last layer (output layer) with the calculated weights
         UpdateOutputLayerWeights(outputWeights);
