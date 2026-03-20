@@ -820,6 +820,18 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>A vector containing the data for the specified batch element.</returns>
     private Vector<T> ExtractVector(Tensor<T> tensor, int batchIndex)
     {
+        // Handle 1D tensor (no batch dimension)
+        if (tensor.Rank <= 1)
+        {
+            return tensor.Length > 0 ? tensor.ToVector() : new Vector<T>(0);
+        }
+
+        // Handle case where batchIndex exceeds actual batch size
+        if (batchIndex >= tensor.Shape[0])
+        {
+            return new Vector<T>(tensor.Shape[1]);
+        }
+
         int vectorSize = tensor.Shape[1];
         var vector = new Vector<T>(vectorSize);
 
