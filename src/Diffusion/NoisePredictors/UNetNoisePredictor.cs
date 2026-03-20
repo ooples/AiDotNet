@@ -568,7 +568,12 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     {
         if (resBlock == null) return x;
 
-        // For now, just apply the block (time conditioning would be added via AdaGN)
+        // Use time-conditioned forward if the block supports it (DiffusionResBlock)
+        if (resBlock is DiffusionResBlock<T> diffResBlock)
+        {
+            return diffResBlock.Forward(x, timeEmbed);
+        }
+
         return resBlock.Forward(x);
     }
 
@@ -621,18 +626,13 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateResBlock(int inChannels, int outChannels, int spatialSize)
     {
-        // Use a convolutional layer that preserves spatial dimensions [B, C, H, W]
-        // Same-padding 3x3 conv: output spatial = input spatial with stride=1, padding=1
-        // This is the standard choice for UNet residual blocks (Stable Diffusion, DDPM)
-        return new ConvolutionalLayer<T>(
-            inputDepth: inChannels,
-            inputHeight: spatialSize,
-            inputWidth: spatialSize,
-            outputDepth: outChannels,
-            kernelSize: 3,
-            stride: 1,
-            padding: 1,
-            activationFunction: new SiLUActivation<T>());
+        // Per DDPM (Ho et al. 2020) and Stable Diffusion (Rombach et al. 2022):
+        // ResBlock = GroupNorm → SiLU → Conv3x3 → (+time) → GroupNorm → SiLU → Conv3x3 → (+skip)
+        return new DiffusionResBlock<T>(
+            inChannels: inChannels,
+            outChannels: outChannels,
+            spatialSize: spatialSize,
+            timeEmbedDim: _timeEmbeddingDim);
     }
 
     private ILayer<T> CreateAttentionBlock(int channels, int spatialSize)

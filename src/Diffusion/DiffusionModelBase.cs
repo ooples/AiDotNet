@@ -198,27 +198,24 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // creating a new Tensor per step (50 allocations → 1)
         var sampleTensor = new Tensor<T>(shape, sample);
 
+        // Pre-allocate reusable noise prediction vector to avoid per-step allocation
+        var noisePredVec = new Vector<T>(sample.Length);
+
         // Iterative denoising loop
         foreach (var timestep in _scheduler.Timesteps)
         {
-            // Update tensor data in-place from sample vector
-            for (int idx = 0; idx < sample.Length; idx++)
-                sampleTensor[idx] = sample[idx];
+            // Update tensor data in-place from sample vector using Span copy
+            var sampleSpan = sample.AsSpan();
+            var tensorSpan = sampleTensor.AsWritableSpan();
+            sampleSpan.CopyTo(tensorSpan);
 
             // Predict the noise
             var noisePrediction = PredictNoise(sampleTensor, timestep);
-            var noisePredVec = noisePrediction.ToVector();
 
-            // Ensure noise prediction matches sample length (some predictors
-            // may output different dimensions than input)
-            if (noisePredVec.Length != sample.Length)
-            {
-                var resized = new Vector<T>(sample.Length);
-                int copyLen = Math.Min(noisePredVec.Length, sample.Length);
-                for (int idx = 0; idx < copyLen; idx++)
-                    resized[idx] = noisePredVec[idx];
-                noisePredVec = resized;
-            }
+            // Copy prediction to pre-allocated vector (avoids ToVector() allocation)
+            int copyLen = Math.Min(noisePrediction.Length, noisePredVec.Length);
+            for (int idx = 0; idx < copyLen; idx++)
+                noisePredVec[idx] = noisePrediction[idx];
 
             // Perform one denoising step
             // eta=0 for deterministic generation
