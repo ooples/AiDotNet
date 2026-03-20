@@ -280,6 +280,11 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Set training mode on all layers for proper gradient storage
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+
         // Forward pass
         var prediction = Predict(input);
 
