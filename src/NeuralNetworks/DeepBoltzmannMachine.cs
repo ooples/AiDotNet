@@ -797,6 +797,38 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// This method updates all the parameters of the DBM (weights and biases) from a single vector.
     /// It expects the parameters to be arranged in the same order as they are returned by GetParameters.
     /// </remarks>
+    /// <inheritdoc/>
+    public override int ParameterCount
+    {
+        get
+        {
+            int count = 0;
+            for (int i = 0; i < _layerWeights.Count; i++)
+            {
+                count += _layerWeights[i].Length + _layerBiases[i].Length;
+            }
+            return count;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var parameters = new Vector<T>(ParameterCount);
+        int index = 0;
+        for (int i = 0; i < _layerWeights.Count; i++)
+        {
+            var weightVec = _layerWeights[i].ToVector();
+            for (int j = 0; j < weightVec.Length; j++)
+                parameters[index++] = weightVec[j];
+
+            var biasVec = _layerBiases[i].ToVector();
+            for (int j = 0; j < biasVec.Length; j++)
+                parameters[index++] = biasVec[j];
+        }
+        return parameters;
+    }
+
     public override void UpdateParameters(Vector<T> parameters)
     {
         int index = 0;
