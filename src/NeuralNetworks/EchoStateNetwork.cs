@@ -457,7 +457,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
             outputSize: 1),
-            reservoirSize: 100, reservoirInputVectorActivation: (IVectorActivationFunction<T>?)null)
+            reservoirSize: 100, warmupPeriod: 0, reservoirInputVectorActivation: (IVectorActivationFunction<T>?)null)
     {
     }
 
@@ -1094,6 +1094,32 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// (the reservoir) aren't trained - only the output connections are adjusted during training.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override int ParameterCount => _reservoirSize * _outputSize;
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var result = new Vector<T>(_reservoirSize * _outputSize);
+        int idx = 0;
+        for (int i = 0; i < _reservoirSize; i++)
+            for (int j = 0; j < _outputSize; j++)
+                result[idx++] = _outputWeights[i, j];
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        for (int i = 0; i < _reservoirSize; i++)
+            for (int j = 0; j < _outputSize; j++)
+                _outputWeights[i, j] = parameters[idx++];
+    }
+
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
@@ -1224,6 +1250,15 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         {
             _collectedStates.Add(_currentState.Clone());
             _collectedTargets.Add(targetVector.Clone());
+        }
+
+        // Finalize training after each call to update output weights
+        // (ESN uses one-shot ridge regression, not iterative gradient descent)
+        if (_collectedStates.Count > 0)
+        {
+            FinalizeTraining();
+            // Keep training flag for next call
+            _isTraining = true;
         }
     }
 
