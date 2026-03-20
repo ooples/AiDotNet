@@ -104,6 +104,10 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </summary>
     private double _threshold = 0.5;
 
+    // Cached tensors for hot-loop operations (avoid per-call allocation)
+    private Tensor<T>? _cachedOnes;
+    private Tensor<T>? _cachedZeros;
+
     /// <summary>
     /// Connection weights between input and output neurons.
     /// </summary>
@@ -942,25 +946,23 @@ public class SpikingLayer<T> : LayerBase<T>
         T decayFactor = NumOps.FromDouble(1.0 - 1.0 / _tau);
         _membranePotential = Engine.TensorMultiplyScalar(_membranePotential, decayFactor);
 
-        // Create threshold tensor for comparison
-        var zeroTensor = new Tensor<T>([_membranePotential.Length]);
-        zeroTensor.Fill(NumOps.Zero);
+        // Cache ones/zeros tensors to avoid per-call allocation (hot loop)
+        if (_cachedOnes == null || _cachedOnes.Length != _membranePotential.Length)
+        {
+            _cachedOnes = Tensor<T>.CreateDefault([_membranePotential.Length], NumOps.One);
+            _cachedZeros = new Tensor<T>([_membranePotential.Length]);
+        }
 
-        // Create mask for neurons not in refractory period (refractoryCountdown <= 0)
-        // Use Engine.TensorLessThan to create binary mask
+        // Create mask for neurons not in refractory period
         var notInRefractoryMask = Engine.TensorLessThan(_refractoryCountdown, NumOps.FromDouble(0.001));
-        var onesTensorForMask = new Tensor<T>([_membranePotential.Length]);
-        onesTensorForMask.Fill(NumOps.One);
-        var inRefractoryMask = Engine.TensorSubtract(onesTensorForMask, notInRefractoryMask);
+        var inRefractoryMask = Engine.TensorSubtract(_cachedOnes, notInRefractoryMask);
 
         // Apply current to neurons not in refractory period
         var currentMasked = Engine.TensorMultiply(current, notInRefractoryMask);
         _membranePotential = Engine.TensorAdd(_membranePotential, currentMasked);
 
         // Decrement refractory countdown for neurons in refractory
-        var onesTensor = new Tensor<T>([_membranePotential.Length]);
-        onesTensor.Fill(NumOps.One);
-        var refractoryDecrement = Engine.TensorMultiply(onesTensor, inRefractoryMask);
+        var refractoryDecrement = Engine.TensorMultiply(_cachedOnes, inRefractoryMask);
         _refractoryCountdown = Engine.TensorSubtract(_refractoryCountdown, refractoryDecrement);
 
         // Generate spikes: where membrane potential >= threshold
@@ -968,7 +970,7 @@ public class SpikingLayer<T> : LayerBase<T>
         _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(_threshold - 0.0001));
 
         // Reset membrane potential where spikes occurred
-        var resetMask = Engine.TensorSubtract(onesTensor, _spikes);
+        var resetMask = Engine.TensorSubtract(_cachedOnes, _spikes);
         _membranePotential = Engine.TensorMultiply(_membranePotential, resetMask);
 
         // Set refractory countdown where spikes occurred
@@ -1008,27 +1010,29 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> UpdateIntegrateAndFire(Tensor<T> current)
     {
-        // Similar to LIF but without leak - use Engine operations
-        var onesTensor = new Tensor<T>([_membranePotential.Length]);
-        onesTensor.Fill(NumOps.One);
+        // Cache ones tensor (reuse across calls)
+        if (_cachedOnes == null || _cachedOnes.Length != _membranePotential.Length)
+        {
+            _cachedOnes = Tensor<T>.CreateDefault([_membranePotential.Length], NumOps.One);
+        }
 
         // Create mask for neurons not in refractory period
         var notInRefractoryMask = Engine.TensorLessThan(_refractoryCountdown, NumOps.FromDouble(0.001));
-        var inRefractoryMask = Engine.TensorSubtract(onesTensor, notInRefractoryMask);
+        var inRefractoryMask = Engine.TensorSubtract(_cachedOnes, notInRefractoryMask);
 
         // Add current to neurons not in refractory
         var currentMasked = Engine.TensorMultiply(current, notInRefractoryMask);
         _membranePotential = Engine.TensorAdd(_membranePotential, currentMasked);
 
         // Decrement refractory countdown
-        var refractoryDecrement = Engine.TensorMultiply(onesTensor, inRefractoryMask);
+        var refractoryDecrement = Engine.TensorMultiply(_cachedOnes, inRefractoryMask);
         _refractoryCountdown = Engine.TensorSubtract(_refractoryCountdown, refractoryDecrement);
 
         // Generate spikes where membrane potential >= 1.0
         _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(_threshold - 0.0001));
 
         // Reset membrane potential where spikes occurred
-        var resetMask = Engine.TensorSubtract(onesTensor, _spikes);
+        var resetMask = Engine.TensorSubtract(_cachedOnes, _spikes);
         _membranePotential = Engine.TensorMultiply(_membranePotential, resetMask);
 
         // Set refractory countdown where spikes occurred
