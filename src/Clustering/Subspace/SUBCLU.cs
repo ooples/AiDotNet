@@ -41,10 +41,12 @@ namespace AiDotNet.Clustering.Subspace;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new SUBCLUOptions&lt;double&gt;();
-/// var sUBCLU = new SUBCLU&lt;double&gt;(options);
-/// sUBCLU.Fit(dataMatrix);
-/// int[] labels = sUBCLU.Labels;
+/// // Use AiModelBuilder facade for subspace clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SUBCLU&lt;double&gt;(new SUBCLUOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

@@ -78,7 +78,7 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         if (d < 2)
             throw new ArgumentException($"TransferEntropy requires at least 2 variables, got {d}.");
         if (effectiveN < 2 * _maxLag + 3)
-            throw new ArgumentException($"Insufficient samples for TransferEntropy: need at least {2 * _maxLag + 3 + _maxLag} rows for maxLag={_maxLag}, got {n}.");
+            throw new ArgumentException($"Insufficient samples for TransferEntropy: need at least {3 * _maxLag + 3} rows for maxLag={_maxLag}, got {n}.");
 
         var result = new Matrix<T>(d, d);
 
