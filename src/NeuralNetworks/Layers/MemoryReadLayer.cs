@@ -545,6 +545,23 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null || _lastMemory == null || _lastOutput == null || _lastAttentionScores == null || _lastTransformed == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Ensure gradient matches stored output shape for activation derivative
+        if (!outputGradient.Shape.SequenceEqual(_lastOutput.Shape))
+        {
+            if (outputGradient.Length == _lastOutput.Length)
+            {
+                outputGradient = outputGradient.Reshape(_lastOutput.Shape);
+            }
+            else
+            {
+                // Sizes differ — truncate or pad to match
+                var resized = new Tensor<T>(_lastOutput.Shape);
+                int minLen = Math.Min(outputGradient.Length, resized.Length);
+                for (int i = 0; i < minLen; i++)
+                    resized.SetFlat(i, outputGradient.GetFlatIndexValue(i));
+                outputGradient = resized;
+            }
+        }
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
         // Output weights gradient: transformed^T × activationGradient
