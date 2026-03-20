@@ -315,7 +315,26 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
-        // Delegate to first conv's computation graph as a simplified representation
-        return _conv1.ExportComputationGraph(inputNodes);
+        // Export the FULL DiffusionResBlock computation chain per DDPM paper:
+        // GroupNorm1 → SiLU → Conv1 → GroupNorm2 → SiLU → Conv2 → (+skip)
+        var x = inputNodes[0];
+
+        // First block: GroupNorm → SiLU → Conv
+        var norm1Out = _norm1.ExportComputationGraph([x]);
+        var silu1Out = Autodiff.TensorOperations<T>.Swish(norm1Out); // SiLU = Swish
+        var conv1Out = _conv1.ExportComputationGraph([silu1Out]);
+
+        // Second block: GroupNorm → SiLU → Conv
+        var norm2Out = _norm2.ExportComputationGraph([conv1Out]);
+        var silu2Out = Autodiff.TensorOperations<T>.Swish(norm2Out);
+        var conv2Out = _conv2.ExportComputationGraph([silu2Out]);
+
+        // Skip connection
+        var skip = _skipConv is not null
+            ? _skipConv.ExportComputationGraph([x])
+            : x;
+
+        // Residual add
+        return Autodiff.TensorOperations<T>.Add(conv2Out, skip);
     }
 }
