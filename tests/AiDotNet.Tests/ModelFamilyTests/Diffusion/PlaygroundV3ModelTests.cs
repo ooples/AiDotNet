@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class PlaygroundV3ModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 16, 32, 32];
+    protected override int[] OutputShape => [1, 16, 32, 32];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new PlaygroundV3Model<double>();
+        => new PlaygroundV3Model<double>(seed: 42);
 }

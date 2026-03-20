@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class PixArtDeltaLCMModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 4, 32, 32];
+    protected override int[] OutputShape => [1, 4, 32, 32];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new PixArtDeltaLCMModel<double>();
+        => new PixArtDeltaLCMModel<double>(seed: 42);
 }

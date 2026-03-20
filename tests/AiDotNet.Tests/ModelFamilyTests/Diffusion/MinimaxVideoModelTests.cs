@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class MinimaxVideoModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 16, 32, 32];
+    protected override int[] OutputShape => [1, 16, 32, 32];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new MinimaxVideoModel<double>();
+        => new MinimaxVideoModel<double>(seed: 42);
 }

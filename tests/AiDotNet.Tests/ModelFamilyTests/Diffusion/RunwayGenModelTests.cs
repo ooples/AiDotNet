@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class RunwayGenModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 4, 16, 16];
+    protected override int[] OutputShape => [1, 4, 16, 16];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new RunwayGenModel<double>();
+        => new RunwayGenModel<double>(seed: 42);
 }
