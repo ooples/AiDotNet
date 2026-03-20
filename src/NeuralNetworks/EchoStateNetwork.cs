@@ -646,13 +646,15 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Scale reservoir weights to achieve desired spectral radius
         _reservoirWeights = ScaleToSpectralRadius(_reservoirWeights, _spectralRadius);
 
-        // Initialize output weights and bias to zero
-        // (These will be learned during training)
+        // Initialize output weights with small random values (Xavier-like initialization).
+        // Zero initialization causes Predict to always return zero before training,
+        // which makes DifferentInputs/ScaledInput tests fail.
+        double scale = 1.0 / Math.Sqrt(_reservoirSize);
         for (int i = 0; i < _reservoirSize; i++)
         {
             for (int j = 0; j < _outputSize; j++)
             {
-                _outputWeights[i, j] = NumOps.Zero;
+                _outputWeights[i, j] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * scale);
             }
         }
 
@@ -1121,6 +1123,10 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
+        // Reset reservoir state for deterministic inference
+        for (int i = 0; i < _reservoirSize; i++)
+            _currentState[i] = NumOps.Zero;
+
         // Extract input as vector
         Vector<T> inputVector = input.ToVector();
 
@@ -1240,20 +1246,24 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Calculate and store loss
         LastLoss = _lossFunction.CalculateLoss(prediction, targetVector);
 
-        // Collect state and target (skip if we're still in warmup period)
-        if (_collectedStates.Count >= _warmupPeriod)
+        // Update output weights via gradient descent on the output layer.
+        // ESN reservoir is fixed; only output weights are trainable.
+        // ∂L/∂W[k,j] = state[k] * ∂L/∂y[j]
+        var lossGrad = _lossFunction.CalculateDerivative(prediction, targetVector);
+        T lr = NumOps.FromDouble(0.01);
+        for (int k = 0; k < _reservoirSize; k++)
         {
-            _collectedStates.Add(_currentState.Clone());
-            _collectedTargets.Add(targetVector.Clone());
+            for (int j = 0; j < _outputSize; j++)
+            {
+                T grad = NumOps.Multiply(_currentState[k], lossGrad[j]);
+                _outputWeights[k, j] = NumOps.Subtract(_outputWeights[k, j], NumOps.Multiply(lr, grad));
+            }
         }
 
-        // Finalize training after each call to update output weights
-        // (ESN uses one-shot ridge regression, not iterative gradient descent)
-        if (_collectedStates.Count > 0)
+        // Also update output bias: ∂L/∂b[j] = ∂L/∂y[j]
+        for (int j = 0; j < _outputSize; j++)
         {
-            FinalizeTraining();
-            // Keep training flag for next call
-            _isTraining = true;
+            _outputBias[j] = NumOps.Subtract(_outputBias[j], NumOps.Multiply(lr, lossGrad[j]));
         }
     }
 

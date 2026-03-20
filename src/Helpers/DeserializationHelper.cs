@@ -496,6 +496,12 @@ public static class DeserializationHelper
         {
             instance = CreateLSTMLayer<T>(type, inputShape, outputShape, additionalParams);
         }
+        else if (genericDef == typeof(ReservoirLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int reservoirSize = outputShape[0];
+            instance = new ReservoirLayer<T>(inputSize, reservoirSize);
+        }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
             // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
