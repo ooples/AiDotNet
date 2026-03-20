@@ -663,6 +663,12 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Handle 1D input [features] → treat as single sample [1, features]
+        if (input.Rank == 1)
+        {
+            input = input.Reshape([1, input.Length]);
+        }
+
         T currentLearningRate = _learningRate;
 
         for (int epoch = 0; epoch < _epochs; epoch++)
