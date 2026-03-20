@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 namespace AiDotNet.JitCompiler.IR.Operations;
 
 /// <summary>
@@ -9,12 +10,14 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// Used in modern transformers (BERT, GPT).
 /// </para>
 /// </remarks>
-public class GELUOp : IROp
+public class GELUOp : IROp, IFusableActivation
 {
     /// <summary>
     /// Whether to use the approximate formula.
     /// </summary>
     public bool Approximate { get; set; } = false;
+
+    public FusedActivationType FusedType => FusedActivationType.GELU;
 
     public override bool Validate()
     {

@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 namespace AiDotNet.JitCompiler.IR.Operations;
 
 /// <summary>
@@ -9,8 +10,10 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// Self-normalizing activation with fixed scale and alpha values.
 /// </para>
 /// </remarks>
-public class SELUOp : IROp
+public class SELUOp : IROp, IFusableActivation
 {
+    public FusedActivationType FusedType => FusedActivationType.SELU;
+
     public override bool Validate()
     {
         if (!base.Validate()) return false;
