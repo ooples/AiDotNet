@@ -316,7 +316,7 @@ public class RWKVLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TimeMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State for WKV: numerator [batch, numHeads, headDim, headDim] and denominator [batch, numHeads, headDim]
         var stateNum = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -471,7 +471,7 @@ public class RWKVLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ChannelMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var xPrev = new Tensor<T>(new[] { batchSize, _modelDimension });
         int expandedDim = _modelDimension * 4;
 

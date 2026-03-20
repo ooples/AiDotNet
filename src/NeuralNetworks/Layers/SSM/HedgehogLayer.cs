@@ -425,7 +425,7 @@ public class HedgehogLayer<T> : LayerBase<T>
         Tensor<T> phiQ, Tensor<T> phiK, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T epsilon = NumOps.FromDouble(1e-6);
 
         // Store denominators for backward pass

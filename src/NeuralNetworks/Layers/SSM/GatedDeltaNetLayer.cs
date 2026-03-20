@@ -333,7 +333,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
         Tensor<T> alpha, Tensor<T> beta,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
         var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -423,7 +423,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var bias2D = _convBias.Reshape(1, _modelDimension);
 
         var weightSlices = new Tensor<T>[_convKernelSize];

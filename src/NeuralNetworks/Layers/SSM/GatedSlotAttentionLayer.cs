@@ -344,7 +344,7 @@ public class GatedSlotAttentionLayer<T> : LayerBase<T>
         Tensor<T> forgetGate, Tensor<T> inputGate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Slot state per head: [batch, numHeads, numSlots, headDim]
         var slotState = new Tensor<T>(new[] { batchSize, _numHeads, _numSlots, _headDimension });

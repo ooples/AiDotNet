@@ -385,7 +385,7 @@ public class DeltaProductLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v, Tensor<T> beta,
         Tensor<T> hVecs, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
         var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));

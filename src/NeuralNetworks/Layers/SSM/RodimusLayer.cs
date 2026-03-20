@@ -376,7 +376,7 @@ public class RodimusLayer<T> : LayerBase<T>
         Tensor<T> temperature, Tensor<T> forgetGate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T baseScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // State matrix per head: [batch, numHeads, headDim, headDim]

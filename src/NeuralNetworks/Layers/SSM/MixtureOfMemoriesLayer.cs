@@ -411,7 +411,7 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
         Tensor<T> writeWeights, Tensor<T> readWeights, Tensor<T> forgetGates,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Memory states: [batch, numMemories, numHeads, headDim, headDim]
         var memStates = new T[batchSize, _numMemories, _numHeads, _headDimension, _headDimension];

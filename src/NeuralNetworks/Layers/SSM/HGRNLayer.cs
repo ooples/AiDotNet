@@ -309,7 +309,7 @@ public class HGRNLayer<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> forgetGate, Tensor<T> inputGate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var h = new Tensor<T>(new[] { batchSize, _modelDimension });
 
         // Store all hidden states for backward pass: [batch, seqLen+1, modelDim]

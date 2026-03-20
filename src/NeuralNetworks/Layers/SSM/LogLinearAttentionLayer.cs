@@ -346,7 +346,7 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State per level per head: S_l [headDim, headDim]
         // states[batch, head, level, headDim, headDim]

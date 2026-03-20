@@ -361,7 +361,7 @@ public class MesaNetLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State: inner weights W and inverse covariance P per head
         // W: [batch, numHeads, headDim, headDim]
@@ -508,7 +508,7 @@ public class MesaNetLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> LayerNormForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T eps = NumOps.FromDouble(1e-5);
 
         for (int bi = 0; bi < batchSize; bi++)

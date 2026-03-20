@@ -389,7 +389,7 @@ public class TTTLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Inner weights state: starts from W_0 (learnable initialization) for each batch element
         var innerW = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -495,7 +495,7 @@ public class TTTLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> LayerNormForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T eps = NumOps.FromDouble(1e-5);
 
         for (int bi = 0; bi < batchSize; bi++)

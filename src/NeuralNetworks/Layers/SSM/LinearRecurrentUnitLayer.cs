@@ -341,7 +341,7 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> DiagonalComplexRecurrence(Tensor<T> u, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Compute lambda = exp(-exp(nu) + i*exp(theta))
         // |lambda| = exp(-exp(nu)), angle = exp(theta)
