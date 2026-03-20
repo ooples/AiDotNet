@@ -326,21 +326,21 @@ public class JitCompilerExtendedIntegrationTests
     [Fact]
     public void TensorPool_Construction_Default()
     {
-        using var pool = new TensorPool();
+        using var pool = new AiDotNet.JitCompiler.Memory.TensorPool();
         Assert.NotNull(pool);
     }
 
     [Fact]
     public void TensorPool_Construction_Custom()
     {
-        using var pool = new TensorPool(maxPoolSizePerShape: 20, maxElementsToPool: 1_000_000);
+        using var pool = new AiDotNet.JitCompiler.Memory.TensorPool(maxPoolSizePerShape: 20, maxElementsToPool: 1_000_000);
         Assert.NotNull(pool);
     }
 
     [Fact]
     public void TensorPool_Rent_ReturnsArray()
     {
-        using var pool = new TensorPool();
+        using var pool = new AiDotNet.JitCompiler.Memory.TensorPool();
         var buffer = pool.Rent<double>(100);
 
         Assert.NotNull(buffer);
@@ -350,7 +350,7 @@ public class JitCompilerExtendedIntegrationTests
     [Fact]
     public void TensorPool_RentReturn_Reuse()
     {
-        using var pool = new TensorPool();
+        using var pool = new AiDotNet.JitCompiler.Memory.TensorPool();
         var buffer1 = pool.Rent<double>(100);
         pool.Return(buffer1);
 
@@ -363,7 +363,7 @@ public class JitCompilerExtendedIntegrationTests
     [Fact]
     public void TensorPool_RentLargeArray_NotPooled()
     {
-        using var pool = new TensorPool(maxPoolSizePerShape: 10, maxElementsToPool: 100);
+        using var pool = new AiDotNet.JitCompiler.Memory.TensorPool(maxPoolSizePerShape: 10, maxElementsToPool: 100);
         // Request larger than maxElementsToPool
         var buffer = pool.Rent<double>(200);
 
@@ -374,7 +374,7 @@ public class JitCompilerExtendedIntegrationTests
     [Fact]
     public void TensorPool_GetStats()
     {
-        using var pool = new TensorPool();
+        using var pool = new AiDotNet.JitCompiler.Memory.TensorPool();
         var stats = pool.GetStats();
 
         Assert.NotNull(stats);
@@ -384,7 +384,7 @@ public class JitCompilerExtendedIntegrationTests
     [Fact]
     public void TensorPool_GetStats_AfterReturn()
     {
-        using var pool = new TensorPool();
+        using var pool = new AiDotNet.JitCompiler.Memory.TensorPool();
         var buffer = pool.Rent<double>(50);
         pool.Return(buffer);
 
@@ -395,7 +395,7 @@ public class JitCompilerExtendedIntegrationTests
     [Fact]
     public void TensorPool_Dispose_Safe()
     {
-        var pool = new TensorPool();
+        var pool = new AiDotNet.JitCompiler.Memory.TensorPool();
         var buffer = pool.Rent<double>(10);
         pool.Return(buffer);
         pool.Dispose();
