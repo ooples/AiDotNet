@@ -332,7 +332,7 @@ public class ModelScopeT2VModel<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _videoUNet.GetParameters().Length;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
         {

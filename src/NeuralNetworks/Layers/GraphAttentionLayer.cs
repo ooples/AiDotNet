@@ -183,9 +183,12 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int numHeads = 1,
         double alpha = 0.2,
         double dropoutRate = 0.0,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         _inputFeatures = inputFeatures;
         _outputFeatures = outputFeatures;
         _numHeads = numHeads;
@@ -232,16 +235,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     private void InitializeTensor(Tensor<T> tensor, int fanIn, int fanOut)
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
-        var halfTensor = new Tensor<T>(tensor.Shape);
-        halfTensor.Fill(NumOps.FromDouble(0.5));
-        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
-        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = scaled.GetFlat(i);
-        }
+        InitializeLayerWeights(tensor, fanIn, fanOut);
     }
 
     /// <inheritdoc/>

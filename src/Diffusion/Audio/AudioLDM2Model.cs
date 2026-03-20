@@ -874,7 +874,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
         var vaeCount = _audioVAE.ParameterCount;
         var projCount = _projectionLayer.ParameterCount;
 

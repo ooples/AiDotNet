@@ -262,7 +262,7 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
     {
         var coarseCount = _coarseUnet.ParameterCount;
         var fineCount = _fineUnet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != coarseCount + fineCount + vaeCount)
         {

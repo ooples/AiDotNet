@@ -300,7 +300,7 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var mmditCount = _mmdit.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != mmditCount + vaeCount)
         {

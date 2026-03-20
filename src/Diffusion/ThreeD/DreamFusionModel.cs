@@ -623,8 +623,8 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var nerfCount = _nerf.ParameterCount;
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         var nerfParams = new T[nerfCount];
         var unetParams = new T[unetCount];

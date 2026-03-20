@@ -556,8 +556,9 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        // Use actual parameter counts from GetParameters to match what was returned
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -596,24 +597,9 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: SD15_LATENT_CHANNELS,
-            outputChannels: SD15_LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
-            contextDim: SD15_CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: SD15_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
+        // Use the UNet's and VAE's own Clone methods to preserve actual architecture
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
 
         return new StableDiffusion15Model<T>(
             unet: clonedUnet,

@@ -213,9 +213,9 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
         var ctrlCount = _controlNet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
         if (parameters.Length != unetCount + ctrlCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + ctrlCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);

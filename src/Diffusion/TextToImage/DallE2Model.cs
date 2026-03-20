@@ -345,7 +345,7 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
     {
         var priorCount = _priorUnet.ParameterCount;
         var decoderCount = _decoderUnet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != priorCount + decoderCount + vaeCount)
         {

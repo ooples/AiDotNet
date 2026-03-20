@@ -161,6 +161,8 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? unet = null,
+        StandardVAE<T>? vae = null,
         IConditioningModule<T>? conditioner = null,
         int? seed = null)
         : base(options, scheduler, architecture)
@@ -175,17 +177,17 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
             DallE3ImageSize.Tall1024x1792
         };
 
-        InitializeLayers(conditioner);
+        InitializeLayers(unet, vae, conditioner);
     }
 
     /// <summary>
     /// Initializes the model layers.
     /// </summary>
     [MemberNotNull(nameof(_unet), nameof(_vae))]
-    private void InitializeLayers(IConditioningModule<T>? conditioner)
+    private void InitializeLayers(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae, IConditioningModule<T>? conditioner)
     {
-        _vae = new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS);
-        _unet = new UNetNoisePredictor<T>(
+        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS);
+        _unet = unet ?? new UNetNoisePredictor<T>(
             architecture: Architecture,
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
@@ -765,8 +767,8 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.");

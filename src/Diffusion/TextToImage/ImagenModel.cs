@@ -364,7 +364,7 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
     {
         var baseCount = _baseUnet.ParameterCount;
         var sr1Count = _superRes1Unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != baseCount + sr1Count + vaeCount)
         {

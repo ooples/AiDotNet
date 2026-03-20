@@ -350,12 +350,15 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int sequenceLength,
         int embeddingDimension,
         int headCount = 8,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastEntropyLoss = NumOps.Zero;
@@ -410,12 +413,15 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int sequenceLength,
         int embeddingDimension,
         int headCount = 8,
-        IVectorActivationFunction<T>? vectorActivationFunction = null)
+        IVectorActivationFunction<T>? vectorActivationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
             vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastEntropyLoss = NumOps.Zero;
@@ -1667,15 +1673,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        int rows = tensor.Shape[0];
-        int cols = tensor.Shape[1];
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                tensor[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
-        }
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <summary>

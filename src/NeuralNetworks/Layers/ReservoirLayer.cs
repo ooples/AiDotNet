@@ -208,9 +208,12 @@ public class ReservoirLayer<T> : LayerBase<T>
         double connectionProbability = 0.1,
         double spectralRadius = 0.9,
         double inputScaling = 1.0,
-        double leakingRate = 1.0)
+        double leakingRate = 1.0,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [reservoirSize])
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         _inputSize = inputSize;
         _reservoirSize = reservoirSize;
         _connectionProbability = connectionProbability;

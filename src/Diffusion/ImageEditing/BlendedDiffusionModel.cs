@@ -278,8 +278,8 @@ public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -318,24 +318,8 @@ public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clonedUnet = new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS,
-            outputChannels: LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocks: 2,
-            attentionResolutions: [4, 2, 1],
-            contextDim: CROSS_ATTENTION_DIM);
-        clonedUnet.SetParameters(_unet.GetParameters());
-
-        var clonedVae = new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: [1, 2, 4, 4],
-            numResBlocksPerLevel: 2,
-            latentScaleFactor: 0.18215);
-        clonedVae.SetParameters(_vae.GetParameters());
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        var clonedVae = (StandardVAE<T>)_vae.Clone();
 
         return new BlendedDiffusionModel<T>(
             unet: clonedUnet,

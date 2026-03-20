@@ -205,12 +205,15 @@ internal class MambaBlock<T> : LayerBase<T>
         int expandFactor = 2,
         int convKernelSize = 4,
         int dtRank = -1,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (sequenceLength <= 0)
         {
             throw new ArgumentException(
@@ -316,15 +319,7 @@ internal class MambaBlock<T> : LayerBase<T>
 
     private void InitializeTensor(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.Multiply(
-                NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape.Length > 1 ? tensor.Shape[1] : tensor.Shape[0]);
     }
 
     /// <inheritdoc />

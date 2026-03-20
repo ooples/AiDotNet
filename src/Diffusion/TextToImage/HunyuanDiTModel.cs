@@ -223,7 +223,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     {
         EnsureInitialized();
         var ditCount = _dit.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
             throw new ArgumentException(

@@ -582,8 +582,8 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
         {
