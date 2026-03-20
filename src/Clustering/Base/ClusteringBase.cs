@@ -477,8 +477,10 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <summary>
     /// Whether this clustering model supports direct parameter-based initialization.
     /// Hierarchical and density-based models should override to return false.
+    /// Returns true by default; override to false for models that don't support it
+    /// (e.g., density-based models where parameters aren't centroid coordinates).
     /// </summary>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    public virtual bool SupportsParameterInitialization => true;
 
     /// <inheritdoc/>
     public virtual Vector<T> GetParameters()
