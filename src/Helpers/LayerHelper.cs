@@ -2545,14 +2545,12 @@ public static class LayerHelper<T>
         // Input layer
         yield return new InputLayer<T>(inputSize);
 
-        // First RNN Layer
+        // First RNN Layer (RecurrentLayer applies tanh internally — no extra ActivationLayer)
         yield return new RecurrentLayer<T>(
             inputSize: inputSize,
             hiddenSize: hiddenSize,
             activationFunction: new TanhActivation<T>()
         );
-
-        yield return new ActivationLayer<T>([hiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
 
         // Additional RNN layers if needed
         for (int i = 1; i < recurrentLayerCount; i++)
@@ -2562,8 +2560,6 @@ public static class LayerHelper<T>
                 hiddenSize: hiddenSize,
                 activationFunction: new TanhActivation<T>()
             );
-
-            yield return new ActivationLayer<T>([hiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
         }
 
         // Extract the last timestep from the sequence for classification tasks
@@ -2577,8 +2573,16 @@ public static class LayerHelper<T>
             activationFunction: null
         );
 
-        // Add the final Activation Layer (typically Softmax for classification tasks)
-        yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Task-appropriate final activation
+        if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IActivationFunction<T>);
+        }
+        // Regression: no final activation (identity)
     }
 
     /// <summary>
