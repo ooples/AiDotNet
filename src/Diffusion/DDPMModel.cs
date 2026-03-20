@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion;
@@ -72,27 +73,24 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     #region Fields
 
     /// <summary>
-    /// The noise prediction function (in a full implementation, this would be a neural network).
+    /// The UNet noise predictor per Ho et al. 2020 Section 3.
+    /// Uses the standard architecture: residual blocks with GroupNorm → SiLU → Conv3x3,
+    /// sinusoidal time embeddings, and self-attention at lower resolutions.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// In a production implementation, this would be a UNet or similar architecture.
-    /// This minimal version uses a placeholder that returns zeros for demonstration.
-    /// </para>
-    /// </remarks>
-    private readonly Func<Tensor<T>, int, Tensor<T>>? _noisePredictor;
+    private readonly UNetNoisePredictor<T> _unet;
 
     /// <summary>
-    /// Stored parameters for the model (placeholder for neural network weights).
+    /// Optional custom noise prediction function for testing or custom architectures.
+    /// When provided, overrides the UNet for noise prediction.
     /// </summary>
-    private Vector<T> _parameters;
+    private readonly Func<Tensor<T>, int, Tensor<T>>? _customPredictor;
 
     #endregion
 
     #region Properties
 
     /// <inheritdoc />
-    public override int ParameterCount => _parameters.Length;
+    public override int ParameterCount => _unet.ParameterCount;
 
     #endregion
 
@@ -140,39 +138,69 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// </code>
     /// </example>
     /// </remarks>
+    /// <summary>
+    /// Creates a DDPM model with the standard UNet architecture from Ho et al. 2020.
+    /// </summary>
+    /// <param name="architecture">Optional neural network architecture specification.</param>
+    /// <param name="options">Configuration options. Default: 1000 timesteps, linear beta schedule.</param>
+    /// <param name="scheduler">Optional custom scheduler. Default: DDIM scheduler.</param>
+    /// <param name="unet">Optional custom UNet. Default: creates per-paper architecture.</param>
+    /// <param name="customPredictor">Optional function override for noise prediction (for testing).</param>
+    /// <param name="channels">Number of data channels. Default: 3 (RGB images).</param>
+    /// <param name="imageSize">Spatial size of input data. Default: 32 (CIFAR-10 size per paper).</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
     public DDPMModel(
         NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
-        Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null)
-        : base(options, scheduler, architecture)
+        UNetNoisePredictor<T>? unet = null,
+        Func<Tensor<T>, int, Tensor<T>>? customPredictor = null,
+        int channels = 3,
+        int imageSize = 32,
+        int? seed = null)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.0001,
+                BetaEnd = 0.02,
+                BetaSchedule = BetaSchedule.Linear,
+                DefaultInferenceSteps = 50
+            },
+            scheduler,
+            architecture)
     {
-        _noisePredictor = noisePredictor;
-        _parameters = new Vector<T>(0); // Placeholder - real model would have neural network weights
+        _customPredictor = customPredictor;
+
+        // Per Ho et al. 2020 Table 1: UNet with channel multipliers [1, 2, 2, 2] for CIFAR-10
+        // Self-attention at 16×16 resolution, GroupNorm with 32 groups, SiLU activations
+        _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: architecture,
+            inputChannels: channels,
+            outputChannels: channels,
+            baseChannels: 128,
+            channelMultipliers: [1, 2, 2, 2],
+            numResBlocks: 2,
+            attentionResolutions: [1],  // Attention at 16×16 (after first downsample)
+            contextDim: 0,  // No cross-attention (unconditional DDPM)
+            numHeads: 4,
+            inputHeight: imageSize,
+            seed: seed);
     }
 
     /// <summary>
     /// Initializes a new instance of the DDPM model with a scheduler only.
     /// </summary>
-    /// <param name="scheduler">The step scheduler to use for the diffusion process.</param>
-    /// <param name="noisePredictor">Optional custom noise prediction function.</param>
-    /// <remarks>
-    /// Convenience constructor for creating a model with a specific scheduler.
-    /// </remarks>
-    public DDPMModel(INoiseScheduler<T> scheduler, Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null)
-        : this(null, null, scheduler, noisePredictor)
+    public DDPMModel(INoiseScheduler<T> scheduler, Func<Tensor<T>, int, Tensor<T>>? customPredictor = null)
+        : this(architecture: null, options: null, scheduler: scheduler, unet: null, customPredictor: customPredictor)
     {
     }
 
     /// <summary>
     /// Initializes a new instance of the DDPM model with a seed for reproducibility.
     /// </summary>
-    /// <param name="seed">The random seed for reproducible generation.</param>
-    /// <remarks>
-    /// Convenience constructor for creating a model with a specific seed.
-    /// </remarks>
     public DDPMModel(int seed)
-        : this(null, new DiffusionModelOptions<T> { Seed = seed }, null, null)
+        : this(architecture: null, options: null, scheduler: null, unet: null, customPredictor: null, seed: seed)
     {
     }
 
@@ -198,43 +226,39 @@ public class DDPMModel<T> : DiffusionModelBase<T>
         if (noisySample == null)
             throw new ArgumentNullException(nameof(noisySample));
 
-        // Use custom predictor if provided
-        if (_noisePredictor != null)
+        // Use custom predictor override if provided (for testing)
+        if (_customPredictor != null)
         {
-            return _noisePredictor(noisySample, timestep);
+            return _customPredictor(noisySample, timestep);
         }
 
-        // Placeholder implementation: return zeros
-        // A real model would use a neural network here
-        var result = new Vector<T>(noisySample.ToVector().Length);
-        return new Tensor<T>(noisySample.Shape, result);
+        // Use the UNet noise predictor per Ho et al. 2020
+        return _unet.PredictNoise(noisySample, timestep, null);
     }
 
     /// <summary>
     /// Creates a DDPM model with a custom scheduler configuration.
     /// </summary>
     /// <param name="config">The scheduler configuration.</param>
-    /// <param name="noisePredictor">Optional custom noise prediction function.</param>
+    /// <param name="unet">Optional custom UNet noise predictor.</param>
     /// <returns>A new DDPM model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// Factory method for creating DDPM models with custom configurations.
-    /// </para>
-    /// <example>
-    /// <code>
-    /// // Create with Stable Diffusion-style config
-    /// var model = DDPMModel&lt;double&gt;.Create(
-    ///     SchedulerConfig&lt;double&gt;.CreateStableDiffusion(),
-    ///     myNeuralNetworkPredictor);
-    /// </code>
-    /// </example>
-    /// </remarks>
     public static DDPMModel<T> Create(
         SchedulerConfig<T> config,
-        Func<Tensor<T>, int, Tensor<T>>? noisePredictor = null)
+        UNetNoisePredictor<T>? unet = null)
     {
         var scheduler = new DDIMScheduler<T>(config);
-        return new DDPMModel<T>(scheduler: scheduler, noisePredictor: noisePredictor);
+        return new DDPMModel<T>(scheduler: scheduler, unet: unet);
+    }
+
+    /// <summary>
+    /// Creates a DDPM model with a custom noise predictor function (for testing).
+    /// </summary>
+    public static DDPMModel<T> Create(
+        SchedulerConfig<T> config,
+        Func<Tensor<T>, int, Tensor<T>> customPredictor)
+    {
+        var scheduler = new DDIMScheduler<T>(config);
+        return new DDPMModel<T>(scheduler: scheduler, customPredictor: customPredictor);
     }
 
     #endregion
@@ -244,37 +268,16 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        // Return a copy to prevent external modification
-        var copy = new Vector<T>(_parameters.Length);
-        for (int i = 0; i < _parameters.Length; i++)
-        {
-            copy[i] = _parameters[i];
-        }
-        return copy;
+        return _unet.GetParameters();
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Sets the model parameters from the given vector. DDPMModel accepts any parameter
-    /// length by design since it serves as a flexible placeholder model without a fixed
-    /// neural network architecture. The parameter vector is deep-copied to prevent
-    /// external modification.
-    /// </para>
-    /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
         if (parameters == null)
             throw new ArgumentNullException(nameof(parameters));
 
-        // Note: No length validation is intentional. DDPMModel is a flexible placeholder
-        // that accepts any parameter vector size, unlike models with fixed architectures
-        // where parameter count must match the layer structure.
-        _parameters = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _parameters[i] = parameters[i];
-        }
+        _unet.SetParameters(parameters);
     }
 
     #endregion
@@ -284,25 +287,17 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// <inheritdoc />
     public override IDiffusionModel<T> Clone()
     {
-        var clone = new DDPMModel<T>(scheduler: Scheduler, noisePredictor: _noisePredictor);
-        clone.SetParameters(GetParameters());
-        return clone;
+        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
+        return new DDPMModel<T>(
+            scheduler: Scheduler,
+            unet: clonedUnet,
+            customPredictor: _customPredictor);
     }
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        // Clone the scheduler preserving its actual type
-        INoiseScheduler<T> newScheduler = Scheduler switch
-        {
-            PNDMScheduler<T> => new PNDMScheduler<T>(Scheduler.Config),
-            DDIMScheduler<T> => new DDIMScheduler<T>(Scheduler.Config),
-            _ => new DDIMScheduler<T>(Scheduler.Config) // Fallback for unknown types
-        };
-
-        var copy = new DDPMModel<T>(scheduler: newScheduler, noisePredictor: _noisePredictor);
-        copy.SetParameters(GetParameters());
-        return copy;
+        return Clone();
     }
 
     #endregion
