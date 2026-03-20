@@ -2542,7 +2542,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 SelectedFeatureIndices = Enumerable.Range(0, inputSize).ToList(),
                 TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
                 {
-                    X = XTrain, Y = yTrain, Predictions = trainPredOutput,
+                    X = directX, Y = directY, Predictions = trainPredOutput,
                     ErrorStats = trainErrorStats,
                     PredictionStats = trainPredStats
                 }
