@@ -365,6 +365,14 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public int NumExperts => _experts.Count;
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumExperts"] = _experts.Count.ToString();
+        metadata["TopK"] = _topK.ToString();
+        return metadata;
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MixtureOfExpertsLayer{T}"/> class.
     /// </summary>

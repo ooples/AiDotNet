@@ -496,6 +496,21 @@ public static class DeserializationHelper
         {
             instance = CreateLSTMLayer<T>(type, inputShape, outputShape, additionalParams);
         }
+        else if (genericDef == typeof(MixtureOfExpertsLayer<>))
+        {
+            // Recreate MoE with default expert count and router
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            int numExperts = TryGetInt(additionalParams, "NumExperts") ?? 4;
+            int topK = TryGetInt(additionalParams, "TopK") ?? 0;
+
+            var experts = new List<ILayer<T>>();
+            for (int e = 0; e < numExperts; e++)
+                experts.Add(new DenseLayer<T>(inputSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
+
+            var router = new DenseLayer<T>(inputSize, numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK);
+        }
         else if (genericDef == typeof(ReservoirLayer<>))
         {
             int inputSize = inputShape[0];
