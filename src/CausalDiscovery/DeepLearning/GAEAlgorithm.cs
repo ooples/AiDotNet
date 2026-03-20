@@ -49,7 +49,10 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int embDim = HiddenUnits;
+        // For small problems, use a smaller embedding dimension and higher learning rate
+        int embDim = Math.Min(HiddenUnits, Math.Max(d * 2, 8));
+        double effectiveLr = d <= 10 ? Math.Max(LearningRate, 0.01) : LearningRate;
+        int effectiveEpochs = d <= 10 ? Math.Max(MaxEpochs, 200) : MaxEpochs;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -73,15 +76,17 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             }
 
         // KL warm-up schedule to prevent posterior collapse
-        int warmUpEpochs = UseKlWarmUp ? Math.Max(1, MaxEpochs / 4) : 0;
+        int warmUpEpochs = UseKlWarmUp ? Math.Max(1, effectiveEpochs / 4) : 0;
 
-        T lr = NumOps.FromDouble(LearningRate);
+        T lr = NumOps.FromDouble(effectiveLr);
         T alpha = NumOps.Zero;
-        T rho = NumOps.One;
-        T lambda1 = NumOps.FromDouble(0.1);
+        T rho = NumOps.FromDouble(0.01); // Start small so reconstruction dominates early
+        T lambda1 = NumOps.FromDouble(0.01); // Small sparsity penalty
         double prevHVal = double.MaxValue;
+        int acyclicityWarmup = effectiveEpochs / 3; // No acyclicity penalty for first 1/3
+        Matrix<T> lastP = new Matrix<T>(d, d); // Save last edge probability matrix
 
-        for (int epoch = 0; epoch < MaxEpochs; epoch++)
+        for (int epoch = 0; epoch < effectiveEpochs; epoch++)
         {
             // KL weight schedule: ramp from DefaultKlWeight to MaxKlWeight over warmUpEpochs
             double klWeight = UseKlWarmUp && warmUpEpochs > 0 && epoch < warmUpEpochs
@@ -128,6 +133,11 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                     double sv = NumOps.ToDouble(dot);
                     P[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
+
+            // Save last P for final edge detection
+            for (int i2 = 0; i2 < d; i2++)
+                for (int j2 = 0; j2 < d; j2++)
+                    lastP[i2, j2] = P[i2, j2];
 
             // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
             var PSq = new Matrix<T>(d, d);
@@ -177,7 +187,8 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                     T sparsityGrad = NumOps.Multiply(lambda1,
                         NumOps.FromDouble(Math.Sign(NumOps.ToDouble(pij))));
                     // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
-                    T acycGrad = NumOps.Multiply(
+                    // Skip during warmup so reconstruction can find edges first
+                    T acycGrad = epoch < acyclicityWarmup ? NumOps.Zero : NumOps.Multiply(
                         NumOps.Add(alpha, NumOps.Multiply(rho, hVal)),
                         NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
                     T totalGradP = NumOps.Add(gradP[i, j], NumOps.Add(sparsityGrad, acycGrad));
@@ -234,41 +245,46 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                     ZtLogVar[i, k] = NumOps.Subtract(ZtLogVar[i, k], NumOps.Multiply(lr, gradZtLogVar[i, k]));
                 }
 
-            // Update augmented Lagrangian per NOTEARS: increase rho when h(W) hasn't
-            // decreased sufficiently (less than 25% reduction), not on absolute threshold.
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            double hValDouble = NumOps.ToDouble(hVal);
-            T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
-            if (hValDouble > prevHVal * 0.25)
+            // Update augmented Lagrangian only after warmup
+            if (epoch >= acyclicityWarmup)
             {
-                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
-                rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
+                alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
+                double hValDouble = NumOps.ToDouble(hVal);
+                T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
+                if (hValDouble > 0.25 * Math.Max(1.0, prevHVal))
+                {
+                    T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+                    rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
+                }
+                prevHVal = hValDouble;
             }
-            prevHVal = hValDouble;
         }
 
-        // Final output using trained embeddings
+        // Final output: use trained P matrix for structure, covariance for weights.
+        // Two-stage approach: (1) P determines direction, (2) covariance provides weight.
         var result = new Matrix<T>(d, d);
-        T threshold = NumOps.FromDouble(0.3);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
-                T dot = NumOps.Zero;
-                for (int k = 0; k < embDim; k++)
-                    dot = NumOps.Add(dot, NumOps.Multiply(ZsMu[i, k], ZtMu[j, k]));
-                double sv = NumOps.ToDouble(dot);
-                double prob = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-                if (prob > 0.5)
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), threshold))
-                            result[i, j] = weight;
-                    }
-                }
+                double pij = NumOps.ToDouble(lastP[i, j]);
+                double pji = NumOps.ToDouble(lastP[j, i]);
+                double varI = NumOps.ToDouble(cov[i, i]);
+                double covIJ = NumOps.ToDouble(cov[i, j]);
+
+                if (varI < 1e-10) continue;
+                double weight = covIJ / varI;
+                if (Math.Abs(weight) < EdgeThreshold) continue;
+
+                // Edge i→j if: learned probability P[i,j] >= P[j,i] (asymmetric direction)
+                // OR if covariance ratio |cov/var_i| > |cov/var_j| (statistical direction)
+                double varJ = NumOps.ToDouble(cov[j, j]);
+                double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+                bool learnedDirection = pij >= pji;
+                bool statisticalDirection = Math.Abs(weight) >= reverseWeight;
+
+                if (learnedDirection || statisticalDirection)
+                    result[i, j] = NumOps.FromDouble(weight);
             }
 
         return result;
