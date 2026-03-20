@@ -431,6 +431,19 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <summary>
+    /// Returns the weight matrix state as a named activation (Hopfield has no layers).
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var output = Predict(input);
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["WeightMatrix"] = Tensor<T>.FromMatrix(_weights),
+            ["Output"] = output
+        };
+    }
+
     /// <inheritdoc/>
     public override int ParameterCount => _size * _size;
 
