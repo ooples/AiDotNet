@@ -120,7 +120,8 @@ public class SparseLinearLayer<T> : LayerBase<T>
         int inputFeatures,
         int outputFeatures,
         double sparsity = 0.9,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [inputFeatures],
             [outputFeatures],
@@ -131,6 +132,7 @@ public class SparseLinearLayer<T> : LayerBase<T>
             throw new ArgumentException("Sparsity must be in [0, 1).", nameof(sparsity));
         }
 
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
         _sparsity = sparsity;
@@ -139,22 +141,22 @@ public class SparseLinearLayer<T> : LayerBase<T>
         _numOps = MathHelper.GetNumericOperations<T>();
 
         _biases = new Vector<T>(outputFeatures);
+        // Biases initialized to zero by default (standard practice for ReLU layers)
         _weights = InitializeSparseWeights();
     }
 
     /// <summary>
-    /// Initializes sparse weights using Xavier/Glorot initialization.
+    /// Initializes sparse weights using the layer's initialization strategy.
     /// </summary>
     private SparseTensor<T> InitializeSparseWeights()
     {
         var random = RandomHelper.CreateSeededRandom(42);
-        var scale = Math.Sqrt(2.0 / (InputFeatures + OutputFeatures));
 
         // Calculate number of non-zero weights
         int totalWeights = OutputFeatures * InputFeatures;
         int nonZeroCount = Math.Max(1, (int)(totalWeights * (1.0 - _sparsity)));
 
-        // Generate random indices
+        // Generate random non-zero positions
         var indices = new HashSet<(int row, int col)>();
         while (indices.Count < nonZeroCount)
         {
@@ -163,7 +165,11 @@ public class SparseLinearLayer<T> : LayerBase<T>
             indices.Add((row, col));
         }
 
-        // Convert to COO format
+        // Create a dense weight tensor initialized via the strategy, then extract sparse values
+        var denseWeights = new Tensor<T>([OutputFeatures, InputFeatures]);
+        InitializeLayerWeights(denseWeights, InputFeatures, OutputFeatures);
+
+        // Convert to COO format, keeping only the selected non-zero positions
         var rowIndices = new int[nonZeroCount];
         var colIndices = new int[nonZeroCount];
         var values = new T[nonZeroCount];
@@ -173,14 +179,8 @@ public class SparseLinearLayer<T> : LayerBase<T>
         {
             rowIndices[idx] = row;
             colIndices[idx] = col;
-            values[idx] = _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale);
+            values[idx] = denseWeights[row, col];
             idx++;
-        }
-
-        // Initialize biases to zero
-        for (int i = 0; i < OutputFeatures; i++)
-        {
-            _biases[i] = _numOps.Zero;
         }
 
         return new SparseTensor<T>(OutputFeatures, InputFeatures, rowIndices, colIndices, values);
@@ -461,6 +461,37 @@ public class SparseLinearLayer<T> : LayerBase<T>
         {
             _biases[o] = parameters[idx++];
         }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        // Match GetParameters layout: non-zero weights (CSR order) + biases
+        var gradients = new Vector<T>(ParameterCount);
+        int idx = 0;
+
+        if (_weightsGradient != null)
+        {
+            // Iterate non-zero positions in same CSR order as GetParameters
+            for (int nz = 0; nz < _weights.NonZeroCount; nz++)
+            {
+                int row = _weights.RowIndices[nz];
+                int col = _weights.ColumnIndices[nz];
+                gradients[idx++] = _weightsGradient[row, col];
+            }
+        }
+        else
+        {
+            idx += _weights.NonZeroCount;
+        }
+
+        if (_biasesGradient != null)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+                gradients[idx++] = _biasesGradient[o];
+        }
+
+        return gradients;
     }
 
     /// <summary>
