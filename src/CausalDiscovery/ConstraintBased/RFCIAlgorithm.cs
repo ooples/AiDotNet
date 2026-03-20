@@ -182,56 +182,63 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
             for (int c = 0; c < d; c++)
             {
                 if (b == c || !adj[b, c]) continue;
-                if (oriented[b, c] || oriented[c, b] || bidirected[b, c]) continue;
+                if (bidirected[b, c]) continue;
 
                 // Search for discriminating paths ending at (b, c)
-                // Start from b's neighbors that are parents of c
+                // A discriminating path <a, ..., v, b, c> requires:
+                //   - a is not adjacent to c
+                //   - every intermediate node between a and b is a collider (both neighbors oriented toward it)
+                //     and is a parent of c
+                //   - b is adjacent to c
+                // Use BFS from b backward to find valid discriminating paths
+                bool foundPath = false;
                 foreach (int v in GetAdjacencies(adj, b, c, d))
                 {
-                    if (!oriented[v, c]) continue; // v must be a parent of c
-                    if (!adj[b, v]) continue; // b must be adjacent to v for the path to exist
+                    if (!oriented[v, c]) continue;     // v must be parent of c (v → c)
+                    if (!adj[b, v]) continue;           // b adjacent to v
+                    if (!oriented[v, b] && !oriented[b, v]) continue; // must be oriented edge
+                    // v must be a collider: needs an incoming edge from the previous node AND oriented[v,b]
+                    // For a 2-node path (path = <a, v, b, c>), v is a collider if a→v and b→v (or bidirected)
 
-                    // Look for 'a' one more step back (path length 3: a → v → b → c)
-                    // For a discriminating path: a → v, v → c are oriented, and a is not adjacent to c
                     foreach (int a in GetAdjacencies(adj, v, b, d))
                     {
-                        if (a == c || adj[a, c]) continue; // a must not be adjacent to c
-                        if (!oriented[a, v]) continue; // a → v must be oriented (collider at v)
+                        if (a == c || a == b || adj[a, c]) continue;
+                        if (!oriented[a, v]) continue; // a → v must be oriented
 
-                        // Found discriminating path <a, v, b, c>
-                        // v is a collider and parent of c ✓
-                        // a is not adjacent to c ✓
-                        // Apply the first valid discriminating path result for (b,c)
-                        // to avoid conflicting mutations from iteration order
+                        // Check v is a collider: a → v ← b (or at least a→v and v adjacent to b)
+                        // v is a collider if oriented[a,v] AND (oriented[b,v] or bidirected[b,v])
+                        if (!oriented[b, v] && !bidirected[b, v]) continue;
+
                         if (sepSets.TryGetValue((a, c), out var sepAC))
                         {
                             if (sepAC.Contains(b))
                             {
                                 // b is non-collider → orient b → c
-                                if (!oriented[c, b])
+                                if (!oriented[c, b] && !oriented[b, c])
                                     oriented[b, c] = true;
                             }
                             else
                             {
-                                // b is collider → orient b ← c
+                                // b is collider → orient c → b
                                 if (oriented[b, c])
                                 {
-                                    // Conflict → bidirected (latent confounder)
+                                    // Conflict with existing b→c → bidirected
                                     bidirected[b, c] = true;
                                     bidirected[c, b] = true;
                                     oriented[b, c] = false;
                                     oriented[c, b] = false;
                                 }
-                                else
+                                else if (!oriented[c, b])
                                 {
                                     oriented[c, b] = true;
                                 }
                             }
-                            goto nextPair; // First valid path decides; avoid conflicting later paths
+                            foundPath = true;
+                            break;
                         }
                     }
+                    if (foundPath) break;
                 }
-                nextPair:;
             }
         }
 

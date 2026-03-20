@@ -298,9 +298,9 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                     }
                     else
                     {
-                        // Middle classes
-                        double term = cumProbs[yi] * (1 - cumProbs[yi]) - cumProbs[yi - 1] * (1 - cumProbs[yi - 1]);
-                        gradCoef[p] -= xi * term / probs[yi];
+                        // Middle classes: ∂NLL/∂β = x * (σ'(α_{yi-1} - η) - σ'(α_yi - η)) / P(Y=yi)
+                        double term = cumProbs[yi - 1] * (1 - cumProbs[yi - 1]) - cumProbs[yi] * (1 - cumProbs[yi]);
+                        gradCoef[p] += xi * term / probs[yi];
                     }
                 }
 
