@@ -1471,8 +1471,8 @@ public static class LayerHelper<T>
         // Reservoir (recurrent connections, fixed random weights)
         yield return new ReservoirLayer<T>(reservoirSize, reservoirSize, spectralRadius: spectralRadius, connectionProbability: sparsity);
 
-        // Reservoir activation
-        yield return new ActivationLayer<T>([reservoirSize], new TanhActivation<T>() as IVectorActivationFunction<T>);
+        // ReservoirLayer already applies tanh internally per Jaeger (2001).
+        // No extra ActivationLayer needed — double tanh compresses output.
 
         // Output layer (Reservoir to output, trainable)
         yield return new DenseLayer<T>(reservoirSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
