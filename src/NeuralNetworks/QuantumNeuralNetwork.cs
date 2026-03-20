@@ -506,7 +506,10 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
 
         for (int i = 0; i < Layers.Count; i++)
         {
-            Layers[i].UpdateParameters(gradients[i].ToVector());
+            if (Layers[i].ParameterCount > 0 && gradients[i].Length > 0)
+            {
+                Layers[i].UpdateParameters(gradients[i].ToVector());
+            }
         }
     }
 

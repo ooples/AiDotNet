@@ -699,6 +699,12 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>The controller output.</returns>
     private Tensor<T> ProcessController(Tensor<T> input)
     {
+        // Handle 1D input [features] → [1, features]
+        if (input.Rank == 1)
+        {
+            input = input.Reshape([1, input.Shape[0]]);
+        }
+
         int batchSize = input.Shape[0];
 
         // Read from memories based on previous weights

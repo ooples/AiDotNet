@@ -940,10 +940,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             _preAllocatedOutput = TensorAllocator.Rent<T>(expectedShape);
         }
 
-        // Conv2D + bias addition + activation
+        // Conv2D + bias broadcast addition + activation
         var convOutput = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
+
+        // Broadcast bias [1, C, 1, 1] across [B, C, H, W] using Engine acceleration
         _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
-        var withBias = Engine.TensorAdd(convOutput, _biasReshaped4D);
+        var withBias = Engine.TensorBroadcastAdd(convOutput, _biasReshaped4D);
         var result = ApplyActivation(withBias);
 
         // Only store for backward pass during training - skip during inference
