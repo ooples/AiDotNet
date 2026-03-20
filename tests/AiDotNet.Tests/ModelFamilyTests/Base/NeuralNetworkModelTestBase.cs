@@ -18,6 +18,12 @@ public abstract class NeuralNetworkModelTestBase
     protected virtual int[] OutputShape => [1, 1];
     protected virtual int TrainingIterations => 10;
 
+    /// <summary>
+    /// Tolerance for the MoreData test. Models with non-continuous outputs
+    /// (e.g., SOM with one-hot BMU encoding) may need a higher tolerance.
+    /// </summary>
+    protected virtual double MoreDataTolerance => 1e-4;
+
     protected Tensor<double> CreateRandomTensor(int[] shape, Random rng)
     {
         var tensor = new Tensor<double>(shape);
@@ -325,7 +331,7 @@ public abstract class NeuralNetworkModelTestBase
 
         if (!double.IsNaN(loss50) && !double.IsNaN(loss200))
         {
-            Assert.True(loss200 <= loss50 + 1e-4,
+            Assert.True(loss200 <= loss50 + MoreDataTolerance,
                 $"200 iterations loss ({loss200:F6}) > 50 iterations loss ({loss50:F6}). " +
                 "Optimizer may be diverging with more training.");
         }

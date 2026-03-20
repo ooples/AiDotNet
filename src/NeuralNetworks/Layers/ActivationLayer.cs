@@ -276,6 +276,12 @@ public class ActivationLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new ForwardPassRequiredException("ActivationLayer", GetType().Name);
 
+        // Reshape gradient to match stored input shape if lengths match but ranks differ
+        if (outputGradient.Length == _lastInput.Length && !_lastInput.Shape.SequenceEqual(outputGradient.Shape))
+        {
+            outputGradient = outputGradient.Reshape(_lastInput.Shape);
+        }
+
         TensorValidator.ValidateShapesMatch(_lastInput, outputGradient, "Activation Layer", "Backward Pass");
 
         return _useVectorActivation

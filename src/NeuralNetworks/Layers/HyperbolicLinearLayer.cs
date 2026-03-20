@@ -825,6 +825,35 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         }
     }
 
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradients = new Vector<T>(ParameterCount);
+        int idx = 0;
+
+        // Weights gradients: [OutputFeatures, InputFeatures]
+        if (_weightsGradient != null)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+                for (int i = 0; i < InputFeatures; i++)
+                    gradients[idx++] = _weightsGradient[o, i];
+        }
+        else
+        {
+            idx += OutputFeatures * InputFeatures;
+        }
+
+        // Biases gradients: also [OutputFeatures, InputFeatures] in hyperbolic space
+        if (_biasesGradient != null)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+                for (int i = 0; i < InputFeatures; i++)
+                    gradients[idx++] = _biasesGradient[o, i];
+        }
+
+        return gradients;
+    }
+
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>

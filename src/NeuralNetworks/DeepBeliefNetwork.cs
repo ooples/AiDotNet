@@ -51,6 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly DeepBeliefNetworkOptions _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -583,90 +584,32 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Normalize to 2D [batch, features] if needed
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
-        if (expectedOutput.Rank == 1)
-            expectedOutput = expectedOutput.Reshape([1, expectedOutput.Shape[0]]);
-
-        // Make sure we're in training mode
         SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
 
-        for (int epoch = 0; epoch < _epochs; epoch++)
-        {
-            T totalLoss = NumOps.Zero;
+        // Single forward/backward pass per Train call
+        var output = ForwardWithMemory(input);
+        var outputVector = output.ToVector();
+        var expectedVector = expectedOutput.ToVector();
 
-            // Process data in batches
-            for (int batchStart = 0; batchStart < input.Shape[0]; batchStart += _batchSize)
-            {
-                // Get a batch of data
-                int batchEnd = Math.Min(batchStart + _batchSize, input.Shape[0]);
-                int actualBatchSize = batchEnd - batchStart;
-                var batchX = input.Slice(batchStart, 0, batchEnd, input.Shape[1]);
-                var batchY = expectedOutput.Slice(batchStart, 0, batchEnd, expectedOutput.Shape[1]);
+        // Compute loss
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
 
-                // Reset gradients at the start of each batch
-                int[] gradientShape = GetGradientShape();
-                Tensor<T> totalGradient = Tensor<T>.CreateDefault(gradientShape, NumOps.Zero);
+        // Backward pass with proper loss gradient
+        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
+        var gradTensor = Tensor<T>.FromVector(lossGrad);
+        if (gradTensor.Rank < output.Rank)
+            gradTensor = gradTensor.Reshape(output.Shape);
 
-                // Accumulate gradients for each example in the batch
-                for (int i = 0; i < actualBatchSize; i++)
-                {
-                    var x = batchX.GetRow(i);
-                    var y = batchY.GetRow(i);
+        Backpropagate(gradTensor);
 
-                    // Forward pass with memory to save intermediate states
-                    // NOTE: This optimization uses the prediction tensor directly instead of converting to Vector<T> and back.
-                    // This is the recommended pattern for consistency across all neural network implementations.
-                    var prediction = ForwardWithMemory(Tensor<T>.FromVector(x));
-
-                    // Calculate loss and gradients for this example
-                    T loss = CalculateLoss(prediction, Tensor<T>.FromVector(y));
-                    totalLoss = NumOps.Add(totalLoss, loss);
-
-                    // Calculate output gradients
-                    Vector<T> outputGradients = CalculateOutputGradients(prediction.ToVector(), y);
-
-                    // Backpropagate to compute gradients for all parameters
-                    Backpropagate(Tensor<T>.FromVector(outputGradients));
-
-                    // Accumulate gradients
-                    var gradients = GetParameterGradients();
-                    for (int j = 0; j < gradients.Length; j++)
-                    {
-                        totalGradient[j] = NumOps.Add(totalGradient[j], gradients[j]);
-                    }
-                }
-
-                // Average the gradients across the batch
-                for (int j = 0; j < totalGradient.Length; j++)
-                {
-                    totalGradient[j] = NumOps.Divide(totalGradient[j], NumOps.FromDouble(actualBatchSize));
-                }
-
-                // Update parameters with averaged gradients
-                var currentParams = GetParameters();
-                var updatedParams = new Vector<T>(currentParams.Length);
-                for (int j = 0; j < currentParams.Length; j++)
-                {
-                    updatedParams[j] = NumOps.Subtract(
-                        currentParams[j],
-                        NumOps.Multiply(_learningRate, totalGradient[j]));
-                }
-
-                UpdateParameters(updatedParams);
-            }
-
-            // Calculate average loss for the epoch
-            T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(input.Shape[0]));
-            Console.WriteLine($"Epoch {epoch + 1}/{_epochs}, Average Loss: {avgLoss}");
-
-            // Store the current loss
-            LastLoss = avgLoss;
-        }
-
-        // Set back to inference mode after training
-        SetTrainingMode(false);
+        // Persistent Adam optimizer
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
     }
 
     /// <summary>
@@ -901,6 +844,17 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// can be loaded into later.
     /// </para>
     /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var copy = (NeuralNetworkBase<T>)CreateNewInstance();
+        var originalParams = GetParameters();
+        if (originalParams.Length > 0 && originalParams.Length == copy.GetParameters().Length)
+        {
+            copy.UpdateParameters(originalParams);
+        }
+        return copy;
+    }
+
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         return new DeepBeliefNetwork<T>(

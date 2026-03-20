@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
 public class RadialBasisFunctionNetworkTests : NeuralNetworkModelTestBase
 {
+    protected override int[] InputShape => [128];
+    protected override int[] OutputShape => [1];
+
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new RadialBasisFunctionNetwork<double>();
 }

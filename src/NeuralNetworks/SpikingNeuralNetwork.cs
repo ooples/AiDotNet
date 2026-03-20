@@ -34,6 +34,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     private readonly SpikingNeuralNetworkOptions _options;
 
     /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     /// <summary>

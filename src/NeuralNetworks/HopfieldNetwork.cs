@@ -428,6 +428,40 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// the underlying mechanism is quite different.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Returns the weight matrix state as a named activation (Hopfield has no layers).
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var output = Predict(input);
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["WeightMatrix"] = Tensor<T>.FromMatrix(_weights),
+            ["Output"] = output
+        };
+    }
+
+    /// <inheritdoc/>
+    public override int ParameterCount => _size * _size;
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        return _weights.ToVector();
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        for (int i = 0; i < _size; i++)
+            for (int j = 0; j < _size; j++)
+                _weights[i, j] = parameters[idx++];
+    }
+
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
@@ -488,13 +522,15 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Handle 1D input: treat as single pattern
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
         // Extract patterns from the input tensor
-        // Each row of the input tensor is treated as a separate pattern
         List<Vector<T>> patterns = new List<Vector<T>>();
 
         for (int i = 0; i < input.Shape[0]; i++)
         {
-            // Extract the i-th pattern from the input tensor
             var pattern = new Vector<T>(_size);
             for (int j = 0; j < _size; j++)
             {

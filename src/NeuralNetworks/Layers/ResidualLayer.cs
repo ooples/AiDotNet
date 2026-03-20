@@ -635,6 +635,28 @@ public class ResidualLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     /// <inheritdoc/>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _innerLayer?.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
+    /// Returns metadata for serialization including inner layer dimensions.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        if (_innerLayer != null)
+        {
+            metadata["InnerLayerType"] = _innerLayer.GetType().AssemblyQualifiedName ?? _innerLayer.GetType().FullName ?? string.Empty;
+            metadata["InnerInputSize"] = _innerLayer.GetInputShape()[0].ToString();
+            metadata["InnerOutputSize"] = _innerLayer.GetOutputShape()[0].ToString();
+        }
+        return metadata;
+    }
+
+    /// <inheritdoc/>
     public override int ParameterCount => _innerLayer?.ParameterCount ?? 0;
 
     /// <inheritdoc/>

@@ -821,6 +821,48 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         }
     }
 
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradients = new Vector<T>(ParameterCount);
+        int idx = 0;
+
+        if (_weightsGradient != null)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                for (int i = 0; i < InputFeatures; i++)
+                {
+                    var g = _weightsGradient[o, i];
+                    gradients[idx] = g.Scalar; gradients[idx + 1] = g.E1;
+                    gradients[idx + 2] = g.E2; gradients[idx + 3] = g.E3;
+                    gradients[idx + 4] = g.E4; gradients[idx + 5] = g.E5;
+                    gradients[idx + 6] = g.E6; gradients[idx + 7] = g.E7;
+                    idx += 8;
+                }
+            }
+        }
+        else
+        {
+            idx += OutputFeatures * InputFeatures * 8;
+        }
+
+        if (_biasesGradient != null)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                var g = _biasesGradient[o];
+                gradients[idx] = g.Scalar; gradients[idx + 1] = g.E1;
+                gradients[idx + 2] = g.E2; gradients[idx + 3] = g.E3;
+                gradients[idx + 4] = g.E4; gradients[idx + 5] = g.E5;
+                gradients[idx + 6] = g.E6; gradients[idx + 7] = g.E7;
+                idx += 8;
+            }
+        }
+
+        return gradients;
+    }
+
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>

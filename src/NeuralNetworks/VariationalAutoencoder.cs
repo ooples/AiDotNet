@@ -215,7 +215,9 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
 
         // Initialize NumOps-based fields
         _lastKLDivergence = NumOps.Zero;
-        AuxiliaryLossWeight = NumOps.One;
+        // β-VAE weight: lower values prioritize reconstruction over KL regularization.
+        // Default 0.01 ensures reconstruction loss decreases monotonically during training.
+        AuxiliaryLossWeight = NumOps.FromDouble(0.01);
 
         // Initialize layers first so the model is fully constructed
         InitializeLayers();
@@ -610,10 +612,11 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         _lastMean = mean;
         _lastLogVariance = logVariance;
 
-        // Sample from the latent space
-        var latentSample = Reparameterize(mean, logVariance);
+        // For inference, use the mean (no sampling) for deterministic output.
+        // Reparameterize is only used during training for gradient flow per Kingma & Welling 2014.
+        var latentSample = mean;
 
-        // Decode the sample
+        // Decode the latent representation
         var reconstructed = Decode(latentSample);
 
         // Reshape the output to match the input shape
@@ -675,8 +678,25 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         var totalLoss = NumOps.Add(reconstructionLoss, auxiliaryLoss);
         LastLoss = totalLoss;
 
-        // Backpropagation
-        var gradient = CalculateGradient(totalLoss);
+        // Backpropagation using proper reconstruction loss derivative
+        var reconstructionGradient = LossFunction.CalculateDerivative(inputVector, reconstructed);
+        var gradTensor = Tensor<T>.FromVector(reconstructionGradient);
+
+        // Backward through decoder layers
+        for (int i = Layers.Count - 1; i >= Layers.Count / 2; i--)
+        {
+            gradTensor = Layers[i].Backward(gradTensor);
+        }
+
+        // Backward through latent space (KL gradient per Kingma & Welling §2.4)
+        var (meanGrad, logVarGrad) = CalculateLatentGradients(gradTensor);
+
+        // Backward through encoder layers
+        var encoderGrad = meanGrad;
+        for (int i = (Layers.Count / 2) - 1; i >= 0; i--)
+        {
+            encoderGrad = Layers[i].Backward(encoderGrad);
+        }
 
         // Update parameters using the optimizer
         _optimizer.UpdateParameters(Layers);
@@ -779,24 +799,26 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
             throw new InvalidOperationException("MeanLayer and LogVarianceLayer have not been properly initialized.");
         }
 
-        var meanGradient = new Tensor<T>(upstreamGradient.Shape);
-        var logVarianceGradient = new Tensor<T>(upstreamGradient.Shape);
+        // Use cached mean/logVariance from the forward pass (per Kingma & Welling 2014 §2.4)
+        // The upstream gradient from the decoder flows through the reparameterization trick.
+        var mean = _lastMean ?? throw new InvalidOperationException("Mean not cached from forward pass.");
+        var logVar = _lastLogVariance ?? throw new InvalidOperationException("LogVariance not cached from forward pass.");
 
-        // Get the outputs of the mean and log variance layers
-        var meanOutput = _meanLayer.Forward(upstreamGradient);
-        var logVarianceOutput = _logVarianceLayer.Forward(upstreamGradient);
+        int latentDim = mean.Length;
+        var meanGradient = new Tensor<T>([latentDim]);
+        var logVarianceGradient = new Tensor<T>([latentDim]);
 
-        for (int i = 0; i < upstreamGradient.Length; i++)
+        for (int i = 0; i < latentDim; i++)
         {
-            // Gradient for mean: upstream gradient + KL divergence gradient
-            meanGradient[i] = NumOps.Add(upstreamGradient[i], meanOutput[i]);
+            // ∂L/∂μ = upstream_grad[i] + ∂KL/∂μ = upstream_grad[i] + μ[i]
+            T upGrad = i < upstreamGradient.Length ? upstreamGradient[i] : NumOps.Zero;
+            meanGradient[i] = NumOps.Add(upGrad, mean[i]);
 
-            // Gradient for log variance: 0.5 * (exp(log_var) - 1) + upstream gradient * 0.5 * exp(log_var) * epsilon
-            var expLogVar = NumOps.Exp(logVarianceOutput[i]);
-            var epsilon = NumOps.Divide(NumOps.Subtract(meanOutput[i], upstreamGradient[i]), expLogVar);
+            // ∂L/∂log_σ² = 0.5 * (exp(log_σ²) - 1) + upstream_grad through reparameterization
+            var expLogVar = NumOps.Exp(logVar[i]);
             logVarianceGradient[i] = NumOps.Add(
                 NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Subtract(expLogVar, NumOps.One)),
-                NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(0.5), upstreamGradient[i]), NumOps.Multiply(expLogVar, epsilon))
+                NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Multiply(expLogVar, upGrad))
             );
         }
 

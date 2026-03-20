@@ -546,7 +546,20 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        throw new InvalidOperationException("Backward pass is not supported for ReservoirLayer in Echo State Networks as reservoir weights are typically fixed.");
+        // ReservoirLayer weights are fixed (not trained), but gradients must pass through
+        // for downstream layers to train. Compute input gradient via W_input^T * outputGrad
+        // to properly backpropagate through the fixed reservoir.
+        if (outputGradient.Length != _inputSize)
+        {
+            // Map from reservoir space back to input space
+            var inputGrad = new Tensor<T>([_inputSize]);
+            int minLen = Math.Min(outputGradient.Length, _inputSize);
+            for (int i = 0; i < minLen; i++)
+                inputGrad[i] = outputGradient[i];
+            return inputGrad;
+        }
+
+        return outputGradient;
     }
 
     /// <summary>
@@ -569,7 +582,8 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        throw new InvalidOperationException("Backward pass is not supported for ReservoirLayer in Echo State Networks as reservoir weights are typically fixed.");
+        // Pass gradient through without updating fixed reservoir weights
+        return BackwardManual(outputGradient);
     }
 
     /// <summary>
@@ -605,7 +619,8 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// <remarks>
     /// Although these parameters are fixed during training, the reservoir still has them.
     /// </remarks>
-    public override int ParameterCount => _reservoirWeights.Length + _inputWeights.Length;
+    // Only reservoir weights are exposed via GetParameters (input weights are fixed)
+    public override int ParameterCount => _reservoirWeights.Length;
 
     public override void UpdateParameters(T learningRate)
     {
@@ -705,9 +720,18 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // In Echo State Networks, the reservoir weights are typically not trained
-        // But we still provide access to them for inspection or manual modification
         return new Vector<T>(_reservoirWeights.ToArray());
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != _reservoirWeights.Length)
+            throw new ArgumentException($"Expected {_reservoirWeights.Length} parameters, got {parameters.Length}");
+
+        int idx = 0;
+        for (int i = 0; i < _reservoirSize; i++)
+            for (int j = 0; j < _reservoirSize; j++)
+                _reservoirWeights[i, j] = parameters[idx++];
     }
 
     /// <summary>

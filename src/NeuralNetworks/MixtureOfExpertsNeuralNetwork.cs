@@ -606,6 +606,25 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     /// - Cross-validation (training and testing on different data splits)
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Creates a deep copy by creating a new instance with the same options
+    /// and copying all parameters. Overrides base to avoid generic layer
+    /// deserialization which can't reconstruct MoE expert architecture.
+    /// </summary>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var copy = (NeuralNetworkBase<T>)CreateNewInstance();
+
+        // Copy parameters from original to clone
+        var originalParams = GetParameters();
+        if (originalParams.Length > 0 && originalParams.Length == copy.GetParameters().Length)
+        {
+            copy.UpdateParameters(originalParams);
+        }
+
+        return copy;
+    }
+
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         // Create a clone of the options to ensure the new instance has independent configuration

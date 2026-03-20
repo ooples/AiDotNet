@@ -496,6 +496,77 @@ public static class DeserializationHelper
         {
             instance = CreateLSTMLayer<T>(type, inputShape, outputShape, additionalParams);
         }
+        else if (genericDef == typeof(MixtureOfExpertsLayer<>))
+        {
+            // Recreate MoE with default expert count and router
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            int numExperts = TryGetInt(additionalParams, "NumExperts") ?? 4;
+            int topK = TryGetInt(additionalParams, "TopK") ?? 0;
+
+            var experts = new List<ILayer<T>>();
+            for (int e = 0; e < numExperts; e++)
+                experts.Add(new DenseLayer<T>(inputSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
+
+            var router = new DenseLayer<T>(inputSize, numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK);
+        }
+        else if (genericDef == typeof(ReservoirLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int reservoirSize = outputShape[0];
+            instance = new ReservoirLayer<T>(inputSize, reservoirSize);
+        }
+        else if (genericDef == typeof(RBFLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int numCenters = TryGetInt(additionalParams, "NumCenters") ?? outputShape[0];
+            instance = new RBFLayer<T>(inputSize, numCenters, new GaussianRBF<T>());
+        }
+        else if (genericDef == typeof(RecurrentLayer<>))
+        {
+            int inputSize = inputShape.Length > 0 ? inputShape[^1] : 128;
+            int hiddenSize = outputShape.Length > 0 ? outputShape[^1] : 64;
+            instance = new RecurrentLayer<T>(inputSize, hiddenSize, (IActivationFunction<T>?)null);
+        }
+        else if (genericDef == typeof(SparseLinearLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            instance = new SparseLinearLayer<T>(inputSize, outputSize);
+        }
+        else if (genericDef == typeof(OctonionLinearLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            instance = new OctonionLinearLayer<T>(inputSize, outputSize);
+        }
+        else if (genericDef == typeof(HyperbolicLinearLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            instance = new HyperbolicLinearLayer<T>(inputSize, outputSize);
+        }
+        else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
+        {
+            // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
+            int axis = TryGetInt(additionalParams, "Axis") ?? 0;
+            instance = Activator.CreateInstance(type, inputShape, axis);
+        }
+        else if (genericDef == typeof(ResidualLayer<>))
+        {
+            // ResidualLayer wraps an inner DenseLayer. Reconstruct inner layer from metadata.
+            int innerInputSize = TryGetInt(additionalParams, "InnerInputSize") ?? inputShape[0];
+            int innerOutputSize = TryGetInt(additionalParams, "InnerOutputSize") ?? inputShape[0];
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            var innerLayer = new DenseLayer<T>(innerInputSize, innerOutputSize, innerActivation as IActivationFunction<T>);
+
+            // Create ResidualLayer directly to avoid constructor ambiguity
+            object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = new ResidualLayer<T>(inputShape, innerLayer, residualActivation as IActivationFunction<T>);
+        }
         else if (openGenericType.FullName != null && openGenericType.FullName.Contains("MambaBlock"))
         {
             // MambaBlock(int sequenceLength, int modelDimension, int stateDimension, int expandFactor, int convKernelSize, int dtRank)

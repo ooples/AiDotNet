@@ -410,19 +410,33 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(expectedOutput), "Expected output tensor cannot be null.");
         }
 
+        SetTrainingMode(true);
+
         // Forward pass with memory for backpropagation
-        Vector<T> outputVector = ForwardWithMemory(input).ToVector();
+        var output = ForwardWithMemory(input);
+        Vector<T> outputVector = output.ToVector();
 
         // Calculate error/loss
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
-        Vector<T> errorVector = outputVector.Subtract(expectedOutputVector);
 
         // Calculate and set the loss using the loss function
         LastLoss = LossFunction.CalculateLoss(outputVector, expectedOutputVector);
 
+        // Compute gradient of loss w.r.t. output
+        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedOutputVector);
+
         // Backpropagate error through the network
-        Backpropagate(Tensor<T>.FromVector(errorVector));
+        Backpropagate(Tensor<T>.FromVector(lossGrad));
+
+        // Update parameters using Adam optimizer
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <summary>
     /// Gets metadata about the Radial Basis Function Network model.

@@ -302,21 +302,33 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(expectedOutput), "Expected output tensor cannot be null.");
         }
 
-        // Forward pass
-        Tensor<T> output = Predict(input);
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
 
-        // Calculate error/loss
-        Tensor<T> error = output.Subtract(expectedOutput);
+        // Forward pass with memory for backpropagation
+        var output = ForwardWithMemory(input);
 
-        // Calculate and set the loss using the loss function
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
+        // Calculate loss
+        var outputVector = output.ToVector();
+        var expectedVector = expectedOutput.ToVector();
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
+
+        // Compute loss gradient
+        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
 
         // Backpropagate error through time
-        BackpropagateError(error);
+        BackpropagateError(Tensor<T>.FromVector(lossGrad));
 
-        // Update network parameters
-        UpdateNetworkParameters();
+        // Update parameters using Adam optimizer
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <summary>
     /// Backpropagates the error through the network layers.

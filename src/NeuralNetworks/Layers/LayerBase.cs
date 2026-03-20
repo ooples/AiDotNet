@@ -2215,10 +2215,11 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </remarks>
     public virtual void Serialize(BinaryWriter writer)
     {
-        writer.Write(ParameterCount);
-        for (int i = 0; i < ParameterCount; i++)
+        var parameters = GetParameters();
+        writer.Write(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
-            writer.Write(Convert.ToDouble(Parameters[i]));
+            writer.Write(Convert.ToDouble(parameters[i]));
         }
     }
 

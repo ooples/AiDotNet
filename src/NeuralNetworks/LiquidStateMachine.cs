@@ -54,6 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 public class LiquidStateMachine<T> : NeuralNetworkBase<T>
 {
     private readonly LiquidStateMachineOptions _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -470,8 +471,10 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
             SetTrainingMode(true);
         }
 
-        // Forward pass through the network, storing intermediate values
-        Tensor<T> prediction = Predict(input);
+        // Forward pass with memory for backpropagation
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+        Tensor<T> prediction = ForwardWithMemory(input);
 
         // Calculate loss
         var flattenedPredictions = prediction.ToVector();
@@ -482,25 +485,27 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
 
         // Backpropagate to get parameter gradients
-        Vector<T> gradients = Backpropagate(Tensor<T>.FromVector(outputGradients)).ToVector();
+        Backpropagate(Tensor<T>.FromVector(outputGradients));
 
-        // Get parameter gradients for all trainable layers
-        Vector<T> parameterGradients = GetParameterGradients();
+        // Only update trainable (non-reservoir) layers
+        // ReservoirLayer weights are fixed; only readout Dense layers train
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        foreach (var layer in Layers)
+        {
+            if (layer is ReservoirLayer<T>)
+                continue; // Skip fixed reservoir
 
-        // Clip gradients to prevent exploding gradients
-        parameterGradients = ClipGradient(parameterGradients);
-
-        // Create optimizer
-        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        // Get current parameters
-        Vector<T> currentParameters = GetParameters();
-
-        // Update parameters using the optimizer
-        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        // Apply updated parameters
-        UpdateParameters(updatedParameters);
+            if (layer.SupportsTraining && layer.ParameterCount > 0)
+            {
+                var layerParams = layer.GetParameters();
+                var layerGrads = layer.GetParameterGradients();
+                if (layerParams.Length == layerGrads.Length && layerGrads.Length > 0)
+                {
+                    var updated = _trainOptimizer.UpdateParameters(layerParams, layerGrads);
+                    layer.SetParameters(updated);
+                }
+            }
+        }
     }
 
     /// <summary>

@@ -1654,9 +1654,18 @@ public class GRULayer<T> : LayerBase<T>
     /// - Advanced optimization techniques that need access to all parameters
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Returns metadata for serialization including ReturnSequences flag.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["ReturnSequences"] = _returnSequences.ToString();
+        return metadata;
+    }
+
     public override Vector<T> GetParameters()
     {
-        // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
             new Vector<T>(_Wz.ToArray()),
             new Vector<T>(_Wr.ToArray()),
@@ -1668,6 +1677,27 @@ public class GRULayer<T> : LayerBase<T>
             new Vector<T>(_br.ToArray()),
             new Vector<T>(_bh.ToArray())
         );
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+
+        void CopyToTensor(Tensor<T> tensor)
+        {
+            for (int i = 0; i < tensor.Length; i++)
+                tensor.SetFlat(i, parameters[idx++]);
+        }
+
+        CopyToTensor(_Wz);
+        CopyToTensor(_Wr);
+        CopyToTensor(_Wh);
+        CopyToTensor(_Uz);
+        CopyToTensor(_Ur);
+        CopyToTensor(_Uh);
+        CopyToTensor(_bz);
+        CopyToTensor(_br);
+        CopyToTensor(_bh);
     }
 
     /// <summary>

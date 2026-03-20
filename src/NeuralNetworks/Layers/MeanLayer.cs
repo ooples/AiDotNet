@@ -173,6 +173,12 @@ public class MeanLayer<T> : LayerBase<T>
     /// </remarks>
     private static int[] CalculateOutputShape(int[] inputShape, int axis)
     {
+        if (inputShape.Length <= 1)
+        {
+            // Reducing a 1D tensor produces a scalar — represent as [1]
+            return [1];
+        }
+
         var outputShape = new int[inputShape.Length - 1];
         int outputIndex = 0;
         for (int i = 0; i < inputShape.Length; i++)
@@ -534,6 +540,13 @@ public class MeanLayer<T> : LayerBase<T>
     /// This is different from layers like Dense layers, which would return their weights and biases.
     /// </para>
     /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Axis"] = Axis.ToString();
+        return metadata;
+    }
+
     public override Vector<T> GetParameters()
     {
         // MeanLayer has no trainable parameters

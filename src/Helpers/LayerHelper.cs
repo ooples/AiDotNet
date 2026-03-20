@@ -909,8 +909,12 @@ public static class LayerHelper<T>
         int hiddenSize = Math.Max(64, inputSize);
         int currentSize = inputSize;
 
+        // Use LeakyReLU instead of ReLU to prevent dead neuron problem in deep ResNets.
+        // ReLU kills gradient for negative values; with many layers, this causes all-zero gradients.
+        IActivationFunction<T> hiddenActivation = new LeakyReLUActivation<T>();
+
         // Initial projection layer
-        yield return new DenseLayer<T>(currentSize, hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(currentSize, hiddenSize, hiddenActivation);
         currentSize = hiddenSize;
 
         // Residual blocks using Dense layers
@@ -918,11 +922,10 @@ public static class LayerHelper<T>
         {
             for (int j = 0; j < blockSize; j++)
             {
-                // Each "residual block" is a Dense layer with skip connection via ResidualLayer
                 yield return new ResidualLayer<T>(
                     inputShape: [currentSize],
-                    innerLayer: new DenseLayer<T>(currentSize, currentSize, new ReLUActivation<T>() as IActivationFunction<T>),
-                    activationFunction: new ReLUActivation<T>()
+                    innerLayer: new DenseLayer<T>(currentSize, currentSize, hiddenActivation),
+                    activationFunction: new LeakyReLUActivation<T>()
                 );
             }
 
@@ -930,7 +933,7 @@ public static class LayerHelper<T>
             if (i < blockCount - 1)
             {
                 int newSize = Math.Min(currentSize * 2, 512);
-                yield return new DenseLayer<T>(currentSize, newSize, new ReLUActivation<T>() as IActivationFunction<T>);
+                yield return new DenseLayer<T>(currentSize, newSize, hiddenActivation);
                 currentSize = newSize;
             }
         }

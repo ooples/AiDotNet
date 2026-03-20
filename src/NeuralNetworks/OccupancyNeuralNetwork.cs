@@ -41,6 +41,9 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     private readonly OccupancyNeuralNetworkOptions _options;
 
     /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     /// <summary>

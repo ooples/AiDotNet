@@ -50,6 +50,9 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     private readonly DeepQNetworkOptions _options;
 
     /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     /// <summary>
@@ -530,11 +533,47 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// This helps the agent gradually improve its ability to predict which actions will lead to higher rewards.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Persistent Adam optimizer for supervised training via Train(input, target).
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+
+    /// <summary>
+    /// Standard supervised training step (forward/backward/update).
+    /// Used when replay buffer is empty or by the test harness.
+    /// </summary>
+    private void TrainSupervised(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+
+        var output = ForwardWithMemory(input);
+        var outputVector = output.ToVector();
+        var expectedVector = expectedOutput.ToVector();
+
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
+
+        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
+        var gradTensor = Tensor<T>.FromVector(lossGrad);
+        if (gradTensor.Rank < output.Rank)
+            gradTensor = gradTensor.Reshape(output.Shape);
+
+        Backpropagate(gradTensor);
+
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Skip if not enough experiences in the buffer
+        // If replay buffer is empty, fall back to standard supervised training
         if (_replayBuffer.Count < _batchSize)
         {
+            TrainSupervised(input, expectedOutput);
             return;
         }
 
