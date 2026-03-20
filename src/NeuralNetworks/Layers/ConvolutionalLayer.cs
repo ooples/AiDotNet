@@ -918,15 +918,14 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         _lastInput = input4D;
 
-        // === GPU-Accelerated Convolution ===
-        // Phase B: US-GPU-016 - Replace 6 nested loops with IEngine.Conv2D
-        // Achieves 50-500x speedup on GPU for large feature maps
+        // === GPU/CPU-Accelerated Convolution ===
         Tensor<T> output = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
 
-        // === GPU-Accelerated Bias Addition with Broadcasting ===
-        // Use cached reshape to avoid allocating a new view tensor every forward pass
+        // === In-Place Bias Addition (zero allocation) ===
+        // TensorBroadcastAddInPlace adds bias [1,C,1,1] directly into output [B,C,H,W]
+        // without allocating a new result tensor. Uses optimized fast path for this pattern.
         _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
-        output = Engine.TensorBroadcastAdd(output, _biasReshaped4D);
+        Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
 
         var result = ApplyActivation(output);
 
