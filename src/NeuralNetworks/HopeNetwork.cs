@@ -435,6 +435,10 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
+        // Reset layer state for deterministic inference
+        foreach (var layer in Layers)
+            layer.ResetState();
+
         return Forward(input);
     }
 
@@ -487,46 +491,42 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Trains the network on a single input-output pair (required by NeuralNetworkBase).
     /// </summary>
+    /// <summary>
+    /// Persistent Adam optimizer for stable training.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
+        Guard.NotNull(input);
+        Guard.NotNull(expectedOutput);
 
-        if (expectedOutput == null)
-            throw new ArgumentNullException(nameof(expectedOutput));
-
-        if (LossFunction == null)
-            throw new InvalidOperationException("Loss function is not set");
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
 
         // Forward pass
-        var prediction = Forward(input);
-
-        // Convert tensors to vectors for loss computation
-        var predictionVector = new Vector<T>(prediction.ToArray());
-        var expectedVector = new Vector<T>(expectedOutput.ToArray());
+        var output = ForwardWithMemory(input);
+        var outputVector = output.ToVector();
+        var expectedVector = expectedOutput.ToVector();
 
         // Compute loss
-        var loss = LossFunction.CalculateLoss(predictionVector, expectedVector);
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
 
-        // Compute loss gradient
-        var lossGradientVector = LossFunction.CalculateDerivative(predictionVector, expectedVector);
+        // Backward pass with proper gradient
+        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
+        var gradTensor = Tensor<T>.FromVector(lossGrad);
+        if (gradTensor.Rank < output.Rank)
+            gradTensor = gradTensor.Reshape(output.Shape);
 
-        // Convert gradient vector back to tensor for backward pass
-        var lossGradient = new Tensor<T>(prediction.Shape, lossGradientVector);
+        Backpropagate(gradTensor);
 
-        // Backward pass
-        Backward(lossGradient);
-
-        // Update parameters using gradient descent with default learning rate
-        T learningRate = _numOps.FromDouble(0.001);
-
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining)
-            {
-                layer.UpdateParameters(learningRate);
-            }
-        }
+        // Persistent Adam optimizer
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
 
         // Periodically consolidate memory
         if (_adaptationStep % 100 == 0)
