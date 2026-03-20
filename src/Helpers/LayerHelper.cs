@@ -1342,21 +1342,18 @@ public static class LayerHelper<T>
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
         IActivationFunction<T> softmaxActivation = new SoftmaxActivation<T>();
 
-        // Initialize layers
+        // Initialize layers — RBMLayer applies sigmoid internally,
+        // no extra ActivationLayer needed (double sigmoid compresses output to [0.5, 0.73])
         for (int i = 0; i < layerSizes.Length - 1; i++)
         {
             int visibleUnits = layerSizes[i];
             int hiddenUnits = layerSizes[i + 1];
 
-            // Create and add RBM layer
             yield return new RBMLayer<T>(
                 visibleUnits: visibleUnits,
                 hiddenUnits: hiddenUnits,
                 scalarActivation: sigmoidActivation
             );
-
-            // Add activation layer for each RBM
-            yield return new ActivationLayer<T>([hiddenUnits], sigmoidActivation);
         }
 
         // Add the final output layer — use softmax for classification, identity for regression
