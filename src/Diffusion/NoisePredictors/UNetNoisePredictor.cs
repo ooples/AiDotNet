@@ -710,69 +710,51 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        // Pre-compute total parameter count to avoid List resizing and double allocation
-        int totalCount = CountLayerParams(_inputConv)
-                       + CountLayerParams(_timeEmbedMlp1)
-                       + CountLayerParams(_timeEmbedMlp2);
+        // Collect all sublayer parameter vectors first (each layer allocates its own)
+        var layerParams = new List<Vector<T>>();
+        int totalCount = 0;
+
+        CollectLayerParams(layerParams, ref totalCount, _inputConv);
+        CollectLayerParams(layerParams, ref totalCount, _timeEmbedMlp1);
+        CollectLayerParams(layerParams, ref totalCount, _timeEmbedMlp2);
 
         for (int i = 0; i < _encoderBlocks.Count; i++)
-            totalCount += CountBlockParams(_encoderBlocks[i]);
+            CollectBlockParams(layerParams, ref totalCount, _encoderBlocks[i]);
         for (int i = 0; i < _middleBlocks.Count; i++)
-            totalCount += CountBlockParams(_middleBlocks[i]);
+            CollectBlockParams(layerParams, ref totalCount, _middleBlocks[i]);
         for (int i = 0; i < _decoderBlocks.Count; i++)
-            totalCount += CountBlockParams(_decoderBlocks[i]);
+            CollectBlockParams(layerParams, ref totalCount, _decoderBlocks[i]);
 
-        totalCount += CountLayerParams(_outputConv);
+        CollectLayerParams(layerParams, ref totalCount, _outputConv);
 
-        // Single allocation at exact size
+        // Single allocation at exact size, then copy from cached sublayer vectors
         var parameters = new Vector<T>(totalCount);
         int idx = 0;
-
-        CopyLayerParams(parameters, ref idx, _inputConv);
-        CopyLayerParams(parameters, ref idx, _timeEmbedMlp1);
-        CopyLayerParams(parameters, ref idx, _timeEmbedMlp2);
-
-        for (int i = 0; i < _encoderBlocks.Count; i++)
-            CopyBlockParams(parameters, ref idx, _encoderBlocks[i]);
-        for (int i = 0; i < _middleBlocks.Count; i++)
-            CopyBlockParams(parameters, ref idx, _middleBlocks[i]);
-        for (int i = 0; i < _decoderBlocks.Count; i++)
-            CopyBlockParams(parameters, ref idx, _decoderBlocks[i]);
-
-        CopyLayerParams(parameters, ref idx, _outputConv);
+        for (int v = 0; v < layerParams.Count; v++)
+        {
+            var p = layerParams[v];
+            for (int i = 0; i < p.Length; i++)
+                parameters[idx++] = p[i];
+        }
 
         return parameters;
     }
 
-    private static int CountLayerParams(ILayer<T>? layer)
-    {
-        return layer?.ParameterCount ?? 0;
-    }
-
-    private static int CountBlockParams(UNetBlock block)
-    {
-        return CountLayerParams(block.ResBlock)
-             + CountLayerParams(block.AttentionBlock)
-             + CountLayerParams(block.CrossAttentionBlock)
-             + CountLayerParams(block.Downsample)
-             + CountLayerParams(block.Upsample);
-    }
-
-    private static void CopyLayerParams(Vector<T> dest, ref int idx, ILayer<T>? layer)
+    private static void CollectLayerParams(List<Vector<T>> dest, ref int totalCount, ILayer<T>? layer)
     {
         if (layer == null) return;
         var p = layer.GetParameters();
-        for (int i = 0; i < p.Length; i++)
-            dest[idx++] = p[i];
+        dest.Add(p);
+        totalCount += p.Length;
     }
 
-    private static void CopyBlockParams(Vector<T> dest, ref int idx, UNetBlock block)
+    private static void CollectBlockParams(List<Vector<T>> dest, ref int totalCount, UNetBlock block)
     {
-        CopyLayerParams(dest, ref idx, block.ResBlock);
-        CopyLayerParams(dest, ref idx, block.AttentionBlock);
-        CopyLayerParams(dest, ref idx, block.CrossAttentionBlock);
-        CopyLayerParams(dest, ref idx, block.Downsample);
-        CopyLayerParams(dest, ref idx, block.Upsample);
+        CollectLayerParams(dest, ref totalCount, block.ResBlock);
+        CollectLayerParams(dest, ref totalCount, block.AttentionBlock);
+        CollectLayerParams(dest, ref totalCount, block.CrossAttentionBlock);
+        CollectLayerParams(dest, ref totalCount, block.Downsample);
+        CollectLayerParams(dest, ref totalCount, block.Upsample);
     }
 
     /// <inheritdoc />
