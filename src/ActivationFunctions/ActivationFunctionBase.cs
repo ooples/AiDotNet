@@ -117,7 +117,8 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     /// </remarks>
     public virtual Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape);
+        // Use TensorAllocator.RentUninitialized — all elements are immediately overwritten below
+        Tensor<T> output = TensorAllocator.RentUninitialized<T>(input.Shape);
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = Activate(input[i]);

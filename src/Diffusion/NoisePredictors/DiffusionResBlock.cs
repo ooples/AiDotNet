@@ -220,16 +220,9 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
-        // Apply SiLU element-wise: silu(x) = x * sigmoid(x)
-        var result = new Tensor<T>(x.Shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            var val = x[i];
-            var sigmoid = NumOps.Divide(NumOps.One,
-                NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(val))));
-            result[i] = NumOps.Multiply(val, sigmoid);
-        }
-        return result;
+        // Use the activation function's Tensor overload which delegates through
+        // the GPU/CPU accelerated path in the base class
+        return _silu.Activate(x);
     }
 
     /// <summary>

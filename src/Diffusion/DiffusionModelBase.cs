@@ -694,40 +694,43 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Each sample requires 2 forward passes; total = 2 * numSamples.
         // Reference: Spall, J.C., IEEE TAC, 1992.
         var epsilon = NumOps.FromDouble(1e-3);
+        var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
         var rng = RandomGenerator;
         int numSamples = 3;
+
+        // Pre-allocate reusable vectors outside the loop to avoid 9 Vector allocations
+        var delta = new Vector<T>(parameters.Length);
+        var perturbedParams = new Vector<T>(parameters.Length);
+        var negOne = NumOps.FromDouble(-1.0);
+        var posOne = NumOps.FromDouble(1.0);
 
         for (int s = 0; s < numSamples; s++)
         {
             // Generate random perturbation vector: each element ±1 (Rademacher distribution)
-            var delta = new Vector<T>(parameters.Length);
             for (int i = 0; i < parameters.Length; i++)
             {
-                delta[i] = NumOps.FromDouble(rng.NextDouble() < 0.5 ? -1.0 : 1.0);
+                delta[i] = rng.NextDouble() < 0.5 ? negOne : posOne;
             }
 
-            // Compute f(x + epsilon * delta)
-            var paramsPlus = new Vector<T>(parameters.Length);
+            // Compute f(x + epsilon * delta) — reuse perturbedParams
             for (int i = 0; i < parameters.Length; i++)
             {
-                paramsPlus[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
+                perturbedParams[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
             }
-            SetParameters(paramsPlus);
+            SetParameters(perturbedParams);
             var predictedPlus = PredictNoise(noisySampleTensor, timestep);
             var lossPlus = effectiveLossFunction.CalculateLoss(predictedPlus.ToVector(), noiseVector);
 
-            // Compute f(x - epsilon * delta)
-            var paramsMinus = new Vector<T>(parameters.Length);
+            // Compute f(x - epsilon * delta) — reuse perturbedParams
             for (int i = 0; i < parameters.Length; i++)
             {
-                paramsMinus[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
+                perturbedParams[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
             }
-            SetParameters(paramsMinus);
+            SetParameters(perturbedParams);
             var predictedMinus = PredictNoise(noisySampleTensor, timestep);
             var lossMinus = effectiveLossFunction.CalculateLoss(predictedMinus.ToVector(), noiseVector);
 
             // Accumulate SPSA gradient estimate: g_i += (f+ - f-) / (2 * epsilon * delta_i)
-            var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
             var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
             for (int i = 0; i < parameters.Length; i++)
             {
