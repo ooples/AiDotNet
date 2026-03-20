@@ -1088,13 +1088,14 @@ public class LSTMLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        var output = new Tensor<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        // Use TensorAllocator.Rent for forward pass tensors to reduce GC pressure
+        var output = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
 
-        _cachedHiddenStates = new Tensor<T>(new int[] { batchSize, timeSteps, _hiddenSize });
-        _cachedCellStates = new Tensor<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        _cachedHiddenStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        _cachedCellStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
 
-        var currentH = new Tensor<T>(new int[] { batchSize, _hiddenSize });
-        var currentC = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+        var currentH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
+        var currentC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
 
         // Pre-transpose weights for efficiency
         var WfiT = Engine.TensorTranspose(_weightsFi);
@@ -1992,8 +1993,8 @@ public class LSTMLayer<T> : LayerBase<T>
         var dBiasC = new Tensor<T>(_biasC.Shape);
         var dBiasO = new Tensor<T>(_biasO.Shape);
 
-        var dNextH = new Tensor<T>(new int[] { batchSize, _hiddenSize });
-        var dNextC = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+        var dNextH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
+        var dNextC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
 
         for (int t = timeSteps - 1; t >= 0; t--)
         {
