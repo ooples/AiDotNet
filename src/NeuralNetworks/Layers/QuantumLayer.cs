@@ -69,6 +69,7 @@ public class QuantumLayer<T> : LayerBase<T>
     /// automatically adjust to better process your specific data.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _rotationAngles.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

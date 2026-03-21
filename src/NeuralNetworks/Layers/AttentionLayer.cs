@@ -187,7 +187,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override int ParameterCount =>
-        (_attentionSize * _inputSize * 3) + (_inputSize * _attentionSize); // Wq, Wk, Wv + Wo
+        _attentionSize * _inputSize * 3; // Wq, Wk, Wv
 
     /// <summary>
     /// Gradient of the weight tensor for the value transformation.

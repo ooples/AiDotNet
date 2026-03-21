@@ -68,6 +68,8 @@ public class BasicBlock<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount =>
+        _conv1.ParameterCount + _bn1.ParameterCount + _conv2.ParameterCount + _bn2.ParameterCount;
     public override bool SupportsTraining => true;
 
     /// <summary>

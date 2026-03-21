@@ -74,6 +74,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
     #endregion
 
+    public override int ParameterCount => _gamma.Length + _beta.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

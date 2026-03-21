@@ -334,6 +334,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// trainable parameters and therefore don't "learn" in the same way.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

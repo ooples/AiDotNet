@@ -410,6 +410,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// Some other layer types might not have trainable parameters and would return false here.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
