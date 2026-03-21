@@ -519,6 +519,16 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
             NumFeatures = parameters.Length / NumClusters;
         }
 
+        // If both are zero (untrained model), try to infer reasonable dimensions
+        // This happens when the optimizer initializes a random solution on a cloned untrained model
+        if (ExpectedParameterCount == 0 && parameters.Length > 0)
+        {
+            // Default to 2 clusters if not set, infer features from parameters
+            if (NumClusters == 0) NumClusters = 2;
+            NumFeatures = parameters.Length / NumClusters;
+            if (NumFeatures == 0) NumFeatures = parameters.Length;
+        }
+
         if (parameters.Length != ExpectedParameterCount)
         {
             throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, got {parameters.Length}.");
@@ -685,10 +695,37 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
             double range = colMax - colMin;
             if (range > maxRange) maxRange = range;
         }
-        // Only merge clusters whose centers are nearly identical (within 1% of the data range).
-        // This catches true degenerate clusters (duplicates/empty splits) without collapsing
-        // legitimate clusters that happen to be somewhat close together.
-        double mergeThreshold = Math.Max(1e-6, maxRange * 0.01);
+        // Merge clusters whose centers are within the expected within-cluster spread.
+        // For degenerate data (all points similar), centers converge to nearly the same point.
+        // Use mean nearest-neighbor distance as the merge criterion — this is data-adaptive
+        // and avoids arbitrary percentage thresholds.
+        double avgSpread = 0;
+        if (x.Rows > 1)
+        {
+            // Sample-based estimate: mean pairwise distance for a subset
+            int sampleSize = Math.Min(x.Rows, 50);
+            double totalDist = 0;
+            int pairs = 0;
+            for (int i = 0; i < sampleSize; i++)
+                for (int j = i + 1; j < sampleSize; j++)
+                {
+                    double d2 = 0;
+                    for (int f = 0; f < x.Columns; f++)
+                    {
+                        double diff = NumOps.ToDouble(x[i, f]) - NumOps.ToDouble(x[j, f]);
+                        d2 += diff * diff;
+                    }
+                    totalDist += Math.Sqrt(d2);
+                    pairs++;
+                }
+            avgSpread = pairs > 0 ? totalDist / pairs : maxRange * 0.1;
+        }
+        else
+        {
+            avgSpread = maxRange * 0.1;
+        }
+        // Merge threshold = half the average pairwise distance (centers closer than this are degenerate)
+        double mergeThreshold = Math.Max(1e-6, avgSpread * 0.5);
 
         // First: identify which clusters actually have data points
         var clusterPopulations = new int[NumClusters];
