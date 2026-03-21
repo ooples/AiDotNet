@@ -555,6 +555,12 @@ public static class DeserializationHelper
             int featureSize = inputShape.Length > 0 ? inputShape[^1] : outputShape[0];
             instance = new SequenceLastLayer<T>(featureSize);
         }
+        else if (genericDef == typeof(RBMLayer<>))
+        {
+            int visibleUnits = inputShape[0];
+            int hiddenUnits = outputShape[0];
+            instance = new RBMLayer<T>(visibleUnits, hiddenUnits, (IActivationFunction<T>?)null);
+        }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
             // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
