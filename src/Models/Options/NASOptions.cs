@@ -1,5 +1,4 @@
 using System;
-using QuantizationMode = AiDotNet.Enums.QuantizationMode;
 using System.Collections.Generic;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;

@@ -1,5 +1,4 @@
 using AiDotNet.InferenceOptimization.IR.Common;
-using MemoryLayout = AiDotNet.InferenceOptimization.IR.Common.MemoryLayout;
 
 namespace AiDotNet.InferenceOptimization.IR.LowLevel;
 

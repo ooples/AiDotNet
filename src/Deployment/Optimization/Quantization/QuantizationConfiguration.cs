@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using QuantizationMode = AiDotNet.Enums.QuantizationMode;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 

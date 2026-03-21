@@ -1,5 +1,4 @@
 using AiDotNet.Enums;
-using QuantizationMode = AiDotNet.Enums.QuantizationMode;
 
 namespace AiDotNet.Deployment.Configuration;
 
