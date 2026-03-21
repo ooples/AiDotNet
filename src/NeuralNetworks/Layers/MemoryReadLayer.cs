@@ -1119,6 +1119,25 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// which is important for correct behavior in many neural network architectures.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_keyWeightsGradient == null || _valueWeightsGradient == null ||
+            _outputWeightsGradient == null || _outputBiasGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()),
+            new Vector<T>(_outputWeightsGradient.ToArray()),
+            new Vector<T>(_outputBiasGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _outputWeightsGradient = null; _outputBiasGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
