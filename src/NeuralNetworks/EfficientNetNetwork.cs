@@ -107,7 +107,7 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public EfficientNetNetwork()
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.TwoDimensional,
+            inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: 224, inputWidth: 224, inputDepth: 3,
             outputSize: 1000),
