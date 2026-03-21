@@ -637,13 +637,9 @@ public class SpikingLayer<T> : LayerBase<T>
 
         // Initialize weights with small random values as Tensor<T>
         // CreateRandom gives [0,1], scale to [-0.1, 0.1]
-        _weights = Tensor<T>.CreateRandom(inputSize, outputSize);
-        var scaleFactor = NumOps.FromDouble(0.2); // scale [0,1] to [0, 0.2]
-        _weights = Engine.TensorMultiplyScalar(_weights, scaleFactor);
-        var offset = NumOps.FromDouble(0.1); // shift to [-0.1, 0.1]
-        var offsetTensor = new Tensor<T>([inputSize, outputSize]);
-        offsetTensor.Fill(offset);
-        _weights = Engine.TensorSubtract(_weights, offsetTensor);
+        // Initialize weights with Xavier-like init [-0.1, 0.1] using InitializeLayerWeights
+        _weights = new Tensor<T>([inputSize, outputSize]);
+        InitializeLayerWeights(_weights, inputSize, outputSize);
 
         _bias = new Tensor<T>([outputSize]);
         _bias.Fill(NumOps.Zero);
@@ -1443,10 +1439,54 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatWeights = new Vector<T>(_weights.ToArray());
-        var flatBias = new Vector<T>(_bias.ToArray());
-        return Vector<T>.Concatenate(flatWeights, flatBias);
+        var result = new Vector<T>(ParameterCount);
+        int idx = 0;
+        int rows = _weights.Shape[0];
+        int cols = _weights.Shape[1];
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                result[idx++] = _weights[i, j];
+        for (int i = 0; i < _bias.Length; i++)
+            result[idx++] = _bias[i];
+        return result;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
+
+        // Use 2D indexer for reliable write (Data.Span and SetFlat don't work for all tensor types)
+        int idx = 0;
+        int rows = _weights.Shape[0];
+        int cols = _weights.Shape[1];
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                _weights[i, j] = parameters[idx++];
+
+        for (int i = 0; i < _bias.Length; i++)
+            _bias[i] = parameters[idx++];
+
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_bias);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightGradients == null || _biasGradients == null)
+            return new Vector<T>(ParameterCount);
+
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weightGradients.ToArray()),
+            new Vector<T>(_biasGradients.ToArray())
+        );
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightGradients.Fill(NumOps.Zero);
+        _biasGradients.Fill(NumOps.Zero);
     }
 
     /// <summary>
