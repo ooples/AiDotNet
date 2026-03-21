@@ -306,12 +306,19 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
             kernelPred = NumOps.Add(kernelPred, NumOps.Multiply(Alphas[i], k));
         }
 
-        // OLS linear prediction (uncentered — includes own intercept)
+        // OLS linear prediction using Engine.DotProduct
         T linearPred = _linearIntercept;
         if (_linearCoefficients is not null)
         {
-            for (int j = 0; j < Math.Min(input.Length, _linearCoefficients.Length); j++)
-                linearPred = NumOps.Add(linearPred, NumOps.Multiply(input[j], _linearCoefficients[j]));
+            int len = Math.Min(input.Length, _linearCoefficients.Length);
+            var inputSlice = new Vector<T>(len);
+            var coefSlice = new Vector<T>(len);
+            for (int j = 0; j < len; j++)
+            {
+                inputSlice[j] = input[j];
+                coefSlice[j] = _linearCoefficients[j];
+            }
+            linearPred = NumOps.Add(linearPred, Engine.DotProduct(inputSlice, coefSlice));
         }
 
         // Blend: maxK near 1.0 means interpolation (use kernel+yMean), near 0 means extrapolation (use OLS)
