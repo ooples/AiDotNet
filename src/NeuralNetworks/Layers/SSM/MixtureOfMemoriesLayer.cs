@@ -372,7 +372,7 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> SoftmaxLastDim(Tensor<T> logits, int batchSize, int seqLen, int dim)
     {
-        var result = new Tensor<T>(new[] { batchSize, seqLen, dim });
+        var result = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, dim });
 
         for (int bi = 0; bi < batchSize; bi++)
         {

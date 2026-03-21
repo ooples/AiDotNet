@@ -75,7 +75,7 @@ public static class ScanPatterns<T>
         }
 
         // Concatenate forward and reverse along feature dimension
-        var result = new Tensor<T>(new[] { batchSize, numPatches, dim * 2 });
+        var result = TensorAllocator.Rent<T>(new[] { batchSize, numPatches, dim * 2 });
         for (int b = 0; b < batchSize; b++)
         {
             for (int p = 0; p < numPatches; p++)
@@ -229,7 +229,7 @@ public static class ScanPatterns<T>
             throw new ArgumentException(
                 $"height ({height}) * width ({width}) = {height * width} does not match numPatches ({numPatches}).");
 
-        var result = new Tensor<T>(new[] { batchSize, numPatches, dim });
+        var result = TensorAllocator.Rent<T>(new[] { batchSize, numPatches, dim });
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -368,7 +368,7 @@ public static class ScanPatterns<T>
 
         // Clone the first output to avoid mutating the input
         var referenceLen = scannedOutputs[0].Length;
-        var result = new Tensor<T>(referenceShape);
+        var result = TensorAllocator.Rent<T>(referenceShape);
         for (int j = 0; j < referenceLen; j++)
         {
             result[j] = scannedOutputs[0][j];

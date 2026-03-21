@@ -362,7 +362,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     private Tensor<T> AggregateEdgeFeatures(Tensor<T> input, int[,] adjacency, int numEdges, int aggregatedSize)
     {
         // Create result tensor [numEdges, aggregatedSize]
-        var result = new Tensor<T>([numEdges, aggregatedSize]);
+        var result = TensorAllocator.Rent<T>([numEdges, aggregatedSize]);
 
         // Step 1: Copy self-features (first InputChannels columns)
         // Use TensorSetSlice for consistent API usage

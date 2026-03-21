@@ -934,7 +934,7 @@ public class MegalodonLayer<T> : LayerBase<T>
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var result = new Tensor<T>(template.Shape);
+        var result = TensorAllocator.Rent<T>(template.Shape);
         for (int i = 0; i < result.Length; i++) result[i] = NumOps.One;
         return result;
     }

@@ -1123,7 +1123,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         int rows = input.Shape[0];
         int cols = input.Shape[1];
-        var result = new Tensor<T>(input.Shape);
+        var result = TensorAllocator.Rent<T>(input.Shape);
 
         if (isFirstActivation)
         {
