@@ -1,4 +1,5 @@
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Clustering.DistanceMetrics;
 
@@ -48,12 +49,22 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
             throw new ArgumentOutOfRangeException(nameof(length),
                 $"Length ({length}) must be non-negative and within bounds of both arrays (a={a.Length}, b={b.Length}).");
 
-        // Default: Euclidean distance without any Vector allocation
+        // Use Engine-accelerated dot product for dimensions >= 4
+        if (length >= 4)
+        {
+            var engine = AiDotNetEngine.Current;
+            var diff = new Vector<T>(length);
+            for (int i = 0; i < length; i++)
+                diff[i] = NumOps.Subtract(a[i], b[i]);
+            return NumOps.Sqrt(engine.DotProduct(diff, diff));
+        }
+
+        // Small dimensions: inline scalar loop
         T sumSq = NumOps.Zero;
         for (int i = 0; i < length; i++)
         {
-            T diff = NumOps.Subtract(a[i], b[i]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
+            T d = NumOps.Subtract(a[i], b[i]);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(d, d));
         }
         return NumOps.Sqrt(sumSq);
     }
