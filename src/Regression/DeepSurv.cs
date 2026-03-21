@@ -234,10 +234,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             var predictions = new Vector<T>(input.Rows);
             for (int i = 0; i < input.Rows; i++)
             {
-                T pred = _olsIntercept;
-                for (int j = 0; j < Math.Min(input.Columns, _olsCoefficients.Length); j++)
-                    pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _olsCoefficients[j]));
-                predictions[i] = pred;
+                int len = Math.Min(input.Columns, _olsCoefficients.Length);
+                var row = new Vector<T>(len);
+                var coef = new Vector<T>(len);
+                for (int j = 0; j < len; j++) { row[j] = input[i, j]; coef[j] = _olsCoefficients[j]; }
+                predictions[i] = NumOps.Add(_olsIntercept, Engine.DotProduct(row, coef));
             }
             return await Task.FromResult(predictions);
         }
@@ -458,13 +459,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                 next[i] = new Vector<T>(outputSize);
                 for (int j = 0; j < outputSize; j++)
                 {
-                    T sum = b[j];
-                    for (int k = 0; k < current[i].Length; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(current[i][k], w[k, j]));
-                    }
+                    // Engine-accelerated dot product for input · weights[:,j]
+                    var wCol = new Vector<T>(current[i].Length);
+                    for (int k = 0; k < current[i].Length; k++) wCol[k] = w[k, j];
+                    T sum = NumOps.Add(b[j], Engine.DotProduct(current[i], wCol));
 
-                    // Apply activation (stays double - special math functions)
                     next[i][j] = NumOps.FromDouble(ApplyActivation(NumOps.ToDouble(sum)));
                 }
             }
