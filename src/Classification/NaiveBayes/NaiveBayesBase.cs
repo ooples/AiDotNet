@@ -25,6 +25,13 @@ namespace AiDotNet.Classification.NaiveBayes;
 public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
 {
     /// <summary>
+    /// Naive Bayes models compute parameters from class statistics during training.
+    /// They do not support flat parameter initialization via SetParameters.
+    /// The AiModelBuilder will use the direct training path instead of the optimizer.
+    /// </summary>
+    public override bool SupportsParameterInitialization => false;
+
+    /// <summary>
     /// Gets the Naive Bayes specific options.
     /// </summary>
     protected new NaiveBayesOptions<T> Options => (NaiveBayesOptions<T>)base.Options;

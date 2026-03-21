@@ -76,6 +76,12 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 {
     /// <summary>
+    /// LDA computes parameters from class covariance matrices during training.
+    /// It does not support flat parameter initialization.
+    /// </summary>
+    public override bool SupportsParameterInitialization => false;
+
+    /// <summary>
     /// Gets the LDA-specific options.
     /// </summary>
     protected new DiscriminantAnalysisOptions<T> Options => (DiscriminantAnalysisOptions<T>)base.Options;

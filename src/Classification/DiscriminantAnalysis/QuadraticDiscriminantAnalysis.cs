@@ -70,6 +70,12 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     protected new DiscriminantAnalysisOptions<T> Options => (DiscriminantAnalysisOptions<T>)base.Options;
 
     /// <summary>
+    /// QDA computes parameters from per-class covariance matrices during training.
+    /// It does not support flat parameter initialization.
+    /// </summary>
+    public override bool SupportsParameterInitialization => false;
+
+    /// <summary>
     /// Class means for each class.
     /// </summary>
     private Matrix<T>? _classMeans;
