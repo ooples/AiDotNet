@@ -567,6 +567,20 @@ public static class DeserializationHelper
             int outputSize = outputShape[0];
             instance = new SpikingLayer<T>(inputSize, outputSize);
         }
+        else if (genericDef == typeof(TemporalMemoryLayer<>))
+        {
+            int columnCount = inputShape[0];
+            int totalCells = outputShape[0];
+            int cellsPerColumn = totalCells / Math.Max(1, columnCount);
+            instance = new TemporalMemoryLayer<T>(columnCount, cellsPerColumn);
+        }
+        else if (genericDef == typeof(SpatialPoolerLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int columnCount = outputShape[0];
+            double sparsityThreshold = TryGetDouble(additionalParams, "SparsityThreshold") ?? 0.02;
+            instance = new SpatialPoolerLayer<T>(inputSize, columnCount, sparsityThreshold);
+        }
         else if (genericDef == typeof(MeasurementLayer<>))
         {
             int size = inputShape[0];
