@@ -560,7 +560,7 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
         }
 
         // Expert SSM backward
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         for (int bi = 0; bi < batchSize; bi++)
         {

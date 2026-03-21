@@ -1912,7 +1912,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         int numEig = Math.Min(_numEigenvectors, _eigenvalues.Length);
 
         // Initialize accumulated gradient
-        var inputGrad = new Tensor<T>([numVertices, InputChannels]);
+        var inputGrad = TensorAllocator.Rent<T>([numVertices, InputChannels]);
 
         // Transpose eigenvectors for projection: [numEig, numVertices]
         var eigenvectorsTransposed = Engine.TensorTranspose(_eigenvectors);
@@ -1963,7 +1963,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             return new Tensor<T>([numVertices, InputChannels]);
 
         // Initialize accumulated gradient
-        var inputGrad = new Tensor<T>([numVertices, InputChannels]);
+        var inputGrad = TensorAllocator.Rent<T>([numVertices, InputChannels]);
 
         for (int t = 0; t < NumTimeScales; t++)
         {

@@ -348,7 +348,7 @@ public class HybridBlockScheduler<T> : LayerBase<T>
     private Tensor<T> BackwardRMSNorm(Tensor<T> dOutput, Tensor<T> input, Tensor<T> gamma,
         int batchSize, int seqLen, out Tensor<T> dGamma, out Tensor<T> dBeta)
     {
-        var dInput = new Tensor<T>(input.Shape);
+        var dInput = TensorAllocator.Rent<T>(input.Shape);
         dGamma = new Tensor<T>(new[] { _modelDimension });
         dBeta = new Tensor<T>(new[] { _modelDimension });
         T eps = NumOps.FromDouble(1e-6);

@@ -438,7 +438,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
             .Reshape(batchSize, seqLen, _modelDimension);
 
         // Accumulate input gradient through all projection paths
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Running cell/norm state gradients for BPTT
         var dCellState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });

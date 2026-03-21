@@ -884,7 +884,7 @@ public class Mamba2Block<T> : LayerBase<T>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
 
         var weightGradSlices = new Tensor<T>[_convKernelSize];

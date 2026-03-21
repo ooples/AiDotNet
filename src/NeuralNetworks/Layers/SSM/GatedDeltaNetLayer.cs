@@ -714,7 +714,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         var weightSlices = new Tensor<T>[_convKernelSize];
         for (int ki = 0; ki < _convKernelSize; ki++)

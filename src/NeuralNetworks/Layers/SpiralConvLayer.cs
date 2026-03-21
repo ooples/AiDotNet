@@ -901,7 +901,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Spiral indices not set.");
 
         // Initialize input gradient tensor
-        var inputGrad = new Tensor<T>([numVertices, InputChannels]);
+        var inputGrad = TensorAllocator.Rent<T>([numVertices, InputChannels]);
 
         // Scatter gradients for each spiral position
         for (int s = 0; s < SpiralLength; s++)

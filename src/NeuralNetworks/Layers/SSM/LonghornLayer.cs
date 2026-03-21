@@ -660,7 +660,7 @@ public class LonghornLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(input.Shape);
+        var dInput = TensorAllocator.Rent<T>(input.Shape);
         T epsilon = NumOps.FromDouble(1e-5);
         T headDimT = NumOps.FromDouble(_headDimension);
         var gammaGrad = _groupNormGammaGradient

@@ -669,7 +669,7 @@ public class MEGALayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> EmaBackward(Tensor<T> dOutput, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _emaDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _emaDimension });
 
         for (int d = 0; d < _emaDimension; d++)
         {

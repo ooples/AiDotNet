@@ -430,7 +430,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int poolSize = 2;
         int stride = 2;
 
-        var inputGrad = new Tensor<T>(inputShape);
+        var inputGrad = TensorAllocator.Rent<T>(inputShape);
         var divisor = NumOps.FromDouble((double)poolSize * (double)poolSize);
 
         for (int n = 0; n < batch; n++)

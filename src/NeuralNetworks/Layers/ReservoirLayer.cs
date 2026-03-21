@@ -552,7 +552,7 @@ public class ReservoirLayer<T> : LayerBase<T>
         if (outputGradient.Length != _inputSize)
         {
             // Map from reservoir space back to input space
-            var inputGrad = new Tensor<T>([_inputSize]);
+            var inputGrad = TensorAllocator.Rent<T>([_inputSize]);
             int minLen = Math.Min(outputGradient.Length, _inputSize);
             for (int i = 0; i < minLen; i++)
                 inputGrad[i] = outputGradient[i];

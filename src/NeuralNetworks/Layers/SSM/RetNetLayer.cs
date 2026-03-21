@@ -700,7 +700,7 @@ public class RetNetLayer<T> : LayerBase<T>
         Tensor<T> dNormed, Tensor<T> retentionInput,
         int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(retentionInput.Shape);
+        var dInput = TensorAllocator.Rent<T>(retentionInput.Shape);
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)

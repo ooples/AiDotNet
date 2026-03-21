@@ -766,7 +766,7 @@ public class MesaNetLayer<T> : LayerBase<T>
 
     private Tensor<T> LayerNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T eps = NumOps.FromDouble(1e-5);
         T invDim = NumOps.Divide(NumOps.One, NumOps.FromDouble(_modelDimension));
         T twoVal = NumOps.FromDouble(2.0);

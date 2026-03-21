@@ -701,7 +701,7 @@ public class DeltaProductLayer<T> : LayerBase<T>
         Tensor<T> dHVecs, int batchSize, int seqLen)
     {
         int total = batchSize * seqLen;
-        var dInput = new Tensor<T>(new[] { total, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { total, _modelDimension });
 
         for (int mi = 0; mi < _numHouseholders; mi++)
         {

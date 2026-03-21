@@ -195,7 +195,7 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
 
         // Reverse the patch merging: distribute gradients back to original positions
         int seqLen = _cachedH * _cachedW;
-        var inputGrad = new Tensor<T>([batch, seqLen, _inputDim]);
+        var inputGrad = TensorAllocator.Rent<T>([batch, seqLen, _inputDim]);
 
         for (int b = 0; b < batch; b++)
         {

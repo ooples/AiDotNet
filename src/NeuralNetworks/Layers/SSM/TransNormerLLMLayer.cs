@@ -638,7 +638,7 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         Tensor<T> dOutput, Tensor<T> input, Tensor<T> scale, Tensor<T> rmsInv,
         Tensor<T> scaleGradient, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(input.Shape);
+        var dInput = TensorAllocator.Rent<T>(input.Shape);
 
         for (int bi = 0; bi < batchSize; bi++)
         {
