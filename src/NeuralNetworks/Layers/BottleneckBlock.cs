@@ -456,6 +456,32 @@ public class BottleneckBlock<T> : LayerBase<T>
         return new Vector<T>([.. allParams]);
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        var grads = new List<T>();
+        grads.AddRange(_conv1.GetParameterGradients().ToArray());
+        grads.AddRange(_bn1.GetParameterGradients().ToArray());
+        grads.AddRange(_conv2.GetParameterGradients().ToArray());
+        grads.AddRange(_bn2.GetParameterGradients().ToArray());
+        grads.AddRange(_conv3.GetParameterGradients().ToArray());
+        grads.AddRange(_bn3.GetParameterGradients().ToArray());
+        if (_downsampleConv is not null && _downsampleBn is not null)
+        {
+            grads.AddRange(_downsampleConv.GetParameterGradients().ToArray());
+            grads.AddRange(_downsampleBn.GetParameterGradients().ToArray());
+        }
+        return new Vector<T>([.. grads]);
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _conv1.ClearGradients(); _bn1.ClearGradients();
+        _conv2.ClearGradients(); _bn2.ClearGradients();
+        _conv3.ClearGradients(); _bn3.ClearGradients();
+        _downsampleConv?.ClearGradients(); _downsampleBn?.ClearGradients();
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int idx = 0;

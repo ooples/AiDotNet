@@ -292,6 +292,23 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Set(_selfAttention); Set(_norm1); Set(_feedForward1); Set(_feedForward2); Set(_norm2);
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(
+            _selfAttention.GetParameterGradients(),
+            _norm1.GetParameterGradients(),
+            _feedForward1.GetParameterGradients(),
+            _feedForward2.GetParameterGradients(),
+            _norm2.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _selfAttention.ClearGradients(); _norm1.ClearGradients();
+        _feedForward1.ClearGradients(); _feedForward2.ClearGradients(); _norm2.ClearGradients();
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>

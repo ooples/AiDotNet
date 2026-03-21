@@ -75,6 +75,28 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         _projectConv.ParameterCount + _projectBn.ParameterCount;
     public override bool SupportsTraining => true;
 
+    public override Vector<T> GetParameterGradients()
+    {
+        var grads = new List<T>();
+        if (_expandConv != null) grads.AddRange(_expandConv.GetParameterGradients().ToArray());
+        if (_expandBn != null) grads.AddRange(_expandBn.GetParameterGradients().ToArray());
+        grads.AddRange(_dwConv.GetParameterGradients().ToArray());
+        grads.AddRange(_dwBn.GetParameterGradients().ToArray());
+        if (_se != null) grads.AddRange(_se.GetParameterGradients().ToArray());
+        grads.AddRange(_projectConv.GetParameterGradients().ToArray());
+        grads.AddRange(_projectBn.GetParameterGradients().ToArray());
+        return new Vector<T>([.. grads]);
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _expandConv?.ClearGradients(); _expandBn?.ClearGradients();
+        _dwConv.ClearGradients(); _dwBn.ClearGradients();
+        _se?.ClearGradients();
+        _projectConv.ClearGradients(); _projectBn.ClearGradients();
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer has a GPU implementation.
     /// </summary>

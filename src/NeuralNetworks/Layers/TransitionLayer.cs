@@ -77,6 +77,17 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     public override int ParameterCount => _bn.ParameterCount + _conv.ParameterCount;
     public override bool SupportsTraining => true;
 
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(_bn.GetParameterGradients(), _conv.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _bn.ClearGradients(); _conv.ClearGradients();
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// All sub-layers (BatchNorm, Conv, AvgPool) support GPU.
