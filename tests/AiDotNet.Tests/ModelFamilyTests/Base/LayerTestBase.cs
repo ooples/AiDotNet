@@ -47,6 +47,13 @@ public abstract class LayerTestBase
     /// </summary>
     protected virtual double Tolerance => 1e-12;
 
+    /// <summary>
+    /// Whether constant inputs (all 0.1 vs all 0.9) should produce different outputs.
+    /// False for normalization layers (LayerNorm, BatchNorm on single-feature constant input)
+    /// where constant inputs normalize to the same output by design.
+    /// </summary>
+    protected virtual bool ExpectsDifferentOutputForConstantInputs => true;
+
     // =========================================================================
     // Helpers
     // =========================================================================
@@ -124,6 +131,8 @@ public abstract class LayerTestBase
     [Fact]
     public void Forward_DifferentInputs_ShouldProduceDifferentOutputs()
     {
+        if (!ExpectsDifferentOutputForConstantInputs) return;
+
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
 

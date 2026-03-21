@@ -10,4 +10,9 @@ public class LayerNormalizationLayerTests : LayerTestBase
         => new LayerNormalizationLayer<double>(4);
 
     protected override int[] InputShape => [2, 4];
+
+    // LayerNorm normalizes each sample to mean=0, std=1. With constant inputs
+    // (all 0.1 or all 0.9), every element equals the mean, so normalized output
+    // is zero for both — identical outputs are mathematically correct.
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }

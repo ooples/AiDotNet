@@ -718,57 +718,26 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         // Efficiently handle vector or scalar activation
         if (VectorActivation != null)
         {
-            // Process each batch item separately
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Create vectors for the current batch item
-                var cellStateVector = new Vector<T>(hiddenSize);
-                var newCellStateVector = new Vector<T>(hiddenSize);
+            // VECTORIZED: c_t = f_t * c_{t-1} + i_t * g_t using Engine
+            var forgetComponent = Engine.TensorMultiply(forgetGate, cellState);
+            var inputComponent = Engine.TensorMultiply(inputGate, cellGate);
+            newCellState = Engine.TensorAdd(forgetComponent, inputComponent);
 
-                // First compute the new cell state
-                for (int h = 0; h < hiddenSize; h++)
-                {
-                    // c_t = f_t * c_{t-1} + i_t * g_t
-                    T forgetComponent = NumOps.Multiply(forgetGate[b, h], cellState[b, h]);
-                    T inputComponent = NumOps.Multiply(inputGate[b, h], cellGate[b, h]);
-                    newCellState[b, h] = NumOps.Add(forgetComponent, inputComponent);
-
-                    // Prepare vector for vector activation
-                    newCellStateVector[h] = newCellState[b, h];
-                }
-
-                // Apply vector activation to the entire cell state vector
-                var activatedVector = VectorActivation.Activate(newCellStateVector);
-
-                // Calculate hidden state using activated cell state
-                for (int h = 0; h < hiddenSize; h++)
-                {
-                    // h_t = o_t * tanh(c_t)
-                    newHiddenState[b, h] = NumOps.Multiply(outputGate[b, h], activatedVector[h]);
-                }
-            }
+            // Apply vector activation to cell state, then h_t = o_t * tanh(c_t)
+            var activatedCellState = VectorActivation.Activate(newCellState);
+            newHiddenState = Engine.TensorMultiply(outputGate, activatedCellState);
         }
         else
         {
-            // Use scalar activation for each element individually
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int h = 0; h < hiddenSize; h++)
-                {
-                    // c_t = f_t * c_{t-1} + i_t * g_t
-                    T forgetComponent = NumOps.Multiply(forgetGate[b, h], cellState[b, h]);
-                    T inputComponent = NumOps.Multiply(inputGate[b, h], cellGate[b, h]);
-                    newCellState[b, h] = NumOps.Add(forgetComponent, inputComponent);
+            // VECTORIZED: c_t = f_t * c_{t-1} + i_t * g_t
+            var forgetComponent = Engine.TensorMultiply(forgetGate, cellState);
+            var inputComponent = Engine.TensorMultiply(inputGate, cellGate);
+            newCellState = Engine.TensorAdd(forgetComponent, inputComponent);
 
-                    // Apply activation to cell state
-                    T activatedCell = ScalarActivation != null
-                        ? ScalarActivation.Activate(newCellState[b, h])
-                        : (new TanhActivation<T>()).Activate(newCellState[b, h]);
-
-                    // h_t = o_t * tanh(c_t)
-                    newHiddenState[b, h] = NumOps.Multiply(outputGate[b, h], activatedCell);
-                }
-            }
+            // Apply scalar activation element-wise, then h_t = o_t * activated(c_t)
+            IActivationFunction<T> activation = ScalarActivation ?? new TanhActivation<T>();
+            var activatedCellState = newCellState.Transform((x, _) => activation.Activate(x));
+            newHiddenState = Engine.TensorMultiply(outputGate, activatedCellState);
         }
 
         return (newHiddenState, newHiddenState, newCellState);
