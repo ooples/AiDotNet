@@ -77,6 +77,9 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
 
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
+        // For small problems, use higher learning rate for faster convergence
+        double effectiveLr = d <= 10 ? Math.Max(_learningRateValue, 0.01) : _learningRateValue;
+
         var X = StandardizeData(data);
 
         // Initialize W from pairwise OLS and M (mask logits) = 0
@@ -90,7 +93,7 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
                 if (i != j)
                     W[i, j] = NumOps.Negate(initGrad[i, j]); // rough OLS initialization
 
-        T lr = NumOps.FromDouble(_learningRateValue);
+        T lr = NumOps.FromDouble(effectiveLr);
         double rho = 1.0, alpha = 0.0, prevH = double.MaxValue;
 
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
