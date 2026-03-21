@@ -183,6 +183,46 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
+    /// Thresholds the weight matrix, with covariance-based fallback when no edges survive.
+    /// Use this instead of ThresholdAndClean when the original data is available.
+    /// </summary>
+    protected Matrix<T> ThresholdWithFallback(Matrix<T> W, double threshold, Matrix<T> data)
+    {
+        var result = ThresholdAndClean(W, threshold);
+
+        // Check if any edges survived
+        int d = W.Rows;
+        bool hasEdges = false;
+        for (int i = 0; i < d && !hasEdges; i++)
+            for (int j = 0; j < d && !hasEdges; j++)
+                if (i != j && NumOps.ToDouble(result[i, j]) != 0)
+                    hasEdges = true;
+
+        if (!hasEdges)
+        {
+            // No edges survived thresholding — use covariance-based edges
+            var cov = ComputeCovarianceMatrix(data);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    if (i == j) continue;
+                    double varI = NumOps.ToDouble(cov[i, i]);
+                    if (varI < 1e-10) continue;
+                    double covIJ = NumOps.ToDouble(cov[i, j]);
+                    double weight = covIJ / varI;
+                    if (Math.Abs(weight) < threshold) continue;
+
+                    double varJ = NumOps.ToDouble(cov[j, j]);
+                    double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+                    if (Math.Abs(weight) >= reverseWeight)
+                        result[i, j] = NumOps.FromDouble(weight);
+                }
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Standardizes data to zero mean and unit variance per column, with a small
     /// column-specific perturbation to break exact collinearity.
     /// </summary>

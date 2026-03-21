@@ -163,18 +163,16 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
         }
 
         // Final: hard mask and threshold
-        var result = new Matrix<T>(d, d);
+        var maskedW = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
                 double maskVal = Sigmoid(NumOps.ToDouble(M[i, j]) / 0.1);
-                T weight = NumOps.Multiply(W[i, j], NumOps.FromDouble(maskVal));
-                if (Math.Abs(NumOps.ToDouble(weight)) >= WThreshold)
-                    result[i, j] = weight;
+                maskedW[i, j] = NumOps.Multiply(W[i, j], NumOps.FromDouble(maskVal));
             }
 
-        return result;
+        return ThresholdWithFallback(maskedW, WThreshold, data);
     }
 
     private static double Sigmoid(double x)

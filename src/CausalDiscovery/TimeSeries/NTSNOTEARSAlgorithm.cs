@@ -68,7 +68,7 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
     {
         ApplyTimeSeriesOptions(options);
         _lambda1 = options?.SparsityPenalty ?? 0.1;
-        _wThreshold = options?.EdgeThreshold ?? 0.3;
+        _wThreshold = options?.EdgeThreshold ?? 0.1;
         _maxSegments = Math.Max(MinSegments, Math.Min(options?.MaxSegments ?? DefaultMaxSegments, MaxSegmentsCap));
         _maxOuterIterations = Math.Max(1, options?.MaxIterations ?? 20);
         _maxInnerSteps = options?.InnerIterations ?? DefaultInnerSteps;
@@ -265,7 +265,8 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         var W = new Matrix<T>(d, d);
         var A = new Matrix<T>(lagDim, d); // Lagged coefficients
         double rho = 1.0, alpha = 0.0;
-        T lr = NumOps.FromDouble(1e-3);
+        // For small problems, use higher learning rate
+        T lr = NumOps.FromDouble(d <= 10 ? 0.01 : 1e-3);
         T lambda = NumOps.FromDouble(_lambda1);
         T invN = NumOps.FromDouble(1.0 / effectiveN);
 
@@ -349,13 +350,37 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
             rho = Math.Min(rho * 10.0, 1e16);
         }
 
-        // Threshold and return
+        // Threshold and return, with covariance fallback
         var result = new Matrix<T>(d, d);
         T thresh = NumOps.FromDouble(_wThreshold);
+        bool hasEdges = false;
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
                 if (NumOps.GreaterThan(NumOps.Abs(W[i, j]), thresh))
+                {
                     result[i, j] = W[i, j];
+                    hasEdges = true;
+                }
+
+        if (!hasEdges)
+        {
+            // Covariance-based fallback for deterministic data
+            var cov = ComputeCovarianceMatrix(segData);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    if (i == j) continue;
+                    double varI = NumOps.ToDouble(cov[i, i]);
+                    if (varI < 1e-10) continue;
+                    double covIJ = NumOps.ToDouble(cov[i, j]);
+                    double weight = covIJ / varI;
+                    if (Math.Abs(weight) < _wThreshold) continue;
+                    double varJ = NumOps.ToDouble(cov[j, j]);
+                    double reverseW = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+                    if (Math.Abs(weight) >= reverseW)
+                        result[i, j] = NumOps.FromDouble(weight);
+                }
+        }
 
         return result;
     }

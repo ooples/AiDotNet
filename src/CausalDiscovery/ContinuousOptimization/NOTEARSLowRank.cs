@@ -172,9 +172,9 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
             if (rho >= _rhoMax) break;
         }
 
-        // Final reconstruction and thresholding
+        // Final reconstruction and thresholding (with covariance fallback)
         var result = ReconstructW(A, B, d, rank);
-        return ThresholdAndClean(result, WThreshold);
+        return ThresholdWithFallback(result, WThreshold, data);
     }
 
     /// <summary>
