@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 
 
 namespace AiDotNet.NeuralNetworks.Attention;
@@ -256,14 +257,15 @@ internal static class FlashAttention<T>
                             continue;
                         }
 
-                        // Dot product: Q[batch, qIdx, :] @ K[batch, kIdx, :]
-                        T dotProduct = NumOps.Zero;
+                        // Engine-accelerated Q·K dot product
+                        var qVec = new Vector<T>(headDim);
+                        var kVec = new Vector<T>(headDim);
                         for (int d = 0; d < headDim; d++)
                         {
-                            T qVal = query[new[] { batch, qIdx, d }];
-                            T kVal = key[new[] { batch, kIdx, d }];
-                            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(qVal, kVal));
+                            qVec[d] = query[new[] { batch, qIdx, d }];
+                            kVec[d] = key[new[] { batch, kIdx, d }];
                         }
+                        T dotProduct = AiDotNetEngine.Current.DotProduct(qVec, kVec);
 
                         T score = NumOps.Multiply(dotProduct, scale);
 
@@ -441,13 +443,15 @@ internal static class FlashAttention<T>
                             continue;
                         }
 
-                        T dotProduct = NumOps.Zero;
+                        // Engine-accelerated Q·K dot product (backward pass)
+                        var qVec2 = new Vector<T>(headDim);
+                        var kVec2 = new Vector<T>(headDim);
                         for (int d = 0; d < headDim; d++)
                         {
-                            T qVal = query[new[] { batch, head, qIdx, d }];
-                            T kVal = key[new[] { batch, head, kIdx, d }];
-                            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(qVal, kVal));
+                            qVec2[d] = query[new[] { batch, head, qIdx, d }];
+                            kVec2[d] = key[new[] { batch, head, kIdx, d }];
                         }
+                        T dotProduct = AiDotNetEngine.Current.DotProduct(qVec2, kVec2);
 
                         T score = NumOps.Multiply(dotProduct, scale);
 
