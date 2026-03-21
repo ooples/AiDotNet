@@ -1786,9 +1786,13 @@ public class SpikingLayer<T> : LayerBase<T>
             ? _lastInput
             : _lastInput.Reshape([_lastInput.Length]);
 
-        var inputReshaped = inputFlat.Reshape([inputFlat.Length, 1]);
-        var scaledGradReshaped = scaledGrad.Reshape([1, scaledGrad.Length]);
-        var weightGradUpdate = Engine.TensorMatMul(inputReshaped, scaledGradReshaped);
+        // Manual outer product: weightGradUpdate[i,j] = inputFlat[i] * scaledGrad[j]
+        int inLen = inputFlat.Length;
+        int outLen = scaledGrad.Length;
+        var weightGradUpdate = new Tensor<T>([inLen, outLen]);
+        for (int i = 0; i < inLen; i++)
+            for (int j = 0; j < outLen; j++)
+                weightGradUpdate[i, j] = NumOps.Multiply(inputFlat[i], scaledGrad[j]);
 
         // Accumulate weight gradients
         _weightGradients = Engine.TensorAdd(_weightGradients, weightGradUpdate);
@@ -1796,12 +1800,15 @@ public class SpikingLayer<T> : LayerBase<T>
         // Bias gradients = scaledGrad (already computed)
         _biasGradients = Engine.TensorAdd(_biasGradients, scaledGrad);
 
-        // Compute input gradients: dL/dX = W @ scaledGrad
-        // weights: [inputSize, outputSize], scaledGrad: [outputSize]
-        // result: [inputSize]
-        var scaledGradCol = scaledGrad.Reshape([scaledGrad.Length, 1]);
-        var inputGradCol = Engine.TensorMatMul(_weights, scaledGradCol);
-        var inputGradient = inputGradCol.Reshape([inputFlat.Length]);
+        // Manual input gradient: inputGrad[i] = sum_j(W[i,j] * scaledGrad[j])
+        var inputGradient = new Tensor<T>([inLen]);
+        for (int i = 0; i < inLen; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < outLen; j++)
+                sum = NumOps.Add(sum, NumOps.Multiply(_weights[i, j], scaledGrad[j]));
+            inputGradient[i] = sum;
+        }
 
         // Reshape to match input shape if needed
         if (_lastInput.Shape.Length > 1)
