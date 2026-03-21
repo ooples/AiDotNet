@@ -347,7 +347,7 @@ public class S5Layer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> MIMOParallelScan(Tensor<T> u, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Compute delta = exp(logDelta): [stateDim]
         var delta = new T[_stateDimension];

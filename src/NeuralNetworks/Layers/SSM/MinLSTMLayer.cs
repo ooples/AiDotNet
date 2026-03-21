@@ -362,7 +362,7 @@ public class MinLSTMLayer<T> : LayerBase<T>
         Tensor<T> forgetNorm, Tensor<T> inputNorm, Tensor<T> cellCandidate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _expandedDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
         // Cell state: [batch, expandedDim] -- initialized to zero
         var cellState = new Tensor<T>(new[] { batchSize, _expandedDimension });
         // Store all cell states for backward pass: [batch, seqLen+1, expandedDim]

@@ -352,7 +352,7 @@ public class S4DLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ComplexRecurrentScan(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
 
         // Compute delta = exp(logDelta): [innerDim]
         var delta = Engine.TensorExp(_logDelta);

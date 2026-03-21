@@ -312,7 +312,7 @@ public class MinGRULayer<T> : LayerBase<T>
         Tensor<T> gate, Tensor<T> candidate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _expandedDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
 
         // Store all hidden states including h_0 for backward pass: [batch, seqLen+1, expandedDim]
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _expandedDimension });
