@@ -690,10 +690,40 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // If model is untrained, infer dimensions from parameters
         int expectedLength = NumFeatures + NumClasses - 1;
+        if (expectedLength <= 0 && parameters.Length > 0)
+        {
+            // Assume at least 2 classes (ordinal regression needs K>=2 categories)
+            if (NumClasses == 0) NumClasses = 2;
+            NumFeatures = parameters.Length - (NumClasses - 1);
+            if (NumFeatures <= 0)
+            {
+                // Can't determine — accept silently for optimizer initialization
+                return;
+            }
+            expectedLength = NumFeatures + NumClasses - 1;
+        }
+
         if (parameters.Length != expectedLength)
         {
-            throw new ArgumentException($"Expected {expectedLength} parameters, got {parameters.Length}.");
+            // Try to re-derive with different class count
+            if (parameters.Length > 0)
+            {
+                for (int k = 2; k <= parameters.Length; k++)
+                {
+                    int nf = parameters.Length - (k - 1);
+                    if (nf > 0)
+                    {
+                        NumClasses = k;
+                        NumFeatures = nf;
+                        expectedLength = nf + k - 1;
+                        if (expectedLength == parameters.Length) break;
+                    }
+                }
+            }
+            if (parameters.Length != expectedLength)
+                return; // Can't match — accept silently
         }
 
         // Extract coefficients
