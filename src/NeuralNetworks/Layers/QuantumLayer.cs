@@ -665,6 +665,14 @@ public class QuantumLayer<T> : LayerBase<T>
     /// potentially unstable learning.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumQubits"] = _numQubits.ToString();
+        return metadata;
+    }
+
     public override void UpdateParameters(T learningRate)
     {
         // Use Engine operations for gradient update

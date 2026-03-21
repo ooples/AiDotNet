@@ -567,6 +567,18 @@ public static class DeserializationHelper
             int outputSize = outputShape[0];
             instance = new SpikingLayer<T>(inputSize, outputSize);
         }
+        else if (genericDef == typeof(MeasurementLayer<>))
+        {
+            int size = inputShape[0];
+            instance = new MeasurementLayer<T>(size);
+        }
+        else if (genericDef == typeof(QuantumLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            int numQubits = TryGetInt(additionalParams, "NumQubits") ?? Math.Max(4, (int)Math.Log2(Math.Max(inputSize, outputSize)));
+            instance = new QuantumLayer<T>(inputSize, outputSize, numQubits);
+        }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
             // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
