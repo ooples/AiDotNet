@@ -201,7 +201,15 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
         T numerator = NumOps.Subtract(rij, NumOps.Multiply(rik, rjk));
         double dRik = NumOps.ToDouble(rik);
         double dRjk = NumOps.ToDouble(rjk);
-        double denom = Math.Sqrt(Math.Max((1 - dRik * dRik) * (1 - dRjk * dRjk), 1e-15));
-        return NumOps.FromDouble(NumOps.ToDouble(numerator) / denom);
+        double denomSq = (1 - dRik * dRik) * (1 - dRjk * dRjk);
+
+        if (denomSq < 1e-10)
+        {
+            // Both conditioning correlations are near 1.0 — all variables are strongly
+            // related. Return the original correlation to preserve the edge.
+            return rij;
+        }
+
+        return NumOps.FromDouble(NumOps.ToDouble(numerator) / Math.Sqrt(denomSq));
     }
 }

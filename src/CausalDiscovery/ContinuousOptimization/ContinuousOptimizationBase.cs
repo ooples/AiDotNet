@@ -32,7 +32,7 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Edge weight threshold for post-optimization pruning.
     /// </summary>
-    protected double WThreshold { get; set; } = 0.3;
+    protected double WThreshold { get; set; } = 0.1;
 
     /// <summary>
     /// Maximum number of outer loop iterations.
