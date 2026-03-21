@@ -6,8 +6,8 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
 public class CapsuleNetworkTests : NeuralNetworkModelTestBase
 {
-    // CapsuleNetwork default: inputSize=128, outputSize=10
-    protected override int[] InputShape => [128];
+    // CapsuleNetwork per Sabour et al. (2017): 28x28x1 MNIST input, 10 classes
+    protected override int[] InputShape => [1, 28, 28];
     protected override int[] OutputShape => [10];
 
     protected override INeuralNetworkModel<double> CreateNetwork()
