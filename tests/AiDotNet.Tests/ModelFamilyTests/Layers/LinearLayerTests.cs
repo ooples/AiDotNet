@@ -35,10 +35,10 @@ public class HyperbolicLinearLayerTests : LayerTestBase
 
 public class OctonionLinearLayerTests : LayerTestBase
 {
-    // Octonion layers require input size divisible by 8
+    // Octonion: inputFeatures=2 means 2 octonions * 8 components = 16 input elements
     protected override ILayer<double> CreateLayer()
-        => new OctonionLinearLayer<double>(inputFeatures: 8, outputFeatures: 16);
-    protected override int[] InputShape => [1, 8];
+        => new OctonionLinearLayer<double>(inputFeatures: 2, outputFeatures: 4);
+    protected override int[] InputShape => [1, 16]; // 2 octonions * 8
 }
 
 public class GatedLinearUnitLayerTests : LayerTestBase

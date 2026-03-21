@@ -34,9 +34,10 @@ public class MaskingLayerTests : LayerTestBase
 
 public class ReshapeLayerTests : LayerTestBase
 {
+    // ReshapeLayer assumes batch dim at [0], so input [1, 2, 3] → output [1, 6]
     protected override ILayer<double> CreateLayer()
         => new ReshapeLayer<double>(inputShape: [2, 3], outputShape: [6]);
-    protected override int[] InputShape => [2, 3];
+    protected override int[] InputShape => [1, 2, 3];
     protected override bool ExpectsTrainableParameters => false;
     protected override bool ExpectsNonZeroGradients => false;
 }
