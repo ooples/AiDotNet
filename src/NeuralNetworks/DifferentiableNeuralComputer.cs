@@ -1399,7 +1399,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         for (int i = 0; i < outputSize; i++)
         {
             T sum = NumOps.Zero;
-            { var _w0 = new Vector<T>(combinedSize); for (int _i = 0; _i < combinedSize; _i++) _w0[_i] = _outputWeights[_i, i]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(combinedVector, _w0)); }
+            { var _w0 = new Vector<T>(combinedSize); for (int _i = 0; _i < combinedSize; _i++) _w0[_i] = _outputWeights[_i, i]; sum = NumOps.Add(sum, Engine.DotProduct(combinedVector, _w0)); }
             finalOutput[0, i] = sum;
         }
 

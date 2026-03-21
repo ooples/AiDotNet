@@ -331,7 +331,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = genB1[j];
-            { var wCol_0 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_0[ii] = genW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(z, wCol_0)); }
+            { var wCol_0 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_0[ii] = genW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, wCol_0)); }
             double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
             h1[j] = NumOps.FromDouble(leakyVal);
         }
@@ -341,7 +341,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = genB2[j];
-            { var wCol_1 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_1[ii] = genW2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h1, wCol_1)); }
+            { var wCol_1 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_1[ii] = genW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_1)); }
             double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
             h2[j] = NumOps.FromDouble(leakyVal);
         }
@@ -351,7 +351,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _inputDim; j++)
         {
             T sum = genB3[j];
-            { var wCol_2 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_2[ii] = genW3[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h2, wCol_2)); }
+            { var wCol_2 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_2[ii] = genW3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_2)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             output[j] = NumOps.FromDouble(tanhVal);
         }
@@ -379,7 +379,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = discB1[j];
-            { var wCol_3 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_3[ii] = discW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(x, wCol_3)); }
+            { var wCol_3 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_3[ii] = discW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_3)); }
             double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
             h1[j] = NumOps.FromDouble(leakyVal);
         }
@@ -389,14 +389,14 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = discB2[j];
-            { var wCol_4 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_4[ii] = discW2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h1, wCol_4)); }
+            { var wCol_4 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_4[ii] = discW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_4)); }
             double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
             h2[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Output layer (sigmoid for probability)
         T outputSum = discB3[0];
-        { var _e0 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e0[_i] = discW3[_i, 0]; outputSum = NumOps.Add(outputSum, AiDotNetEngine.Current.DotProduct(h2, _e0)); }
+        { var _e0 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e0[_i] = discW3[_i, 0]; outputSum = NumOps.Add(outputSum, Engine.DotProduct(h2, _e0)); }
         double sigVal = Sigmoid(NumOps.ToDouble(outputSum));
         T output = NumOps.FromDouble(sigVal);
 
@@ -442,7 +442,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = discB1[j];
-            { var wCol_5 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_5[ii] = discW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(x, wCol_5)); }
+            { var wCol_5 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_5[ii] = discW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_5)); }
             double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
             h1[j] = NumOps.FromDouble(leakyVal);
         }
@@ -452,14 +452,14 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = discB2[j];
-            { var wCol_6 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_6[ii] = discW2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h1, wCol_6)); }
+            { var wCol_6 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_6[ii] = discW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_6)); }
             double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
             h2[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Output layer
         T outSum = discB3[0];
-        { var _e1 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e1[_i] = discW3[_i, 0]; outSum = NumOps.Add(outSum, AiDotNetEngine.Current.DotProduct(h2, _e1)); }
+        { var _e1 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e1[_i] = discW3[_i, 0]; outSum = NumOps.Add(outSum, Engine.DotProduct(h2, _e1)); }
         double sigVal = Sigmoid(NumOps.ToDouble(outSum));
         T output = NumOps.FromDouble(sigVal);
 
@@ -583,7 +583,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = genB1[j];
-            { var wCol_7 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_7[ii] = genW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(z, wCol_7)); }
+            { var wCol_7 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_7[ii] = genW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, wCol_7)); }
             double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
             h1[j] = NumOps.FromDouble(leakyVal);
         }
@@ -593,7 +593,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = genB2[j];
-            { var wCol_8 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_8[ii] = genW2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h1, wCol_8)); }
+            { var wCol_8 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_8[ii] = genW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_8)); }
             double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
             h2[j] = NumOps.FromDouble(leakyVal);
         }
@@ -603,7 +603,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _inputDim; j++)
         {
             T sum = genB3[j];
-            { var wCol_9 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_9[ii] = genW3[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h2, wCol_9)); }
+            { var wCol_9 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_9[ii] = genW3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_9)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             output[j] = NumOps.FromDouble(tanhVal);
         }
@@ -642,7 +642,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = discB1[j];
-            { var wCol_10 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_10[ii] = discW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(x, wCol_10)); }
+            { var wCol_10 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_10[ii] = discW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_10)); }
             double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
             h1[j] = NumOps.FromDouble(leakyVal);
         }
@@ -699,7 +699,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _inputDim; j++)
         {
             T sum = genB3[j];
-            { var wCol_11 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_11[ii] = genW3[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h2, wCol_11)); }
+            { var wCol_11 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_11[ii] = genW3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_11)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             output[j] = NumOps.FromDouble(tanhVal);
         }

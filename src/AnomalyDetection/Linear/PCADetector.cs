@@ -195,12 +195,9 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             var reconstructed = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                T sum = NumOps.Zero;
-                for (int c = 0; c < _fittedComponents; c++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(projected[c], _components![c, j]));
-                }
-                reconstructed[j] = sum;
+                var compCol = new Vector<T>(_fittedComponents);
+                for (int c = 0; c < _fittedComponents; c++) compCol[c] = _components![c, j];
+                reconstructed[j] = Engine.DotProduct(projected, compCol);
             }
 
             // Compute reconstruction error (residual from unretained components)
@@ -241,12 +238,10 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = i; j < d; j++)
             {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < n; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(centered[k, i], centered[k, j]));
-                }
-                cov[i, j] = NumOps.Divide(sum, NumOps.FromDouble(n - 1));
+                var colI = new Vector<T>(n);
+                var colJ = new Vector<T>(n);
+                for (int k = 0; k < n; k++) { colI[k] = centered[k, i]; colJ[k] = centered[k, j]; }
+                cov[i, j] = NumOps.Divide(Engine.DotProduct(colI, colJ), NumOps.FromDouble(n - 1));
                 cov[j, i] = cov[i, j];
             }
         }

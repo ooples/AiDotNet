@@ -306,7 +306,7 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = encoderB1[j];
-            { var _w0 = new Vector<T>(_inputDim); for (int _i = 0; _i < _inputDim; _i++) _w0[_i] = encoderW1[_i, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(x, _w0)); }
+            { var _w0 = new Vector<T>(_inputDim); for (int _i = 0; _i < _inputDim; _i++) _w0[_i] = encoderW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, _w0)); }
             double reluVal = ReLU(NumOps.ToDouble(sum));
             hidden[j] = NumOps.FromDouble(reluVal);
         }
@@ -343,7 +343,7 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = decoderB1[j];
-            { var _w1 = new Vector<T>(_latentDim); for (int _i = 0; _i < _latentDim; _i++) _w1[_i] = decoderW1[_i, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(z, _w1)); }
+            { var _w1 = new Vector<T>(_latentDim); for (int _i = 0; _i < _latentDim; _i++) _w1[_i] = decoderW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, _w1)); }
             double reluVal = ReLU(NumOps.ToDouble(sum));
             hidden2[j] = NumOps.FromDouble(reluVal);
         }
@@ -353,7 +353,7 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _inputDim; j++)
         {
             T sum = decoderB2[j];
-            { var _w2 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _w2[_i] = decoderW2[_i, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(hidden2, _w2)); }
+            { var _w2 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _w2[_i] = decoderW2[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(hidden2, _w2)); }
             reconstruction[j] = sum;
         }
 

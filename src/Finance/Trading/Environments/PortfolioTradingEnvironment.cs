@@ -78,7 +78,7 @@ public sealed class PortfolioTradingEnvironment<T> : TradingEnvironment<T>
         var targetWeights = NormalizeWeights(action);
 
         T portfolioValue = NumOps.Zero;
-        portfolioValue = NumOps.Add(portfolioValue, AiDotNetEngine.Current.DotProduct(_positions, prices));
+        portfolioValue = NumOps.Add(portfolioValue, Engine.DotProduct(_positions, prices));
         portfolioValue = NumOps.Add(portfolioValue, _cash);
 
         var desiredPositions = new T[NumAssets];

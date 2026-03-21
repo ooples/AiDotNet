@@ -1651,7 +1651,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         // Compute regression component: y_reg = intercept + sum(coeff[i] * x[i])
         T prediction = _intercept;
         int regLen = Math.Min(input.Length, _regressionCoefficients.Length);
-        prediction = NumOps.Add(prediction, AiDotNetEngine.Current.DotProduct(_regressionCoefficients, input));
+        prediction = NumOps.Add(prediction, Engine.DotProduct(_regressionCoefficients, input));
 
         return GuardPrediction(prediction);
     }

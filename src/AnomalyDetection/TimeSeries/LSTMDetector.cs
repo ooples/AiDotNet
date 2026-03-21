@@ -610,7 +610,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < _hiddenDim; j++)
             {
                 T sum = bf[j];
-                { var wc0 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc0[ii] = Wf[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(concat, wc0)); }
+                { var wc0 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc0[ii] = Wf[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc0)); }
                 double sigInput = NumOps.ToDouble(sum);
                 f[j] = NumOps.FromDouble(Sigmoid(sigInput));
             }
@@ -621,7 +621,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < _hiddenDim; j++)
             {
                 T sum = bi[j];
-                { var wc1 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc1[ii] = Wi[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(concat, wc1)); }
+                { var wc1 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc1[ii] = Wi[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc1)); }
                 double sigInput = NumOps.ToDouble(sum);
                 ig[j] = NumOps.FromDouble(Sigmoid(sigInput));
             }
@@ -632,7 +632,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < _hiddenDim; j++)
             {
                 T sum = bc[j];
-                { var wc2 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc2[ii] = Wc[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(concat, wc2)); }
+                { var wc2 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc2[ii] = Wc[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc2)); }
                 double tanhInput = NumOps.ToDouble(sum);
                 cCand[j] = NumOps.FromDouble(Math.Tanh(tanhInput));
             }
@@ -643,7 +643,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < _hiddenDim; j++)
             {
                 T sum = bo[j];
-                { var wc3 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc3[ii] = Wo[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(concat, wc3)); }
+                { var wc3 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc3[ii] = Wo[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc3)); }
                 double sigInput = NumOps.ToDouble(sum);
                 o[j] = NumOps.FromDouble(Sigmoid(sigInput));
             }
@@ -673,7 +673,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _inputDim; j++)
         {
             T sum = by[j];
-            { var wc4 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wc4[ii] = Wy[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(hFinal, wc4)); }
+            { var wc4 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wc4[ii] = Wy[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(hFinal, wc4)); }
             output[j] = sum;
         }
 
@@ -704,7 +704,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _inputDim; j++)
         {
             T sum = by[j];
-            { var wc5 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wc5[ii] = Wy[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h, wc5)); }
+            { var wc5 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wc5[ii] = Wy[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, wc5)); }
             output[j] = sum;
         }
 
@@ -747,7 +747,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = bf[j];
-            { var wc6 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc6[ii] = Wf[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(concat, wc6)); }
+            { var wc6 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc6[ii] = Wf[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc6)); }
             double sigInput = NumOps.ToDouble(sum);
             f[j] = NumOps.FromDouble(Sigmoid(sigInput));
         }
@@ -757,7 +757,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = bi[j];
-            { var wc7 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc7[ii] = Wi[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(concat, wc7)); }
+            { var wc7 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc7[ii] = Wi[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc7)); }
             double sigInput = NumOps.ToDouble(sum);
             ig[j] = NumOps.FromDouble(Sigmoid(sigInput));
         }
@@ -767,7 +767,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = bc[j];
-            { var wc8 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc8[ii] = Wc[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(concat, wc8)); }
+            { var wc8 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc8[ii] = Wc[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc8)); }
             double tanhInput = NumOps.ToDouble(sum);
             cCandidate[j] = NumOps.FromDouble(Math.Tanh(tanhInput));
         }
@@ -777,7 +777,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = bo[j];
-            { var wc9 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc9[ii] = Wo[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(concat, wc9)); }
+            { var wc9 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc9[ii] = Wo[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc9)); }
             double sigInput = NumOps.ToDouble(sum);
             o[j] = NumOps.FromDouble(Sigmoid(sigInput));
         }

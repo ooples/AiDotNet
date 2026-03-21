@@ -733,7 +733,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
 
                 // Compute scalar projection: proj = Dot(_lastNormalizedDirection[i], inputActivationRow[b])
                 T proj = NumOps.Zero;
-                proj = NumOps.Add(proj, AiDotNetEngine.Current.DotProduct(normalizedDirectionRow, inputActivationRow));
+                proj = NumOps.Add(proj, Engine.DotProduct(normalizedDirectionRow, inputActivationRow));
 
                 // Compute gradient contribution: gradContribution = NumOps.Mul(gradMatrix[b,i], proj)
                 T gradContribution = NumOps.Multiply(gradMatrix[b, i], proj);

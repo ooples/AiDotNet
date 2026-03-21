@@ -541,7 +541,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         if (coefficients != null)
         {
-            val = NumOps.Add(val, AiDotNetEngine.Current.DotProduct(coefficients, sample));
+            val = NumOps.Add(val, Engine.DotProduct(coefficients, sample));
         }
 
         if (useExpLink)

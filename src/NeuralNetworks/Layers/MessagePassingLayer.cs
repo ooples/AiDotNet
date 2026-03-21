@@ -594,7 +594,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     for (int h = 0; h < _messageFeatures; h++)
                     {
                         T sum = _messageBias2[h];
-                        { var _w0 = new Vector<T>(_messageFeatures); for (int _i = 0; _i < _messageFeatures; _i++) _w0[_i] = _messageWeights2[_i, h]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(hidden, _w0)); }
+                        { var _w0 = new Vector<T>(_messageFeatures); for (int _i = 0; _i < _messageFeatures; _i++) _w0[_i] = _messageWeights2[_i, h]; sum = NumOps.Add(sum, Engine.DotProduct(hidden, _w0)); }
                         _lastMessages[b, i, j, h] = sum;
                     }
                 }

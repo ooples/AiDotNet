@@ -30,6 +30,7 @@ namespace AiDotNet.Diffusion.Safety;
 public class ConceptEraser<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly List<Vector<T>> _conceptDirections;
     private readonly double _erasureStrength;
@@ -114,7 +115,7 @@ public class ConceptEraser<T>
     {
         var sum = NumOps.Zero;
         var len = Math.Min(a.Length, b.Length);
-        sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(a, b));
+        sum = NumOps.Add(sum, Engine.DotProduct(a, b));
         return sum;
     }
 

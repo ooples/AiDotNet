@@ -193,7 +193,7 @@ public class ReferenceBasedHallucinationDetector<T> : TextSafetyModuleBase<T>
 
         // Normalize
         T sumSq = NumOps.Zero;
-        sumSq = NumOps.Add(sumSq, AiDotNetEngine.Current.DotProduct(embedding, embedding));
+        sumSq = NumOps.Add(sumSq, Engine.DotProduct(embedding, embedding));
 
         double norm = Math.Sqrt(NumOps.ToDouble(sumSq));
         if (norm > 1e-10)

@@ -25,6 +25,11 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
     protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
+    /// Provides hardware-accelerated tensor/vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Initializes a new instance of the distance metric base class.
     /// </summary>
     protected DistanceMetricBase()
@@ -52,11 +57,10 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
         // Use Engine-accelerated dot product for dimensions >= 4
         if (length >= 4)
         {
-            var engine = AiDotNetEngine.Current;
             var diff = new Vector<T>(length);
             for (int i = 0; i < length; i++)
                 diff[i] = NumOps.Subtract(a[i], b[i]);
-            return NumOps.Sqrt(engine.DotProduct(diff, diff));
+            return NumOps.Sqrt(Engine.DotProduct(diff, diff));
         }
 
         // Small dimensions: inline scalar loop
