@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -1087,10 +1088,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < _modelDim; j++)
             {
                 T sum = b2[j];
-                for (int i = 0; i < ffDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(h[i], W2[i, j]));
-                }
+                { var wc0 = new Vector<T>(ffDim); for (int ii = 0; ii < ffDim; ii++) wc0[ii] = W2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h, wc0)); }
                 // Residual connection
                 output[t, j] = NumOps.Add(sum, x[t, j]);
             }
