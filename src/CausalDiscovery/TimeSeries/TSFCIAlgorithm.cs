@@ -134,8 +134,20 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
                         if (NumOps.GreaterThan(corrJI, bestJtoI)) bestJtoI = corrJI;
                     }
 
-                    // Direction with stronger lagged correlation wins
-                    if (NumOps.GreaterThan(bestItoJ, bestJtoI))
+                    // Direction with stronger lagged correlation wins.
+                    // When equal (deterministic data), use asymmetric cov ratio.
+                    bool iToJ = NumOps.GreaterThan(bestItoJ, bestJtoI);
+                    if (!iToJ && !NumOps.GreaterThan(bestJtoI, bestItoJ))
+                    {
+                        // Equal correlations — use covariance ratio for direction
+                        double varId = NumOps.ToDouble(cov[i, i]);
+                        double varJd = NumOps.ToDouble(cov[j, j]);
+                        double covIJd = NumOps.ToDouble(cov[i, j]);
+                        if (varId > 1e-10 && varJd > 1e-10)
+                            iToJ = Math.Abs(covIJd / varId) >= Math.Abs(covIJd / varJd);
+                    }
+
+                    if (iToJ)
                     {
                         T varI = cov[i, i];
                         if (NumOps.GreaterThan(varI, eps))
