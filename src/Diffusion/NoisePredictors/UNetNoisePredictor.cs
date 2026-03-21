@@ -434,10 +434,8 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Func<Tensor<T>[], Tensor<T>[]>? _compiledForward;
 
-    // TensorWorkspace support is pending NuGet release of AiDotNet.Tensors with TensorWorkspace<T>.
-    // Uncomment when available:
-    // private TensorWorkspace<T>? _compiledWorkspace;
-    // private int _compiledOutputSlot;
+    private TensorWorkspace<T>? _compiledWorkspace;
+    private int _compiledOutputSlot;
 
     /// <summary>
     /// Gets whether the UNet forward pass has been JIT-compiled.
@@ -496,8 +494,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         if (_outputConv is not null)
             current = _outputConv.ExportComputationGraph([current]);
 
-        // TensorWorkspace compilation pending NuGet release. Using standard compile for now.
-        _compiledForward = jit.Compile<T>(current, inputNodes);
+        // Use TensorWorkspace-backed compilation for zero-allocation forward passes.
+        // All intermediate tensors are pre-allocated in a single contiguous buffer.
+        var (execute, workspace, outputSlot) = jit.CompileWithWorkspace<T>(current, inputNodes);
+        _compiledWorkspace = workspace;
+        _compiledOutputSlot = outputSlot;
+        _compiledForward = inputs =>
+        {
+            execute(inputs, Engine);
+            return [workspace.Get(outputSlot)];
+        };
     }
 
     /// <inheritdoc />

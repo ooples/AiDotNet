@@ -1,6 +1,4 @@
-// This file requires TensorWorkspace<T> from AiDotNet.Tensors (pending NuGet release).
-// Gated behind TENSORWORKSPACE_AVAILABLE until the dependency is available.
-#if TENSORWORKSPACE_AVAILABLE
+// TensorWorkspace<T> is now available in AiDotNet.Tensors 0.13.0+
 using System.Linq.Expressions;
 using System.Reflection;
 using AiDotNet.JitCompiler.IR;
@@ -325,4 +323,4 @@ public class WorkspaceCodeGenerator
         return null;
     }
 }
-#endif
+

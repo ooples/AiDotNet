@@ -255,17 +255,15 @@ public class JitCompiler : IDisposable
     /// <typeparam name="T">The numeric type for tensor elements.</typeparam>
     /// <param name="outputNode">The output node of the computation graph.</param>
     /// <param name="inputs">The input nodes to the computation graph.</param>
-    // CompileWithWorkspace is pending TensorWorkspace<T> NuGet release.
-    // Uncomment when AiDotNet.Tensors is updated with TensorWorkspace support.
-    // public (Action<Tensor<T>[], IEngine> Execute, TensorWorkspace<T> Workspace, int OutputSlot)
-    //     CompileWithWorkspace<T>(ComputationNode<T> outputNode, List<ComputationNode<T>> inputs)
-    // {
-    //     var irBuilder = new IRBuilder();
-    //     var irGraph = irBuilder.Build(outputNode, inputs);
-    //     var optimizedGraph = ApplyOptimizations(irGraph);
-    //     var wsCodeGen = new WorkspaceCodeGenerator();
-    //     return wsCodeGen.Compile<T>(optimizedGraph);
-    // }
+    public (Action<Tensor<T>[], IEngine> Execute, TensorWorkspace<T> Workspace, int OutputSlot)
+        CompileWithWorkspace<T>(ComputationNode<T> outputNode, List<ComputationNode<T>> inputs)
+    {
+        var irBuilder = new IRBuilder();
+        var irGraph = irBuilder.Build(outputNode, inputs);
+        var optimizedGraph = ApplyOptimizations(irGraph);
+        var wsCodeGen = new WorkspaceCodeGenerator();
+        return wsCodeGen.Compile<T>(optimizedGraph);
+    }
 
     /// <summary>
     /// Compiles a computation graph and returns compilation statistics.
