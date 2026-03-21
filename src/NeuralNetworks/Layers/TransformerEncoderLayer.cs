@@ -280,6 +280,18 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        void Set(ILayer<T> layer)
+        {
+            int count = layer.ParameterCount;
+            layer.SetParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        Set(_selfAttention); Set(_norm1); Set(_feedForward1); Set(_feedForward2); Set(_norm2);
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>

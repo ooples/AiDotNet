@@ -405,6 +405,22 @@ public class BasicBlock<T> : LayerBase<T>
         return new Vector<T>([.. allParams]);
     }
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        void Set(ILayer<T> layer)
+        {
+            int count = layer.ParameterCount;
+            layer.SetParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        Set(_conv1); Set(_bn1); Set(_conv2); Set(_bn2);
+        if (_downsampleConv is not null && _downsampleBn is not null)
+        {
+            Set(_downsampleConv); Set(_downsampleBn);
+        }
+    }
+
     /// <summary>
     /// Resets the internal state of the block.
     /// </summary>

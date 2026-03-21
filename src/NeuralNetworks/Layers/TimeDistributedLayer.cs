@@ -127,6 +127,11 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     public override int ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _innerLayer.SetParameters(parameters);
+    }
+
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
 
