@@ -1702,6 +1702,36 @@ public class GRULayer<T> : LayerBase<T>
         CopyToTensor(_bh);
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_dWz == null || _dWr == null || _dWh == null ||
+            _dUz == null || _dUr == null || _dUh == null ||
+            _dbz == null || _dbr == null || _dbh == null)
+        {
+            return new Vector<T>(ParameterCount);
+        }
+
+        return Vector<T>.Concatenate(
+            new Vector<T>(_dWz.ToArray()),
+            new Vector<T>(_dWr.ToArray()),
+            new Vector<T>(_dWh.ToArray()),
+            new Vector<T>(_dUz.ToArray()),
+            new Vector<T>(_dUr.ToArray()),
+            new Vector<T>(_dUh.ToArray()),
+            new Vector<T>(_dbz.ToArray()),
+            new Vector<T>(_dbr.ToArray()),
+            new Vector<T>(_dbh.ToArray())
+        );
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _dWz = null; _dWr = null; _dWh = null;
+        _dUz = null; _dUr = null; _dUh = null;
+        _dbz = null; _dbr = null; _dbh = null;
+    }
+
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
