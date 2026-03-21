@@ -87,6 +87,9 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     public virtual int ParameterCount => NumFeatures;
 
     /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <summary>

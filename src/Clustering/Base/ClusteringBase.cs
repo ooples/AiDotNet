@@ -475,6 +475,9 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <inheritdoc/>
     public virtual int ParameterCount => ExpectedParameterCount;
 
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
     /// <summary>
     /// Whether this clustering model supports direct parameter-based initialization.
     /// Hierarchical and density-based models should override to return false.

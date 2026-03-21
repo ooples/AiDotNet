@@ -55,4 +55,21 @@ public interface IParameterizable<T, TInput, TOutput>
     /// Creates a new instance with the specified parameters.
     /// </summary>
     IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);
+
+    /// <summary>
+    /// Sanitizes random parameters to satisfy model-specific constraints.
+    /// Called by the optimizer after generating random parameter vectors.
+    /// </summary>
+    /// <param name="parameters">The randomly generated parameter vector.</param>
+    /// <returns>A parameter vector that satisfies model constraints (e.g., sorted thresholds for ordinal models).</returns>
+    /// <remarks>
+    /// The default implementation returns the parameters unchanged. Override this in models
+    /// that have structural constraints on their parameters (e.g., monotonically increasing
+    /// thresholds in ordinal regression, non-negative weights in NMF, etc.).
+    /// </remarks>
+#if NETFRAMEWORK
+    Vector<T> SanitizeParameters(Vector<T> parameters);
+#else
+    Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+#endif
 }

@@ -748,6 +748,9 @@ namespace AiDotNet.AutoML
     public virtual int ParameterCount => BestModel?.ParameterCount ?? 0;
 
     /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <summary>

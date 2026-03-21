@@ -2829,6 +2829,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <inheritdoc/>
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
+    /// <inheritdoc/>
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => Model?.SanitizeParameters(parameters) ?? parameters;
+
     /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>

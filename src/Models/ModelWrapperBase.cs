@@ -74,6 +74,9 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
 
     /// <inheritdoc/>
     public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);

@@ -348,6 +348,9 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         public bool SupportsParameterInitialization => _inner.SupportsParameterInitialization;
 
         /// <inheritdoc/>
+        public Vector<T> SanitizeParameters(Vector<T> parameters) => _inner.SanitizeParameters(parameters);
+
+        /// <inheritdoc/>
         public bool SupportsJitCompilation => _inner.SupportsJitCompilation;
 
         /// <inheritdoc/>

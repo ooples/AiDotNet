@@ -96,6 +96,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     public abstract int ParameterCount { get; }
 
     /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <inheritdoc />

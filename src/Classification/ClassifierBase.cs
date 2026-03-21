@@ -608,7 +608,10 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// Returns true if the classifier type supports parameter initialization,
     /// regardless of whether it has been trained yet (ParameterCount may be 0 before training).
     /// </remarks>
-    public virtual bool SupportsParameterInitialization => true;
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
     /// <inheritdoc/>
     public virtual ILossFunction<T> DefaultLossFunction => _defaultLossFunction;

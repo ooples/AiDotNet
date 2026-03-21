@@ -604,6 +604,39 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     }
 
     /// <summary>
+    /// Sanitizes random parameters to ensure ordinal constraints are satisfied.
+    /// Thresholds (parameters after coefficients) must be monotonically increasing.
+    /// </summary>
+    public override Vector<T> SanitizeParameters(Vector<T> parameters)
+    {
+        if (parameters.Length <= NumFeatures) return parameters;
+
+        var sanitized = new Vector<T>(parameters.Length);
+        // Copy coefficients as-is
+        for (int i = 0; i < NumFeatures; i++)
+            sanitized[i] = parameters[i];
+
+        // Sort thresholds to ensure monotonically increasing order
+        int numThresholds = parameters.Length - NumFeatures;
+        var thresholds = new double[numThresholds];
+        for (int i = 0; i < numThresholds; i++)
+            thresholds[i] = NumOps.ToDouble(parameters[NumFeatures + i]);
+        Array.Sort(thresholds);
+
+        // Ensure minimum gap between thresholds
+        for (int i = 1; i < numThresholds; i++)
+        {
+            if (thresholds[i] <= thresholds[i - 1])
+                thresholds[i] = thresholds[i - 1] + 0.1;
+        }
+
+        for (int i = 0; i < numThresholds; i++)
+            sanitized[NumFeatures + i] = NumOps.FromDouble(thresholds[i]);
+
+        return sanitized;
+    }
+
+    /// <summary>
     /// Creates a new instance of this model type.
     /// </summary>
     /// <returns>New instance with same hyperparameters.</returns>
