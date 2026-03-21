@@ -135,24 +135,43 @@ public class WorkspaceCodeGenerator
     {
         return op switch
         {
-            // Arithmetic — into pre-allocated output
+            // Arithmetic
             AddOp => EmitInto<T>(engine, "TensorAddInto", output, inputs[0], inputs[1]),
             SubtractOp => EmitAllocating<T>(engine, "TensorSubtract", output, inputs),
             ElementwiseMultiplyOp => EmitInto<T>(engine, "TensorMultiplyInto", output, inputs[0], inputs[1]),
+            DivideOp => EmitAllocating<T>(engine, "TensorDivide", output, inputs),
+            NegateOp => EmitAllocating<T>(engine, "TensorNegate", output, inputs),
 
-            // Convolution — into pre-allocated output
+            // Element-wise math
+            ExpOp => EmitAllocating<T>(engine, "TensorExp", output, inputs),
+            LogOp => EmitAllocating<T>(engine, "TensorLog", output, inputs),
+            SqrtOp => EmitAllocating<T>(engine, "TensorSqrt", output, inputs),
+            AbsOp => EmitAllocating<T>(engine, "TensorAbs", output, inputs),
+
+            // Convolution
             Conv2DOp conv => EmitConv2DInto<T>(engine, output, inputs[0], inputs[1], conv),
 
-            // Normalization — into pre-allocated output
+            // Normalization
             GroupNormOp gn => EmitGroupNormInto<T>(engine, output, inputs, gn),
+            BatchNormOp => EmitAllocating<T>(engine, "BatchNorm", output, inputs),
+            LayerNormOp => EmitAllocating<T>(engine, "LayerNorm", output, inputs),
 
-            // Activations — into pre-allocated output
+            // Activations
             ReLUOp => EmitActivationInto<T>(engine, "ReLUInto", output, inputs[0]),
             SigmoidOp => EmitActivationInto<T>(engine, "SigmoidInto", output, inputs[0]),
             SwishOp => EmitActivationInto<T>(engine, "SwishInto", output, inputs[0]),
             GELUOp => EmitActivationInto<T>(engine, "GELUInto", output, inputs[0]),
             TanhOp => EmitActivationInto<T>(engine, "TanhInto", output, inputs[0]),
             MishOp => EmitActivationInto<T>(engine, "MishInto", output, inputs[0]),
+            LeakyReLUOp => EmitActivationInto<T>(engine, "LeakyReLUInto", output, inputs[0]),
+
+            // Softmax (uses oneDNN when available via IEngine)
+            SoftmaxOp => EmitAllocating<T>(engine, "Softmax", output, inputs),
+            LogSoftmaxOp => EmitAllocating<T>(engine, "TensorLogSoftmax", output, inputs),
+
+            // Pooling
+            MaxPool2DOp => EmitAllocating<T>(engine, "MaxPool2D", output, inputs),
+            AvgPool2DOp => EmitAllocating<T>(engine, "AvgPool2D", output, inputs),
 
             // Fused operations
             FusedGroupNormActivationOp fgna => EmitGroupNormSwishInto<T>(engine, output, inputs, fgna),
@@ -164,14 +183,18 @@ public class WorkspaceCodeGenerator
             MatMulOp => EmitInto<T>(engine, "MatMulInto", output, inputs[0], inputs[1]),
             TransposeOp => EmitTransposeInto<T>(engine, output, inputs[0]),
 
-            // Shape operations — view only, no computation needed
+            // Reductions
+            SumOp => EmitAllocating<T>(engine, "TensorSum", output, inputs),
+            MeanOp => EmitAllocating<T>(engine, "TensorMean", output, inputs),
+
+            // Shape operations
             ReshapeOp reshape => EmitReshape<T>(output, inputs[0], reshape),
 
             // Concatenation
             ConcatOp concat => EmitConcatInto<T>(engine, output, inputs, concat),
 
-            // Constant — just copy
-            ConstantOp => null, // constants are pre-loaded into workspace
+            // Constant — pre-loaded into workspace
+            ConstantOp => null,
 
             // Default: fall back to allocating call + copy
             _ => EmitFallback<T>(engine, op, output, inputs)
