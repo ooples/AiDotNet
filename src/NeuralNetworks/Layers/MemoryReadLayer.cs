@@ -224,6 +224,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - How to combine everything into a useful output
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

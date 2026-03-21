@@ -251,6 +251,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - How to selectively update memory instead of overwriting everything
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _queryWeights.Length + _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

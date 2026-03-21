@@ -669,4 +669,10 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
                 "Use UpdateParameters() for CPU-based parameter updates.");
         }
     }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _innerLayer.ClearGradients();
+    }
 }

@@ -1895,4 +1895,13 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override bool SupportsJitCompilation =>
         _weights1 != null && _weights2 != null && _bias1 != null && _bias2 != null;
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weights1Gradient = null;
+        _bias1Gradient = null;
+        _weights2Gradient = null;
+        _bias2Gradient = null;
+    }
 }

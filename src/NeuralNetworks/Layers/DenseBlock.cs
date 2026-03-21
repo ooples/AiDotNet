@@ -61,6 +61,7 @@ public class DenseBlock<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount => _layers.Sum(l => l.ParameterCount);
     public override bool SupportsTraining => true;
 
     /// <summary>
