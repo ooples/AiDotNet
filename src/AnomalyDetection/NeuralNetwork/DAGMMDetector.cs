@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -707,10 +708,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = encB1[j];
-            for (int i = 0; i < _inputDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(x[i], encW1[i, j]));
-            }
+            { var wCol_0 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_0[ii] = encW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(x, wCol_0)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             encH[j] = NumOps.FromDouble(tanhVal);
         }
@@ -720,10 +718,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _latentDim; j++)
         {
             T sum = encB2[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(encH[i], encW2[i, j]));
-            }
+            { var wCol_1 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_1[ii] = encW2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(encH, wCol_1)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             z[j] = NumOps.FromDouble(tanhVal);
         }
@@ -733,10 +728,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = decB1[j];
-            for (int i = 0; i < _latentDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(z[i], decW1[i, j]));
-            }
+            { var wCol_2 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_2[ii] = decW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(z, wCol_2)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             decH[j] = NumOps.FromDouble(tanhVal);
         }
@@ -746,10 +738,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _inputDim; j++)
         {
             T sum = decB2[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(decH[i], decW2[i, j]));
-            }
+            { var wCol_3 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_3[ii] = decW2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(decH, wCol_3)); }
             xRecon[j] = sum;
         }
 
@@ -789,10 +778,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = estB1[j];
-            for (int i = 0; i < _zDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(zc[i], estW1[i, j]));
-            }
+            { var wCol_4 = new Vector<T>(_zDim); for (int ii = 0; ii < _zDim; ii++) wCol_4[ii] = estW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(zc, wCol_4)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             estH[j] = NumOps.FromDouble(tanhVal);
         }
@@ -803,10 +789,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _numMixtures; j++)
         {
             T sum = estB2[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(estH[i], estW2[i, j]));
-            }
+            { var wCol_5 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_5[ii] = estW2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(estH, wCol_5)); }
             logits[j] = NumOps.ToDouble(sum);
             if (logits[j] > maxLogit) maxLogit = logits[j];
         }
@@ -890,10 +873,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = encB1[j];
-            for (int i = 0; i < _inputDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(x[i], encW1[i, j]));
-            }
+            { var wCol_6 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_6[ii] = encW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(x, wCol_6)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             h[j] = NumOps.FromDouble(tanhVal);
         }
@@ -903,10 +883,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _latentDim; j++)
         {
             T sum = encB2[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(h[i], encW2[i, j]));
-            }
+            { var wCol_7 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_7[ii] = encW2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h, wCol_7)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             z[j] = NumOps.FromDouble(tanhVal);
         }
@@ -931,10 +908,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = decB1[j];
-            for (int i = 0; i < _latentDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(z[i], decW1[i, j]));
-            }
+            { var wCol_8 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_8[ii] = decW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(z, wCol_8)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             h[j] = NumOps.FromDouble(tanhVal);
         }
@@ -944,10 +918,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _inputDim; j++)
         {
             T sum = decB2[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(h[i], decW2[i, j]));
-            }
+            { var wCol_9 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_9[ii] = decW2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h, wCol_9)); }
             xRecon[j] = sum;
         }
 
@@ -971,10 +942,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = estB1[j];
-            for (int i = 0; i < _zDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(zc[i], estW1[i, j]));
-            }
+            { var wCol_10 = new Vector<T>(_zDim); for (int ii = 0; ii < _zDim; ii++) wCol_10[ii] = estW1[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(zc, wCol_10)); }
             double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
             h[j] = NumOps.FromDouble(tanhVal);
         }
@@ -985,10 +953,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _numMixtures; j++)
         {
             T sum = estB2[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(h[i], estW2[i, j]));
-            }
+            { var wCol_11 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_11[ii] = estW2[ii, j]; sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(h, wCol_11)); }
             logits[j] = NumOps.ToDouble(sum);
             if (logits[j] > maxLogit) maxLogit = logits[j];
         }
