@@ -598,10 +598,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 var gradients = _scaleNetworks[scale].GetGradients();
                 T magnitude = NumOps.Zero;
 
-                for (int i = 0; i < gradients.Length; i++)
-                {
-                    magnitude = NumOps.Add(magnitude, NumOps.Multiply(gradients[i], gradients[i]));
-                }
+                magnitude = NumOps.Add(magnitude, Engine.DotProduct(gradients, gradients));
 
                 gradientMagnitudes[scale] = NumOps.Sqrt(magnitude);
             }

@@ -253,10 +253,7 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
             throw new ArgumentException("Vectors must have the same length");
 
         T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(a[i], b[i]));
-        }
+        sum = NumOps.Add(sum, Engine.DotProduct(a, b));
         return sum;
     }
 

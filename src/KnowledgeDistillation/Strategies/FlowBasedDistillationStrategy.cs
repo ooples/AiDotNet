@@ -188,10 +188,7 @@ public class FlowBasedDistillationStrategy<T> : DistillationStrategyBase<T>
         T flow = NumOps.Zero;
         int n = Math.Min(layerI.Length, layerJ.Length);
 
-        for (int i = 0; i < n; i++)
-        {
-            flow = NumOps.Add(flow, NumOps.Multiply(layerI[i], layerJ[i]));
-        }
+        flow = NumOps.Add(flow, Engine.DotProduct(layerI, layerJ));
 
         return flow;
     }

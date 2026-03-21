@@ -899,10 +899,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         {
             // Calculate L2 norm of mean vector
             T meanNormSquared = NumOps.Zero;
-            for (int i = 0; i < _lastMean.Length; i++)
-            {
-                meanNormSquared = NumOps.Add(meanNormSquared, NumOps.Multiply(_lastMean[i], _lastMean[i]));
-            }
+            meanNormSquared = NumOps.Add(meanNormSquared, Engine.DotProduct(_lastMean, _lastMean));
             var meanNorm = NumOps.Sqrt(meanNormSquared);
             diagnostics["LatentMeanNorm"] = meanNorm?.ToString() ?? "0";
         }

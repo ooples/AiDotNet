@@ -250,10 +250,7 @@ public class LinearSupportVectorClassifier<T> : SVMBase<T>
         }
 
         T output = _bias;
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            output = NumOps.Add(output, NumOps.Multiply(_weights[i], x[i]));
-        }
+        output = NumOps.Add(output, Engine.DotProduct(_weights, x));
         return output;
     }
 

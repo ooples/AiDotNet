@@ -100,10 +100,7 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
 
         // Compute (a - b)^T × temp
         T result = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            result = NumOps.Add(result, NumOps.Multiply(diff[i], temp[i]));
-        }
+        result = NumOps.Add(result, Engine.DotProduct(diff, temp));
 
         return Sqrt(result);
     }

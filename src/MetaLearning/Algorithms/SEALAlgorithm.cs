@@ -458,10 +458,7 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             case SEALAdaptiveLearningRateMode.PerLayer:
                 // Compute average gradient norm across all parameters
                 T sumSquared = NumOps.Zero;
-                for (int i = 0; i < gradients.Length; i++)
-                {
-                    sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(gradients[i], gradients[i]));
-                }
+                sumSquared = NumOps.Add(sumSquared, Engine.DotProduct(gradients, gradients));
                 T avgSquared = NumOps.Divide(sumSquared, NumOps.FromDouble(gradients.Length));
                 T avgSqrt = NumOps.FromDouble(Math.Sqrt(Math.Max(NumOps.ToDouble(avgSquared), 1e-16)));
                 T sharedLr = NumOps.Divide(baseLr, NumOps.Add(avgSqrt, epsilon));
