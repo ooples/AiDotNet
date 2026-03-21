@@ -293,8 +293,8 @@ public class WorkspaceCodeGenerator
     private Expression EmitAddGroupNormInto<T>(ParameterExpression engine,
         ParameterExpression dest, Expression[] inputs, FusedAddGroupNormOp fagn)
     {
-        var method = typeof(IEngine).GetMethod("AddGroupNormInto")!.MakeGenericMethod(typeof(T));
-        return Expression.Call(engine, method, dest, inputs[0], inputs[1],
+        var agnMethod = typeof(IEngine).GetMethod("AddGroupNormInto")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(engine, agnMethod, dest, inputs[0], inputs[1],
             Expression.Constant(fagn.NumGroups), inputs[2], inputs[3],
             Expression.Constant(fagn.Epsilon));
     }
