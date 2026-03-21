@@ -86,11 +86,29 @@ public class IGCIAlgorithm<T> : FunctionalBase<T>
                 {
                     if (score < 0)
                     {
-                        W[i, j] = NumOps.FromDouble(-score); // i → j with weight |score|
+                        W[i, j] = NumOps.FromDouble(-score);
                     }
                     else
                     {
-                        W[j, i] = NumOps.FromDouble(score);  // j → i with weight |score|
+                        W[j, i] = NumOps.FromDouble(score);
+                    }
+                }
+                else
+                {
+                    // Fallback for linear relationships where IGCI score is zero:
+                    // use asymmetric covariance ratio (|cov/var_i| vs |cov/var_j|)
+                    var cov = ComputeCovarianceMatrix(data);
+                    double varI = NumOps.ToDouble(cov[i, i]);
+                    double varJ = NumOps.ToDouble(cov[j, j]);
+                    double covIJ = NumOps.ToDouble(cov[i, j]);
+                    if (varI > 1e-10 && varJ > 1e-10 && Math.Abs(covIJ) > 1e-10)
+                    {
+                        double wIJ = Math.Abs(covIJ / varI);
+                        double wJI = Math.Abs(covIJ / varJ);
+                        if (wIJ > wJI)
+                            W[i, j] = NumOps.FromDouble(wIJ);
+                        else
+                            W[j, i] = NumOps.FromDouble(wJI);
                     }
                 }
             }
