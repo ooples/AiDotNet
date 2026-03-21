@@ -82,7 +82,8 @@ public class BottleneckBlock<T> : LayerBase<T>
     /// </summary>
     public override int ParameterCount =>
         _conv1.ParameterCount + _bn1.ParameterCount + _conv2.ParameterCount + _bn2.ParameterCount +
-        _conv3.ParameterCount + _bn3.ParameterCount;
+        _conv3.ParameterCount + _bn3.ParameterCount +
+        (_downsampleConv?.ParameterCount ?? 0) + (_downsampleBn?.ParameterCount ?? 0);
     public override bool SupportsTraining => true;
 
     /// <summary>
