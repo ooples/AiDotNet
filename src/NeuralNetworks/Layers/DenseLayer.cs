@@ -1644,12 +1644,58 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
         }
 
+        // Modify weights and biases IN PLACE to preserve engine's persistent tensor references
         int index = 0;
-        _weights = new Tensor<T>(_weights.Shape, parameters.Slice(index, _weights.Length));
+        var wSpan = _weights.Data.Span;
+        for (int i = 0; i < _weights.Length; i++)
+            wSpan[i] = parameters[index + i];
         index += _weights.Length;
-        _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
 
-        // Notify engine that weights/biases have changed (for GPU cache invalidation)
+        var bSpan = _biases.Data.Span;
+        for (int i = 0; i < _biases.Length; i++)
+            bSpan[i] = parameters[index + i];
+
+        // Notify engine that data changed (for GPU re-upload)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    public override void Serialize(BinaryWriter writer)
+    {
+        EnsureInitialized();
+        // Write weights
+        writer.Write(_weights.Length);
+        var wSpan = _weights.Data.Span;
+        for (int i = 0; i < _weights.Length; i++)
+            writer.Write(Convert.ToDouble(wSpan[i]));
+        // Write biases
+        writer.Write(_biases.Length);
+        var bSpan = _biases.Data.Span;
+        for (int i = 0; i < _biases.Length; i++)
+            writer.Write(Convert.ToDouble(bSpan[i]));
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        EnsureInitialized();
+        // Read weights IN PLACE to preserve engine's persistent tensor reference
+        int wLen = reader.ReadInt32();
+        var wSpan = _weights.Data.Span;
+        for (int i = 0; i < Math.Min(wLen, _weights.Length); i++)
+            wSpan[i] = NumOps.FromDouble(reader.ReadDouble());
+        // Skip any extra values if serialized layer was bigger
+        for (int i = _weights.Length; i < wLen; i++)
+            reader.ReadDouble();
+
+        // Read biases IN PLACE
+        int bLen = reader.ReadInt32();
+        var bSpan = _biases.Data.Span;
+        for (int i = 0; i < Math.Min(bLen, _biases.Length); i++)
+            bSpan[i] = NumOps.FromDouble(reader.ReadDouble());
+        for (int i = _biases.Length; i < bLen; i++)
+            reader.ReadDouble();
+
+        // Notify engine that data changed (for GPU re-upload)
         Engine.InvalidatePersistentTensor(_weights);
         Engine.InvalidatePersistentTensor(_biases);
     }
