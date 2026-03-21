@@ -421,10 +421,7 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
 
         // Output layer (linear)
         T score = b3[0];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            score = NumOps.Add(score, NumOps.Multiply(h2[i], w3[i, 0]));
-        }
+        { var _e0 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e0[_i] = w3[_i, 0]; score = NumOps.Add(score, AiDotNetEngine.Current.DotProduct(h2, _e0)); }
 
         return score;
     }
@@ -466,10 +463,7 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
 
         // Output layer
         T score = b3[0];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            score = NumOps.Add(score, NumOps.Multiply(h2[i], w3[i, 0]));
-        }
+        { var _e1 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e1[_i] = w3[_i, 0]; score = NumOps.Add(score, AiDotNetEngine.Current.DotProduct(h2, _e1)); }
 
         return (h1, h2, score);
     }

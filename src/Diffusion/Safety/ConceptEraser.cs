@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -113,10 +114,7 @@ public class ConceptEraser<T>
     {
         var sum = NumOps.Zero;
         var len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(a[i], b[i]));
-        }
+        sum = NumOps.Add(sum, AiDotNetEngine.Current.DotProduct(a, b));
         return sum;
     }
 

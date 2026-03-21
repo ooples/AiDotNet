@@ -396,10 +396,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
 
         // Output layer (sigmoid for probability)
         T outputSum = discB3[0];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            outputSum = NumOps.Add(outputSum, NumOps.Multiply(h2[i], discW3[i, 0]));
-        }
+        { var _e0 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e0[_i] = discW3[_i, 0]; outputSum = NumOps.Add(outputSum, AiDotNetEngine.Current.DotProduct(h2, _e0)); }
         double sigVal = Sigmoid(NumOps.ToDouble(outputSum));
         T output = NumOps.FromDouble(sigVal);
 
@@ -462,10 +459,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
 
         // Output layer
         T outSum = discB3[0];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            outSum = NumOps.Add(outSum, NumOps.Multiply(h2[i], discW3[i, 0]));
-        }
+        { var _e1 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e1[_i] = discW3[_i, 0]; outSum = NumOps.Add(outSum, AiDotNetEngine.Current.DotProduct(h2, _e1)); }
         double sigVal = Sigmoid(NumOps.ToDouble(outSum));
         T output = NumOps.FromDouble(sigVal);
 

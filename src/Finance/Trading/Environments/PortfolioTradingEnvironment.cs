@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using System;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
@@ -77,10 +78,7 @@ public sealed class PortfolioTradingEnvironment<T> : TradingEnvironment<T>
         var targetWeights = NormalizeWeights(action);
 
         T portfolioValue = NumOps.Zero;
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            portfolioValue = NumOps.Add(portfolioValue, NumOps.Multiply(_positions[asset], prices[asset]));
-        }
+        portfolioValue = NumOps.Add(portfolioValue, AiDotNetEngine.Current.DotProduct(_positions, prices));
         portfolioValue = NumOps.Add(portfolioValue, _cash);
 
         var desiredPositions = new T[NumAssets];

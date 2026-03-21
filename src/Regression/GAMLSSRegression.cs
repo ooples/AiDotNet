@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Distributions;
 using AiDotNet.Enums;
@@ -540,10 +541,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         if (coefficients != null)
         {
-            for (int j = 0; j < _numFeatures; j++)
-            {
-                val = NumOps.Add(val, NumOps.Multiply(coefficients[j], sample[j]));
-            }
+            val = NumOps.Add(val, AiDotNetEngine.Current.DotProduct(coefficients, sample));
         }
 
         if (useExpLink)
