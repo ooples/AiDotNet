@@ -390,14 +390,7 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
     private T ComputeOutputNorm(TOutput output)
     {
         var vector = ConvertToVector(output);
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(vector[i], vector[i]));
-        }
-
-        return NumOps.Sqrt(sum);
+        return NumOps.Sqrt(Engine.DotProduct(vector, vector));
     }
 
     /// <summary>
@@ -469,12 +462,7 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
     private T ComputeGradientNorm(Vector<T> gradients)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(gradients[i], gradients[i]));
-        }
-        return NumOps.Sqrt(sum);
+        return NumOps.Sqrt(Engine.DotProduct(gradients, gradients));
     }
 
     private Vector<T>? ComputeReplayGradients(
