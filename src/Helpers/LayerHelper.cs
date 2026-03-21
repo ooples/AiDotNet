@@ -3097,8 +3097,6 @@ public static class LayerHelper<T>
             yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
         }
 
-        // Add the final Activation Layer (typically Softmax for classification tasks)
-        yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>

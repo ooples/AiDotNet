@@ -71,6 +71,7 @@ internal class SimpleMetaModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     public int ParameterCount => _parameters.Length;
+    public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {

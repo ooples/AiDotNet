@@ -515,7 +515,11 @@ public static class DeserializationHelper
         {
             int inputSize = inputShape[0];
             int reservoirSize = outputShape[0];
-            instance = new ReservoirLayer<T>(inputSize, reservoirSize);
+            double connProb = TryGetDouble(additionalParams, "ConnectionProbability") ?? 0.1;
+            double specRadius = TryGetDouble(additionalParams, "SpectralRadius") ?? 0.9;
+            double inpScaling = TryGetDouble(additionalParams, "InputScaling") ?? 1.0;
+            double leakRate = TryGetDouble(additionalParams, "LeakingRate") ?? 1.0;
+            instance = new ReservoirLayer<T>(inputSize, reservoirSize, connProb, specRadius, inpScaling, leakRate);
         }
         else if (genericDef == typeof(RBFLayer<>))
         {
@@ -590,7 +594,7 @@ public static class DeserializationHelper
         {
             int inputSize = inputShape[0];
             int outputSize = outputShape[0];
-            int numQubits = TryGetInt(additionalParams, "NumQubits") ?? Math.Max(4, (int)Math.Log2(Math.Max(inputSize, outputSize)));
+            int numQubits = TryGetInt(additionalParams, "NumQubits") ?? Math.Max(4, (int)(Math.Log(Math.Max(inputSize, outputSize)) / Math.Log(2)));
             instance = new QuantumLayer<T>(inputSize, outputSize, numQubits);
         }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))

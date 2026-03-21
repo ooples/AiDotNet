@@ -277,19 +277,47 @@ public class ReservoirLayer<T> : LayerBase<T>
             ? input.Reshape([1, _inputSize])
             : input.Reshape([flatBatch, _inputSize]);
 
-        var outputs = TensorAllocator.Rent<T>([flatBatch, _reservoirSize]);
+        var outputs = new Tensor<T>([flatBatch, _reservoirSize]);
         T inputScale = NumOps.FromDouble(_inputScaling);
 
         for (int i = 0; i < flatBatch; i++)
         {
-            var stepInput = input2D.GetSlice(i);
-            var scaledInput = Engine.TensorMultiplyScalar(stepInput, inputScale);
+            // Extract step input manually to avoid GetSlice issues
+            var stepInput = new Tensor<T>([_inputSize]);
+            for (int j = 0; j < _inputSize; j++)
+            {
+                stepInput[j] = input2D[i, j];
+            }
 
-            var inputColumn = scaledInput.Reshape([_inputSize, 1]);
-            var inputContribution = Engine.TensorMatMul(_inputWeights, inputColumn).Reshape([_reservoirSize]);
+            // Scale input
+            for (int j = 0; j < _inputSize; j++)
+            {
+                stepInput[j] = NumOps.Multiply(stepInput[j], inputScale);
+            }
 
-            var stateColumn = _reservoirState.Reshape([_reservoirSize, 1]);
-            var weightedState = Engine.TensorMatMul(_reservoirWeights, stateColumn).Reshape([_reservoirSize]);
+            // Manual matmul for input contribution
+            var inputContribution = new Tensor<T>([_reservoirSize]);
+            for (int r = 0; r < _reservoirSize; r++)
+            {
+                T sum = NumOps.Zero;
+                for (int c = 0; c < _inputSize; c++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_inputWeights[r, c], stepInput[c]));
+                }
+                inputContribution[r] = sum;
+            }
+
+            // Manual matmul for weighted state
+            var weightedState = new Tensor<T>([_reservoirSize]);
+            for (int r = 0; r < _reservoirSize; r++)
+            {
+                T sum = NumOps.Zero;
+                for (int c = 0; c < _reservoirSize; c++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_reservoirWeights[r, c], _reservoirState[c]));
+                }
+                weightedState[r] = sum;
+            }
 
             var reservoirInput = Engine.TensorAdd(weightedState, inputContribution);
 
@@ -298,7 +326,10 @@ public class ReservoirLayer<T> : LayerBase<T>
             var newComponent = Engine.TensorMultiplyScalar(newState, NumOps.FromDouble(_leakingRate));
             _reservoirState = Engine.TensorAdd(oldComponent, newComponent);
 
-            outputs.SetSlice(0, i, _reservoirState);
+            // Copy state to outputs row by row using Span
+            var stateSpan = _reservoirState.Data.Span;
+            var outputSpan = outputs.Data.Span;
+            stateSpan.CopyTo(outputSpan.Slice(i * _reservoirSize, _reservoirSize));
         }
 
         if (rank == 1)
@@ -619,8 +650,8 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// <remarks>
     /// Although these parameters are fixed during training, the reservoir still has them.
     /// </remarks>
-    // Only reservoir weights are exposed via GetParameters (input weights are fixed)
-    public override int ParameterCount => _reservoirWeights.Length;
+    // Both reservoir weights and input weights are serialized for Clone fidelity
+    public override int ParameterCount => _reservoirWeights.Length + _inputWeights.Length;
 
     public override void UpdateParameters(T learningRate)
     {
@@ -720,18 +751,41 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return new Vector<T>(_reservoirWeights.ToArray());
+        // Serialize reservoir weights followed by input weights
+        var result = new Vector<T>(_reservoirWeights.Length + _inputWeights.Length);
+        int idx = 0;
+        for (int i = 0; i < _reservoirSize; i++)
+            for (int j = 0; j < _reservoirSize; j++)
+                result[idx++] = _reservoirWeights[i, j];
+        for (int i = 0; i < _reservoirSize; i++)
+            for (int j = 0; j < _inputSize; j++)
+                result[idx++] = _inputWeights[i, j];
+        return result;
     }
 
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _reservoirWeights.Length)
-            throw new ArgumentException($"Expected {_reservoirWeights.Length} parameters, got {parameters.Length}");
+        int expectedCount = _reservoirWeights.Length + _inputWeights.Length;
+        if (parameters.Length != expectedCount)
+            throw new ArgumentException($"Expected {expectedCount} parameters, got {parameters.Length}");
 
         int idx = 0;
         for (int i = 0; i < _reservoirSize; i++)
             for (int j = 0; j < _reservoirSize; j++)
                 _reservoirWeights[i, j] = parameters[idx++];
+        for (int i = 0; i < _reservoirSize; i++)
+            for (int j = 0; j < _inputSize; j++)
+                _inputWeights[i, j] = parameters[idx++];
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var meta = base.GetMetadata();
+        meta["ConnectionProbability"] = _connectionProbability.ToString("R");
+        meta["SpectralRadius"] = _spectralRadius.ToString("R");
+        meta["InputScaling"] = _inputScaling.ToString("R");
+        meta["LeakingRate"] = _leakingRate.ToString("R");
+        return meta;
     }
 
     /// <summary>
