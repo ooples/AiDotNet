@@ -561,6 +561,12 @@ public static class DeserializationHelper
             int hiddenUnits = outputShape[0];
             instance = new RBMLayer<T>(visibleUnits, hiddenUnits, (IActivationFunction<T>?)null);
         }
+        else if (genericDef == typeof(SpikingLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            instance = new SpikingLayer<T>(inputSize, outputSize);
+        }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {
             // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
