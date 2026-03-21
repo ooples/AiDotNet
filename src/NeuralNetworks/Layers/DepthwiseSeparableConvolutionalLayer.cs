@@ -413,6 +413,21 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     public override int ParameterCount => _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(new Vector<T>(_depthwiseKernelsGradient.ToArray()), new Vector<T>(_pointwiseKernelsGradient.ToArray())),
+            new Vector<T>(_biasesGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _depthwiseKernelsGradient = null; _pointwiseKernelsGradient = null; _biasesGradient = null;
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>

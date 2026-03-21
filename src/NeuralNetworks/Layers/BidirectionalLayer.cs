@@ -72,6 +72,17 @@ public class BidirectionalLayer<T> : LayerBase<T>
     public override int ParameterCount => _forwardLayer.ParameterCount + _backwardLayer.ParameterCount;
     public override bool SupportsTraining => _forwardLayer.SupportsTraining || _backwardLayer.SupportsTraining;
 
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(_forwardLayer.GetParameterGradients(), _backwardLayer.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _forwardLayer.ClearGradients(); _backwardLayer.ClearGradients();
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU-accelerated forward pass.
     /// </summary>

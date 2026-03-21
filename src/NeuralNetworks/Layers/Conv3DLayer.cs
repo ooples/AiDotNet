@@ -101,6 +101,14 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// <value>Always <c>true</c> for Conv3DLayer as it has learnable parameters.</value>
     public override bool SupportsTraining => true;
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(new Vector<T>(_kernelsGradient.ToArray()), new Vector<T>(_biasesGradient.ToArray()));
+    }
+
+    public override void ClearGradients() { base.ClearGradients(); _kernelsGradient = null; _biasesGradient = null; }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports JIT compilation for accelerated execution.
     /// </summary>

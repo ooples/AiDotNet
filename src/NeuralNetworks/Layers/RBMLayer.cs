@@ -1044,6 +1044,22 @@ public class RBMLayer<T> : LayerBase<T>
     /// - Processing unrelated sequences of data
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightsGradient == null || _visibleBiasesGradient == null || _hiddenBiasesGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weightsGradient.ToArray()),
+            new Vector<T>(_visibleBiasesGradient.ToArray()),
+            new Vector<T>(_hiddenBiasesGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null; _visibleBiasesGradient = null; _hiddenBiasesGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values used during contrastive divergence training

@@ -34,6 +34,19 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     public override int ParameterCount => _bn1.ParameterCount + _conv1x1.ParameterCount + _bn2.ParameterCount + _conv3x3.ParameterCount;
     public override bool SupportsTraining => true;
 
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(_bn1.GetParameterGradients(), _conv1x1.GetParameterGradients()),
+            Vector<T>.Concatenate(_bn2.GetParameterGradients(), _conv3x3.GetParameterGradients()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _bn1.ClearGradients(); _conv1x1.ClearGradients(); _bn2.ClearGradients(); _conv3x3.ClearGradients();
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
