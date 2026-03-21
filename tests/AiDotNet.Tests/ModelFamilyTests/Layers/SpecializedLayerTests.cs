@@ -9,6 +9,8 @@ public class QuantumLayerTests : LayerTestBase
     protected override ILayer<double> CreateLayer()
         => new QuantumLayer<double>(inputSize: 4, outputSize: 4, numQubits: 4);
     protected override int[] InputShape => [4];
+    // Quantum rotation gates can map different classical inputs to same quantum state
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }
 
 public class MeasurementLayerTests : LayerTestBase

@@ -18,4 +18,6 @@ public class BottleneckBlockTests : LayerTestBase
     protected override ILayer<double> CreateLayer()
         => new BottleneckBlock<double>(inChannels: 4, baseChannels: 4, stride: 1, inputHeight: 8, inputWidth: 8);
     protected override int[] InputShape => [1, 4, 8, 8];
+    // BatchNorm normalizes constant inputs to zero — identical outputs expected
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }

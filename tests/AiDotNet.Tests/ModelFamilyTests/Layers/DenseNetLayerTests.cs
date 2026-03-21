@@ -9,6 +9,8 @@ public class DenseBlockLayerTests : LayerTestBase
     protected override ILayer<double> CreateLayer()
         => new DenseBlockLayer<double>(inputChannels: 4, growthRate: 4, height: 4, width: 4);
     protected override int[] InputShape => [1, 4, 4, 4];
+    // Contains BatchNorm which normalizes constant inputs identically
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }
 
 public class DenseBlockTests : LayerTestBase
@@ -24,6 +26,8 @@ public class TransitionLayerTests : LayerTestBase
     protected override ILayer<double> CreateLayer()
         => new TransitionLayer<double>(inputChannels: 4, inputHeight: 4, inputWidth: 4);
     protected override int[] InputShape => [1, 4, 4, 4];
+    // Contains BatchNorm which normalizes constant inputs identically
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }
 
 public class InvertedResidualBlockTests : LayerTestBase
