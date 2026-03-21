@@ -485,13 +485,14 @@ public class SpectralClustering<T> : ClusteringBase<T>
     private T[] MultiplyMatrixVector(T[,] matrix, T[] vector, int n)
     {
         var result = new T[n];
+        // Engine-accelerated matrix-vector multiply
+        var vecV = new Vector<T>(n);
+        for (int j = 0; j < n; j++) vecV[j] = vector[j];
         for (int i = 0; i < n; i++)
         {
-            result[i] = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                result[i] = NumOps.Add(result[i], NumOps.Multiply(matrix[i, j], vector[j]));
-            }
+            var row = new Vector<T>(n);
+            for (int j = 0; j < n; j++) row[j] = matrix[i, j];
+            result[i] = Engine.DotProduct(row, vecV);
         }
         return result;
     }

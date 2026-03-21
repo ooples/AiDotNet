@@ -654,12 +654,11 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         {
             for (int j = 0; j < d; j++)
             {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_responsibilities![i, c], data[i, j]));
-                }
-                _means![c, j] = NumOps.Divide(sum, nk[c]);
+                // Engine.DotProduct for responsibility-weighted mean
+                var respCol = new Vector<T>(n);
+                var dataCol = new Vector<T>(n);
+                for (int i = 0; i < n; i++) { respCol[i] = _responsibilities![i, c]; dataCol[i] = data[i, j]; }
+                _means![c, j] = NumOps.Divide(Engine.DotProduct(respCol, dataCol), nk[c]);
             }
         }
 
@@ -758,12 +757,16 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         {
             for (int p = 0; p < d; p++)
             {
-                T sum = NumOps.Zero;
+                // Engine-accelerated weighted variance: sum = resp · diff²
+                var respVec = new Vector<T>(n);
+                var diffSq = new Vector<T>(n);
                 for (int i = 0; i < n; i++)
                 {
                     T diff = NumOps.Subtract(data[i, p], _means![c, p]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(_responsibilities![i, c], diff), diff));
+                    respVec[i] = _responsibilities![i, c];
+                    diffSq[i] = NumOps.Multiply(diff, diff);
                 }
+                T sum = Engine.DotProduct(respVec, diffSq);
                 _covariances![c, p, p] = NumOps.Add(NumOps.Divide(sum, nk[c]), reg);
 
                 // Zero out off-diagonal elements
