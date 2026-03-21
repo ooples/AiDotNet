@@ -135,7 +135,18 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         double rssUnrestricted = ComputeOLSResidualVariance(fullPast, yFuture, effectiveN, fullDim);
 
         // TE = 0.5 * log(var_restricted / var_unrestricted)
-        if (rssUnrestricted < 1e-15 || rssRestricted < 1e-15) return 0;
+        if (rssUnrestricted < 1e-15)
+        {
+            // Both models fit perfectly — the source perfectly predicts the target.
+            // Return a large TE value if restricted variance is non-trivial,
+            // or use correlation-based fallback for deterministic data.
+            if (rssRestricted > 1e-15)
+                return 0.5 * Math.Log(rssRestricted / 1e-15); // Very high TE
+            // Both near zero — use Pearson correlation as fallback
+            return ComputeCorrelationFallback(data, source, target, n);
+        }
+
+        if (rssRestricted < 1e-15) return 0;
 
         double te = 0.5 * Math.Log(rssRestricted / rssUnrestricted);
         return Math.Max(te, 0);
@@ -201,5 +212,37 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         }
 
         return NumOps.ToDouble(Engine.DotProduct(residuals, residuals)) / n;
+    }
+
+    /// <summary>
+    /// Fallback for deterministic data where OLS residuals are near-zero.
+    /// Uses lagged Pearson correlation as a proxy for transfer entropy.
+    /// </summary>
+    private double ComputeCorrelationFallback(Matrix<T> data, int source, int target, int n)
+    {
+        int effectiveN = n - 1;
+        if (effectiveN < 3) return 0;
+
+        double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+        for (int t = 1; t < n; t++)
+        {
+            double x = NumOps.ToDouble(data[t - 1, source]);
+            double y = NumOps.ToDouble(data[t, target]);
+            sumX += x; sumY += y;
+            sumXY += x * y;
+            sumX2 += x * x;
+            sumY2 += y * y;
+        }
+
+        double meanX = sumX / effectiveN;
+        double meanY = sumY / effectiveN;
+        double covXY = sumXY / effectiveN - meanX * meanY;
+        double varX = sumX2 / effectiveN - meanX * meanX;
+        double varY = sumY2 / effectiveN - meanY * meanY;
+
+        if (varX < 1e-15 || varY < 1e-15) return 0;
+
+        double r = Math.Abs(covXY / Math.Sqrt(varX * varY));
+        return r > _threshold ? -0.5 * Math.Log(1 - r * r + 1e-15) : 0;
     }
 }
