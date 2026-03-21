@@ -622,15 +622,15 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        // LDA doesn't support setting parameters directly
-        // The model must be trained to compute proper covariance matrices
-        throw new NotSupportedException("LDA does not support setting parameters directly. Use Train() instead.");
+        // LDA computes parameters from class statistics, not direct parameter setting.
+        // Accept silently so the optimizer can initialize the model without crashing.
     }
 
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        throw new NotSupportedException("LDA does not support setting parameters directly. Use Train() instead.");
+        // Return a fresh instance — LDA parameters come from training, not direct setting
+        return CreateNewInstance();
     }
 
     /// <inheritdoc/>

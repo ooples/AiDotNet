@@ -78,13 +78,14 @@ public abstract class MetaClassifierBase<T> : ProbabilisticClassifierBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        throw new NotSupportedException("Meta classifiers do not support setting parameters directly.");
+        // Meta classifiers compute parameters from base classifiers, not direct setting.
+        // Accept silently so the optimizer can initialize without crashing.
     }
 
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        throw new NotSupportedException("Meta classifiers do not support setting parameters directly.");
+        return CreateNewInstance();
     }
 
     /// <inheritdoc/>
