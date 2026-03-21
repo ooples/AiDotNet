@@ -776,7 +776,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape);
         for (int i = 0; i < input.Length; i++)
         {
             output.Data.Span[i] = _activation.Activate(input.Data.Span[i]);
@@ -789,7 +789,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     private Tensor<T> BackwardActivation(Tensor<T> activationOutput, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(gradient.Shape);
+        var output = TensorAllocator.Rent<T>(gradient.Shape);
         for (int i = 0; i < gradient.Length; i++)
         {
             output.Data.Span[i] = NumOps.Multiply(

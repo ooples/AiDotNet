@@ -336,7 +336,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         }
 
         // Step 2: Aggregate neighbor features using edge-specific weights
-        var output = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+        var output = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
         output.Fill(NumOps.Zero);
 
         for (int b = 0; b < batchSize; b++)
@@ -795,7 +795,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     /// </summary>
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape);
         for (int i = 0; i < input.Length; i++)
         {
             T val = input.GetFlat(i);

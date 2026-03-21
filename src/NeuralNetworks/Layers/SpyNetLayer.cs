@@ -439,7 +439,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             return gradient;
 
         var outShape = hasBatch ? new[] { batch, channels, targetH, targetW } : new[] { channels, targetH, targetW };
-        var output = new Tensor<T>(outShape);
+        var output = TensorAllocator.Rent<T>(outShape);
 
         double scaleH = (double)srcH / targetH;
         double scaleW = (double)srcW / targetW;
@@ -508,7 +508,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int newW = width / 2;
 
         var outShape = hasBatch ? new[] { batch, 2, newH, newW } : new[] { 2, newH, newW };
-        var output = new Tensor<T>(outShape);
+        var output = TensorAllocator.Rent<T>(outShape);
 
         // Average pooling 2x2 for gradient downsampling
         for (int b = 0; b < batch; b++)
@@ -555,7 +555,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var outShape = hasBatch
             ? new[] { batch, 2 * channels, height, width }
             : new[] { 2 * channels, height, width };
-        var output = new Tensor<T>(outShape);
+        var output = TensorAllocator.Rent<T>(outShape);
 
         int pixelsPerChannel = height * width;
 
@@ -652,7 +652,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int newW = width / 2;
 
         var outShape = hasBatch ? new[] { batch, channels, newH, newW } : new[] { channels, newH, newW };
-        var output = new Tensor<T>(outShape);
+        var output = TensorAllocator.Rent<T>(outShape);
 
         // Simple average pooling 2x2
         for (int b = 0; b < batch; b++)
@@ -695,7 +695,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int width = hasBatch ? flow.Shape[3] : flow.Shape[2];
 
         var outShape = hasBatch ? new[] { batch, 2, targetH, targetW } : new[] { 2, targetH, targetW };
-        var output = new Tensor<T>(outShape);
+        var output = TensorAllocator.Rent<T>(outShape);
 
         // Bilinear upsampling with scale factor for flow values
         double scaleH = (double)targetH / height;
@@ -847,7 +847,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int height = hasBatch ? image.Shape[2] : image.Shape[1];
         int width = hasBatch ? image.Shape[3] : image.Shape[2];
 
-        var output = new Tensor<T>(image.Shape);
+        var output = TensorAllocator.Rent<T>(image.Shape);
 
         for (int b = 0; b < batch; b++)
         {
@@ -937,7 +937,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var outShape = hasBatch
             ? new[] { batch, outChannels, height, width }
             : new[] { outChannels, height, width };
-        var output = new Tensor<T>(outShape);
+        var output = TensorAllocator.Rent<T>(outShape);
 
         int pixelsPerChannel = height * width;
 
@@ -994,7 +994,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int height = hasBatch ? flow.Shape[2] : flow.Shape[1];
         int width = hasBatch ? flow.Shape[3] : flow.Shape[2];
 
-        var output = new Tensor<T>(flow.Shape);
+        var output = TensorAllocator.Rent<T>(flow.Shape);
         int pixelsPerChannel = height * width;
 
         for (int b = 0; b < batch; b++)

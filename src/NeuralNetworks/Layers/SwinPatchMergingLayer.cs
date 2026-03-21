@@ -132,7 +132,7 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         var normalized = _norm.Forward(merged);
 
         // Apply linear reduction: [batch, newSeqLen, 4*dim] -> [batch, newSeqLen, 2*dim]
-        var output = new Tensor<T>([batch, newSeqLen, _outputDim]);
+        var output = TensorAllocator.Rent<T>([batch, newSeqLen, _outputDim]);
 
         for (int b = 0; b < batch; b++)
         {

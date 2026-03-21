@@ -470,7 +470,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         }
 
         // Compute attention per window
-        var output = new Tensor<T>([numWindows, windowArea, c]);
+        var output = TensorAllocator.Rent<T>([numWindows, windowArea, c]);
 
         for (int win = 0; win < numWindows; win++)
         {

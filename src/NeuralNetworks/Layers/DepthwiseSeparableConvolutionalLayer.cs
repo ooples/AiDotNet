@@ -998,7 +998,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int outputHeight = CalculateOutputDimension(inputHeight, _kernelSize, _stride, _padding);
         int outputWidth = CalculateOutputDimension(inputWidth, _kernelSize, _stride, _padding);
 
-        var output = new Tensor<T>([batchSize, outputHeight, outputWidth, _inputDepth]);
+        var output = TensorAllocator.Rent<T>([batchSize, outputHeight, outputWidth, _inputDepth]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1064,7 +1064,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int height = input.Shape[1];
         int width = input.Shape[2];
 
-        var output = new Tensor<T>([batchSize, height, width, _outputDepth]);
+        var output = TensorAllocator.Rent<T>([batchSize, height, width, _outputDepth]);
 
         for (int b = 0; b < batchSize; b++)
         {

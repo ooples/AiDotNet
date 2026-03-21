@@ -436,7 +436,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
 
         var innerOutputShape = _innerLayer.GetOutputShape();
         var outputShape = new[] { batchSize, timeSteps }.Concat(innerOutputShape).ToArray();
-        var output = new Tensor<T>(outputShape);
+        var output = TensorAllocator.Rent<T>(outputShape);
 
         for (int t = 0; t < timeSteps; t++)
         {
