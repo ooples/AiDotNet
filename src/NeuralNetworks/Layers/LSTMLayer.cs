@@ -2648,6 +2648,35 @@ public class LSTMLayer<T> : LayerBase<T>
         );
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (Gradients == null || Gradients.Count == 0)
+            return new Vector<T>(ParameterCount);
+
+        Tensor<T> Get(string key) => Gradients.TryGetValue(key, out var t) ? t : new Tensor<T>([0]);
+
+        return Vector<T>.Concatenate(
+            new Vector<T>(Get("weightsFi").ToArray()),
+            new Vector<T>(Get("weightsIi").ToArray()),
+            new Vector<T>(Get("weightsCi").ToArray()),
+            new Vector<T>(Get("weightsOi").ToArray()),
+            new Vector<T>(Get("weightsFh").ToArray()),
+            new Vector<T>(Get("weightsIh").ToArray()),
+            new Vector<T>(Get("weightsCh").ToArray()),
+            new Vector<T>(Get("weightsOh").ToArray()),
+            new Vector<T>(Get("biasF").ToArray()),
+            new Vector<T>(Get("biasI").ToArray()),
+            new Vector<T>(Get("biasC").ToArray()),
+            new Vector<T>(Get("biasO").ToArray())
+        );
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        Gradients?.Clear();
+    }
+
     /// <summary>
     /// Sets the trainable parameters of the LSTM layer from a single vector.
     /// </summary>
