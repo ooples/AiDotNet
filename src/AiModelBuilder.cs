@@ -36,6 +36,7 @@ global using AiDotNet.Tokenization.HuggingFace;
 global using AiDotNet.Tokenization.Interfaces;
 global using AiDotNet.Tools;
 global using AiDotNet.UncertaintyQuantification.Layers;
+using QuantizationMode = AiDotNet.Enums.QuantizationMode;
 using AiDotNet.Augmentation;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;

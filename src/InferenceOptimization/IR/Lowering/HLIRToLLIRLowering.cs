@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using MemoryLayout = AiDotNet.InferenceOptimization.IR.Common.MemoryLayout;
 using AiDotNet.InferenceOptimization.IR.Common;
 using AiDotNet.InferenceOptimization.IR.HighLevel;
 using AiDotNet.InferenceOptimization.IR.LowLevel;

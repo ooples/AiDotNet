@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using QuantizationMode = AiDotNet.Enums.QuantizationMode;
 using AiDotNet.Deployment.Export;
 
 namespace AiDotNet.Deployment.Mobile.CoreML;

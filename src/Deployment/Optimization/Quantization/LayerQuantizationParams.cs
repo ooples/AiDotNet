@@ -1,4 +1,5 @@
 using AiDotNet.Deployment.Export;
+using QuantizationMode = AiDotNet.Enums.QuantizationMode;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
 
