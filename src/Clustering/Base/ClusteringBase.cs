@@ -529,6 +529,31 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
             if (NumFeatures == 0) NumFeatures = parameters.Length;
         }
 
+        // If parameter count doesn't match, re-derive NumFeatures from the parameters.
+        // This handles cloned models where NumFeatures wasn't preserved, and cases where
+        // NumClusters changed after construction.
+        if (parameters.Length != ExpectedParameterCount && parameters.Length > 0 && NumClusters > 0)
+        {
+            if (parameters.Length % NumClusters == 0)
+            {
+                NumFeatures = parameters.Length / NumClusters;
+            }
+            else
+            {
+                // Parameters don't divide evenly into NumClusters — try adjusting NumClusters
+                // This can happen when the optimizer uses different cluster count than the model
+                for (int k = NumClusters; k >= 1; k--)
+                {
+                    if (parameters.Length % k == 0)
+                    {
+                        NumClusters = k;
+                        NumFeatures = parameters.Length / k;
+                        break;
+                    }
+                }
+            }
+        }
+
         if (parameters.Length != ExpectedParameterCount)
         {
             throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, got {parameters.Length}.");
