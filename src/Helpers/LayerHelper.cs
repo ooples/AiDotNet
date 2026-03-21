@@ -2770,8 +2770,10 @@ public static class LayerHelper<T>
         // Input layer
         yield return new InputLayer<T>(inputSize);
 
-        // Controller (Feed-forward network)
-        yield return new DenseLayer<T>(inputSize, controllerSize, new TanhActivation<T>() as IActivationFunction<T>);
+        // Controller (Feed-forward network) — input is [features + memoryVectorSize]
+        // because ProcessController concatenates input with read results
+        int controllerInputSize = inputSize + memoryVectorSize;
+        yield return new DenseLayer<T>(controllerInputSize, controllerSize, new TanhActivation<T>() as IActivationFunction<T>);
 
         // Read heads - typically use content-based addressing with cosine similarity
         yield return new MemoryReadLayer<T>(controllerSize, memoryVectorSize, memoryVectorSize,
