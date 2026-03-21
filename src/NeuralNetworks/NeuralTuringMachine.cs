@@ -659,7 +659,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
             resultShape[i + 1] = remainingDims[i];
         }
 
-        var result = new Tensor<T>(resultShape);
+        var result = TensorAllocator.Rent<T>(resultShape);
 
         // Copy data for this time step
         int featureSize = 1;
@@ -1165,7 +1165,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     private Tensor<T> ReadFromMemories()
     {
         int batchSize = _memories.Count;
-        var result = new Tensor<T>([batchSize, _memoryVectorSize]);
+        var result = TensorAllocator.Rent<T>([batchSize, _memoryVectorSize]);
 
         for (int b = 0; b < batchSize; b++)
         {

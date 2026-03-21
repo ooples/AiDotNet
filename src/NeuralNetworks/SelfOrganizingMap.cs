@@ -677,7 +677,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
         int bmu = FindBestMatchingUnit(input.ToVector());
 
         // Create a one-hot encoded output tensor
-        var output = new Tensor<T>(new[] { _mapWidth * _mapHeight });
+        var output = TensorAllocator.Rent<T>(new[] { _mapWidth * _mapHeight });
         for (int i = 0; i < output.Length; i++)
         {
             output[i] = i == bmu ? NumOps.One : NumOps.Zero;

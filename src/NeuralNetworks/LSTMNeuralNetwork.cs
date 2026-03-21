@@ -786,7 +786,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         int features = input.Shape[2];
 
         // Create result tensor with shape [batch_size, features]
-        var result = new Tensor<T>(new int[] { batchSize, features });
+        var result = TensorAllocator.Rent<T>(new int[] { batchSize, features });
 
         // Copy data for this time step
         for (int b = 0; b < batchSize; b++)
@@ -869,7 +869,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Create result tensor
-        var result = new Tensor<T>(resultShape);
+        var result = TensorAllocator.Rent<T>(resultShape);
 
         // Copy data from each tensor
         for (int t = 0; t < tensors.Count; t++)
@@ -919,7 +919,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Create result tensor
-        var result = new Tensor<T>(resultShape);
+        var result = TensorAllocator.Rent<T>(resultShape);
 
         // Copy data
         if (inputShape.Length == 2)
@@ -972,7 +972,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Create result tensor
-        var result = new Tensor<T>(resultShape);
+        var result = TensorAllocator.Rent<T>(resultShape);
 
         // Copy data
         if (inputShape.Length == 3)
@@ -1024,7 +1024,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Create result tensor
-        var result = new Tensor<T>(resultShape);
+        var result = TensorAllocator.Rent<T>(resultShape);
 
         // Copy data
         if (inputShape.Length == 2)
@@ -1071,7 +1071,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Create result tensor
-        var result = new Tensor<T>(resultShape);
+        var result = TensorAllocator.Rent<T>(resultShape);
 
         // Copy data
         if (inputShape.Length == 3)
@@ -1112,7 +1112,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Create result tensor
-        var result = new Tensor<T>(resultShape);
+        var result = TensorAllocator.Rent<T>(resultShape);
 
         // Copy data
         if (inputShape.Length == 1)
@@ -1152,7 +1152,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Create result tensor
-        var result = new Tensor<T>(resultShape);
+        var result = TensorAllocator.Rent<T>(resultShape);
 
         // Copy data
         if (inputShape.Length == 3)

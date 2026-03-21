@@ -703,7 +703,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> SampleBinaryStates(Tensor<T> activations)
     {
-        var result = new Tensor<T>(activations.Shape);
+        var result = TensorAllocator.Rent<T>(activations.Shape);
         var random = RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < activations.Length; i++)

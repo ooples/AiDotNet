@@ -374,7 +374,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                     int features = input.Rank > 1 ? input.Shape[1] : input.Shape[0];
 
                     // Create output tensor for batch results
-                    var output = new Tensor<T>([batchSize, Architecture.OutputSize]);
+                    var output = TensorAllocator.Rent<T>([batchSize, Architecture.OutputSize]);
 
                     // Process each input in the batch
                     for (int b = 0; b < batchSize; b++)

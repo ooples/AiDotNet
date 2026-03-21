@@ -473,7 +473,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         int[] outputShape = images1.Shape.Length == 4
             ? new int[] { batchSize, height, width, totalChannels }
             : new int[] { batchSize, height * width, totalChannels };
-        var result = new Tensor<T>(outputShape);
+        var result = TensorAllocator.Rent<T>(outputShape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -530,7 +530,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         int size1 = totalSize1 / batchSize;
         int size2 = totalSize2 / batchSize;
 
-        var result = new Tensor<T>(new int[] { batchSize, size1 + size2 });
+        var result = TensorAllocator.Rent<T>(new int[] { batchSize, size1 + size2 });
 
         for (int b = 0; b < batchSize; b++)
         {

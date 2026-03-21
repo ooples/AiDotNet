@@ -452,7 +452,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             }
 
             int batchSize = input.Shape[0];
-            var output = new Tensor<T>(new[] { batchSize, 1 });
+            var output = TensorAllocator.Rent<T>(new[] { batchSize, 1 });
 
             // Process each pair in the batch
             for (int b = 0; b < batchSize; b++)

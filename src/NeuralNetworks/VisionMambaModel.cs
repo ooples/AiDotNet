@@ -452,7 +452,7 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ApplyRMSNorm1D(Tensor<T> input, Tensor<T> gamma, int batchSize, int dim)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape);
         T eps = NumOps.FromDouble(1e-6);
 
         for (int b = 0; b < batchSize; b++)

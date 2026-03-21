@@ -398,7 +398,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
             // Broadcast norm back and divide
             // norm shape: [batch, height, width], need to broadcast to [batch, channels, height, width]
-            var result = new Tensor<T>(features.Shape);
+            var result = TensorAllocator.Rent<T>(features.Shape);
             int batch = features.Shape[0];
             int channels = features.Shape[1];
             int height = features.Shape[2];
@@ -441,7 +441,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
             }
 
             // Divide each row by its norm
-            var result = new Tensor<T>(features.Shape);
+            var result = TensorAllocator.Rent<T>(features.Shape);
             int batchSize = features.Shape[0];
             int featureCount = features.Shape[1];
 

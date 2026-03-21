@@ -710,7 +710,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
             int featureSize = input.Shape[1];
 
             // Create output tensor with correct shape
-            var output = new Tensor<T>(new int[] { batchSize, Architecture.OutputSize });
+            var output = TensorAllocator.Rent<T>(new int[] { batchSize, Architecture.OutputSize });
 
             // Process each sample
             for (int b = 0; b < batchSize; b++)
@@ -744,7 +744,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
             var activations = ActivateGenome(bestGenome, inputVector);
 
             // Create output tensor
-            var output = new Tensor<T>(new int[] { Architecture.OutputSize });
+            var output = TensorAllocator.Rent<T>(new int[] { Architecture.OutputSize });
             for (int i = 0; i < Architecture.OutputSize; i++)
             {
                 output[i] = activations[Architecture.InputSize + i];
