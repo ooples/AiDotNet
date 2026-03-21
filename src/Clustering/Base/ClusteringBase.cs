@@ -720,37 +720,9 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
             double range = colMax - colMin;
             if (range > maxRange) maxRange = range;
         }
-        // Merge clusters whose centers are within the expected within-cluster spread.
-        // For degenerate data (all points similar), centers converge to nearly the same point.
-        // Use mean nearest-neighbor distance as the merge criterion — this is data-adaptive
-        // and avoids arbitrary percentage thresholds.
-        double avgSpread = 0;
-        if (x.Rows > 1)
-        {
-            // Sample-based estimate: mean pairwise distance for a subset
-            int sampleSize = Math.Min(x.Rows, 50);
-            double totalDist = 0;
-            int pairs = 0;
-            for (int i = 0; i < sampleSize; i++)
-                for (int j = i + 1; j < sampleSize; j++)
-                {
-                    double d2 = 0;
-                    for (int f = 0; f < x.Columns; f++)
-                    {
-                        double diff = NumOps.ToDouble(x[i, f]) - NumOps.ToDouble(x[j, f]);
-                        d2 += diff * diff;
-                    }
-                    totalDist += Math.Sqrt(d2);
-                    pairs++;
-                }
-            avgSpread = pairs > 0 ? totalDist / pairs : maxRange * 0.1;
-        }
-        else
-        {
-            avgSpread = maxRange * 0.1;
-        }
-        // Merge threshold = half the average pairwise distance (centers closer than this are degenerate)
-        double mergeThreshold = Math.Max(1e-6, avgSpread * 0.5);
+        // Merge degenerate clusters: when cluster centers are closer than half the maximum
+        // feature range, they represent the same region of the data space.
+        double mergeThreshold = Math.Max(1e-6, maxRange * 0.5);
 
         // First: identify which clusters actually have data points
         var clusterPopulations = new int[NumClusters];
@@ -782,6 +754,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
         }
 
         // Merge nearby populated clusters
+        double minDist = double.MaxValue;
         for (int a = 0; a < NumClusters; a++)
         {
             if (clusterPopulations[a] == 0) continue;
@@ -794,7 +767,9 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
                     double dd = NumOps.ToDouble(ClusterCenters[a, j]) - NumOps.ToDouble(ClusterCenters[b, j]);
                     dist += dd * dd;
                 }
-                if (Math.Sqrt(dist) < mergeThreshold)
+                double eucDist = Math.Sqrt(dist);
+                if (eucDist < minDist) minDist = eucDist;
+                if (eucDist < mergeThreshold)
                     mergedId[b] = mergedId[a];
             }
         }
