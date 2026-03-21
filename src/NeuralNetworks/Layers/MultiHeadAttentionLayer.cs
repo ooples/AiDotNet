@@ -1478,6 +1478,22 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// 3. It prevents old calculations from affecting new ones, which could lead to incorrect results
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient.ToArray()),
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

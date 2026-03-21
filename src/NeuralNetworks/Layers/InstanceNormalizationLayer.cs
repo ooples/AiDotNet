@@ -533,6 +533,14 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+    }
+
+    public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
+
     public override void ResetState()
     {
         _lastInput = null;
