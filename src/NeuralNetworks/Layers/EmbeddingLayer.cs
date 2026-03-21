@@ -1203,6 +1203,23 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     /// working data used during computation.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_embeddingGradient == null)
+            return new Vector<T>(ParameterCount);
+        var embGrad = new Vector<T>(_embeddingGradient.ToArray());
+        if (_projectionWeightsGradient == null || _projectionWeights == null)
+            return embGrad;
+        return Vector<T>.Concatenate(embGrad, new Vector<T>(_projectionWeightsGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _embeddingGradient = null;
+        _projectionWeightsGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

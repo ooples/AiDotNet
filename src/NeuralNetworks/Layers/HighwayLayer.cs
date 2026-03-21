@@ -1252,6 +1252,25 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// you should reset the state to prevent the new processing from being influenced by the previous batch.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_transformWeightsGradient == null || _transformBiasGradient == null ||
+            _gateWeightsGradient == null || _gateBiasGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_transformWeightsGradient.ToArray()),
+            new Vector<T>(_transformBiasGradient.ToArray()),
+            new Vector<T>(_gateWeightsGradient.ToArray()),
+            new Vector<T>(_gateBiasGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _transformWeightsGradient = null; _transformBiasGradient = null;
+        _gateWeightsGradient = null; _gateBiasGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

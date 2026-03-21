@@ -947,6 +947,25 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// temporary working data.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_linearWeightsGradient == null || _gateWeightsGradient == null ||
+            _linearBiasGradient == null || _gateBiasGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_linearWeightsGradient.ToArray()),
+            new Vector<T>(_gateWeightsGradient.ToArray()),
+            new Vector<T>(_linearBiasGradient.ToArray()),
+            new Vector<T>(_gateBiasGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _linearWeightsGradient = null; _gateWeightsGradient = null;
+        _linearBiasGradient = null; _gateBiasGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
