@@ -18,6 +18,8 @@ public class MeasurementLayerTests : LayerTestBase
     protected override int[] InputShape => [4];
     protected override bool ExpectsTrainableParameters => false;
     protected override bool ExpectsNonZeroGradients => false;
+    // Measurement layer produces probabilities from quantum state — constant inputs may give same distribution
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }
 
 // RBFLayer already tested in RBMLayerTests.cs — skip duplicate
@@ -37,6 +39,8 @@ public class SpatialPoolerLayerTests : LayerTestBase
         => new SpatialPoolerLayer<double>(inputSize: 4, columnCount: 8, sparsityThreshold: 0.02);
     protected override int[] InputShape => [4];
     protected override bool ExpectsNonZeroGradients => false;
+    // SpatialPooler uses threshold-based activation — constant inputs may activate same columns
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }
 
 public class TemporalMemoryLayerTests : LayerTestBase
@@ -45,4 +49,6 @@ public class TemporalMemoryLayerTests : LayerTestBase
         => new TemporalMemoryLayer<double>(columnCount: 4, cellsPerColumn: 2);
     protected override int[] InputShape => [4];
     protected override bool ExpectsNonZeroGradients => false;
+    // TemporalMemory uses binary column activation — different constant values may map to same pattern
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }

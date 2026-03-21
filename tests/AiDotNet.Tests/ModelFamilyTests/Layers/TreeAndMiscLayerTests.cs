@@ -44,6 +44,8 @@ public class AnomalyDetectorLayerTests : LayerTestBase
     protected override int[] InputShape => [4];
     protected override bool ExpectsTrainableParameters => false;
     protected override bool ExpectsNonZeroGradients => false;
+    // AnomalyDetector uses statistical thresholding — constant inputs both fall within/outside threshold
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }
 
 public class MeanLayerTests : LayerTestBase

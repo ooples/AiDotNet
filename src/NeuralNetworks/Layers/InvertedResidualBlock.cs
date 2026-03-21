@@ -68,6 +68,11 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount =>
+        (_expandConv?.ParameterCount ?? 0) + (_expandBn?.ParameterCount ?? 0) +
+        _dwConv.ParameterCount + _dwBn.ParameterCount +
+        (_se?.ParameterCount ?? 0) +
+        _projectConv.ParameterCount + _projectBn.ParameterCount;
     public override bool SupportsTraining => true;
 
     /// <summary>

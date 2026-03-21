@@ -31,6 +31,7 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private IGpuTensor<T>? _gpuConv1Out;
     private IGpuTensor<T>? _gpuBn2Out;
 
+    public override int ParameterCount => _bn1.ParameterCount + _conv1x1.ParameterCount + _bn2.ParameterCount + _conv3x3.ParameterCount;
     public override bool SupportsTraining => true;
 
     /// <summary>

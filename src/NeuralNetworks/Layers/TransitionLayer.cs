@@ -74,6 +74,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount => _bn.ParameterCount + _conv.ParameterCount;
     public override bool SupportsTraining => true;
 
     /// <summary>
