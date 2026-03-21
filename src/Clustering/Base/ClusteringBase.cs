@@ -177,13 +177,22 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     protected virtual T ComputeDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
-        // Inline Euclidean distance to avoid Vector allocation in hot loops
+        // Use Engine.DotProduct for vectorized distance computation when possible
         int d = x.Columns;
+        if (d >= 4) // Engine overhead only worth it for higher dimensions
+        {
+            var diff = new Vector<T>(d);
+            for (int j = 0; j < d; j++)
+                diff[j] = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
+            return NumOps.Sqrt(Engine.DotProduct(diff, diff));
+        }
+
+        // Small dimensions: inline scalar loop (avoids Vector allocation overhead)
         T sumSq = NumOps.Zero;
         for (int j = 0; j < d; j++)
         {
-            T diff = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
+            T val = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
         }
         return NumOps.Sqrt(sumSq);
     }
@@ -194,11 +203,19 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     protected T ComputeSquaredDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
         int d = x.Columns;
+        if (d >= 4)
+        {
+            var diff = new Vector<T>(d);
+            for (int j = 0; j < d; j++)
+                diff[j] = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
+            return Engine.DotProduct(diff, diff);
+        }
+
         T sumSq = NumOps.Zero;
         for (int j = 0; j < d; j++)
         {
-            T diff = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
+            T val = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
         }
         return sumSq;
     }
