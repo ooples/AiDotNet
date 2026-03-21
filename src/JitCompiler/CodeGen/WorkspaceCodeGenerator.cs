@@ -135,19 +135,13 @@ public class WorkspaceCodeGenerator
     {
         return op switch
         {
-            // Arithmetic
+            // Arithmetic — into pre-allocated output
             AddOp => EmitInto<T>(engine, "TensorAddInto", output, inputs[0], inputs[1]),
             SubtractOp => EmitAllocating<T>(engine, "TensorSubtract", output, inputs),
-            DivideOp => EmitAllocating<T>(engine, "TensorDivide", output, inputs),
-            NegateOp => EmitAllocating<T>(engine, "TensorNegate", output, inputs),
-            PowerOp => EmitAllocating<T>(engine, "TensorPow", output, inputs),
-            ExpOp => EmitAllocating<T>(engine, "TensorExp", output, inputs),
-            LogOp => EmitAllocating<T>(engine, "TensorLog", output, inputs),
-            SqrtOp => EmitAllocating<T>(engine, "TensorSqrt", output, inputs),
-            AbsOp => EmitAllocating<T>(engine, "TensorAbs", output, inputs),
             ElementwiseMultiplyOp => EmitInto<T>(engine, "TensorMultiplyInto", output, inputs[0], inputs[1]),
             DivideOp => EmitAllocating<T>(engine, "TensorDivide", output, inputs),
             NegateOp => EmitAllocating<T>(engine, "TensorNegate", output, inputs),
+            PowerOp => EmitAllocating<T>(engine, "TensorPow", output, inputs),
 
             // Element-wise math
             ExpOp => EmitAllocating<T>(engine, "TensorExp", output, inputs),
@@ -180,8 +174,6 @@ public class WorkspaceCodeGenerator
             LogSoftmaxOp => EmitAllocating<T>(engine, "TensorLogSoftmax", output, inputs),
             MaxPool2DOp => EmitAllocating<T>(engine, "MaxPool2D", output, inputs),
             AvgPool2DOp => EmitAllocating<T>(engine, "AvgPool2D", output, inputs),
-            BatchNormOp => EmitAllocating<T>(engine, "BatchNorm", output, inputs),
-            LayerNormOp => EmitAllocating<T>(engine, "LayerNorm", output, inputs),
             DropoutOp => EmitAllocating<T>(engine, "Dropout", output, inputs),
             EmbeddingOp => EmitAllocating<T>(engine, "Embedding", output, inputs),
             LSTMCellOp => EmitAllocating<T>(engine, "LSTMCell", output, inputs),
@@ -199,15 +191,6 @@ public class WorkspaceCodeGenerator
             UpsampleOp => EmitAllocating<T>(engine, "Upsample", output, inputs),
             SpMMOp => EmitAllocating<T>(engine, "SpMM", output, inputs),
             GridSampleOp => EmitAllocating<T>(engine, "GridSample", output, inputs),
-            LeakyReLUOp => EmitActivationInto<T>(engine, "LeakyReLUInto", output, inputs[0]),
-
-            // Softmax (uses oneDNN when available via IEngine)
-            SoftmaxOp => EmitAllocating<T>(engine, "Softmax", output, inputs),
-            LogSoftmaxOp => EmitAllocating<T>(engine, "TensorLogSoftmax", output, inputs),
-
-            // Pooling
-            MaxPool2DOp => EmitAllocating<T>(engine, "MaxPool2D", output, inputs),
-            AvgPool2DOp => EmitAllocating<T>(engine, "AvgPool2D", output, inputs),
 
             // Fused operations
             FusedGroupNormActivationOp fgna => EmitGroupNormSwishInto<T>(engine, output, inputs, fgna),
@@ -218,10 +201,6 @@ public class WorkspaceCodeGenerator
             // Matrix operations
             MatMulOp => EmitInto<T>(engine, "MatMulInto", output, inputs[0], inputs[1]),
             TransposeOp => EmitTransposeInto<T>(engine, output, inputs[0]),
-
-            // Reductions
-            SumOp => EmitAllocating<T>(engine, "TensorSum", output, inputs),
-            MeanOp => EmitAllocating<T>(engine, "TensorMean", output, inputs),
 
             // Shape operations
             ReshapeOp reshape => EmitReshape<T>(output, inputs[0], reshape),
