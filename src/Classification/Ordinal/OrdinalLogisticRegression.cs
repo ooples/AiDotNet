@@ -256,34 +256,42 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
         // Optimization using the configured gradient-based optimizer (Adam by default).
         double prevLoss = double.MaxValue;
 
+        // Pre-allocate arrays outside the training loop (avoid GC pressure)
+        var gradCoef = new double[P];
+        var gradThresh = new double[K - 1];
+        var cumProbs = new double[K - 1];
+        var probs = new double[K];
+        var etas = new double[N];
+
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Compute gradients
-            var gradCoef = new double[P];
-            var gradThresh = new double[K - 1];
+            // Zero gradients
+            Array.Clear(gradCoef, 0, P);
+            Array.Clear(gradThresh, 0, K - 1);
             double loss = 0;
+
+            // Precompute all linear predictors: eta[i] = X[i,:] * coef
+            for (int i = 0; i < N; i++)
+            {
+                double eta = 0;
+                for (int p = 0; p < P; p++)
+                    eta += coef[p] * xDouble[i, p];
+                etas[i] = eta;
+            }
 
             for (int i = 0; i < N; i++)
             {
                 int yi = yIndices[i];
+                double eta = etas[i];
 
-                // Compute linear predictor using pre-converted double arrays
-                double eta = 0;
-                for (int p = 0; p < P; p++)
-                {
-                    eta += coef[p] * xDouble[i, p];
-                }
-
-                // Compute cumulative probabilities
-                var cumProbs = new double[K - 1];
+                // Compute cumulative probabilities (reuse pre-allocated array)
                 for (int k = 0; k < K - 1; k++)
                 {
                     double z = thresh[k] - eta;
                     cumProbs[k] = 1.0 / (1.0 + Math.Exp(-z));
                 }
 
-                // Compute class probabilities
-                var probs = new double[K];
+                // Compute class probabilities (reuse pre-allocated array)
                 probs[0] = cumProbs[0];
                 for (int k = 1; k < K - 1; k++)
                 {
