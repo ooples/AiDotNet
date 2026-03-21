@@ -71,6 +71,7 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     /// Contains log P(feature | class) with Laplace smoothing.
     /// </summary>
     private Matrix<T>? _logFeatureProbs;
+    private T[]? _featureMinShift;
 
     /// <summary>
     /// Initializes a new instance of the MultinomialNaiveBayes class.
@@ -105,19 +106,36 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     {
         // Multinomial Naive Bayes requires non-negative feature values (counts/frequencies).
         // Negative values cause Log(negative) = NaN, silently corrupting the model.
-        for (int i = 0; i < x.Rows; i++)
+        // Shift features to non-negative if any negatives are present.
+        // Per scikit-learn: MultinomialNB handles this by shifting each feature by its minimum.
+        _featureMinShift = new T[x.Columns];
+        bool hasNegative = false;
+        for (int f = 0; f < x.Columns; f++)
         {
-            for (int f = 0; f < x.Columns; f++)
+            T minVal = x[0, f];
+            for (int i = 1; i < x.Rows; i++)
+                if (NumOps.LessThan(x[i, f], minVal))
+                    minVal = x[i, f];
+            if (NumOps.LessThan(minVal, NumOps.Zero))
             {
-                if (NumOps.LessThan(x[i, f], NumOps.Zero))
-                {
-                    throw new ArgumentException(
-                        $"MultinomialNaiveBayes requires non-negative feature values, " +
-                        $"but found {NumOps.ToDouble(x[i, f]):F4} at row {i}, column {f}. " +
-                        "Use GaussianNaiveBayes for continuous features that may be negative.",
-                        nameof(x));
-                }
+                _featureMinShift[f] = NumOps.Negate(minVal);
+                hasNegative = true;
             }
+            else
+            {
+                _featureMinShift[f] = NumOps.Zero;
+            }
+        }
+
+        // Apply shift to make all features non-negative
+        Matrix<T> xShifted;
+        if (hasNegative)
+        {
+            xShifted = new Matrix<T>(x.Rows, x.Columns);
+            for (int i = 0; i < x.Rows; i++)
+                for (int f = 0; f < x.Columns; f++)
+                    xShifted[i, f] = NumOps.Add(x[i, f], _featureMinShift[f]);
+            x = xShifted;
         }
 
         _logFeatureProbs = new Matrix<T>(NumClasses, NumFeatures);
@@ -183,8 +201,14 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
 
         for (int f = 0; f < NumFeatures; f++)
         {
-            // Contribution: count * log(probability)
-            T contribution = NumOps.Multiply(sample[f], _logFeatureProbs[classIndex, f]);
+            // Apply the same shift used during training to ensure non-negative features
+            T featureVal = sample[f];
+            if (_featureMinShift is not null && f < _featureMinShift.Length)
+                featureVal = NumOps.Add(featureVal, _featureMinShift[f]);
+            if (NumOps.LessThan(featureVal, NumOps.Zero))
+                featureVal = NumOps.Zero;
+
+            T contribution = NumOps.Multiply(featureVal, _logFeatureProbs[classIndex, f]);
             logLikelihood = NumOps.Add(logLikelihood, contribution);
         }
 
