@@ -1427,6 +1427,12 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         return metadata;
     }
 
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null; _attentionWeightsGradient = null; _biasGradient = null;
+    }
+
     /// <inheritdoc/>
     public override void ResetState()
     {

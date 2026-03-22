@@ -884,6 +884,12 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));
     }
 
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _selfWeightsGradient = null; _neighborWeightsGradient = null; _biasGradient = null;
+    }
+
     /// <inheritdoc/>
     public override void ResetState()
     {
