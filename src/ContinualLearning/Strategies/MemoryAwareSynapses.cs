@@ -919,10 +919,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         switch (_accumulationMode)
         {
             case ImportanceAccumulationMode.Sum:
-                for (int i = 0; i < _omega.Length; i++)
-                {
-                    _omega[i] = NumOps.Add(_omega[i], taskImportance[i]);
-                }
+                _omega = Engine.Add(_omega, taskImportance);
                 break;
 
             case ImportanceAccumulationMode.Max:
