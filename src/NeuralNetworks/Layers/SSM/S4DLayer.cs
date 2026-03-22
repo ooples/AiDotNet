@@ -777,6 +777,10 @@ public class S4DLayer<T> : LayerBase<T>
             new Vector<T>(_cRealGradient!.ToArray()),
             new Vector<T>(_cImagGradient!.ToArray()),
             new Vector<T>(_dParamGradient!.ToArray()),
+            _inputProjectionWeightsGradient != null ? new Vector<T>(_inputProjectionWeightsGradient.ToArray()) : new Vector<T>(_inputProjectionWeights.Length),
+            _inputProjectionBiasGradient != null ? new Vector<T>(_inputProjectionBiasGradient.ToArray()) : new Vector<T>(_inputProjectionBias.Length),
+            _outputProjectionWeightsGradient != null ? new Vector<T>(_outputProjectionWeightsGradient.ToArray()) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient != null ? new Vector<T>(_outputProjectionBiasGradient.ToArray()) : new Vector<T>(_outputProjectionBias.Length),
             new Vector<T>(_logDeltaGradient!.ToArray()));
     }
 
@@ -784,6 +788,7 @@ public class S4DLayer<T> : LayerBase<T>
     {
         base.ClearGradients();
         _aRealGradient = null; _aImagGradient = null; _bRealGradient = null; _bImagGradient = null; _cRealGradient = null; _cImagGradient = null; _dParamGradient = null; _logDeltaGradient = null;
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />
