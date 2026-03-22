@@ -137,13 +137,10 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         // TE = 0.5 * log(var_restricted / var_unrestricted)
         if (rssUnrestricted < 1e-15)
         {
-            // Both models fit perfectly — the source perfectly predicts the target.
-            // Return a large TE value if restricted variance is non-trivial,
-            // or use correlation-based fallback for deterministic data.
-            if (rssRestricted > 1e-15)
-                return 0.5 * Math.Log(rssRestricted / 1e-15); // Very high TE
-            // Both near zero — use Pearson correlation as fallback
-            return ComputeCorrelationFallback(data, source, target, n);
+            // Both models fit perfectly — no meaningful residual variance to compare.
+            // Transfer entropy is undefined in this case. Return 0 (no evidence of
+            // information transfer beyond what both models already explain).
+            return 0;
         }
 
         if (rssRestricted < 1e-15) return 0;

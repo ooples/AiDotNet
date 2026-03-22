@@ -542,43 +542,38 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public (Tensor<T> mean, Tensor<T> logVar, Tensor<T> hidden) EncodeWithCache(Vector<T> input)
     {
-        // Simple LSTM-like encoding: hidden = tanh(W * input + bias)
+        // Simple LSTM-like encoding: hidden = tanh(W * input + bias) using Engine
+        int effectiveInput = Math.Min(input.Length, _inputSize);
+        var inputVec = new Vector<T>(effectiveInput);
+        for (int j = 0; j < effectiveInput; j++) inputVec[j] = input[j];
+
         var hidden = new Tensor<T>(new[] { _hiddenSize });
         for (int i = 0; i < _hiddenSize; i++)
         {
-            T sum = _bias[i];
-            for (int j = 0; j < Math.Min(input.Length, _inputSize); j++)
-            {
-                int idx = i * _inputSize + j;
-                sum = NumOps.Add(sum, NumOps.Multiply(_weights[idx], input[j]));
-            }
-            hidden[i] = MathHelper.Tanh(sum);
+            var wSlice = new Vector<T>(effectiveInput);
+            for (int j = 0; j < effectiveInput; j++) wSlice[j] = _weights[i * _inputSize + j];
+            hidden[i] = MathHelper.Tanh(NumOps.Add(_bias[i], Engine.DotProduct(wSlice, inputVec)));
         }
 
-        // Compute mean: mean = meanWeights * hidden + meanBias
+        // Compute mean: mean = meanWeights * hidden + meanBias using Engine
+        var hiddenVec = new Vector<T>(_hiddenSize);
+        for (int j = 0; j < _hiddenSize; j++) hiddenVec[j] = hidden[j];
+
         var mean = new Tensor<T>(new[] { _latentDim });
         for (int i = 0; i < _latentDim; i++)
         {
-            T sum = _meanBias[i];
-            for (int j = 0; j < _hiddenSize; j++)
-            {
-                int idx = i * _hiddenSize + j;
-                sum = NumOps.Add(sum, NumOps.Multiply(_meanWeights[idx], hidden[j]));
-            }
-            mean[i] = sum;
+            var mwSlice = new Vector<T>(_hiddenSize);
+            for (int j = 0; j < _hiddenSize; j++) mwSlice[j] = _meanWeights[i * _hiddenSize + j];
+            mean[i] = NumOps.Add(_meanBias[i], Engine.DotProduct(mwSlice, hiddenVec));
         }
 
         // Compute log variance: logVar = logVarWeights * hidden + logVarBias
         var logVar = new Tensor<T>(new[] { _latentDim });
         for (int i = 0; i < _latentDim; i++)
         {
-            T sum = _logVarBias[i];
-            for (int j = 0; j < _hiddenSize; j++)
-            {
-                int idx = i * _hiddenSize + j;
-                sum = NumOps.Add(sum, NumOps.Multiply(_logVarWeights[idx], hidden[j]));
-            }
-            logVar[i] = sum;
+            var lvSlice = new Vector<T>(_hiddenSize);
+            for (int j = 0; j < _hiddenSize; j++) lvSlice[j] = _logVarWeights[i * _hiddenSize + j];
+            logVar[i] = NumOps.Add(_logVarBias[i], Engine.DotProduct(lvSlice, hiddenVec));
         }
 
         return (mean, logVar, hidden);
@@ -610,18 +605,22 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             }
         }
 
-        // Compute gradient w.r.t. hidden: dHidden = meanWeights^T * dMean + logVarWeights^T * dLogVar
+        // Compute gradient w.r.t. hidden using Engine.DotProduct per column
+        var dMeanVec = new Vector<T>(_latentDim);
+        var dLogVarVec = new Vector<T>(_latentDim);
+        for (int i = 0; i < _latentDim; i++) { dMeanVec[i] = dMean[i]; dLogVarVec[i] = dLogVar[i]; }
+
         var dHidden = new Tensor<T>(new[] { _hiddenSize });
         for (int j = 0; j < _hiddenSize; j++)
         {
-            T sum = NumOps.Zero;
+            var mwCol = new Vector<T>(_latentDim);
+            var lvCol = new Vector<T>(_latentDim);
             for (int i = 0; i < _latentDim; i++)
             {
-                int idx = i * _hiddenSize + j;
-                sum = NumOps.Add(sum, NumOps.Multiply(_meanWeights[idx], dMean[i]));
-                sum = NumOps.Add(sum, NumOps.Multiply(_logVarWeights[idx], dLogVar[i]));
+                mwCol[i] = _meanWeights[i * _hiddenSize + j];
+                lvCol[i] = _logVarWeights[i * _hiddenSize + j];
             }
-            dHidden[j] = sum;
+            dHidden[j] = NumOps.Add(Engine.DotProduct(mwCol, dMeanVec), Engine.DotProduct(lvCol, dLogVarVec));
         }
 
         // Apply tanh derivative: dHidden * (1 - hidden^2)

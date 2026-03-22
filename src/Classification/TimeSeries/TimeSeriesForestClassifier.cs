@@ -858,6 +858,11 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
             throw new ArgumentException("Sequences must be at least 2D [samples, sequence_length].");
         }
 
+        if (sequences.Shape[1] == 0)
+        {
+            throw new ArgumentException("Sequence length must be greater than 0.", nameof(sequences));
+        }
+
         if (labels is not null && labels.Length != sequences.Shape[0])
         {
             throw new ArgumentException("Number of labels must match number of samples.");
