@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Layers;
 public class BasicBlockTests : LayerTestBase
 {
     protected override ILayer<double> CreateLayer()
-        => new BasicBlock<double>(inChannels: 1, outChannels: 1, stride: 1);
+        => new BasicBlock<double>(inChannels: 1, outChannels: 1, stride: 1, inputHeight: 8, inputWidth: 8);
     // BasicBlock expects [batch, channels, height, width]
     protected override int[] InputShape => [1, 1, 8, 8];
 }

@@ -7,10 +7,12 @@ namespace AiDotNet.Tests.ModelFamilyTests.Layers;
 
 public class PaddingLayerTests : LayerTestBase
 {
+    // PaddingLayer: Forward expects padding.Length == input.Shape.Length (BHWC)
+    // padding = [batch_pad, height_pad, width_pad, channel_pad]
     protected override ILayer<double> CreateLayer()
-        => new PaddingLayer<double>(inputShape: [1, 4, 4], padding: [1, 1, 1, 1],
+        => new PaddingLayer<double>(inputShape: [1, 4, 4, 1], padding: [0, 1, 1, 0],
             activationFunction: new IdentityActivation<double>() as IActivationFunction<double>);
-    protected override int[] InputShape => [1, 1, 4, 4];
+    protected override int[] InputShape => [1, 4, 4, 1]; // BHWC
     protected override bool ExpectsTrainableParameters => false;
     protected override bool ExpectsNonZeroGradients => false;
 }
