@@ -131,15 +131,28 @@ public class SimpleRegression<T> : RegressionBase<T>
     {
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS for all data (handles both single and multi-feature input)
-        var xWithInt = x.AddConstantColumn(NumOps.One);
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var solution = SolveSystem(xTx, xTy);
-        Intercept = solution[0];
-        Coefficients = solution.Slice(1, x.Columns);
+        if (Options.UseIntercept)
+        {
+            // OLS with intercept: augment X with a constant column
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+        }
+        else
+        {
+            // OLS without intercept: slope = (X'X)^(-1) X'y
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            Coefficients = SolveSystem(xTx, xTy);
+            Intercept = NumOps.Zero;
+        }
     }
 
     /// <summary>
