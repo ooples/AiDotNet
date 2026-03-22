@@ -2321,23 +2321,25 @@ public class LSTMLayer<T> : LayerBase<T>
         var dc_bar_input = DerivativeTensor(_tanhActivation, c_bar).PointwiseMultiply(dc_bar);
 
         // Compute gradients for weights and biases
-        var dWeights = concat.Transpose(new[] { 1, 0 }).Multiply(Tensor<T>.Concatenate(new[] { di_input, df_input, dc_bar_input, do_input }, 1));
-        var dWfi = dWeights.Slice(0, 0, _inputSize).Slice(1, 0, _hiddenSize);
-        var dWii = dWeights.Slice(0, 0, _inputSize).Slice(1, _hiddenSize, _hiddenSize * 2);
-        var dWci = dWeights.Slice(0, 0, _inputSize).Slice(1, _hiddenSize * 2, _hiddenSize * 3);
-        var dWoi = dWeights.Slice(0, 0, _inputSize).Slice(1, _hiddenSize * 3, _hiddenSize * 4);
-        var dWfh = dWeights.Slice(0, _inputSize, _inputSize + _hiddenSize).Slice(1, 0, _hiddenSize);
-        var dWih = dWeights.Slice(0, _inputSize, _inputSize + _hiddenSize).Slice(1, _hiddenSize, _hiddenSize * 2);
-        var dWch = dWeights.Slice(0, _inputSize, _inputSize + _hiddenSize).Slice(1, _hiddenSize * 2, _hiddenSize * 3);
-        var dWoh = dWeights.Slice(0, _inputSize, _inputSize + _hiddenSize).Slice(1, _hiddenSize * 3, _hiddenSize * 4);
+        // Forward: gate = concat @ W^T, so dW = d_gate^T @ concat = [hidden, batch] @ [batch, input+hidden]
+        var gateGrads = Tensor<T>.Concatenate(new[] { df_input, di_input, dc_bar_input, do_input }, 1);
+        var dWeights = gateGrads.Transpose(new[] { 1, 0 }).Multiply(concat);
+        // dWeights is [4*hidden, input+hidden]. Each hidden-block row corresponds to a gate.
+        // Split into per-gate, per-source (input vs hidden) blocks
+        var dWfi = dWeights.Slice(0, 0, _hiddenSize).Slice(1, 0, _inputSize);
+        var dWii = dWeights.Slice(0, _hiddenSize, _hiddenSize * 2).Slice(1, 0, _inputSize);
+        var dWci = dWeights.Slice(0, _hiddenSize * 2, _hiddenSize * 3).Slice(1, 0, _inputSize);
+        var dWoi = dWeights.Slice(0, _hiddenSize * 3, _hiddenSize * 4).Slice(1, 0, _inputSize);
+        var dWfh = dWeights.Slice(0, 0, _hiddenSize).Slice(1, _inputSize, _inputSize + _hiddenSize);
+        var dWih = dWeights.Slice(0, _hiddenSize, _hiddenSize * 2).Slice(1, _inputSize, _inputSize + _hiddenSize);
+        var dWch = dWeights.Slice(0, _hiddenSize * 2, _hiddenSize * 3).Slice(1, _inputSize, _inputSize + _hiddenSize);
+        var dWoh = dWeights.Slice(0, _hiddenSize * 3, _hiddenSize * 4).Slice(1, _inputSize, _inputSize + _hiddenSize);
 
-        // Sum over batch dimension (0), results are 1D tensors [hiddenSize]
-        // Concatenate along axis 0 since these are 1D tensors
-        var dBiases = Tensor<T>.Concatenate(new[] { di_input.Sum(new[] { 0 }), df_input.Sum(new[] { 0 }), dc_bar_input.Sum(new[] { 0 }), do_input.Sum(new[] { 0 }) }, 0);
-        var dbf = dBiases.Slice(0, 0, _hiddenSize);
-        var dbi = dBiases.Slice(0, _hiddenSize, _hiddenSize * 2);
-        var dbc = dBiases.Slice(0, _hiddenSize * 2, _hiddenSize * 3);
-        var dbo = dBiases.Slice(0, _hiddenSize * 3, _hiddenSize * 4);
+        // Bias gradients: sum over batch dimension
+        var dbf = df_input.Sum(new[] { 0 });
+        var dbi = di_input.Sum(new[] { 0 });
+        var dbc = dc_bar_input.Sum(new[] { 0 });
+        var dbo = do_input.Sum(new[] { 0 });
 
         // Compute gradient for input (using input-to-hidden weights)
         // Forward: gate = concat @ W^T + b, so backward: dx = d_gate @ W (no transpose needed)
