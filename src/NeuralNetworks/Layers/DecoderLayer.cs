@@ -107,6 +107,30 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </summary>
     public override bool SupportsTraining => true;
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        void Set(ILayer<T> layer) { int c = layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
+        Set(_selfAttention); Set(_crossAttention); Set(_feedForward1); Set(_feedForward2);
+        Set(_norm1); Set(_norm2); Set(_norm3);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(
+            _selfAttention.GetParameterGradients(), _crossAttention.GetParameterGradients(),
+            _feedForward1.GetParameterGradients(), _feedForward2.GetParameterGradients(),
+            _norm1.GetParameterGradients(), _norm2.GetParameterGradients(), _norm3.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _selfAttention.ClearGradients(); _crossAttention.ClearGradients();
+        _feedForward1.ClearGradients(); _feedForward2.ClearGradients();
+        _norm1.ClearGradients(); _norm2.ClearGradients(); _norm3.ClearGradients();
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
