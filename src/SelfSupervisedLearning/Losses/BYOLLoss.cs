@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SelfSupervisedLearning.Losses;
 
@@ -33,6 +34,7 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 public class BYOLLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly bool _normalize;
     private readonly bool _symmetric;
@@ -71,11 +73,15 @@ public class BYOLLoss<T>
 
         for (int i = 0; i < batchSize; i++)
         {
-            T cosineSim = NumOps.Zero;
+            // Extract rows as Vector<T> for Engine.DotProduct
+            var pRow = new Vector<T>(dim);
+            var zRow = new Vector<T>(dim);
             for (int d = 0; d < dim; d++)
             {
-                cosineSim = NumOps.Add(cosineSim, NumOps.Multiply(p[i, d], z[i, d]));
+                pRow[d] = p[i, d];
+                zRow[d] = z[i, d];
             }
+            T cosineSim = Engine.DotProduct(pRow, zRow);
 
             // Loss = 2 - 2 * cosine_similarity
             var loss = NumOps.Subtract(
@@ -123,19 +129,22 @@ public class BYOLLoss<T>
 
         for (int i = 0; i < batchSize; i++)
         {
-            // Compute cosine similarity using normalized vectors
-            T cosineSim = NumOps.Zero;
+            // Extract rows as Vector<T> for Engine.DotProduct
+            var pRow = new Vector<T>(dim);
+            var zRow = new Vector<T>(dim);
+            var origRow = new Vector<T>(dim);
             for (int d = 0; d < dim; d++)
             {
-                cosineSim = NumOps.Add(cosineSim, NumOps.Multiply(p[i, d], z[i, d]));
+                pRow[d] = p[i, d];
+                zRow[d] = z[i, d];
+                origRow[d] = onlinePrediction[i, d];
             }
 
+            // Compute cosine similarity using normalized vectors
+            T cosineSim = Engine.DotProduct(pRow, zRow);
+
             // Compute norm of the ORIGINAL (unnormalized) input for chain rule
-            T origNormSq = NumOps.Zero;
-            for (int d = 0; d < dim; d++)
-            {
-                origNormSq = NumOps.Add(origNormSq, NumOps.Multiply(onlinePrediction[i, d], onlinePrediction[i, d]));
-            }
+            T origNormSq = Engine.DotProduct(origRow, origRow);
             T origNorm = NumOps.Sqrt(NumOps.Add(origNormSq, NumOps.FromDouble(1e-8)));
 
             // Loss = 2 - 2 * cos_sim
@@ -190,11 +199,13 @@ public class BYOLLoss<T>
 
         for (int i = 0; i < batchSize; i++)
         {
+            // Extract difference row as Vector<T>
+            var diff = new Vector<T>(dim);
             for (int d = 0; d < dim; d++)
             {
-                var diff = NumOps.Subtract(p[i, d], z[i, d]);
-                totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(diff, diff));
+                diff[d] = NumOps.Subtract(p[i, d], z[i, d]);
             }
+            totalLoss = NumOps.Add(totalLoss, Engine.DotProduct(diff, diff));
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize * dim));
@@ -208,18 +219,19 @@ public class BYOLLoss<T>
 
         for (int i = 0; i < batchSize; i++)
         {
-            T sumSquared = NumOps.Zero;
+            // Extract row as Vector<T> for Engine.DotProduct
+            var row = new Vector<T>(dim);
             for (int j = 0; j < dim; j++)
             {
-                var val = tensor[i, j];
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(val, val));
+                row[j] = tensor[i, j];
             }
 
+            var sumSquared = Engine.DotProduct(row, row);
             var norm = NumOps.Sqrt(NumOps.Add(sumSquared, NumOps.FromDouble(1e-8)));
 
             for (int j = 0; j < dim; j++)
             {
-                result[i * dim + j] = NumOps.Divide(tensor[i, j], norm);
+                result[i * dim + j] = NumOps.Divide(row[j], norm);
             }
         }
 

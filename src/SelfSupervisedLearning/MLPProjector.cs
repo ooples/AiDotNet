@@ -426,14 +426,22 @@ public class MLPProjector<T> : IProjectorHead<T>
         var inputGrad = new T[batchSize * inputDim];
         for (int b = 0; b < batchSize; b++)
         {
+            // Extract outputGrad row for this batch
+            var gradRow = new Vector<T>(outputDim);
+            for (int o = 0; o < outputDim; o++)
+            {
+                gradRow[o] = outputGrad[b, o];
+            }
+
             for (int i = 0; i < inputDim; i++)
             {
-                T sum = NumOps.Zero;
+                // Extract weight row (which is the column in the transpose)
+                var weightRow = new Vector<T>(outputDim);
                 for (int o = 0; o < outputDim; o++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(outputGrad[b, o], weight[i, o]));
+                    weightRow[o] = weight[i, o];
                 }
-                inputGrad[b * inputDim + i] = sum;
+                inputGrad[b * inputDim + i] = Engine.DotProduct(gradRow, weightRow);
             }
         }
 
@@ -441,14 +449,22 @@ public class MLPProjector<T> : IProjectorHead<T>
         var weightGrad = new T[inputDim * outputDim];
         for (int i = 0; i < inputDim; i++)
         {
+            // Extract input column (all batches for feature i)
+            var inputCol = new Vector<T>(batchSize);
+            for (int b = 0; b < batchSize; b++)
+            {
+                inputCol[b] = input[b, i];
+            }
+
             for (int o = 0; o < outputDim; o++)
             {
-                T sum = NumOps.Zero;
+                // Extract outputGrad column (all batches for output o)
+                var gradCol = new Vector<T>(batchSize);
                 for (int b = 0; b < batchSize; b++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[b, i], outputGrad[b, o]));
+                    gradCol[b] = outputGrad[b, o];
                 }
-                weightGrad[i * outputDim + o] = sum;
+                weightGrad[i * outputDim + o] = Engine.DotProduct(inputCol, gradCol);
             }
         }
 
