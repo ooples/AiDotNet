@@ -675,12 +675,53 @@ public class RBMLayer<T> : LayerBase<T>
         for (int d = 0; d < rank - 1; d++)
             flatBatch *= outputGradient.Shape[d];
 
-        var hidden2D = rank == 1
+        var outGrad2D = rank == 1
             ? outputGradient.Reshape([1, _hiddenUnits])
             : outputGradient.Reshape([flatBatch, _hiddenUnits]);
 
-        _reconstructedHidden = hidden2D;
+        // Forward was: hidden = sigmoid(input @ W^T + b_h)
+        // Backprop through sigmoid: dPreAct = outGrad * sigmoid'(preAct) = outGrad * hidden * (1 - hidden)
+        // We need the hidden activations from forward. Recompute from _lastVisibleInput:
+        if (_lastVisibleInput != null)
+        {
+            var input2D = _lastVisibleInput.Shape.Length == 1
+                ? _lastVisibleInput.Reshape([1, _visibleUnits])
+                : _lastVisibleInput.Reshape([flatBatch, _visibleUnits]);
 
+            // Recompute pre-activation and sigmoid derivative
+            var preAct = Engine.TensorAdd(
+                Engine.TensorMatMul(input2D, Engine.TensorTranspose(_weights)),
+                Engine.TensorRepeatElements(_hiddenBiases.Reshape([1, _hiddenUnits]), flatBatch, axis: 0));
+            var hidden = new Tensor<T>(preAct.Shape);
+            for (int i = 0; i < hidden.Length; i++)
+                hidden[i] = MathHelper.Sigmoid(preAct[i]);
+
+            // sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
+            var ones = new Tensor<T>(hidden.Shape);
+            ones.Fill(NumOps.One);
+            var sigmoidDeriv = Engine.TensorMultiply(hidden, Engine.TensorSubtract(ones, hidden));
+            var dPreAct = Engine.TensorMultiply(outGrad2D, sigmoidDeriv);
+
+            // Weight gradients: dW = input^T @ dPreAct (note: W is [hidden, visible] so transpose)
+            _weightsGradient = Engine.TensorTranspose(Engine.TensorMatMul(Engine.TensorTranspose(input2D), dPreAct));
+            _hiddenBiasesGradient = Engine.ReduceSum(dPreAct, [0], keepDims: false);
+            _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape); // visible biases don't affect forward
+
+            // Input gradient: dInput = dPreAct @ W
+            var inputGrad = Engine.TensorMatMul(dPreAct, _weights);
+
+            if (_originalInputShape == null)
+                return inputGrad;
+            if (_originalInputShape.Length == 1)
+                return inputGrad.Reshape([_visibleUnits]);
+            var outputShape = (int[])_originalInputShape.Clone();
+            outputShape[^1] = _visibleUnits;
+            return inputGrad.Reshape(outputShape);
+        }
+
+        // Fallback: reconstruction-based backward (legacy)
+        var hidden2D = outGrad2D;
+        _reconstructedHidden = hidden2D;
         Tensor<T> visibleProbs = SampleVisibleGivenHiddenTensor(hidden2D);
         _reconstructedVisible = visibleProbs;
 
@@ -690,9 +731,9 @@ public class RBMLayer<T> : LayerBase<T>
         if (_originalInputShape.Length == 1)
             return visibleProbs.Reshape([_visibleUnits]);
 
-        var outputShape = (int[])_originalInputShape.Clone();
-        outputShape[^1] = _visibleUnits;
-        return visibleProbs.Reshape(outputShape);
+        var fallbackShape = (int[])_originalInputShape.Clone();
+        fallbackShape[^1] = _visibleUnits;
+        return visibleProbs.Reshape(fallbackShape);
     }
 
 
