@@ -237,6 +237,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// - It has weights that are updated to make better predictions over time
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _weights.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

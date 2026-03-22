@@ -107,7 +107,23 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount => _linear1Weights.Length + _linear1Bias.Length + _linear2Weights.Length + _linear2Bias.Length;
     public override bool SupportsTraining => true;
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_linear1WeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            _linear1WeightsGradient.ToVector(), _linear1BiasGradient!.ToVector(),
+            _linear2WeightsGradient!.ToVector(), _linear2BiasGradient!.ToVector());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _linear1WeightsGradient = null; _linear1BiasGradient = null;
+        _linear2WeightsGradient = null; _linear2BiasGradient = null;
+    }
 
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
