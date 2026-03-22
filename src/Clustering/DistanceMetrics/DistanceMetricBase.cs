@@ -54,10 +54,15 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
             throw new ArgumentOutOfRangeException(nameof(length),
                 $"Length ({length}) must be non-negative and within bounds of both arrays (a={a.Length}, b={b.Length}).");
 
-        // Engine.DotProduct is zero-overhead in 0.13.0 — always use it
-        var diff = new Vector<T>(length);
+        // Engine.Subtract + DotProduct — zero-overhead in 0.13.0
+        var aVec = new Vector<T>(length);
+        var bVec = new Vector<T>(length);
         for (int i = 0; i < length; i++)
-            diff[i] = NumOps.Subtract(a[i], b[i]);
+        {
+            aVec[i] = a[i];
+            bVec[i] = b[i];
+        }
+        var diff = Engine.Subtract(aVec, bVec);
         return NumOps.Sqrt(Engine.DotProduct(diff, diff));
     }
 

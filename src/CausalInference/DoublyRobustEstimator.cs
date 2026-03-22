@@ -708,13 +708,7 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
         var mu0 = PredictOutcome(x, _outcomeCoefficients0!);
         var cate = new Vector<T>(x.Rows);
 
-        for (int i = 0; i < x.Rows; i++)
-        {
-            // CATE from outcome model
-            cate[i] = NumOps.Subtract(mu1[i], mu0[i]);
-        }
-
-        return cate;
+        return Engine.Subtract(mu1, mu0);
     }
 
     /// <summary>
@@ -733,12 +727,7 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
         var mu0 = PredictOutcome(x, _outcomeCoefficients0);
         var effects = new Vector<T>(x.Rows);
 
-        for (int i = 0; i < x.Rows; i++)
-        {
-            effects[i] = NumOps.Subtract(mu1[i], mu0[i]);
-        }
-
-        return effects;
+        return Engine.Subtract(mu1, mu0);
     }
 
     /// <summary>
