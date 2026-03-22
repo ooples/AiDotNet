@@ -1458,7 +1458,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _gpuWidth = 0;
         _gpuActivationType = FusedActivationType.None;
 
-        // Reinitialize weights
-        InitializeWeights();
+        // Note: Do NOT reinitialize weights in ResetState.
+        // ResetState clears cached state, not learned parameters.
     }
 }
