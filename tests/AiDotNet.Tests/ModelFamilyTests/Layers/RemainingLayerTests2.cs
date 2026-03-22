@@ -48,9 +48,10 @@ public class GroupedQueryAttentionLayerTests : LayerTestBase
 
 public class SwinPatchMergingLayerTests : LayerTestBase
 {
+    // SwinPatchMerging expects [batch, seqLen, dim] where seqLen = H*W, H and W even
     protected override ILayer<double> CreateLayer()
         => new SwinPatchMergingLayer<double>(inputDim: 4);
-    protected override int[] InputShape => [1, 4, 4, 4]; // [batch, H, W, C]
+    protected override int[] InputShape => [1, 4, 4]; // [batch, seqLen=4 (2x2), dim=4]
 }
 
 public class ResidualDenseBlockTests : LayerTestBase

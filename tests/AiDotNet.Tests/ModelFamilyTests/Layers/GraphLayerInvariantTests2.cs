@@ -29,6 +29,10 @@ public class EdgeConditionalConvLayerTests : LayerTestBase
         var adj = new Tensor<double>([1, 2, 2]);
         adj[0, 0, 0] = 1; adj[0, 0, 1] = 1; adj[0, 1, 0] = 1; adj[0, 1, 1] = 1;
         layer.SetAdjacencyMatrix(adj);
+        // Edge features: [batch, nodes, nodes, edgeFeatures]
+        var ef = new Tensor<double>([1, 2, 2, 2]);
+        for (int i = 0; i < ef.Length; i++) ef[i] = 0.5;
+        layer.SetEdgeFeatures(ef);
         return layer;
     }
     protected override int[] InputShape => [1, 2, 4];

@@ -7,11 +7,12 @@ namespace AiDotNet.Tests.ModelFamilyTests.Layers;
 
 public class CroppingLayerTests : LayerTestBase
 {
+    // CroppingLayer uses NHWC: input [batch, H, W, C], crop arrays per dim of inputShape
     protected override ILayer<double> CreateLayer()
-        => new CroppingLayer<double>(inputShape: [1, 6, 6],
-            cropTop: [0, 1, 1], cropBottom: [0, 1, 1], cropLeft: [0, 1, 1], cropRight: [0, 1, 1],
+        => new CroppingLayer<double>(inputShape: [6, 6, 1],
+            cropTop: [1, 1, 0], cropBottom: [1, 1, 0], cropLeft: [1, 1, 0], cropRight: [1, 1, 0],
             scalarActivation: new IdentityActivation<double>() as IActivationFunction<double>);
-    protected override int[] InputShape => [1, 1, 6, 6];
+    protected override int[] InputShape => [1, 6, 6, 1]; // NHWC
     protected override bool ExpectsTrainableParameters => false;
     protected override bool ExpectsNonZeroGradients => false;
 }
@@ -34,9 +35,10 @@ public class SwinPatchEmbeddingLayerTests : LayerTestBase
 
 public class SwinTransformerBlockLayerTests : LayerTestBase
 {
+    // SwinBlock expects [batch, seqLen, dim] where seqLen = H*W, H divisible by windowSize
     protected override ILayer<double> CreateLayer()
         => new SwinTransformerBlockLayer<double>(dim: 8, numHeads: 2, windowSize: 2);
-    protected override int[] InputShape => [1, 4, 4, 8]; // [batch, H, W, C]
+    protected override int[] InputShape => [1, 16, 8]; // [batch, seqLen=16 (4x4), dim=8]
 }
 
 public class SpatialTransformerLayerTests : LayerTestBase
