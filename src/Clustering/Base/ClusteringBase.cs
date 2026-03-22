@@ -734,18 +734,23 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
         // and merge nearby populated clusters
         var mergedId = Enumerable.Range(0, NumClusters).ToArray();
 
-        // Merge empty clusters into the first populated cluster
+        // Find first populated cluster
         int firstPopulated = -1;
         for (int c = 0; c < NumClusters; c++)
         {
             if (clusterPopulations[c] > 0)
             {
-                if (firstPopulated < 0) firstPopulated = c;
+                firstPopulated = c;
+                break;
             }
-            else
+        }
+
+        // Merge all empty clusters into the first populated one
+        if (firstPopulated >= 0)
+        {
+            for (int c = 0; c < NumClusters; c++)
             {
-                // Empty cluster — merge into first populated
-                if (firstPopulated >= 0)
+                if (clusterPopulations[c] == 0)
                     mergedId[c] = firstPopulated;
             }
         }

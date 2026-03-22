@@ -77,14 +77,24 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
         if (options == null) return;
         if (options.MaxIterations.HasValue) MaxEpochs = options.MaxIterations.Value;
         if (options.MaxEpochs.HasValue) MaxEpochs = options.MaxEpochs.Value;
-        if (options.LearningRate.HasValue) LearningRate = options.LearningRate.Value;
         if (options.HiddenUnits.HasValue)
         {
             if (options.HiddenUnits.Value <= 0)
                 throw new ArgumentException("HiddenUnits must be greater than 0.");
             HiddenUnits = options.HiddenUnits.Value;
         }
-        if (options.EdgeThreshold.HasValue) EdgeThreshold = options.EdgeThreshold.Value;
+        if (options.EdgeThreshold.HasValue)
+        {
+            if (double.IsNaN(options.EdgeThreshold.Value) || options.EdgeThreshold.Value < 0 || options.EdgeThreshold.Value > 1)
+                throw new ArgumentException("EdgeThreshold must be a finite value between 0 and 1.");
+            EdgeThreshold = options.EdgeThreshold.Value;
+        }
+        if (options.LearningRate.HasValue)
+        {
+            if (double.IsNaN(options.LearningRate.Value) || options.LearningRate.Value <= 0)
+                throw new ArgumentException("LearningRate must be a positive finite value.");
+            LearningRate = options.LearningRate.Value;
+        }
         if (options.InitialLogVariance.HasValue) InitialLogVariance = options.InitialLogVariance.Value;
         if (options.DefaultKlWeight.HasValue) DefaultKlWeight = options.DefaultKlWeight.Value;
         if (options.MaxKlWeight.HasValue) MaxKlWeight = options.MaxKlWeight.Value;
