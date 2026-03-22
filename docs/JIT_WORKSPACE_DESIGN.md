@@ -180,10 +180,10 @@ BenchmarkDotNet project comparing:
 - Operation-level comparisons (Conv2D, GroupNorm, Attention)
 - Memory usage comparisons
 
-## Gaps in Current Code (What I Claimed to Do But Didn't)
+## Gaps in Current Code (Status: Resolved in PR #1018)
 
 1. **CodeGenerator fused ops**: Generate the SAME allocating calls as unfused — zero benefit
 2. **CompileForward**: Chains ExportComputationGraph through layers but still targets TensorOperations — zero benefit
-3. **UNet CompileForward**: Exports graph but doesn't handle skip connections, time embedding, or the encoder-decoder structure properly
+3. ~~**UNet CompileForward**: Exports graph but doesn't handle skip connections~~ � FIXED: Wired to CompileWithWorkspace
 4. **FusedGroupNormActivationConv2DOp code gen**: Calls GroupNorm then Swish then Conv2D separately — no fusion
 5. **FusedAddGroupNormOp code gen**: Calls Add then GroupNorm separately — no fusion
