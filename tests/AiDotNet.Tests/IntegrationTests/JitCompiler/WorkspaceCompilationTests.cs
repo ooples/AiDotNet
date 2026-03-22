@@ -116,7 +116,7 @@ public class WorkspaceCompilationTests
 
         var a = TensorOperations<double>.Variable(aData, "a");
         var b = TensorOperations<double>.Variable(bData, "b");
-        var result = TensorOperations<double>.MatMul(a, b);
+        var result = TensorOperations<double>.MatrixMultiply(a, b);
 
         var (execute, workspace, outputSlot) = _jit.CompileWithWorkspace<double>(result, new() { a, b });
 

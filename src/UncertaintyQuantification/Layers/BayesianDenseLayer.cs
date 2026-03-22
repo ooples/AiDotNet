@@ -277,14 +277,14 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
             var inputOffset = b * _inputSize;
             var outputOffset = b * _outputSize;
 
+            // Engine-accelerated forward: output = bias + weights · input
+            var inputSlice = new Vector<T>(_inputSize);
+            for (int j = 0; j < _inputSize; j++) inputSlice[j] = inputFlat[inputOffset + j];
             for (int i = 0; i < _outputSize; i++)
             {
-                var sum = _sampledBias![i];
-                for (int j = 0; j < _inputSize; j++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_sampledWeights![i, j], inputFlat[inputOffset + j]));
-                }
-                outputVector[outputOffset + i] = sum;
+                var wRow = new Vector<T>(_inputSize);
+                for (int j = 0; j < _inputSize; j++) wRow[j] = _sampledWeights![i, j];
+                outputVector[outputOffset + i] = NumOps.Add(_sampledBias![i], Engine.DotProduct(wRow, inputSlice));
             }
         }
 

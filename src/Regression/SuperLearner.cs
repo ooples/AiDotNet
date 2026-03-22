@@ -264,12 +264,9 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         var result = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            T combined = _metaIntercept;
-            for (int m = 0; m < numModels; m++)
-            {
-                combined = NumOps.Add(combined, NumOps.Multiply(basePredictions[i, m], _metaWeights[m]));
-            }
-            result[i] = combined;
+            var predRow = new Vector<T>(numModels);
+            for (int m = 0; m < numModels; m++) predRow[m] = basePredictions[i, m];
+            result[i] = NumOps.Add(_metaIntercept, Engine.DotProduct(predRow, _metaWeights));
         }
 
         return result;

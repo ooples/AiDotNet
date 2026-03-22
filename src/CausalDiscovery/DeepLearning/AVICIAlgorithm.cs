@@ -142,14 +142,16 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
 
                     // Compute attention scores against all keys for target j
                     T maxScore = NumOps.FromDouble(-1e10);
-                    var scores = new T[d];
+                    var scores = new Vector<T>(d);
+                    // Extract Q row for this query
+                    var qRow = new Vector<T>(headDim);
+                    for (int k = 0; k < headDim; k++) qRow[k] = Q[qIdx, k];
                     for (int ki = 0; ki < d; ki++)
                     {
                         int kIdx = ki * d + j;
-                        T score = NumOps.Zero;
-                        for (int k = 0; k < headDim; k++)
-                            score = NumOps.Add(score, NumOps.Multiply(Q[qIdx, k], K[kIdx, k]));
-                        score = NumOps.Multiply(score, headScale);
+                        var kRow = new Vector<T>(headDim);
+                        for (int k = 0; k < headDim; k++) kRow[k] = K[kIdx, k];
+                        T score = NumOps.Multiply(Engine.DotProduct(qRow, kRow), headScale);
                         scores[ki] = score;
                         if (NumOps.GreaterThan(score, maxScore)) maxScore = score;
                     }
