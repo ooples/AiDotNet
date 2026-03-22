@@ -90,9 +90,6 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     public T LowerBound => _lowerBound;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
-
-    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new GaussianMixtureModel<T>(new GMMOptions<T>

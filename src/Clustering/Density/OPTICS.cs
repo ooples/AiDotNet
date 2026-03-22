@@ -130,10 +130,10 @@ public class OPTICS<T> : ClusteringBase<T>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (OPTICS<T>)CreateNewInstance();
-        clone._reachabilityDistances = _reachabilityDistances?.ToArray();
-        clone._coreDistances = _coreDistances?.ToArray();
-        clone._ordering = _ordering?.ToArray();
-        clone._predecessor = _predecessor?.ToArray();
+        clone._reachabilityDistances = _reachabilityDistances.Length > 0 ? new Vector<T>(_reachabilityDistances.ToArray()) : new Vector<T>(0);
+        clone._coreDistances = _coreDistances.Length > 0 ? new Vector<T>(_coreDistances.ToArray()) : new Vector<T>(0);
+        clone._ordering = _ordering?.ToArray() ?? Array.Empty<int>();
+        clone._predecessor = _predecessor?.ToArray() ?? Array.Empty<int>();
         clone._featureMeans = _featureMeans?.ToArray();
         clone._featureStds = _featureStds?.ToArray();
         clone.NumClusters = NumClusters;

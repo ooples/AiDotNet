@@ -77,6 +77,9 @@ public abstract class MetaLearningModelBase<T, TInput, TOutput> : IFullModel<T, 
     public virtual int ParameterCount => GetParameters().Length;
 
     /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
     public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);
 
     // --- ICloneable<IFullModel<T, TInput, TOutput>> ---
