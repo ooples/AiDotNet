@@ -1493,6 +1493,14 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     }
 
     /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightGradients = null;
+        _biasGradients = null;
+    }
+
+    /// <inheritdoc/>
     public override void ResetState()
     {
         _lastInput = null;

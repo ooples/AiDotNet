@@ -778,6 +778,15 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _norm1.ClearGradients(); _norm2.ClearGradients();
+        _qkvProj.ClearGradients(); _outProj.ClearGradients();
+        _mlpFc1.ClearGradients(); _mlpFc2.ClearGradients();
+    }
+
+    /// <inheritdoc/>
     public override void ResetState()
     {
         _norm1.ResetState();
