@@ -8,6 +8,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Validation;
@@ -60,6 +61,8 @@ namespace AiDotNet.Models;
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretableModel<T>
 {
+    private static IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Gets the vector of coefficients used by the model.
     /// </summary>

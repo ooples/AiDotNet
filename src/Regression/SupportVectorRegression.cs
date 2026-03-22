@@ -410,9 +410,8 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
             for (int i = 0; i < m; i++)
             {
                 // Compute prediction and error for sample i
-                T fi = B;
-                for (int idx = 0; idx < m; idx++)
-                    fi = NumOps.Add(fi, NumOps.Multiply(Alphas[idx], K[i, idx]));
+                var kRow = K.GetRow(i);
+                T fi = NumOps.Add(B, Engine.DotProduct(Alphas, kRow));
                 T Ei = NumOps.Subtract(fi, y[i]);
 
                 // Check KKT conditions
@@ -429,9 +428,8 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
                 for (int k = 0; k < m; k++)
                 {
                     if (k == i) continue;
-                    T fk = B;
-                    for (int l = 0; l < m; l++)
-                        fk = NumOps.Add(fk, NumOps.Multiply(Alphas[l], K[k, l]));
+                    var kRowK = K.GetRow(k);
+                    T fk = NumOps.Add(B, Engine.DotProduct(Alphas, kRowK));
                     T Ek = NumOps.Subtract(fk, y[k]);
                     T diff = NumOps.Abs(NumOps.Subtract(Ei, Ek));
                     if (NumOps.GreaterThan(diff, maxDiff))
@@ -442,7 +440,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
                 }
 
                 T Ej = NumOps.Subtract(
-                    NumOps.Add(B, K.GetRow(j).Zip(Alphas, (k, a) => NumOps.Multiply(k, a)).Aggregate(NumOps.Zero, (acc, v) => NumOps.Add(acc, v))),
+                    NumOps.Add(B, Engine.DotProduct(K.GetRow(j), Alphas)),
                     y[j]);
 
                 T oldAi = Alphas[i];
