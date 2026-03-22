@@ -268,9 +268,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 untestedModels.Remove(model);
                 // Only count as "has tests" if the test can actually construct the model.
                 // Runtime-throwing scaffolds don't provide real test coverage.
-                bool constructible = !string.IsNullOrEmpty(model.TypeName) &&
-                    model.Symbol?.Constructors.Any(c => c.Parameters.IsEmpty ||
-                        c.Parameters.All(p => p.HasExplicitDefaultValue)) == true;
+                bool constructible = !string.IsNullOrEmpty(model.ClassName);
                 model.HasTests = constructible;
                 testedModels.Add(model);
             }

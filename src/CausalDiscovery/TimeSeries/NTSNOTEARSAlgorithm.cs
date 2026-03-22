@@ -377,7 +377,7 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
                     if (Math.Abs(weight) < _wThreshold) continue;
                     double varJ = NumOps.ToDouble(cov[j, j]);
                     double reverseW = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
-                    if (Math.Abs(weight) >= reverseW)
+                    if (Math.Abs(weight) > reverseW || (Math.Abs(weight) == reverseW && i < j))
                         result[i, j] = NumOps.FromDouble(weight);
                 }
         }

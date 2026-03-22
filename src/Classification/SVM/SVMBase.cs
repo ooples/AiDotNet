@@ -115,11 +115,13 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
     /// </summary>
     protected T ComputeRBFKernel(Vector<T> x, Vector<T> y)
     {
-        // Use Engine for vectorized ||x - y||^2 computation
-        var diff = new Vector<T>(x.Length);
+        // Compute ||x - y||^2 without allocating a diff vector
+        T squaredNorm = NumOps.Zero;
         for (int i = 0; i < x.Length; i++)
-            diff[i] = NumOps.Subtract(x[i], y[i]);
-        T squaredNorm = Engine.DotProduct(diff, diff);
+        {
+            T d = NumOps.Subtract(x[i], y[i]);
+            squaredNorm = NumOps.Add(squaredNorm, NumOps.Multiply(d, d));
+        }
         T gamma = GetGamma();
         return NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, squaredNorm)));
     }

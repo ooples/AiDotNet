@@ -144,7 +144,9 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
                         double varJd = NumOps.ToDouble(cov[j, j]);
                         double covIJd = NumOps.ToDouble(cov[i, j]);
                         if (varId > 1e-10 && varJd > 1e-10)
-                            iToJ = Math.Abs(covIJd / varId) >= Math.Abs(covIJd / varJd);
+                            // Strict > with i < j tie-break to avoid creating both directions
+                            iToJ = Math.Abs(covIJd / varId) > Math.Abs(covIJd / varJd) ||
+                                (Math.Abs(covIJd / varId) == Math.Abs(covIJd / varJd) && i < j);
                     }
 
                     if (iToJ)

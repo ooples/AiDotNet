@@ -182,7 +182,7 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         double stdC = Math.Sqrt(Math.Max(dVarC / effectiveN, NumericalStabilityEpsilon));
         double dVarT = NumOps.ToDouble(Engine.DotProduct(centT, centT));
         double stdT = Math.Sqrt(Math.Max(dVarT / effectiveN, NumericalStabilityEpsilon));
-        double betaStd = NumOps.ToDouble(beta) * stdC / stdT;
+        double betaStd = stdT > 1e-15 ? NumOps.ToDouble(beta) * stdC / stdT : 0;
 
         return (corrResidual * corrResidual, betaStd); // Squared correlation as HSIC proxy
     }

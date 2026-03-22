@@ -77,8 +77,8 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
 
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
-        // For small problems, use higher learning rate for faster convergence
-        double effectiveLr = d <= 10 ? Math.Max(_learningRateValue, 0.01) : _learningRateValue;
+        // For small problems, suggest higher learning rate but don't override explicit config
+        double effectiveLr = _learningRateValue;
 
         var X = StandardizeData(data);
 

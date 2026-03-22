@@ -10,7 +10,7 @@ namespace AiDotNet.Benchmarks;
 /// Benchmarks memory allocation patterns: raw allocation vs TensorAllocator vs new Tensor.
 /// Measures GC pressure, allocation count, and throughput.
 /// </summary>
-[SimpleJob(RuntimeMoniker.Net90)]
+[SimpleJob(RuntimeMoniker.Net10_0)]
 [MemoryDiagnoser]
 [RankColumn]
 public class MemoryBenchmarks

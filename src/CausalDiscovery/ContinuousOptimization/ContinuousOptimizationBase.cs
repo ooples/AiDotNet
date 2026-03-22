@@ -218,7 +218,9 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
 
                     double varJ = NumOps.ToDouble(cov[j, j]);
                     double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
-                    if (Math.Abs(weight) >= reverseWeight)
+                    // Use strict > to avoid creating both directions for ties.
+                    // For exact ties, use i < j as tie-breaker.
+                    if (Math.Abs(weight) > reverseWeight || (Math.Abs(weight) == reverseWeight && i < j))
                         result[i, j] = NumOps.FromDouble(weight);
                 }
         }

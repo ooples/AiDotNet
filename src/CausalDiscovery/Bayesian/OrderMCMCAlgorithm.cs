@@ -205,8 +205,10 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
                     W[parents[p], target] = weights[p];
                 else
                 {
-                    // Preserve sign when applying minimum edge weight
-                    T sign = NumOps.GreaterThan(weights[p], NumOps.Zero) ? NumOps.One : NumOps.Negate(NumOps.One);
+                    // Preserve sign when applying minimum edge weight.
+                    // Zero coefficients default to positive sign (unbiased).
+                    bool isNegative = NumOps.ToDouble(weights[p]) < 0;
+                    T sign = isNegative ? NumOps.Negate(NumOps.One) : NumOps.One;
                     W[parents[p], target] = NumOps.Multiply(sign, NumOps.FromDouble(MinEdgeWeight));
                 }
             }

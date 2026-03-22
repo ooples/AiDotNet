@@ -104,7 +104,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                 features[idx, 3] = cov[j, j];
             }
 
-        double prevHW = (double)d; // initial h(W) = tr(I) - d = 0, but use d as conservative start
+        double prevHW = 0; // Initial h(W) = 0 (no edges yet = acyclic)
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
             // Compute Q, K, V for each pair
@@ -318,7 +318,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
             {
                 T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
-                T rhoMax = NumOps.FromDouble(1e+16);
+                T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
                 rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
             }
         }
