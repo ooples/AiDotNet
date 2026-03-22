@@ -651,7 +651,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        throw new InvalidOperationException("Use Forward(Tensor<T> input, Tensor<T> encoderOutput) for TransformerDecoderLayer.");
+        // Decoder-only mode (GPT-style): use self-attention only, skip cross-attention
+        // Per Vaswani et al. 2017, the decoder can operate without encoder output
+        // for autoregressive language models
+        return Forward(input, input);
     }
 
     /// <summary>
