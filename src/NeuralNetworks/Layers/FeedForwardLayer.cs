@@ -857,19 +857,16 @@ public class FeedForwardLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {Weights.Length + Biases.Length} parameters, but got {parameters.Length}");
         }
 
-        // Create new mutable tensors (Engine-created tensors may be immutable)
         int index = 0;
-        var newWeights = new Tensor<T>(Weights.Shape);
-        var wSpan = newWeights.Data.Span;
-        for (int i = 0; i < Weights.Length; i++)
-            wSpan[i] = parameters[index++];
-        Weights = newWeights;
 
-        var newBiases = new Tensor<T>(Biases.Shape);
-        var bSpan = newBiases.Data.Span;
-        for (int i = 0; i < Biases.Length; i++)
-            bSpan[i] = parameters[index++];
-        Biases = newBiases;
+        // Set weights parameters using indexer
+        for (int i = 0; i < Weights.Shape[0]; i++)
+            for (int j = 0; j < Weights.Shape[1]; j++)
+                Weights[i, j] = parameters[index++];
+
+        // Set biases parameters
+        for (int j = 0; j < Biases.Shape[1]; j++)
+            Biases[0, j] = parameters[index++];
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(Weights);
