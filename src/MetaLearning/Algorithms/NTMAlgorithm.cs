@@ -677,16 +677,17 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         // Compute appropriate loss (cross-entropy, MSE, etc.)
         if (targets is Tensor<T> targetTensor)
         {
-            T loss = NumOps.Zero;
             int size = Math.Min(
                 predictions.Shape.Length > 0 ? predictions.Shape[0] : 0,
                 targetTensor.Shape.Length > 0 ? targetTensor.Shape[0] : 0);
 
+            // Compute MSE using Engine.DotProduct
+            var diff = new Vector<T>(size);
             for (int i = 0; i < size; i++)
             {
-                T diff = NumOps.Subtract(predictions[i], targetTensor[i]);
-                loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
+                diff[i] = NumOps.Subtract(predictions[i], targetTensor[i]);
             }
+            T loss = Engine.DotProduct(diff, diff);
 
             if (size > 0)
             {
@@ -1127,12 +1128,7 @@ public class NTMMemory<T>
         // Compute concentration measure: sum of squared weights
         // Higher values mean more focused/sharp attention (approaching one-hot)
         // Lower values mean more spread out attention (approaching uniform)
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < _lastWriteWeights.Length; i++)
-        {
-            T w = _lastWriteWeights[i];
-            sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(w, w));
-        }
+        T sumSquared = AiDotNetEngine.Current.DotProduct(_lastWriteWeights, _lastWriteWeights);
 
         // For a uniform distribution over N items: sum(w^2) = 1/N
         // For a one-hot distribution: sum(w^2) = 1
@@ -2098,20 +2094,19 @@ public class NTMReadHead<T>
 
         for (int i = 0; i < memory.Size; i++)
         {
-            // Cosine similarity
-            T dotProduct = NumOps.Zero;
-            T keyNorm = NumOps.Zero;
-            T memNorm = NumOps.Zero;
-
-            for (int j = 0; j < memory.Width && j < key.Shape[0]; j++)
+            // Cosine similarity using Engine.DotProduct
+            int width = Math.Min(memory.Width, key.Shape[0]);
+            var keyVec = new Vector<T>(width);
+            var memVec = new Vector<T>(width);
+            for (int j = 0; j < width; j++)
             {
-                T keyVal = key[j];
-                T memVal = memory.GetValue(i, j);
-
-                dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(keyVal, memVal));
-                keyNorm = NumOps.Add(keyNorm, NumOps.Multiply(keyVal, keyVal));
-                memNorm = NumOps.Add(memNorm, NumOps.Multiply(memVal, memVal));
+                keyVec[j] = key[j];
+                memVec[j] = memory.GetValue(i, j);
             }
+
+            T dotProduct = AiDotNetEngine.Current.DotProduct(keyVec, memVec);
+            T keyNorm = AiDotNetEngine.Current.DotProduct(keyVec, keyVec);
+            T memNorm = AiDotNetEngine.Current.DotProduct(memVec, memVec);
 
             double keyNormVal = Math.Sqrt(Math.Max(NumOps.ToDouble(keyNorm), 1e-8));
             double memNormVal = Math.Sqrt(Math.Max(NumOps.ToDouble(memNorm), 1e-8));
@@ -2182,20 +2177,19 @@ public class NTMWriteHead<T>
 
         for (int i = 0; i < memory.Size; i++)
         {
-            // Cosine similarity
-            T dotProduct = NumOps.Zero;
-            T keyNorm = NumOps.Zero;
-            T memNorm = NumOps.Zero;
-
-            for (int j = 0; j < memory.Width && j < key.Shape[0]; j++)
+            // Cosine similarity using Engine.DotProduct
+            int width = Math.Min(memory.Width, key.Shape[0]);
+            var keyVec = new Vector<T>(width);
+            var memVec = new Vector<T>(width);
+            for (int j = 0; j < width; j++)
             {
-                T keyVal = key[j];
-                T memVal = memory.GetValue(i, j);
-
-                dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(keyVal, memVal));
-                keyNorm = NumOps.Add(keyNorm, NumOps.Multiply(keyVal, keyVal));
-                memNorm = NumOps.Add(memNorm, NumOps.Multiply(memVal, memVal));
+                keyVec[j] = key[j];
+                memVec[j] = memory.GetValue(i, j);
             }
+
+            T dotProduct = AiDotNetEngine.Current.DotProduct(keyVec, memVec);
+            T keyNorm = AiDotNetEngine.Current.DotProduct(keyVec, keyVec);
+            T memNorm = AiDotNetEngine.Current.DotProduct(memVec, memVec);
 
             double keyNormVal = Math.Sqrt(Math.Max(NumOps.ToDouble(keyNorm), 1e-8));
             double memNormVal = Math.Sqrt(Math.Max(NumOps.ToDouble(memNorm), 1e-8));
