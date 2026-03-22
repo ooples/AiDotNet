@@ -98,6 +98,8 @@ public class LonghornLayerTests : LayerTestBase
 {
     protected override ILayer<double> CreateLayer() => new LonghornLayer<double>(4, 8);
     protected override int[] InputShape => [1, 4, 8];
+    // Group normalization maps constant inputs to same output by design
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }
 
 public class MEGALayerTests : LayerTestBase
