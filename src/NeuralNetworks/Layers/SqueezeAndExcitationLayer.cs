@@ -1438,9 +1438,10 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             spatialAxes = Enumerable.Range(1, rank - 2).ToArray();
         }
 
-        var inputGradientDirect = Engine.TensorMultiply(outputGradient, excitationReshaped);
+        // Broadcast multiply: excitationReshaped [1,1,1,C] * outputGradient [B,H,W,C]
+        var inputGradientDirect = BroadcastElementwiseMultiply(outputGradient, excitationReshaped);
 
-        var excitationGradientSpatial = Engine.TensorMultiply(outputGradient, _lastInput);
+        var excitationGradientSpatial = Engine.TensorMultiply(outputGradient, _lastInput!);
         Tensor<T> excitationGradient;
         if (spatialAxes.Length > 0)
         {
@@ -1903,5 +1904,29 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _bias1Gradient = null;
         _weights2Gradient = null;
         _bias2Gradient = null;
+    }
+
+    /// <summary>
+    /// Element-wise multiply with broadcasting: smaller tensor broadcasts across larger.
+    /// </summary>
+    private Tensor<T> BroadcastElementwiseMultiply(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Length == b.Length) return Engine.TensorMultiply(a, b);
+
+        // Ensure a is the larger tensor
+        var large = a.Length >= b.Length ? a : b;
+        var small = a.Length >= b.Length ? b : a;
+
+        var result = new Tensor<T>(large.Shape);
+        var largeSpan = large.Data.Span;
+        var smallSpan = small.Data.Span;
+        var resultSpan = result.Data.Span;
+
+        // Broadcast: small repeats across large
+        for (int i = 0; i < large.Length; i++)
+        {
+            resultSpan[i] = NumOps.Multiply(largeSpan[i], smallSpan[i % small.Length]);
+        }
+        return result;
     }
 }
