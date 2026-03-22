@@ -321,10 +321,7 @@ public abstract class TradingEnvironment<T> : IEnvironment<T>
     protected void UpdatePortfolioValue(Vector<T> prices)
     {
         T value = _cash;
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            value = NumOps.Add(value, NumOps.Multiply(_positions[asset], prices[asset]));
-        }
+        value = NumOps.Add(value, Engine.DotProduct(_positions, prices));
         _portfolioValue = value;
     }
 

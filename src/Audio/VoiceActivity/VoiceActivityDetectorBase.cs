@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Audio.VoiceActivity;
 
@@ -30,6 +31,11 @@ namespace AiDotNet.Audio.VoiceActivity;
 /// </remarks>
 public abstract class VoiceActivityDetectorBase<T> : IVoiceActivityDetector<T>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     #region Numeric Operations
 
     /// <summary>

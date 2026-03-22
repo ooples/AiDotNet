@@ -206,9 +206,9 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
     /// <summary>
     /// Forward pass through the 2-input MLP: sigmoid hidden layer, linear output.
     /// </summary>
-    private (T prediction, T[] hidden) ForwardMLP(T sourceVal, T noise, Matrix<T> wh, Matrix<T> wo, int h)
+    private (T prediction, Vector<T> hidden) ForwardMLP(T sourceVal, T noise, Matrix<T> wh, Matrix<T> wo, int h)
     {
-        var hidden = new T[h];
+        var hidden = new Vector<T>(h);
         for (int k = 0; k < h; k++)
         {
             T z = NumOps.Add(NumOps.Multiply(sourceVal, wh[0, k]),
@@ -217,9 +217,9 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
             hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
         }
 
-        T pred = NumOps.Zero;
-        for (int k = 0; k < h; k++)
-            pred = NumOps.Add(pred, NumOps.Multiply(hidden[k], wo[k, 0]));
+        var woCol = new Vector<T>(h);
+        for (int k = 0; k < h; k++) woCol[k] = wo[k, 0];
+        T pred = Engine.DotProduct(hidden, woCol);
 
         return (pred, hidden);
     }

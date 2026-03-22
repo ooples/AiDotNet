@@ -897,10 +897,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         }
         else
         {
-            for (int i = 0; i < output.Length; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(output[i], output[i]));
-            }
+            sum = NumOps.Add(sum, Engine.DotProduct(output, output));
             sum = NumOps.FromDouble(Math.Sqrt(Convert.ToDouble(sum)));
         }
 

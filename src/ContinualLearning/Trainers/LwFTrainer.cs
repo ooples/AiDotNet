@@ -435,12 +435,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
     private T ComputeGradientNorm(Vector<T> gradients)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(gradients[i], gradients[i]));
-        }
-        return NumOps.Sqrt(sum);
+        return NumOps.Sqrt(Engine.DotProduct(gradients, gradients));
     }
 
     private Vector<T>? ComputeReplayGradients(

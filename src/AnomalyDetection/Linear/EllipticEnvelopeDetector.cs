@@ -144,10 +144,7 @@ public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
 
             // distance^2 = diff' * temp
             T distSquared = NumOps.Zero;
-            for (int j = 0; j < d; j++)
-            {
-                distSquared = NumOps.Add(distSquared, NumOps.Multiply(diff[j], temp[j]));
-            }
+            distSquared = NumOps.Add(distSquared, Engine.DotProduct(diff, temp));
 
             scores[i] = NumOps.Sqrt(distSquared);
         }
@@ -195,10 +192,7 @@ public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
                 }
 
                 T distSquared = NumOps.Zero;
-                for (int j = 0; j < d; j++)
-                {
-                    distSquared = NumOps.Add(distSquared, NumOps.Multiply(diff[j], temp[j]));
-                }
+                distSquared = NumOps.Add(distSquared, Engine.DotProduct(diff, temp));
 
                 distances[i] = NumOps.ToDouble(distSquared);
             }

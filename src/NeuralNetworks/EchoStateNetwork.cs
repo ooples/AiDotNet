@@ -724,10 +724,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Calculate Rayleigh quotient
         Vector<T> Ax = matrix.Multiply(x);
         T rayleighQuotient = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            rayleighQuotient = NumOps.Add(rayleighQuotient, NumOps.Multiply(Ax[i], x[i]));
-        }
+        rayleighQuotient = NumOps.Add(rayleighQuotient, Engine.DotProduct(Ax, x));
 
         return Math.Abs(Convert.ToDouble(rayleighQuotient));
     }

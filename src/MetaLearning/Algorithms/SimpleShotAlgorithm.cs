@@ -266,10 +266,7 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         {
             // L2 normalize
             T normSq = NumOps.Zero;
-            for (int i = 0; i < features.Length; i++)
-            {
-                normSq = NumOps.Add(normSq, NumOps.Multiply(features[i], features[i]));
-            }
+            normSq = NumOps.Add(normSq, Engine.DotProduct(features, features));
             double norm = Math.Sqrt(NumOps.ToDouble(normSq));
             if (norm > 1e-10)
             {

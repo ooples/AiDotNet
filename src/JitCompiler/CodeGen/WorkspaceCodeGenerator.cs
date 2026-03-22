@@ -1,6 +1,4 @@
-// This file requires TensorWorkspace<T> from AiDotNet.Tensors (pending NuGet release).
-// Gated behind TENSORWORKSPACE_AVAILABLE until the dependency is available.
-#if TENSORWORKSPACE_AVAILABLE
+// TensorWorkspace<T> is now available in AiDotNet.Tensors 0.13.0+
 using System.Linq.Expressions;
 using System.Reflection;
 using AiDotNet.JitCompiler.IR;
@@ -141,20 +139,58 @@ public class WorkspaceCodeGenerator
             AddOp => EmitInto<T>(engine, "TensorAddInto", output, inputs[0], inputs[1]),
             SubtractOp => EmitAllocating<T>(engine, "TensorSubtract", output, inputs),
             ElementwiseMultiplyOp => EmitInto<T>(engine, "TensorMultiplyInto", output, inputs[0], inputs[1]),
+            DivideOp => EmitAllocating<T>(engine, "TensorDivide", output, inputs),
+            NegateOp => EmitAllocating<T>(engine, "TensorNegate", output, inputs),
+            PowerOp => EmitAllocating<T>(engine, "TensorPow", output, inputs),
 
-            // Convolution — into pre-allocated output
+            // Element-wise math
+            ExpOp => EmitAllocating<T>(engine, "TensorExp", output, inputs),
+            LogOp => EmitAllocating<T>(engine, "TensorLog", output, inputs),
+            SqrtOp => EmitAllocating<T>(engine, "TensorSqrt", output, inputs),
+            AbsOp => EmitAllocating<T>(engine, "TensorAbs", output, inputs),
+
+            // Convolution
             Conv2DOp conv => EmitConv2DInto<T>(engine, output, inputs[0], inputs[1], conv),
 
-            // Normalization — into pre-allocated output
+            // Normalization
             GroupNormOp gn => EmitGroupNormInto<T>(engine, output, inputs, gn),
+            BatchNormOp => EmitAllocating<T>(engine, "BatchNorm", output, inputs),
+            LayerNormOp => EmitAllocating<T>(engine, "LayerNorm", output, inputs),
 
-            // Activations — into pre-allocated output
+            // Activations
             ReLUOp => EmitActivationInto<T>(engine, "ReLUInto", output, inputs[0]),
             SigmoidOp => EmitActivationInto<T>(engine, "SigmoidInto", output, inputs[0]),
             SwishOp => EmitActivationInto<T>(engine, "SwishInto", output, inputs[0]),
             GELUOp => EmitActivationInto<T>(engine, "GELUInto", output, inputs[0]),
             TanhOp => EmitActivationInto<T>(engine, "TanhInto", output, inputs[0]),
             MishOp => EmitActivationInto<T>(engine, "MishInto", output, inputs[0]),
+            LeakyReLUOp => EmitActivationInto<T>(engine, "LeakyReLUInto", output, inputs[0]),
+            ELUOp => EmitAllocating<T>(engine, "ELU", output, inputs),
+            SELUOp => EmitAllocating<T>(engine, "SELU", output, inputs),
+            SoftPlusOp => EmitAllocating<T>(engine, "SoftPlus", output, inputs),
+            HardSigmoidOp => EmitAllocating<T>(engine, "HardSigmoid", output, inputs),
+            HardTanhOp => EmitAllocating<T>(engine, "HardTanh", output, inputs),
+            SoftmaxOp => EmitAllocating<T>(engine, "Softmax", output, inputs),
+            LogSoftmaxOp => EmitAllocating<T>(engine, "TensorLogSoftmax", output, inputs),
+            MaxPool2DOp => EmitAllocating<T>(engine, "MaxPool2D", output, inputs),
+            AvgPool2DOp => EmitAllocating<T>(engine, "AvgPool2D", output, inputs),
+            DropoutOp => EmitAllocating<T>(engine, "Dropout", output, inputs),
+            EmbeddingOp => EmitAllocating<T>(engine, "Embedding", output, inputs),
+            LSTMCellOp => EmitAllocating<T>(engine, "LSTMCell", output, inputs),
+            GRUCellOp => EmitAllocating<T>(engine, "GRUCell", output, inputs),
+            DepthwiseConv2DOp => EmitAllocating<T>(engine, "DepthwiseConv2D", output, inputs),
+            ConvTranspose2DOp => EmitAllocating<T>(engine, "ConvTranspose2D", output, inputs),
+            AttentionOp => EmitAllocating<T>(engine, "ScaledDotProductAttention", output, inputs),
+            ScaledDotProductAttentionOp => EmitAllocating<T>(engine, "ScaledDotProductAttention", output, inputs),
+            MultiHeadAttentionOp => EmitAllocating<T>(engine, "MultiHeadAttention", output, inputs),
+            SumOp => EmitAllocating<T>(engine, "TensorSum", output, inputs),
+            MeanOp => EmitAllocating<T>(engine, "TensorMean", output, inputs),
+            SliceOp => EmitAllocating<T>(engine, "Slice", output, inputs),
+            PadOp => EmitAllocating<T>(engine, "Pad", output, inputs),
+            SplitOp => EmitAllocating<T>(engine, "Split", output, inputs),
+            UpsampleOp => EmitAllocating<T>(engine, "Upsample", output, inputs),
+            SpMMOp => EmitAllocating<T>(engine, "SpMM", output, inputs),
+            GridSampleOp => EmitAllocating<T>(engine, "GridSample", output, inputs),
 
             // Fused operations
             FusedGroupNormActivationOp fgna => EmitGroupNormSwishInto<T>(engine, output, inputs, fgna),
@@ -166,14 +202,14 @@ public class WorkspaceCodeGenerator
             MatMulOp => EmitInto<T>(engine, "MatMulInto", output, inputs[0], inputs[1]),
             TransposeOp => EmitTransposeInto<T>(engine, output, inputs[0]),
 
-            // Shape operations — view only, no computation needed
+            // Shape operations
             ReshapeOp reshape => EmitReshape<T>(output, inputs[0], reshape),
 
             // Concatenation
             ConcatOp concat => EmitConcatInto<T>(engine, output, inputs, concat),
 
-            // Constant — just copy
-            ConstantOp => null, // constants are pre-loaded into workspace
+            // Constant — pre-loaded into workspace
+            ConstantOp => null,
 
             // Default: fall back to allocating call + copy
             _ => EmitFallback<T>(engine, op, output, inputs)
@@ -272,8 +308,8 @@ public class WorkspaceCodeGenerator
     private Expression EmitAddGroupNormInto<T>(ParameterExpression engine,
         ParameterExpression dest, Expression[] inputs, FusedAddGroupNormOp fagn)
     {
-        var method = typeof(IEngine).GetMethod("AddGroupNormInto")!.MakeGenericMethod(typeof(T));
-        return Expression.Call(engine, method, dest, inputs[0], inputs[1],
+        var agnMethod = typeof(IEngine).GetMethod("AddGroupNormInto")!.MakeGenericMethod(typeof(T));
+        return Expression.Call(engine, agnMethod, dest, inputs[0], inputs[1],
             Expression.Constant(fagn.NumGroups), inputs[2], inputs[3],
             Expression.Constant(fagn.Epsilon));
     }
@@ -325,4 +361,4 @@ public class WorkspaceCodeGenerator
         return null;
     }
 }
-#endif
+

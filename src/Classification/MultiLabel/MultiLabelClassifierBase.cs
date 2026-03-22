@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 using Newtonsoft.Json;
 
@@ -17,6 +18,11 @@ namespace AiDotNet.Classification.MultiLabel;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>, IModelShape
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Gets the numeric operations provider for type T.
     /// </summary>

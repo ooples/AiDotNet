@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -37,6 +38,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 public class LinearProjector<T> : IProjectorHead<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -116,18 +118,30 @@ public class LinearProjector<T> : IProjectorHead<T>
         var batchSize = input.Shape[0];
         var result = new T[batchSize * _outputDim];
 
+        // Pre-extract weight columns for Engine.DotProduct
+        var weightCols = new Vector<T>[_outputDim];
+        for (int o = 0; o < _outputDim; o++)
+        {
+            weightCols[o] = new Vector<T>(_inputDim);
+            for (int i = 0; i < _inputDim; i++)
+            {
+                weightCols[o][i] = _weight[i, o];
+            }
+        }
+
         for (int b = 0; b < batchSize; b++)
         {
+            // Extract input row
+            var inputRow = new Vector<T>(_inputDim);
+            for (int i = 0; i < _inputDim; i++)
+            {
+                inputRow[i] = input[b, i];
+            }
+
             for (int o = 0; o < _outputDim; o++)
             {
-                T sum = _useBias && _bias is not null ? _bias[o] : NumOps.Zero;
-
-                for (int i = 0; i < _inputDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[b, i], _weight[i, o]));
-                }
-
-                result[b * _outputDim + o] = sum;
+                T bias = _useBias && _bias is not null ? _bias[o] : NumOps.Zero;
+                result[b * _outputDim + o] = NumOps.Add(bias, Engine.DotProduct(inputRow, weightCols[o]));
             }
         }
 
@@ -142,18 +156,31 @@ public class LinearProjector<T> : IProjectorHead<T>
 
         var batchSize = gradients.Shape[0];
 
+        // Pre-extract weight rows for input gradient computation
+        var weightRows = new Vector<T>[_inputDim];
+        for (int i = 0; i < _inputDim; i++)
+        {
+            weightRows[i] = new Vector<T>(_outputDim);
+            for (int o = 0; o < _outputDim; o++)
+            {
+                weightRows[i][o] = _weight[i, o];
+            }
+        }
+
         // Input gradient: gradients @ weight.T
         var inputGrad = new T[batchSize * _inputDim];
         for (int b = 0; b < batchSize; b++)
         {
+            // Extract gradient row
+            var gradRow = new Vector<T>(_outputDim);
+            for (int o = 0; o < _outputDim; o++)
+            {
+                gradRow[o] = gradients[b, o];
+            }
+
             for (int i = 0; i < _inputDim; i++)
             {
-                T sum = NumOps.Zero;
-                for (int o = 0; o < _outputDim; o++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(gradients[b, o], _weight[i, o]));
-                }
-                inputGrad[b * _inputDim + i] = sum;
+                inputGrad[b * _inputDim + i] = Engine.DotProduct(gradRow, weightRows[i]);
             }
         }
 
@@ -161,14 +188,22 @@ public class LinearProjector<T> : IProjectorHead<T>
         var weightGrad = new T[_inputDim * _outputDim];
         for (int i = 0; i < _inputDim; i++)
         {
+            // Extract input column (all batches for feature i)
+            var inputCol = new Vector<T>(batchSize);
+            for (int b = 0; b < batchSize; b++)
+            {
+                inputCol[b] = _lastInput[b, i];
+            }
+
             for (int o = 0; o < _outputDim; o++)
             {
-                T sum = NumOps.Zero;
+                // Extract gradient column (all batches for output o)
+                var gradCol = new Vector<T>(batchSize);
                 for (int b = 0; b < batchSize; b++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_lastInput[b, i], gradients[b, o]));
+                    gradCol[b] = gradients[b, o];
                 }
-                weightGrad[i * _outputDim + o] = sum;
+                weightGrad[i * _outputDim + o] = Engine.DotProduct(inputCol, gradCol);
             }
         }
 

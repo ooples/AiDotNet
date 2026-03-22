@@ -167,13 +167,10 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         var distArray = new double[n];
         for (int i = 0; i < n; i++)
         {
-            double sumSq = 0;
+            var trainRow = new Vector<T>(d);
             for (int j = 0; j < d; j++)
-            {
-                double diff = NumOps.ToDouble(sample[j]) - NumOps.ToDouble(xTrain[i, j]);
-                sumSq += diff * diff;
-            }
-            distArray[i] = Math.Sqrt(sumSq);
+                trainRow[j] = xTrain[i, j];
+            distArray[i] = NumOps.ToDouble(ComputeDistance(sample, trainRow));
         }
 
         // Partial sort: find k nearest using selection rather than full sort

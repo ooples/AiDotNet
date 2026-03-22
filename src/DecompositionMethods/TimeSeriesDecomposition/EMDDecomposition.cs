@@ -609,10 +609,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     private T CalculateEnergy(Vector<T> signal)
     {
         T sum = NumOps.Zero;
-        for (int i = 0; i < signal.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(signal[i], signal[i]));
-        }
+        sum = NumOps.Add(sum, Engine.DotProduct(signal, signal));
 
         return NumOps.Divide(sum, NumOps.FromDouble(signal.Length));
     }
@@ -775,10 +772,7 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     private bool IsIMFNegligible(Vector<T> imf)
     {
         T sum = NumOps.Zero;
-        for (int i = 0; i < imf.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(imf[i], imf[i]));
-        }
+        sum = NumOps.Add(sum, Engine.DotProduct(imf, imf));
         T energy = NumOps.Divide(sum, NumOps.FromDouble(imf.Length));
 
         return NumOps.LessThan(energy, NumOps.FromDouble(_threshold));

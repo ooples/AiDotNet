@@ -1484,10 +1484,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             if (_bayesianOptions.IncludeRegression && _regression != null && futureExog != null)
             {
                 Vector<T> exogRow = futureExog.GetRow(t);
-                for (int i = 0; i < _regression.Length; i++)
-                {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(exogRow[i], _regression[i]));
-                }
+                prediction = NumOps.Add(prediction, Engine.DotProduct(exogRow, _regression));
             }
 
             forecast[t] = prediction;
@@ -1739,10 +1736,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         if (_bayesianOptions.IncludeRegression && _regression != null)
         {
             int regLen = Math.Min(input.Length, _regression.Length);
-            for (int i = 0; i < regLen; i++)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_regression[i], input[i]));
-            }
+            prediction = NumOps.Add(prediction, Engine.DotProduct(_regression, input));
         }
 
         return GuardPrediction(prediction);

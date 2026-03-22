@@ -5,6 +5,7 @@ using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Memory;
 using AiDotNet.ContinualLearning.Results;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json.Linq;
 using AiDotNet.Validation;
@@ -38,6 +39,11 @@ namespace AiDotNet.ContinualLearning.Trainers;
 public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearner<T, TInput, TOutput>
 {
     #region Protected Fields
+
+    /// <summary>
+    /// Provides hardware-accelerated tensor/vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// The underlying model being trained.

@@ -305,10 +305,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
                 }
 
                 T dotProduct = NumOps.Zero;
-                for (int i = 0; i < rows; i++)
-                {
-                    dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(column[i], prevColumn[i]));
-                }
+                dotProduct = NumOps.Add(dotProduct, Engine.DotProduct(column, prevColumn));
 
                 for (int i = 0; i < rows; i++)
                 {
@@ -317,10 +314,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
             }
 
             T norm = NumOps.Zero;
-            for (int i = 0; i < rows; i++)
-            {
-                norm = NumOps.Add(norm, NumOps.Multiply(column[i], column[i]));
-            }
+            norm = NumOps.Add(norm, Engine.DotProduct(column, column));
             norm = NumOps.Sqrt(norm);
 
             if (NumOps.GreaterThan(norm, NumOps.FromDouble(1e-10)))

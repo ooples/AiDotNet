@@ -249,11 +249,16 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
             {
                 T prediction = _intercept;
 
-                // Regression component using external regressors
-                for (int i = 0; i < xNew.Columns && i < _regressionCoefficients.Length; i++)
+                // Regression component using external regressors via Engine.DotProduct
+                int regLen = Math.Min(xNew.Columns, _regressionCoefficients.Length);
+                var xRow = new Vector<T>(regLen);
+                var regCoeffs = new Vector<T>(regLen);
+                for (int i = 0; i < regLen; i++)
                 {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(xNew[t, i], _regressionCoefficients[i]));
+                    xRow[i] = xNew[t, i];
+                    regCoeffs[i] = _regressionCoefficients[i];
                 }
+                prediction = NumOps.Add(prediction, Engine.DotProduct(xRow, regCoeffs));
 
                 // AR component using previous predictions (centered around intercept)
                 for (int p = 0; p < _arimaOptions.AROrder; p++)
@@ -276,10 +281,15 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         for (int t = 0; t < horizon; t++)
         {
             T prediction = _intercept;
-            for (int i = 0; i < xNew.Columns && i < _regressionCoefficients.Length; i++)
+            int regLen2 = Math.Min(xNew.Columns, _regressionCoefficients.Length);
+            var xRow2 = new Vector<T>(regLen2);
+            var regCoeffs2 = new Vector<T>(regLen2);
+            for (int i = 0; i < regLen2; i++)
             {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(xNew[t, i], _regressionCoefficients[i]));
+                xRow2[i] = xNew[t, i];
+                regCoeffs2[i] = _regressionCoefficients[i];
             }
+            prediction = NumOps.Add(prediction, Engine.DotProduct(xRow2, regCoeffs2));
             fallback[t] = prediction;
         }
 

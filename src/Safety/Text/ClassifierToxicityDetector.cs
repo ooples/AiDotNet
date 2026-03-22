@@ -168,10 +168,7 @@ public class ClassifierToxicityDetector<T> : TextSafetyModuleBase<T>
         T dot = bias;
         int len = Math.Min(features.Length, weights.Length);
 
-        for (int i = 0; i < len; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(features[i], weights[i]));
-        }
+        dot = NumOps.Add(dot, Engine.DotProduct(features, weights));
 
         // Sigmoid function: 1 / (1 + exp(-x))
         double dotVal = NumOps.ToDouble(dot);

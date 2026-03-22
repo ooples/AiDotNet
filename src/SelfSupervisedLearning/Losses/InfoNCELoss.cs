@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SelfSupervisedLearning.Losses;
 
@@ -35,6 +36,7 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 public class InfoNCELoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly double _temperature;
     private readonly bool _normalize;
@@ -84,26 +86,22 @@ public class InfoNCELoss<T>
 
         for (int i = 0; i < batchSize; i++)
         {
-            // Compute positive logit: q_i · k+_i / τ
-            T posLogit = NumOps.Zero;
-            for (int d = 0; d < dim; d++)
-            {
-                posLogit = NumOps.Add(posLogit, NumOps.Multiply(q[i, d], kPos[i, d]));
-            }
-            posLogit = NumOps.Divide(posLogit, NumOps.FromDouble(_temperature));
+            // Engine-accelerated q·k dot products
+            var qRow = new Vector<T>(dim);
+            for (int d = 0; d < dim; d++) qRow[d] = q[i, d];
+            var kPosRow = new Vector<T>(dim);
+            for (int d = 0; d < dim; d++) kPosRow[d] = kPos[i, d];
 
-            // Compute negative logits: q_i · k-_j / τ for all j
-            var negLogits = new T[numNegatives];
+            T posLogit = NumOps.Divide(Engine.DotProduct(qRow, kPosRow), NumOps.FromDouble(_temperature));
+
+            var negLogits = new Vector<T>(numNegatives);
             T maxLogit = posLogit;
 
             for (int j = 0; j < numNegatives; j++)
             {
-                T dot = NumOps.Zero;
-                for (int d = 0; d < dim; d++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(q[i, d], kNeg[j, d]));
-                }
-                negLogits[j] = NumOps.Divide(dot, NumOps.FromDouble(_temperature));
+                var kNegRow = new Vector<T>(dim);
+                for (int d = 0; d < dim; d++) kNegRow[d] = kNeg[j, d];
+                negLogits[j] = NumOps.Divide(Engine.DotProduct(qRow, kNegRow), NumOps.FromDouble(_temperature));
 
                 if (NumOps.GreaterThan(negLogits[j], maxLogit))
                     maxLogit = negLogits[j];

@@ -217,9 +217,10 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
 
         if (denomSq < 1e-10)
         {
-            // Both conditioning correlations are near 1.0 — all variables are strongly
-            // related. Return the original correlation to preserve the edge.
-            return rij;
+            // Both conditioning correlations are near 1.0 — the conditioning variable
+            // explains all variance. Partial correlation is undefined; return 0
+            // (no evidence of direct association beyond the conditioning variable).
+            return NumOps.Zero;
         }
 
         return NumOps.FromDouble(NumOps.ToDouble(numerator) / Math.Sqrt(denomSq));

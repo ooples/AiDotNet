@@ -105,9 +105,9 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
             }
             if (deltaVar / effectiveN < 1e-10)
             {
-                // Transitions are constant — fall back to raw data
-                for (int t = 0; t < effectiveN; t++)
-                    deltaY[t] = data[t, target];
+                // Transitions are constant — no temporal variation to explain.
+                // Keep deltaY as-is (constant) rather than substituting raw levels,
+                // which would change the score semantics from transitions to levels.
             }
 
             // Greedy forward selection of causal parents

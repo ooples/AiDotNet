@@ -149,14 +149,16 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
                 T minDist = NumOps.MaxValue;
                 int bestCluster = 0;
 
+                // Extract data row as Vector<T>
+                var dataRow = new Vector<T>(d);
+                for (int j = 0; j < d; j++) dataRow[j] = x[pointIdx, j];
+
                 for (int c = 0; c < k; c++)
                 {
-                    T dist = NumOps.Zero;
-                    for (int j = 0; j < d; j++)
-                    {
-                        T diff = NumOps.Subtract(x[pointIdx, j], centers[c][j]);
-                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
-                    }
+                    var centerVec = new Vector<T>(centers[c]);
+                    var diff = new Vector<T>(d);
+                    for (int j = 0; j < d; j++) diff[j] = NumOps.Subtract(dataRow[j], centerVec[j]);
+                    T dist = Engine.DotProduct(diff, diff);
 
                     batchDistances[b, c] = dist;
                     if (NumOps.LessThan(dist, minDist))

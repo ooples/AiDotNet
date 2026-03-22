@@ -224,12 +224,8 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         var vReshaped2 = v.Reshape(inputSize, 1);
         var Wv = Engine.TensorMatMul(weights, vReshaped2).Reshape(outputSize);
 
-        // Dot product u^T @ Wv - computed element-wise for 1D vectors
-        T spectralNorm = NumOps.Zero;
-        for (int i = 0; i < outputSize; i++)
-        {
-            spectralNorm = NumOps.Add(spectralNorm, NumOps.Multiply(u[i], Wv[i]));
-        }
+        // Dot product u^T @ Wv using Engine.DotProduct
+        T spectralNorm = Engine.DotProduct(u.ToVector(), Wv.ToVector());
 
         return spectralNorm;
     }

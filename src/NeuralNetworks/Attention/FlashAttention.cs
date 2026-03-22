@@ -637,14 +637,15 @@ internal static class FlashAttention<T>
         var D = new T[seqLenQ];
         for (int i = 0; i < seqLenQ; i++)
         {
-            T sum = NumOps.Zero;
+            // Extract dO and O rows as Vector<T> for Engine.DotProduct
+            var dORow = new Vector<T>(headDim);
+            var oRow = new Vector<T>(headDim);
             for (int d = 0; d < headDim; d++)
             {
-                T dO = gradOutput[new[] { batch, i, d }];
-                T O = output[new[] { batch, i, d }];
-                sum = NumOps.Add(sum, NumOps.Multiply(dO, O));
+                dORow[d] = gradOutput[new[] { batch, i, d }];
+                oRow[d] = output[new[] { batch, i, d }];
             }
-            D[i] = sum;
+            D[i] = AiDotNetEngine.Current.DotProduct(dORow, oRow);
         }
 
         // Recompute attention and gradients row by row
@@ -662,14 +663,15 @@ internal static class FlashAttention<T>
                     continue;
                 }
 
-                T dot = NumOps.Zero;
+                // Extract Q and K rows for Engine.DotProduct
+                var qRow = new Vector<T>(headDim);
+                var kRow = new Vector<T>(headDim);
                 for (int d = 0; d < headDim; d++)
                 {
-                    T qVal = query[new[] { batch, i, d }];
-                    T kVal = key[new[] { batch, j, d }];
-                    dot = NumOps.Add(dot, NumOps.Multiply(qVal, kVal));
+                    qRow[d] = query[new[] { batch, i, d }];
+                    kRow[d] = key[new[] { batch, j, d }];
                 }
-                scores[j] = NumOps.Multiply(dot, scale);
+                scores[j] = NumOps.Multiply(AiDotNetEngine.Current.DotProduct(qRow, kRow), scale);
 
                 // Add attention bias during recomputation (must match forward pass)
                 if (attentionBias != null)
@@ -703,17 +705,22 @@ internal static class FlashAttention<T>
             }
 
             // Compute gradient of attention weights: dP = dO @ V^T
+            // Extract dO row once
+            var dOVec = new Vector<T>(headDim);
+            for (int d = 0; d < headDim; d++)
+            {
+                dOVec[d] = gradOutput[new[] { batch, i, d }];
+            }
+
             var gradAttn = new T[seqLenKV];
             for (int j = 0; j < seqLenKV; j++)
             {
-                T sum = NumOps.Zero;
+                var vRow = new Vector<T>(headDim);
                 for (int d = 0; d < headDim; d++)
                 {
-                    T dO = gradOutput[new[] { batch, i, d }];
-                    T vVal = value[new[] { batch, j, d }];
-                    sum = NumOps.Add(sum, NumOps.Multiply(dO, vVal));
+                    vRow[d] = value[new[] { batch, j, d }];
                 }
-                gradAttn[j] = sum;
+                gradAttn[j] = AiDotNetEngine.Current.DotProduct(dOVec, vRow);
             }
 
             // Compute gradient of scores: dS = P * (dP - D[i])
@@ -726,14 +733,16 @@ internal static class FlashAttention<T>
 
             // Update gradients
             // dQ[i] += scale * dS @ K
+            var gradScoresVec = new Vector<T>(gradScores);
             for (int d = 0; d < headDim; d++)
             {
-                T sum = NumOps.Zero;
+                // Extract K column d across all KV positions
+                var kCol = new Vector<T>(seqLenKV);
                 for (int j = 0; j < seqLenKV; j++)
                 {
-                    T kVal = key[new[] { batch, j, d }];
-                    sum = NumOps.Add(sum, NumOps.Multiply(gradScores[j], kVal));
+                    kCol[j] = key[new[] { batch, j, d }];
                 }
+                T sum = AiDotNetEngine.Current.DotProduct(gradScoresVec, kCol);
                 T current = gradQuery[new[] { batch, i, d }];
                 gradQuery[new[] { batch, i, d }] = NumOps.Add(current, NumOps.Multiply(scale, sum));
             }
@@ -825,14 +834,14 @@ internal static class FlashAttention<T>
         var D = new T[seqLenQ];
         for (int i = 0; i < seqLenQ; i++)
         {
-            T sum = NumOps.Zero;
+            var dORow4d = new Vector<T>(headDim);
+            var oRow4d = new Vector<T>(headDim);
             for (int d = 0; d < headDim; d++)
             {
-                T dO = gradOutput[new[] { batch, head, i, d }];
-                T O = output[new[] { batch, head, i, d }];
-                sum = NumOps.Add(sum, NumOps.Multiply(dO, O));
+                dORow4d[d] = gradOutput[new[] { batch, head, i, d }];
+                oRow4d[d] = output[new[] { batch, head, i, d }];
             }
-            D[i] = sum;
+            D[i] = AiDotNetEngine.Current.DotProduct(dORow4d, oRow4d);
         }
 
         for (int i = 0; i < seqLenQ; i++)
@@ -848,14 +857,14 @@ internal static class FlashAttention<T>
                     continue;
                 }
 
-                T dot = NumOps.Zero;
+                var qRow4d = new Vector<T>(headDim);
+                var kRow4d = new Vector<T>(headDim);
                 for (int d = 0; d < headDim; d++)
                 {
-                    T qVal = query[new[] { batch, head, i, d }];
-                    T kVal = key[new[] { batch, head, j, d }];
-                    dot = NumOps.Add(dot, NumOps.Multiply(qVal, kVal));
+                    qRow4d[d] = query[new[] { batch, head, i, d }];
+                    kRow4d[d] = key[new[] { batch, head, j, d }];
                 }
-                scores[j] = NumOps.Multiply(dot, scale);
+                scores[j] = NumOps.Multiply(AiDotNetEngine.Current.DotProduct(qRow4d, kRow4d), scale);
 
                 // Add attention bias during recomputation (must match forward pass)
                 if (attentionBias != null)
@@ -887,17 +896,22 @@ internal static class FlashAttention<T>
                 attnWeights[j] = NumericalStabilityHelper.SafeDiv(attnWeights[j], sumExp);
             }
 
+            // Extract dO row once for this query position
+            var dOVec4d = new Vector<T>(headDim);
+            for (int d = 0; d < headDim; d++)
+            {
+                dOVec4d[d] = gradOutput[new[] { batch, head, i, d }];
+            }
+
             var gradAttn = new T[seqLenKV];
             for (int j = 0; j < seqLenKV; j++)
             {
-                T sum = NumOps.Zero;
+                var vRow4d = new Vector<T>(headDim);
                 for (int d = 0; d < headDim; d++)
                 {
-                    T dO = gradOutput[new[] { batch, head, i, d }];
-                    T vVal = value[new[] { batch, head, j, d }];
-                    sum = NumOps.Add(sum, NumOps.Multiply(dO, vVal));
+                    vRow4d[d] = value[new[] { batch, head, j, d }];
                 }
-                gradAttn[j] = sum;
+                gradAttn[j] = AiDotNetEngine.Current.DotProduct(dOVec4d, vRow4d);
             }
 
             var gradScores = new T[seqLenKV];
@@ -907,14 +921,15 @@ internal static class FlashAttention<T>
                 gradScores[j] = NumOps.Multiply(attnWeights[j], diff);
             }
 
+            var gradScoresVec4d = new Vector<T>(gradScores);
             for (int d = 0; d < headDim; d++)
             {
-                T sum = NumOps.Zero;
+                var kCol4d = new Vector<T>(seqLenKV);
                 for (int j = 0; j < seqLenKV; j++)
                 {
-                    T kVal = key[new[] { batch, head, j, d }];
-                    sum = NumOps.Add(sum, NumOps.Multiply(gradScores[j], kVal));
+                    kCol4d[j] = key[new[] { batch, head, j, d }];
                 }
+                T sum = AiDotNetEngine.Current.DotProduct(gradScoresVec4d, kCol4d);
                 T current = gradQuery[new[] { batch, head, i, d }];
                 gradQuery[new[] { batch, head, i, d }] = NumOps.Add(current, NumOps.Multiply(scale, sum));
             }

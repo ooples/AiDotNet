@@ -280,8 +280,10 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                 // OR if covariance ratio |cov/var_i| > |cov/var_j| (statistical direction)
                 double varJ = NumOps.ToDouble(cov[j, j]);
                 double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
-                bool learnedDirection = pij >= pji;
-                bool statisticalDirection = Math.Abs(weight) >= reverseWeight;
+                // Use strict inequality to avoid creating both i→j and j→i (2-cycle).
+                // For ties, only process the (i,j) pair where i < j.
+                bool learnedDirection = pij > pji || (pij == pji && i < j);
+                bool statisticalDirection = Math.Abs(weight) > reverseWeight;
 
                 if (learnedDirection || statisticalDirection)
                     result[i, j] = NumOps.FromDouble(weight);

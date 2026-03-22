@@ -749,10 +749,7 @@ public class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private T ComputeL2Penalty(Vector<T> weights)
     {
         T sum = NumOps.Zero;
-        for (int i = 0; i < weights.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(weights[i], weights[i]));
-        }
+        sum = NumOps.Add(sum, Engine.DotProduct(weights, weights));
         return NumOps.Multiply(NumOps.FromDouble(0.5), sum);
     }
 

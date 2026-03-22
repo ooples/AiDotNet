@@ -657,7 +657,9 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
             double sum = aug[row, p];
             for (int j = row + 1; j < p; j++) sum -= aug[row, j] * x[j];
             double diag = aug[row, row];
-            x[row] = Math.Abs(diag) > pivotTolerance ? sum / diag : 0;
+            if (Math.Abs(diag) <= pivotTolerance)
+                return new double[p]; // Singular — return zero coefficients (caller handles)
+            x[row] = sum / diag;
         }
         return x;
     }

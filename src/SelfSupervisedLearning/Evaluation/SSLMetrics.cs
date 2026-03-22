@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 
@@ -22,6 +23,7 @@ namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 public class SSLMetrics<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Computes the standard deviation of representations (collapse detection).
@@ -87,13 +89,13 @@ public class SSLMetrics<T>
 
         for (int b = 0; b < batchSize; b++)
         {
-            T dist = NumOps.Zero;
+            // Extract rows and compute difference, then squared norm via dot product
+            var diff = new Vector<T>(dim);
             for (int d = 0; d < dim; d++)
             {
-                var diff = NumOps.Subtract(z1Norm[b, d], z2Norm[b, d]);
-                dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
+                diff[d] = NumOps.Subtract(z1Norm[b, d], z2Norm[b, d]);
             }
-            totalDist = NumOps.Add(totalDist, dist);
+            totalDist = NumOps.Add(totalDist, Engine.DotProduct(diff, diff));
         }
 
         return NumOps.Divide(totalDist, NumOps.FromDouble(batchSize));
@@ -125,13 +127,13 @@ public class SSLMetrics<T>
         {
             for (int j = i + 1; j < batchSize; j++)
             {
-                // Compute squared distance
-                T dist = NumOps.Zero;
+                // Compute squared distance using Engine.DotProduct
+                var diff = new Vector<T>(dim);
                 for (int d = 0; d < dim; d++)
                 {
-                    var diff = NumOps.Subtract(zNorm[i, d], zNorm[j, d]);
-                    dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
+                    diff[d] = NumOps.Subtract(zNorm[i, d], zNorm[j, d]);
                 }
+                T dist = Engine.DotProduct(diff, diff);
 
                 // Add exp(-t * dist)
                 sum = NumOps.Add(sum,
@@ -329,12 +331,15 @@ public class SSLMetrics<T>
 
         for (int b = 0; b < batchSize; b++)
         {
-            T dot = NumOps.Zero;
+            // Extract rows as Vector<T> for Engine.DotProduct
+            var row1 = new Vector<T>(dim);
+            var row2 = new Vector<T>(dim);
             for (int d = 0; d < dim; d++)
             {
-                dot = NumOps.Add(dot, NumOps.Multiply(z1Norm[b, d], z2Norm[b, d]));
+                row1[d] = z1Norm[b, d];
+                row2[d] = z2Norm[b, d];
             }
-            totalSim = NumOps.Add(totalSim, dot);
+            totalSim = NumOps.Add(totalSim, Engine.DotProduct(row1, row2));
         }
 
         return NumOps.Divide(totalSim, NumOps.FromDouble(batchSize));
@@ -348,18 +353,19 @@ public class SSLMetrics<T>
 
         for (int i = 0; i < batchSize; i++)
         {
-            T sumSquared = NumOps.Zero;
+            // Extract row as Vector<T> for Engine.DotProduct
+            var row = new Vector<T>(dim);
             for (int j = 0; j < dim; j++)
             {
-                var val = tensor[i, j];
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(val, val));
+                row[j] = tensor[i, j];
             }
 
+            var sumSquared = Engine.DotProduct(row, row);
             var norm = NumOps.Sqrt(NumOps.Add(sumSquared, NumOps.FromDouble(1e-8)));
 
             for (int j = 0; j < dim; j++)
             {
-                result[i * dim + j] = NumOps.Divide(tensor[i, j], norm);
+                result[i * dim + j] = NumOps.Divide(row[j], norm);
             }
         }
 

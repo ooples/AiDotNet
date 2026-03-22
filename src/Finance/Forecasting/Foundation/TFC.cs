@@ -319,16 +319,14 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         }
 
         // Cosine similarity / temperature
-        T dotProduct = NumOps.Zero;
-        T normTime = NumOps.Zero;
-        T normFreq = NumOps.Zero;
-        int len = Math.Min(timeProj.Length, freqProj.Length);
-        for (int i = 0; i < len; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(timeProj[i], freqProj[i]));
-            normTime = NumOps.Add(normTime, NumOps.Multiply(timeProj[i], timeProj[i]));
-            normFreq = NumOps.Add(normFreq, NumOps.Multiply(freqProj[i], freqProj[i]));
-        }
+        // Engine-accelerated cosine similarity
+        int projLen = Math.Min(timeProj.Length, freqProj.Length);
+        var tpVec = new Vector<T>(projLen);
+        var fpVec = new Vector<T>(projLen);
+        for (int i = 0; i < projLen; i++) { tpVec[i] = timeProj[i]; fpVec[i] = freqProj[i]; }
+        T dotProduct = Engine.DotProduct(tpVec, fpVec);
+        T normTime = Engine.DotProduct(tpVec, tpVec);
+        T normFreq = Engine.DotProduct(fpVec, fpVec);
         T eps8 = NumOps.FromDouble(1e-8);
         T normProduct = NumOps.Add(NumOps.Multiply(NumOps.Sqrt(normTime), NumOps.Sqrt(normFreq)), eps8);
         T cosSim = NumOps.Divide(dotProduct, normProduct);

@@ -229,15 +229,21 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
                 double bestScore = double.MinValue;
                 int weightsPerClass = NumFeatures;
 
+                // Extract input row once
+                var inputRow = new Vector<T>(NumFeatures);
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    inputRow[j] = input[i, j];
+                }
+
                 for (int c = 0; c < NumClasses; c++)
                 {
-                    T score = NumOps.Zero;
+                    var classWeights = new Vector<T>(NumFeatures);
                     for (int j = 0; j < NumFeatures; j++)
                     {
-                        score = NumOps.Add(score, NumOps.Multiply(
-                            input[i, j],
-                            _weights[c * weightsPerClass + j]));
+                        classWeights[j] = _weights[c * weightsPerClass + j];
                     }
+                    T score = Engine.DotProduct(inputRow, classWeights);
 
                     double scoreVal = NumOps.ToDouble(score);
                     if (scoreVal > bestScore)
@@ -685,17 +691,23 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     {
         int n = x.Columns;
 
+        // Pre-extract columns from X as Vector<T> for Engine.DotProduct
+        var xCols = new Vector<T>[n];
+        for (int col = 0; col < n; col++)
+        {
+            xCols[col] = new Vector<T>(x.Rows);
+            for (int row = 0; row < x.Rows; row++)
+            {
+                xCols[col][row] = x[row, col];
+            }
+        }
+
         var xtx = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < x.Rows; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(x[k, i], x[k, j]));
-                }
-                xtx[i, j] = sum;
+                xtx[i, j] = Engine.DotProduct(xCols[i], xCols[j]);
                 if (i == j)
                 {
                     xtx[i, j] = NumOps.Add(xtx[i, j], NumOps.FromDouble(alpha));
@@ -706,12 +718,7 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
         var xty = new Vector<T>(n);
         for (int j = 0; j < n; j++)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < x.Rows; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(x[i, j], y[i]));
-            }
-            xty[j] = sum;
+            xty[j] = Engine.DotProduct(xCols[j], y);
         }
 
         return SolveLinearSystem(xtx, xty);
@@ -787,12 +794,15 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
 
     private T ComputeScore(Matrix<T> input, int rowIdx, Vector<T> weights)
     {
-        T score = NumOps.Zero;
-        for (int j = 0; j < NumFeatures && j < weights.Length; j++)
+        int len = Math.Min(NumFeatures, weights.Length);
+        var row = new Vector<T>(len);
+        var w = new Vector<T>(len);
+        for (int j = 0; j < len; j++)
         {
-            score = NumOps.Add(score, NumOps.Multiply(input[rowIdx, j], weights[j]));
+            row[j] = input[rowIdx, j];
+            w[j] = weights[j];
         }
-        return score;
+        return Engine.DotProduct(row, w);
     }
 
     private void ValidateSequenceInput(Tensor<T> sequences, Vector<T>? labels)

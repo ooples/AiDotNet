@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SelfSupervisedLearning.Losses;
 
@@ -39,6 +40,7 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 public class BarlowTwinsLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly double _lambda;
     private readonly bool _normalize;
@@ -168,25 +170,32 @@ public class BarlowTwinsLoss<T>
 
         for (int b = 0; b < batchSize; b++)
         {
+            // Extract z2Norm row and z1Norm row for this batch sample
+            var z2Row = new Vector<T>(dim);
+            var z1Row = new Vector<T>(dim);
+            for (int d = 0; d < dim; d++)
+            {
+                z2Row[d] = NumOps.Multiply(z2Norm[b, d], invBatch);
+                z1Row[d] = NumOps.Multiply(z1Norm[b, d], invBatch);
+            }
+
             for (int i = 0; i < dim; i++)
             {
-                T gradZ1Elem = NumOps.Zero;
-                T gradZ2Elem = NumOps.Zero;
-
+                // gradZ1[b,i] = Σ_j gradC[i,j] * z2Norm[b,j] / N
+                var gradCRow = new Vector<T>(dim);
                 for (int j = 0; j < dim; j++)
                 {
-                    // C_ij = (1/N) * Σ_b z1[b,i] * z2[b,j]
-                    // dL/dz1[b,i] = Σ_j dL/dC_ij * dC_ij/dz1[b,i] = Σ_j dL/dC_ij * z2[b,j] / N
-                    // dL/dz2[b,j] = Σ_i dL/dC_ij * dC_ij/dz2[b,j] = Σ_i dL/dC_ij * z1[b,i] / N
-
-                    gradZ1Elem = NumOps.Add(gradZ1Elem,
-                        NumOps.Multiply(NumOps.Multiply(gradC[i * dim + j], z2Norm[b, j]), invBatch));
-                    gradZ2Elem = NumOps.Add(gradZ2Elem,
-                        NumOps.Multiply(NumOps.Multiply(gradC[j * dim + i], z1Norm[b, j]), invBatch));
+                    gradCRow[j] = gradC[i * dim + j];
                 }
+                gradZ1[b * dim + i] = Engine.DotProduct(gradCRow, z2Row);
 
-                gradZ1[b * dim + i] = gradZ1Elem;
-                gradZ2[b * dim + i] = gradZ2Elem;
+                // gradZ2[b,i] = Σ_j gradC[j,i] * z1Norm[b,j] / N
+                var gradCCol = new Vector<T>(dim);
+                for (int j = 0; j < dim; j++)
+                {
+                    gradCCol[j] = gradC[j * dim + i];
+                }
+                gradZ2[b * dim + i] = Engine.DotProduct(gradCCol, z1Row);
             }
         }
 
@@ -204,16 +213,25 @@ public class BarlowTwinsLoss<T>
         var result = new T[dim * dim];
         var invBatch = NumOps.FromDouble(1.0 / batchSize);
 
+        // Pre-extract columns as Vector<T> for Engine.DotProduct
+        var z1Cols = new Vector<T>[dim];
+        var z2Cols = new Vector<T>[dim];
+        for (int d = 0; d < dim; d++)
+        {
+            z1Cols[d] = new Vector<T>(batchSize);
+            z2Cols[d] = new Vector<T>(batchSize);
+            for (int b = 0; b < batchSize; b++)
+            {
+                z1Cols[d][b] = z1[b, d];
+                z2Cols[d][b] = z2[b, d];
+            }
+        }
+
         for (int i = 0; i < dim; i++)
         {
             for (int j = 0; j < dim; j++)
             {
-                T sum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(z1[b, i], z2[b, j]));
-                }
-                result[i * dim + j] = NumOps.Multiply(sum, invBatch);
+                result[i * dim + j] = NumOps.Multiply(Engine.DotProduct(z1Cols[i], z2Cols[j]), invBatch);
             }
         }
 

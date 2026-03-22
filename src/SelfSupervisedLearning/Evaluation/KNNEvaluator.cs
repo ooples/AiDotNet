@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
@@ -42,6 +43,7 @@ namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 public class KNNEvaluator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly INeuralNetwork<T> _encoder;
     private readonly int _k;
@@ -302,26 +304,29 @@ public class KNNEvaluator<T>
 
     private T ComputeDistance(Tensor<T> a, int aIdx, Tensor<T> b, int bIdx, int dim)
     {
+        // Extract rows as Vector<T> for Engine.DotProduct
+        var aRow = new Vector<T>(dim);
+        var bRow = new Vector<T>(dim);
+        for (int d = 0; d < dim; d++)
+        {
+            aRow[d] = a[aIdx, d];
+            bRow[d] = b[bIdx, d];
+        }
+
         if (_useCosine)
         {
             // Cosine similarity (features are already normalized)
-            T dot = NumOps.Zero;
-            for (int d = 0; d < dim; d++)
-            {
-                dot = NumOps.Add(dot, NumOps.Multiply(a[aIdx, d], b[bIdx, d]));
-            }
-            return dot;
+            return Engine.DotProduct(aRow, bRow);
         }
         else
         {
             // L2 distance
-            T sumSq = NumOps.Zero;
+            var diff = new Vector<T>(dim);
             for (int d = 0; d < dim; d++)
             {
-                var diff = NumOps.Subtract(a[aIdx, d], b[bIdx, d]);
-                sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
+                diff[d] = NumOps.Subtract(aRow[d], bRow[d]);
             }
-            return NumOps.Sqrt(sumSq);
+            return NumOps.Sqrt(Engine.DotProduct(diff, diff));
         }
     }
 
@@ -338,18 +343,19 @@ public class KNNEvaluator<T>
 
         for (int i = 0; i < batchSize; i++)
         {
-            T sumSquared = NumOps.Zero;
+            // Extract row as Vector<T> for Engine.DotProduct
+            var row = new Vector<T>(dim);
             for (int j = 0; j < dim; j++)
             {
-                var val = tensor[i, j];
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(val, val));
+                row[j] = tensor[i, j];
             }
 
+            var sumSquared = Engine.DotProduct(row, row);
             var norm = NumOps.Sqrt(NumOps.Add(sumSquared, NumOps.FromDouble(1e-8)));
 
             for (int j = 0; j < dim; j++)
             {
-                result[i * dim + j] = NumOps.Divide(tensor[i, j], norm);
+                result[i * dim + j] = NumOps.Divide(row[j], norm);
             }
         }
 
