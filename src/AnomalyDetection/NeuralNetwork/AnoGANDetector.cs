@@ -647,15 +647,13 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             h1[j] = NumOps.FromDouble(leakyVal);
         }
 
-        // Gradient through layer 2
+        // Gradient through layer 2 using Engine.DotProduct
         var dH1 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
-            dH1[i] = NumOps.Zero;
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(discW2[i, j], dH2[j]));
-            }
+            var wRow = new Vector<T>(_hiddenDim);
+            for (int j = 0; j < _hiddenDim; j++) wRow[j] = discW2[i, j];
+            dH1[i] = Engine.DotProduct(wRow, dH2);
         }
 
         // LeakyReLU derivative for h1
@@ -665,15 +663,13 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                 dH1[i] = NumOps.Multiply(dH1[i], NumOps.FromDouble(0.2));
         }
 
-        // Gradient through layer 1 to input
+        // Gradient through layer 1 to input using Engine.DotProduct
         var dX = new Vector<T>(_inputDim);
         for (int i = 0; i < _inputDim; i++)
         {
-            dX[i] = NumOps.Zero;
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                dX[i] = NumOps.Add(dX[i], NumOps.Multiply(discW1[i, j], dH1[j]));
-            }
+            var wRow1 = new Vector<T>(_hiddenDim);
+            for (int j = 0; j < _hiddenDim; j++) wRow1[j] = discW1[i, j];
+            dX[i] = Engine.DotProduct(wRow1, dH1);
         }
 
         return dX;
