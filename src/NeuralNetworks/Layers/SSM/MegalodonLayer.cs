@@ -1014,13 +1014,16 @@ public class MegalodonLayer<T> : LayerBase<T>
             new Vector<T>(_keyWeightsGradient!.ToArray()),
             new Vector<T>(_valueWeightsGradient!.ToArray()),
             new Vector<T>(_gateWeightsGradient!.ToArray()),
-            new Vector<T>(_gateBiasGradient!.ToArray()));
+            new Vector<T>(_gateBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _emaAlphaRealGradient = null; _emaAlphaImagGradient = null; _emaInputWeightsGradient = null; _emaInputBiasGradient = null; _emaOutputWeightsGradient = null; _emaOutputBiasGradient = null; _tsNormGammaGradient = null; _tsNormBetaGradient = null; _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _gateWeightsGradient = null; _gateBiasGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

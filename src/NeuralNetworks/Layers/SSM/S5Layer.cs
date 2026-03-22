@@ -807,13 +807,18 @@ public class S5Layer<T> : LayerBase<T>
             new Vector<T>(_cRealGradient!.ToArray()),
             new Vector<T>(_cImagGradient!.ToArray()),
             new Vector<T>(_dParamGradient!.ToArray()),
-            new Vector<T>(_logDeltaGradient!.ToArray()));
+            new Vector<T>(_logDeltaGradient!.ToArray()),
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _aRealGradient = null; _aImagGradient = null; _bRealGradient = null; _bImagGradient = null; _cRealGradient = null; _cImagGradient = null; _dParamGradient = null; _logDeltaGradient = null;
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />
