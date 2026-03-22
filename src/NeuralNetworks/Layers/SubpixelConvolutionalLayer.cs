@@ -1219,6 +1219,19 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
+        int idx = 0;
+        var kSpan = _kernels.Data.Span;
+        for (int i = 0; i < _kernels.Length; i++) kSpan[i] = parameters[idx++];
+        var bSpan = _biases.Data.Span;
+        for (int i = 0; i < _biases.Length; i++) bSpan[i] = parameters[idx++];
+        Engine.InvalidatePersistentTensor(_kernels);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
     /// <summary>
     /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
     /// </summary>
