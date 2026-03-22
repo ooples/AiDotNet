@@ -787,6 +787,25 @@ internal class MambaBlock<T> : LayerBase<T>
         }
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_convWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_convWeightsGradient!.ToArray()),
+            new Vector<T>(_convBiasGradient!.ToArray()),
+            new Vector<T>(_xProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_aLogGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _convWeightsGradient = null; _convBiasGradient = null; _xProjectionWeightsGradient = null; _dtProjectionWeightsGradient = null; _dtProjectionBiasGradient = null; _aLogGradient = null; _dParamGradient = null;
+    }
+
     /// <inheritdoc />
     public override void ResetState()
     {

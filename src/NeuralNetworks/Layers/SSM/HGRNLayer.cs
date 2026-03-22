@@ -551,6 +551,20 @@ public class HGRNLayer<T> : LayerBase<T>
         _outputProjectionWeights, _outputProjectionBias
     ];
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_forgetGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
+            new Vector<T>(_forgetGateBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null;
+    }
+
     /// <inheritdoc />
     public override void ResetState()
     {

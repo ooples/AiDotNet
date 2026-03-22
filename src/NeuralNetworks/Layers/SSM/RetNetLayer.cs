@@ -846,6 +846,27 @@ public class RetNetLayer<T> : LayerBase<T>
         _groupNormScale, _groupNormBias
     ];
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_gammasGradient!.ToArray()),
+            new Vector<T>(_groupNormScaleGradient!.ToArray()),
+            new Vector<T>(_groupNormBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null; _gammasGradient = null; _groupNormScaleGradient = null; _groupNormBiasGradient = null;
+    }
+
     /// <inheritdoc />
     public override void ResetState()
     {

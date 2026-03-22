@@ -819,6 +819,28 @@ public class LonghornLayer<T> : LayerBase<T>
         _outputProjectionWeights, _outputProjectionBias
     ];
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_alphaWeightsGradient!.ToArray()),
+            new Vector<T>(_alphaBiasGradient!.ToArray()),
+            new Vector<T>(_groupNormGammaGradient!.ToArray()),
+            new Vector<T>(_groupNormBetaGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null; _alphaWeightsGradient = null; _alphaBiasGradient = null; _groupNormGammaGradient = null; _groupNormBetaGradient = null;
+    }
+
     /// <inheritdoc />
     public override void ResetState()
     {

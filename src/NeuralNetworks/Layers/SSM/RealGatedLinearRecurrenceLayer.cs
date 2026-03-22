@@ -544,6 +544,22 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _outputProjectionWeights, _outputProjectionBias
     ];
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_recurrenceGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_recurrenceGateWeightsGradient!.ToArray()),
+            new Vector<T>(_recurrenceGateBiasGradient!.ToArray()),
+            new Vector<T>(_valueProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_decayParamGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _recurrenceGateWeightsGradient = null; _recurrenceGateBiasGradient = null; _valueProjectionWeightsGradient = null; _decayParamGradient = null;
+    }
+
     /// <inheritdoc />
     public override void ResetState()
     {

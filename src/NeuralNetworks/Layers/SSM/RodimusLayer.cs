@@ -786,6 +786,25 @@ public class RodimusLayer<T> : LayerBase<T>
         _outputProjectionWeights, _outputProjectionBias
     ];
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_temperatureWeightsGradient!.ToArray()),
+            new Vector<T>(_temperatureBiasGradient!.ToArray()),
+            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
+            new Vector<T>(_forgetGateBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _temperatureWeightsGradient = null; _temperatureBiasGradient = null; _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null;
+    }
+
     /// <inheritdoc />
     public override void ResetState()
     {

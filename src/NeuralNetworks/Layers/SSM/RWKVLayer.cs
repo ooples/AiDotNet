@@ -671,6 +671,36 @@ public class RWKVLayer<T> : LayerBase<T>
         _normGamma1, _normBeta1, _normGamma2, _normBeta2
     ];
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_timeMixRGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_timeMixRGradient!.ToArray()),
+            new Vector<T>(_timeMixKGradient!.ToArray()),
+            new Vector<T>(_timeMixVGradient!.ToArray()),
+            new Vector<T>(_receptanceWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_decayWeightsGradient!.ToArray()),
+            new Vector<T>(_decayBiasGradient!.ToArray()),
+            new Vector<T>(_bonusGradient!.ToArray()),
+            new Vector<T>(_channelMixRGradient!.ToArray()),
+            new Vector<T>(_channelMixKGradient!.ToArray()),
+            new Vector<T>(_channelKeyWeightsGradient!.ToArray()),
+            new Vector<T>(_channelValueWeightsGradient!.ToArray()),
+            new Vector<T>(_channelReceptanceWeightsGradient!.ToArray()),
+            new Vector<T>(_normGamma1Gradient!.ToArray()),
+            new Vector<T>(_normBeta1Gradient!.ToArray()),
+            new Vector<T>(_normGamma2Gradient!.ToArray()),
+            new Vector<T>(_normBeta2Gradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _timeMixRGradient = null; _timeMixKGradient = null; _timeMixVGradient = null; _receptanceWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _decayWeightsGradient = null; _decayBiasGradient = null; _bonusGradient = null; _channelMixRGradient = null; _channelMixKGradient = null; _channelKeyWeightsGradient = null; _channelValueWeightsGradient = null; _channelReceptanceWeightsGradient = null; _normGamma1Gradient = null; _normBeta1Gradient = null; _normGamma2Gradient = null; _normBeta2Gradient = null;
+    }
+
     /// <inheritdoc />
     public override void ResetState()
     {

@@ -1056,6 +1056,28 @@ public class Mamba2Block<T> : LayerBase<T>
         }
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_convWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_convWeightsGradient!.ToArray()),
+            new Vector<T>(_convBiasGradient!.ToArray()),
+            new Vector<T>(_bProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_cProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_aLogGradient!.ToArray()),
+            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_normGammaGradient!.ToArray()),
+            new Vector<T>(_normBetaGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _convWeightsGradient = null; _convBiasGradient = null; _bProjectionWeightsGradient = null; _cProjectionWeightsGradient = null; _aLogGradient = null; _dtProjectionWeightsGradient = null; _dtProjectionBiasGradient = null; _dParamGradient = null; _normGammaGradient = null; _normBetaGradient = null;
+    }
+
     /// <inheritdoc />
     public override void ResetState()
     {

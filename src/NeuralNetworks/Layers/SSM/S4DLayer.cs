@@ -766,6 +766,26 @@ public class S4DLayer<T> : LayerBase<T>
         }
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_aRealGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_aRealGradient!.ToArray()),
+            new Vector<T>(_aImagGradient!.ToArray()),
+            new Vector<T>(_bRealGradient!.ToArray()),
+            new Vector<T>(_bImagGradient!.ToArray()),
+            new Vector<T>(_cRealGradient!.ToArray()),
+            new Vector<T>(_cImagGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_logDeltaGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _aRealGradient = null; _aImagGradient = null; _bRealGradient = null; _bImagGradient = null; _cRealGradient = null; _cImagGradient = null; _dParamGradient = null; _logDeltaGradient = null;
+    }
+
     /// <inheritdoc />
     public override void ResetState()
     {
