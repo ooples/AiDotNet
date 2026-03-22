@@ -963,8 +963,17 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // gradNCHW shape is [batch, channels, height, width]
         // We need bias gradient of shape [channels] - sum over dims [0, 2, 3]
         var biasGradTensor = Engine.LocallyConnectedConv2DBackwardBias(gradNCHW);
-        // biasGradTensor is [oh, ow, oc], sum to get per-channel [oc]
-        _biasGradients = Engine.ReduceSum(biasGradTensor, new[] { 0, 1 }, keepDims: false);
+        // biasGradTensor should be [oh, ow, oc], sum to get per-channel [oc]
+        // Guard: if engine returns 1D tensor, it's already reduced
+        if (biasGradTensor.Rank <= 1)
+        {
+            _biasGradients = biasGradTensor;
+        }
+        else
+        {
+            var axes = Enumerable.Range(0, biasGradTensor.Rank - 1).ToArray();
+            _biasGradients = Engine.ReduceSum(biasGradTensor, axes, keepDims: false);
+        }
 
         // Transpose input gradient back from NCHW to NHWC
         var inputGradient = inputGradNCHW.Transpose([0, 2, 3, 1]);
