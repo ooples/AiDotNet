@@ -230,6 +230,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// that can be updated during training to learn patterns in spatio-temporal data (like videos or weather data).
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _weightsFi.Length + _weightsIi.Length + _weightsCi.Length + _weightsOi.Length + _weightsFh.Length + _weightsIh.Length + _weightsCh.Length + _weightsOh.Length + _biasF.Length + _biasI.Length + _biasC.Length + _biasO.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

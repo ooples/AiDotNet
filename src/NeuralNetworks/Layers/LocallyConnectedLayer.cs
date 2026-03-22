@@ -311,6 +311,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// and biases that are learned during training.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _weights.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
