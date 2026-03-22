@@ -484,10 +484,12 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
 
     private void UpdateWeights(Vector<T> weights, Vector<T> gradients, T lr)
     {
+        // w = w - lr * g using Engine vectorized operations
+        var scaled = Engine.Multiply(gradients, lr);
+        var updated = Engine.Subtract(weights, scaled);
         for (int i = 0; i < weights.Length; i++)
         {
-            T update = NumOps.Multiply(lr, gradients[i]);
-            weights[i] = NumOps.Subtract(weights[i], update);
+            weights[i] = updated[i];
         }
     }
 
