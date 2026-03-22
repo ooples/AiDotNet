@@ -132,6 +132,11 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             var attended = new Matrix<T>(numPairs, headDim);
             var attnWeights = new Matrix<T>(numPairs, d); // attention weights for backprop
 
+            // Pre-allocate reusable vectors outside the attention loop
+            var scores = new Vector<T>(d);
+            var qRow = new Vector<T>(headDim);
+            var kRow = new Vector<T>(headDim);
+
             for (int j = 0; j < d; j++)
             {
                 // Pairs targeting j: indices i*d+j for i in [0..d)
@@ -142,14 +147,11 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
 
                     // Compute attention scores against all keys for target j
                     T maxScore = NumOps.FromDouble(-1e10);
-                    var scores = new Vector<T>(d);
                     // Extract Q row for this query
-                    var qRow = new Vector<T>(headDim);
                     for (int k = 0; k < headDim; k++) qRow[k] = Q[qIdx, k];
                     for (int ki = 0; ki < d; ki++)
                     {
                         int kIdx = ki * d + j;
-                        var kRow = new Vector<T>(headDim);
                         for (int k = 0; k < headDim; k++) kRow[k] = K[kIdx, k];
                         T score = NumOps.Multiply(Engine.DotProduct(qRow, kRow), headScale);
                         scores[ki] = score;
