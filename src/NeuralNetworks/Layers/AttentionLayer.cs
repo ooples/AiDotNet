@@ -195,16 +195,25 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
         int wqLen = _Wq.Length;
         int wkLen = _Wk.Length;
+        int wvLen = _Wv.Length;
         int idx = 0;
+
+        // Create new mutable tensors to avoid immutable Engine tensor issue
+        _Wq = new Tensor<T>(_Wq.Shape);
         var wqSpan = _Wq.Data.Span;
         for (int i = 0; i < wqLen; i++) wqSpan[i] = parameters[idx++];
+
+        _Wk = new Tensor<T>(_Wk.Shape);
         var wkSpan = _Wk.Data.Span;
         for (int i = 0; i < wkLen; i++) wkSpan[i] = parameters[idx++];
+
+        _Wv = new Tensor<T>(_Wv.Shape);
         var wvSpan = _Wv.Data.Span;
-        for (int i = 0; i < _Wv.Length; i++) wvSpan[i] = parameters[idx++];
-        Engine.InvalidatePersistentTensor(_Wq);
-        Engine.InvalidatePersistentTensor(_Wk);
-        Engine.InvalidatePersistentTensor(_Wv);
+        for (int i = 0; i < wvLen; i++) wvSpan[i] = parameters[idx++];
+
+        RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wk, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wv, PersistentTensorRole.Weights);
     }
 
     /// <summary>

@@ -1435,19 +1435,21 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var vLen = vRows * vCols;
         var oLen = oRows * oCols;
 
-        _queryWeights = new Tensor<T>([qRows, qCols], parameters.Slice(index, qLen));
-        index += qLen;
+        // Write in-place to preserve engine persistent tensor references
+        var qSpan = _queryWeights.Data.Span;
+        for (int i = 0; i < qLen; i++) qSpan[i] = parameters[index++];
 
-        _keyWeights = new Tensor<T>([kRows, kCols], parameters.Slice(index, kLen));
-        index += kLen;
+        var kSpan = _keyWeights.Data.Span;
+        for (int i = 0; i < kLen; i++) kSpan[i] = parameters[index++];
 
-        _valueWeights = new Tensor<T>([vRows, vCols], parameters.Slice(index, vLen));
-        index += vLen;
+        var vSpan = _valueWeights.Data.Span;
+        for (int i = 0; i < vLen; i++) vSpan[i] = parameters[index++];
 
-        _outputWeights = new Tensor<T>([oRows, oCols], parameters.Slice(index, oLen));
-        index += oLen;
+        var oSpan = _outputWeights.Data.Span;
+        for (int i = 0; i < oLen; i++) oSpan[i] = parameters[index++];
 
-        _outputBias = new Tensor<T>([biasLen], parameters.Slice(index, biasLen));
+        var bSpan = _outputBias.Data.Span;
+        for (int i = 0; i < biasLen; i++) bSpan[i] = parameters[index++];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_queryWeights);
