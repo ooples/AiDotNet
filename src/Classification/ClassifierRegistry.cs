@@ -131,7 +131,9 @@ public static class ClassifierRegistry<T>
                 }
                 else
                 {
-                    throw;
+                    throw new InvalidOperationException(
+                        $"Classifier type '{typeName}' has no parameterless constructor and no constructor with all-default parameters. " +
+                        $"Register a factory via ClassifierRegistry<{typeof(T).Name}>.Register() or add a parameterless constructor.");
                 }
             }
 
