@@ -223,6 +223,14 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _projection.ClearGradients();
+        _norm.ClearGradients();
+    }
+
+    /// <inheritdoc/>
     public override void ResetState()
     {
         _projection.ResetState();

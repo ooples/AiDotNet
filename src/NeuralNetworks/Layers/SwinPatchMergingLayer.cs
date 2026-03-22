@@ -299,6 +299,14 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _reduction.ClearGradients();
+        _norm.ClearGradients();
+    }
+
+    /// <inheritdoc/>
     public override void ResetState()
     {
         _norm.ResetState();

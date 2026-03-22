@@ -631,6 +631,13 @@ public class RBFLayer<T> : LayerBase<T>
     /// only the temporary state information.
     /// </para>
     /// </remarks>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _centersGradient = null;
+        _widthsGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
