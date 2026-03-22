@@ -355,6 +355,19 @@ public class SoftTreeLayer<T> : LayerBase<T>
         _splitWeightsGrad = null; _splitBiasesGrad = null; _leafValuesGrad = null;
     }
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
+        int idx = 0;
+        var swSpan = _splitWeights.Data.Span;
+        for (int i = 0; i < _splitWeights.Length; i++) swSpan[i] = parameters[idx++];
+        var sbSpan = _splitBiases.Data.Span;
+        for (int i = 0; i < _splitBiases.Length; i++) sbSpan[i] = parameters[idx++];
+        var lvSpan = _leafValues.Data.Span;
+        for (int i = 0; i < _leafValues.Length; i++) lvSpan[i] = parameters[idx++];
+    }
+
     /// <inheritdoc/>
     public override void ResetState()
     {
