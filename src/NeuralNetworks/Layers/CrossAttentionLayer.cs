@@ -509,20 +509,58 @@ public class CrossAttentionLayer<T> : LayerBase<T>
             outGrad3D = outputGradient.Reshape(new[] { flatBatch, seqLenHigh, _queryDim });
         }
 
-        // Compute weight gradients (simplified)
+        // Compute weight gradients
         var queryShape = _lastQuery.Shape;
         int batch = queryShape[0];
         int seqLen = queryShape[1];
 
-        // Approximate gradients
+        // Output projection backward: output = attended @ Wo + bo
+        // dL/d(attended) = outGrad3D @ Wo^T
+        var dAttended = ProjectTensor(outGrad3D, TransposeWeights(_outputWeights));
+
+        // dL/d(Wo) = sum_b(attended_b^T @ grad_b)
+        // dL/d(bo) = sum(grad, dims=[0,1])
+        _outputWeightsGradient = new Tensor<T>(_outputWeights.Shape);
+        _outputBiasGradient = new Tensor<T>(_outputBias.Shape);
+        for (int b = 0; b < batch; b++)
+        {
+            var attendedB = _lastOutput != null
+                ? _lastOutput.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim])
+                : new Tensor<T>([seqLen, _queryDim]);
+            var gradB = outGrad3D.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
+            _outputWeightsGradient = _outputWeightsGradient.Add(
+                Engine.TensorMatMul(Engine.TensorTranspose(attendedB), gradB));
+            _outputBiasGradient = _outputBiasGradient.Add(
+                Engine.ReduceSum(gradB, [0], keepDims: false));
+        }
+
+        // Q/K/V weight gradients: approximate via chain rule through projection
+        // dL/d(Wq) ≈ query^T @ dL/d(Q), where dL/d(Q) ≈ dAttended (simplified)
         _queryWeightsGradient = new Tensor<T>(_queryWeights.Shape);
         _keyWeightsGradient = new Tensor<T>(_keyWeights.Shape);
         _valueWeightsGradient = new Tensor<T>(_valueWeights.Shape);
-        _outputWeightsGradient = new Tensor<T>(_outputWeights.Shape);
-        _outputBiasGradient = new Tensor<T>(_outputBias.Shape);
+        for (int b = 0; b < batch; b++)
+        {
+            var queryB = _lastQuery.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
+            var dAttB = dAttended.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
+            _queryWeightsGradient = _queryWeightsGradient.Add(
+                Engine.TensorMatMul(Engine.TensorTranspose(queryB), dAttB));
 
-        // Return input gradient (backprop through output projection)
-        var inputGradient = ProjectTensor(outGrad3D, TransposeWeights(_outputWeights));
+            if (_lastContext != null)
+            {
+                var ctxB = _lastContext.GetSliceAlongDimension(b, 0);
+                int ctxLen = ctxB.Shape[0];
+                ctxB = ctxB.Reshape([ctxLen, _queryDim]);
+                // K and V gradients approximate: context^T @ dAttended (summed over batch)
+                _keyWeightsGradient = _keyWeightsGradient.Add(
+                    Engine.TensorMatMul(Engine.TensorTranspose(ctxB), dAttB));
+                _valueWeightsGradient = _valueWeightsGradient.Add(
+                    Engine.TensorMatMul(Engine.TensorTranspose(ctxB), dAttB));
+            }
+        }
+
+        // Return input gradient
+        var inputGradient = dAttended;
 
         // Restore higher-rank gradients to their original shape
         if (_originalQueryShape != null && origRank != 3)
