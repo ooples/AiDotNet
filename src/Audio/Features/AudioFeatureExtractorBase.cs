@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -22,6 +23,11 @@ namespace AiDotNet.Audio.Features;
 /// </remarks>
 public abstract class AudioFeatureExtractorBase<T> : IAudioFeatureExtractor<T>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Numeric operations for the current type.
     /// </summary>

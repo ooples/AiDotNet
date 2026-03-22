@@ -775,7 +775,6 @@ namespace AiDotNet.AutoML
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     internal class DiffusionAutoMLModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
-        private static IEngine Engine => AiDotNetEngine.Current;
         private readonly UNetNoisePredictor<T> _noisePredictor;
         private readonly StandardVAE<T> _vae;
         private readonly INoiseScheduler<T> _scheduler;

@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Audio.Pitch;
 
@@ -11,6 +12,11 @@ namespace AiDotNet.Audio.Pitch;
 /// </remarks>
 public abstract class PitchDetectorBase<T> : IPitchDetector<T>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Numeric operations for type T.
     /// </summary>

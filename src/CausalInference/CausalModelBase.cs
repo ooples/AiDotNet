@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using Newtonsoft.Json;
@@ -31,6 +32,11 @@ namespace AiDotNet.CausalInference;
 /// </remarks>
 public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Numeric operations helper for generic math.
     /// </summary>

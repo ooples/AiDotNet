@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Audio.Effects;
 
@@ -11,6 +12,11 @@ namespace AiDotNet.Audio.Effects;
 /// </remarks>
 public abstract class AudioEffectBase<T> : IAudioEffect<T>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Numeric operations for type T.
     /// </summary>

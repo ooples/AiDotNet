@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Models;
 
@@ -27,6 +28,11 @@ namespace AiDotNet.Models;
 /// </remarks>
 public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Numeric operations for type T.
     /// </summary>

@@ -61,8 +61,6 @@ namespace AiDotNet.Models;
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretableModel<T>
 {
-    private static IEngine Engine => AiDotNetEngine.Current;
-
     /// <summary>
     /// Gets the vector of coefficients used by the model.
     /// </summary>
