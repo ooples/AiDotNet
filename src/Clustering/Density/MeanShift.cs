@@ -205,16 +205,13 @@ public class MeanShift<T> : ClusteringBase<T>
 
             for (int k = 0; k < NumClusters; k++)
             {
-                if (ClusterCenters is not null)
-                {
-                    for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[k, j];
-                    T dist = metric.ComputeInline(pointArr, centerArr, d);
+                for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[k, j];
+                T dist = metric.ComputeInline(pointArr, centerArr, d);
 
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = k;
-                    }
+                if (NumOps.LessThan(dist, minDist))
+                {
+                    minDist = dist;
+                    nearestCluster = k;
                 }
             }
 

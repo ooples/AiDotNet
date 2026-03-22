@@ -236,9 +236,10 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
                     inputRow[j] = input[i, j];
                 }
 
+                // Reuse classWeights vector across class iterations
+                var classWeights = new Vector<T>(NumFeatures);
                 for (int c = 0; c < NumClasses; c++)
                 {
-                    var classWeights = new Vector<T>(NumFeatures);
                     for (int j = 0; j < NumFeatures; j++)
                     {
                         classWeights[j] = _weights[c * weightsPerClass + j];
@@ -795,14 +796,13 @@ public class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<
     private T ComputeScore(Matrix<T> input, int rowIdx, Vector<T> weights)
     {
         int len = Math.Min(NumFeatures, weights.Length);
-        var row = new Vector<T>(len);
-        var w = new Vector<T>(len);
+        // Compute dot product inline to avoid per-call vector allocations
+        T sum = NumOps.Zero;
         for (int j = 0; j < len; j++)
         {
-            row[j] = input[rowIdx, j];
-            w[j] = weights[j];
+            sum = NumOps.Add(sum, NumOps.Multiply(input[rowIdx, j], weights[j]));
         }
-        return Engine.DotProduct(row, w);
+        return sum;
     }
 
     private void ValidateSequenceInput(Tensor<T> sequences, Vector<T>? labels)

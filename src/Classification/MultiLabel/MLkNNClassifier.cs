@@ -40,16 +40,23 @@ namespace AiDotNet.Classification.MultiLabel;
 /// var classifier = new MLkNNClassifier&lt;double&gt;(options);
 ///
 /// // Prepare features and multi-label targets
-/// var features = Matrix&lt;double&gt;.Build.Dense(4, 2, new double[] {
-///     1.0, 2.0,  3.0, 4.0,  5.0, 6.0,  7.0, 8.0 });
-/// var labels = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
-///     1, 0, 1,  1, 1, 0,  0, 1, 1,  0, 0, 1 });
+/// var features = new Matrix&lt;double&gt;(4, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 2.0;
+/// features[1, 0] = 3.0; features[1, 1] = 4.0;
+/// features[2, 0] = 5.0; features[2, 1] = 6.0;
+/// features[3, 0] = 7.0; features[3, 1] = 8.0;
+/// var labels = new Matrix&lt;double&gt;(4, 3);
+/// labels[0, 0] = 1; labels[0, 1] = 0; labels[0, 2] = 1;
+/// labels[1, 0] = 1; labels[1, 1] = 1; labels[1, 2] = 0;
+/// labels[2, 0] = 0; labels[2, 1] = 1; labels[2, 2] = 1;
+/// labels[3, 0] = 0; labels[3, 1] = 0; labels[3, 2] = 1;
 ///
 /// // Train by storing instances and computing Bayesian priors
 /// classifier.Train(features, labels);
 ///
 /// // Predict labels using k-NN neighbor counts and Bayesian inference
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 2.0, 3.0 });
+/// var newSample = new Matrix&lt;double&gt;(1, 2);
+/// newSample[0, 0] = 2.0; newSample[0, 1] = 3.0;
 /// var prediction = classifier.Predict(newSample);
 /// </code>
 /// </example>

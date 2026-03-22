@@ -37,7 +37,8 @@ namespace AiDotNet.Clustering.AutoML;
 /// {
 ///     { "NumClusters", new object[] { 2, 3, 4, 5 } }
 /// };
-/// var result = gridSearch.Search(dataMatrix, p =&gt; new KMeans&lt;double&gt;(), paramGrid);
+/// var result = gridSearch.Search(dataMatrix, p =&gt; new KMeans&lt;double&gt;(
+///     numClusters: (int)p["NumClusters"]), paramGrid);
 /// </code>
 /// </example>
 public class ClusteringGridSearch<T> : UnsupervisedAutoMLBase<T>

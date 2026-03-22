@@ -283,9 +283,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 }
 
                 // Normalize
-                T norm = NumOps.Zero;
-                norm = NumOps.Add(norm, Engine.DotProduct(Av, Av));
-                norm = NumOps.Sqrt(norm);
+                T norm = NumOps.Sqrt(Engine.DotProduct(Av, Av));
 
                 if (NumOps.LessThan(norm, NumOps.FromDouble(1e-10))) break;
 
@@ -307,8 +305,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 Av2[i] = sum;
             }
 
-            T eigenvalue = NumOps.Zero;
-            eigenvalue = NumOps.Add(eigenvalue, Engine.DotProduct(v, Av2));
+            T eigenvalue = Engine.DotProduct(v, Av2);
 
             eigenvalues[e] = eigenvalue;
             for (int j = 0; j < d; j++)
