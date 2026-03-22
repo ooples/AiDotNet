@@ -5,9 +5,26 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Layers;
 
-// DeconvolutionalLayer: inputShape format unclear, crashes in CalculateOutputShape
-// LocallyConnectedLayer: input channel mismatch in engine Conv2D call
-// TODO: Investigate correct input shapes for these layers
+public class DeconvolutionalLayerTests : LayerTestBase
+{
+    // Deconv uses NCHW format: inputShape = [batch, channels, H, W]
+    protected override ILayer<double> CreateLayer()
+        => new DeconvolutionalLayer<double>(inputShape: [1, 2, 4, 4], outputDepth: 1, kernelSize: 3,
+            stride: 1, padding: 0,
+            activationFunction: new ReLUActivation<double>() as IActivationFunction<double>);
+    protected override int[] InputShape => [1, 2, 4, 4]; // NCHW
+}
+
+public class LocallyConnectedLayerTests : LayerTestBase
+{
+    // LocallyConnected: constructor is [H, W, C], Forward normalizes to NHWC
+    protected override ILayer<double> CreateLayer()
+        => new LocallyConnectedLayer<double>(
+            inputHeight: 4, inputWidth: 4, inputChannels: 1, outputChannels: 2,
+            kernelSize: 3, stride: 1,
+            activationFunction: new ReLUActivation<double>() as IActivationFunction<double>);
+    protected override int[] InputShape => [1, 4, 4, 1]; // NHWC: [batch, H, W, C]
+}
 
 public class PatchEmbeddingLayerTests : LayerTestBase
 {
