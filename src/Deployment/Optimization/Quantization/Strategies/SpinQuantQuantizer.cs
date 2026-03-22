@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Deployment.Optimization.Quantization.Strategies;
 
@@ -39,6 +40,7 @@ namespace AiDotNet.Deployment.Optimization.Quantization.Strategies;
 public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly QuantizationConfiguration _config;
     private readonly Dictionary<string, T> _scaleFactors = new();
@@ -510,14 +512,30 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             int blockEnd = Math.Min(blockStart + size, n);
             int blockLen = blockEnd - blockStart;
 
+            // Extract weight block as Vector<T>
+            var weightBlock = new Vector<T>(blockLen);
+            for (int j = 0; j < blockLen; j++)
+            {
+                weightBlock[j] = weights[blockStart + j];
+            }
+
             for (int i = 0; i < blockLen; i++)
             {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < blockLen; j++)
+                var rotRow = rotation.GetRow(i);
+                if (rotRow.Length == blockLen)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(rotation[i, j], weights[blockStart + j]));
+                    result[blockStart + i] = Engine.DotProduct(rotRow, weightBlock);
                 }
-                result[blockStart + i] = sum;
+                else
+                {
+                    // Handle case where rotation is larger than block
+                    var rotSlice = new Vector<T>(blockLen);
+                    for (int j = 0; j < blockLen; j++)
+                    {
+                        rotSlice[j] = rotation[i, j];
+                    }
+                    result[blockStart + i] = Engine.DotProduct(rotSlice, weightBlock);
+                }
             }
         }
 
