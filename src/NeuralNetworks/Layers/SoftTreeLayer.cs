@@ -349,6 +349,12 @@ public class SoftTreeLayer<T> : LayerBase<T>
         return gradients;
     }
 
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _splitWeightsGrad = null; _splitBiasesGrad = null; _leafValuesGrad = null;
+    }
+
     /// <inheritdoc/>
     public override void ResetState()
     {
