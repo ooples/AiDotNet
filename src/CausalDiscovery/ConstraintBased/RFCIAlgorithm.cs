@@ -170,13 +170,12 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
             }
         }
 
-        // 3b: Discriminating path rule (bounded length for RFCI efficiency).
-        // A discriminating path for (b, c) is <a, ..., v, b, c> where:
-        //   - a is not adjacent to c
-        //   - every intermediate node between a and b is a collider and a parent of c
-        //   - b is adjacent to c
-        // If b is in sepSet(a, c): b is a non-collider → orient b → c
-        // If b is NOT in sepSet(a, c): b is a collider → orient b ← c (and mark bidirected if conflict)
+        // 3b: Discriminating path rule (bounded to length-4 paths for efficiency).
+        // NOTE: The full RFCI algorithm requires searching for discriminating paths of
+        // arbitrary length. This implementation only checks 4-node paths (a → v → b → c)
+        // which is a sound but incomplete approximation — it may miss some orientations
+        // that require longer discriminating paths. For most practical DAGs with moderate
+        // density, this produces correct results.
         for (int b = 0; b < d; b++)
         {
             for (int c = 0; c < d; c++)

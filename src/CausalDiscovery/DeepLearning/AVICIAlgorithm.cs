@@ -255,8 +255,9 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     // NOTEARS acyclicity gradient: (α + ρ·h(W)) · ∂h/∂W_ij
                     // where ∂h/∂W_ij = 2·W_ij·[e^{W⊙W}]_ji (Zheng et al. 2018)
                     // Approximation: use 2·pij as proxy for ∂h/∂W_ij (ignores matrix exponential)
-                    T acycGrad2 = NumOps.Multiply(
-                        NumOps.Add(alpha, NumOps.Multiply(rho, NumOps.FromDouble(prevHW))),
+                    // Use consistent acyclicity formula: (alpha + rho * pij) * 2 * pij
+                    // (matches the main path at line 213, not prevHW)
+                    T acycGrad2 = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
                         NumOps.Multiply(NumOps.FromDouble(2), pij));
                     T totalGrad2 = NumOps.Add(dataGrad2, acycGrad2);
                     T sigDeriv2 = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));

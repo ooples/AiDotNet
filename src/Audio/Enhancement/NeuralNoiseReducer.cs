@@ -60,9 +60,11 @@ namespace AiDotNet.Audio.Enhancement;
 ///     inputSize: 257,
 ///     outputSize: 257);
 ///
-/// var reducer = new NeuralNoiseReducer&lt;float&gt;(
-///     architecture: architecture,
-///     modelPath: "denoiser.onnx");
+/// // Create reducer with default architecture
+/// var reducer = new NeuralNoiseReducer&lt;float&gt;();
+///
+/// // Or with custom architecture
+/// // var reducer = new NeuralNoiseReducer&lt;float&gt;(architecture);
 ///
 /// // Enhance noisy audio
 /// Tensor&lt;float&gt; cleanAudio = reducer.Enhance(noisyAudioTensor);
