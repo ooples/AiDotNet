@@ -825,8 +825,23 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = _lastInput.Shape[0];
 
         // Build theta tensor replicated across batch using Engine ops
-        var thetaExpanded = Engine.TensorExpandDims(_lastTransformationMatrix, 0); // [1, 2, 3]
-        var theta = Engine.TensorTile(thetaExpanded, [batchSize, 1, 1]); // [batch, 2, 3]
+        Tensor<T> theta;
+        if (_lastTransformationMatrix.Rank == 2)
+        {
+            // [2, 3] → expand to [1, 2, 3] → tile to [batch, 2, 3]
+            var thetaExpanded = Engine.TensorExpandDims(_lastTransformationMatrix, 0);
+            theta = Engine.TensorTile(thetaExpanded, [batchSize, 1, 1]);
+        }
+        else if (_lastTransformationMatrix.Shape[0] == batchSize)
+        {
+            // Already batched [batch, 2, 3]
+            theta = _lastTransformationMatrix;
+        }
+        else
+        {
+            // [1, 2, 3] → tile to [batch, 2, 3]
+            theta = Engine.TensorTile(_lastTransformationMatrix, [batchSize, 1, 1]);
+        }
 
         // Autodiff graph for sampling backward
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "st_input", requiresGradient: true);
