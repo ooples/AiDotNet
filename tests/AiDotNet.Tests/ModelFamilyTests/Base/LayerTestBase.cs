@@ -436,6 +436,7 @@ public abstract class LayerTestBase
         var parameters = layer.GetParameters();
         int checkCount = Math.Min(10, parameters.Length); // Check first 10 params
         int failCount = 0;
+        var debugInfo = new System.Text.StringBuilder();
 
         for (int p = 0; p < checkCount; p++)
         {
@@ -470,7 +471,10 @@ public abstract class LayerTestBase
 
             double relError = Math.Abs(numericalGrad - analyticalGrad) / (absMax + 1e-8);
             if (relError > 0.01) // 1% relative error threshold
+            {
                 failCount++;
+                debugInfo.Append($"p[{p}]: analytical={analyticalGrad:G6} numerical={numericalGrad:G6} relErr={relError:G4} | ");
+            }
         }
 
         // Restore original parameters
@@ -478,6 +482,7 @@ public abstract class LayerTestBase
 
         Assert.True(failCount <= checkCount / 3,
             $"Numerical gradient check failed for {failCount}/{checkCount} parameters. " +
-            "Analytical gradients don't match finite differences.");
+            $"Analytical gradients don't match finite differences. " +
+            $"Details: {debugInfo}");
     }
 }
