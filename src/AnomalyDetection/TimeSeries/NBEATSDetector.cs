@@ -765,11 +765,8 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
             // Update residual (subtract backcast) using Engine.Subtract
             residual = Engine.Subtract(residual, backcast);
 
-            // Accumulate forecast
-            for (int i = 0; i < _inputDim; i++)
-            {
-                totalForecast[i] = NumOps.Add(totalForecast[i], forecast[i]);
-            }
+            // Accumulate forecast using Engine.Add
+            totalForecast = Engine.Add(totalForecast, forecast);
         }
 
         return (totalForecast, residuals, hValues);
@@ -847,17 +844,11 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
             // Update residual (subtract backcast) using Engine.Subtract
             residual = Engine.Subtract(residual, backcast);
 
-            // Accumulate forecast
-            for (int i = 0; i < _inputDim; i++)
-            {
-                totalForecast[i] = NumOps.Add(totalForecast[i], forecast[i]);
-            }
+            // Accumulate forecast using Engine.Add
+            totalForecast = Engine.Add(totalForecast, forecast);
 
-            // Accumulate backcast
-            for (int i = 0; i < inputSize; i++)
-            {
-                totalBackcast[i] = NumOps.Add(totalBackcast[i], backcast[i]);
-            }
+            // Accumulate backcast using Engine.Add
+            totalBackcast = Engine.Add(totalBackcast, backcast);
         }
 
         return (totalForecast, totalBackcast);
