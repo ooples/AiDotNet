@@ -425,7 +425,7 @@ public class HedgehogLayer<T> : LayerBase<T>
         Tensor<T> phiQ, Tensor<T> phiK, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T epsilon = NumOps.FromDouble(1e-6);
 
         // Store denominators for backward pass
@@ -876,6 +876,25 @@ public class HedgehogLayer<T> : LayerBase<T>
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_featureMapW1Gradient!.ToArray()),
+            new Vector<T>(_featureMapB1Gradient!.ToArray()),
+            new Vector<T>(_featureMapW2Gradient!.ToArray()),
+            new Vector<T>(_featureMapB2Gradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _featureMapW1Gradient = null; _featureMapB1Gradient = null; _featureMapW2Gradient = null; _featureMapB2Gradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

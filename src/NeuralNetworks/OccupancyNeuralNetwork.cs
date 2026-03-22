@@ -321,9 +321,13 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Set network to inference mode
+        // Set network AND layers to inference mode.
+        // Critical: BatchNorm in training mode with batch_size=1 normalizes everything
+        // to the same value (zero variance), making all inputs produce identical output.
         bool originalTrainingMode = IsTrainingMode;
         SetTrainingMode(false);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
 
         try
         {
@@ -370,7 +374,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                     int features = input.Rank > 1 ? input.Shape[1] : input.Shape[0];
 
                     // Create output tensor for batch results
-                    var output = new Tensor<T>([batchSize, Architecture.OutputSize]);
+                    var output = TensorAllocator.Rent<T>([batchSize, Architecture.OutputSize]);
 
                     // Process each input in the batch
                     for (int b = 0; b < batchSize; b++)
@@ -404,8 +408,10 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         }
         finally
         {
-            // Restore original training mode
+            // Restore original training mode for network and layers
             SetTrainingMode(originalTrainingMode);
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(originalTrainingMode);
         }
     }
 
@@ -535,8 +541,10 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="expectedOutput">The expected output tensor.</param>
     private void TrainNonTemporal(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var output = Predict(input);
+        // Forward pass with memory for backpropagation (NOT Predict, which sets eval mode)
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+        var output = ForwardWithMemory(input);
 
         // Calculate loss using the loss function
         Vector<T> predictedVector = output.ToVector();

@@ -524,7 +524,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         }
 
         // Create output tensor with expected dimensions
-        var output = new Tensor<T>([batchSize, expectedDepth, expectedHeight, expectedWidth]);
+        var output = TensorAllocator.Rent<T>([batchSize, expectedDepth, expectedHeight, expectedWidth]);
 
         // Tile/repeat input to fill expected dimensions
         for (int b = 0; b < batchSize; b++)

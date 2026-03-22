@@ -226,6 +226,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private IGpuBuffer? _gpuResetBiasGradient;
 
     /// <inheritdoc/>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -626,9 +627,10 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Step 3: Update node features (GRU-style update)
-        var output = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
-        _lastResetGate = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
-        _lastUpdateGate = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+        // Rent tensors (all fully overwritten in forward pass)
+        var output = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
+        _lastResetGate = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
+        _lastUpdateGate = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
 
         for (int b = 0; b < batchSize; b++)
         {

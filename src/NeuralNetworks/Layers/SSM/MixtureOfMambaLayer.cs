@@ -560,7 +560,7 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
         }
 
         // Expert SSM backward
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         for (int bi = 0; bi < batchSize; bi++)
         {
@@ -755,6 +755,24 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_routerWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_routerWeightsGradient!.ToArray()),
+            new Vector<T>(_routerBiasGradient!.ToArray()),
+            new Vector<T>(_expertAGradient!.ToArray()),
+            new Vector<T>(_expertBGradient!.ToArray()),
+            new Vector<T>(_expertCGradient!.ToArray()),
+            new Vector<T>(_expertDGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _routerWeightsGradient = null; _routerBiasGradient = null; _expertAGradient = null; _expertBGradient = null; _expertCGradient = null; _expertDGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

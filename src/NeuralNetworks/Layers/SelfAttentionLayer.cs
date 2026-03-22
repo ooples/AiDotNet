@@ -1114,8 +1114,10 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize)
     {
         var biasReshaped = bias.Reshape(1, 1, _embeddingDimension);
-        var zeros = new Tensor<T>(new[] { batchSize, _sequenceLength, _embeddingDimension });
-        return Engine.TensorBroadcastAdd(zeros, biasReshaped);
+        // Rent and zero-fill for broadcast (used as broadcast target, needs zeros)
+        var target = TensorAllocator.Rent<T>(new[] { batchSize, _sequenceLength, _embeddingDimension });
+        target.Fill(NumOps.Zero);
+        return Engine.TensorBroadcastAdd(target, biasReshaped);
     }
 
     /// <summary>
@@ -1382,6 +1384,22 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// each new sequence is processed independently.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient.ToArray()),
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

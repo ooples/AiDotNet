@@ -410,7 +410,23 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// Some other layer types might not have trainable parameters and would return false here.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(new Vector<T>(_depthwiseKernelsGradient.ToArray()), new Vector<T>(_pointwiseKernelsGradient.ToArray())),
+            new Vector<T>(_biasesGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _depthwiseKernelsGradient = null; _pointwiseKernelsGradient = null; _biasesGradient = null;
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -998,7 +1014,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int outputHeight = CalculateOutputDimension(inputHeight, _kernelSize, _stride, _padding);
         int outputWidth = CalculateOutputDimension(inputWidth, _kernelSize, _stride, _padding);
 
-        var output = new Tensor<T>([batchSize, outputHeight, outputWidth, _inputDepth]);
+        var output = TensorAllocator.Rent<T>([batchSize, outputHeight, outputWidth, _inputDepth]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1064,7 +1080,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int height = input.Shape[1];
         int width = input.Shape[2];
 
-        var output = new Tensor<T>([batchSize, height, width, _outputDepth]);
+        var output = TensorAllocator.Rent<T>([batchSize, height, width, _outputDepth]);
 
         for (int b = 0; b < batchSize; b++)
         {

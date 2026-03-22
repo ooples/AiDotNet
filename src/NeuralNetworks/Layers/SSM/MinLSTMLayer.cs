@@ -362,7 +362,7 @@ public class MinLSTMLayer<T> : LayerBase<T>
         Tensor<T> forgetNorm, Tensor<T> inputNorm, Tensor<T> cellCandidate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _expandedDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
         // Cell state: [batch, expandedDim] -- initialized to zero
         var cellState = new Tensor<T>(new[] { batchSize, _expandedDimension });
         // Store all cell states for backward pass: [batch, seqLen+1, expandedDim]
@@ -629,6 +629,22 @@ public class MinLSTMLayer<T> : LayerBase<T>
         _cellCandidateWeights, _cellCandidateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_forgetGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
+            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
+            new Vector<T>(_cellCandidateWeightsGradient!.ToArray()),
+            new Vector<T>(_cellCandidateBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null; _cellCandidateWeightsGradient = null; _cellCandidateBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

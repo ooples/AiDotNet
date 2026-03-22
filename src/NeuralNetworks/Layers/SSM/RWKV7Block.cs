@@ -356,7 +356,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TimeMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State: [batch, numHeads, headDim, headDim] - matrix-valued per head
         var state = _recurrentState ?? new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -513,7 +513,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ChannelMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var xPrev = _prevChannelToken ?? new Tensor<T>(new[] { batchSize, _modelDimension });
 
         // Caches for backward pass
@@ -591,7 +591,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape);
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)

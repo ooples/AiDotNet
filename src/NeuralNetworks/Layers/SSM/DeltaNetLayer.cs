@@ -315,7 +315,7 @@ public class DeltaNetLayer<T> : LayerBase<T>
         Tensor<T> beta,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
         var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -701,6 +701,26 @@ public class DeltaNetLayer<T> : LayerBase<T>
         _betaWeights, _betaBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_betaWeightsGradient!.ToArray()),
+            new Vector<T>(_betaBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null; _betaWeightsGradient = null; _betaBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

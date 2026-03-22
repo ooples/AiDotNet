@@ -114,12 +114,14 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         var clone = (OnlineKMeans<T>)CreateNewInstance();
         if (_centers is not null)
         {
-            int k = _centers.GetLength(0);
-            int d = _centers.GetLength(1);
-            clone._centers = new T[k, d];
-            Array.Copy(_centers, clone._centers, _centers.Length);
+            int k = _centers.Rows;
+            int d = _centers.Columns;
+            clone._centers = new Matrix<T>(k, d);
+            for (int i = 0; i < k; i++)
+                for (int j = 0; j < d; j++)
+                    clone._centers[i, j] = _centers[i, j];
         }
-        clone._clusterCounts = _clusterCounts?.ToArray();
+        clone._clusterCounts = _clusterCounts?.ToArray() ?? Array.Empty<int>();
         clone._totalPointsSeen = _totalPointsSeen;
         clone.CurrentLearningRate = CurrentLearningRate;
         clone.NumClusters = NumClusters;

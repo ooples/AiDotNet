@@ -361,7 +361,7 @@ public class MesaNetLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State: inner weights W and inverse covariance P per head
         // W: [batch, numHeads, headDim, headDim]
@@ -508,7 +508,7 @@ public class MesaNetLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> LayerNormForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T eps = NumOps.FromDouble(1e-5);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -766,7 +766,7 @@ public class MesaNetLayer<T> : LayerBase<T>
 
     private Tensor<T> LayerNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T eps = NumOps.FromDouble(1e-5);
         T invDim = NumOps.Divide(NumOps.One, NumOps.FromDouble(_modelDimension));
         T twoVal = NumOps.FromDouble(2.0);
@@ -899,6 +899,27 @@ public class MesaNetLayer<T> : LayerBase<T>
         _outputProjectionWeights, _outputProjectionBias,
         _lnGamma, _lnBeta
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_innerWeightsInitGradient!.ToArray()),
+            new Vector<T>(_lnGammaGradient!.ToArray()),
+            new Vector<T>(_lnBetaGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null; _innerWeightsInitGradient = null; _lnGammaGradient = null; _lnBetaGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

@@ -156,6 +156,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T>? _gateBiasGradient;
 
     /// <inheritdoc/>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -872,7 +873,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T> ConcatenateFeatures(Tensor<T> incoming, Tensor<T> outgoing, Tensor<T> self, int batchSize, int numNodes)
     {
         int outputFeatures = incoming.Shape[2];
-        var combined = new Tensor<T>([batchSize, numNodes, 3 * outputFeatures]);
+        var combined = TensorAllocator.Rent<T>([batchSize, numNodes, 3 * outputFeatures]);
 
         for (int b = 0; b < batchSize; b++)
         {

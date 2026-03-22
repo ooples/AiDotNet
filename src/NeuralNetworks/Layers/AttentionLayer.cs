@@ -187,7 +187,25 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override int ParameterCount =>
-        (_attentionSize * _inputSize * 3) + (_inputSize * _attentionSize); // Wq, Wk, Wv + Wo
+        _attentionSize * _inputSize * 3; // Wq, Wk, Wv
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
+        int wqLen = _Wq.Length;
+        int wkLen = _Wk.Length;
+        int idx = 0;
+        var wqSpan = _Wq.Data.Span;
+        for (int i = 0; i < wqLen; i++) wqSpan[i] = parameters[idx++];
+        var wkSpan = _Wk.Data.Span;
+        for (int i = 0; i < wkLen; i++) wkSpan[i] = parameters[idx++];
+        var wvSpan = _Wv.Data.Span;
+        for (int i = 0; i < _Wv.Length; i++) wvSpan[i] = parameters[idx++];
+        Engine.InvalidatePersistentTensor(_Wq);
+        Engine.InvalidatePersistentTensor(_Wk);
+        Engine.InvalidatePersistentTensor(_Wv);
+    }
 
     /// <summary>
     /// Gradient of the weight tensor for the value transformation.

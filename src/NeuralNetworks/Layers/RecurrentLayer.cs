@@ -363,10 +363,9 @@ public class RecurrentLayer<T> : LayerBase<T>
                 nameof(input));
         }
 
-        var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
+        // Rent tensors to reduce GC pressure (output is fully overwritten, hidden needs zero init)
+        var output = TensorAllocator.Rent<T>([sequenceLength, batchSize, hiddenSize]);
         var hiddenState = new Tensor<T>([sequenceLength + 1, batchSize, hiddenSize]);
-
-        // Initialize the first hidden state with zeros (vectorized)
         hiddenState.Fill(NumOps.Zero);
 
         // Process sequence using tensor operations
@@ -1131,14 +1130,19 @@ public class RecurrentLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // VECTORIZED: Use Vector.Slice and Tensor.FromVector for parameter setting
-        var inputWeightsVec = parameters.Slice(0, inputWeightsSize);
-        var hiddenWeightsVec = parameters.Slice(inputWeightsSize, hiddenWeightsSize);
-        var biasesVec = parameters.Slice(inputWeightsSize + hiddenWeightsSize, _biases.Length);
+        // Modify weights IN PLACE to preserve engine's persistent tensor references
+        int idx = 0;
+        var iwSpan = _inputWeights.Data.Span;
+        for (int i = 0; i < inputWeightsSize; i++)
+            iwSpan[i] = parameters[idx++];
 
-        _inputWeights = Tensor<T>.FromVector(inputWeightsVec).Reshape(_inputWeights.Shape);
-        _hiddenWeights = Tensor<T>.FromVector(hiddenWeightsVec).Reshape(_hiddenWeights.Shape);
-        _biases = Tensor<T>.FromVector(biasesVec).Reshape(_biases.Shape);
+        var hwSpan = _hiddenWeights.Data.Span;
+        for (int i = 0; i < hiddenWeightsSize; i++)
+            hwSpan[i] = parameters[idx++];
+
+        var bSpan = _biases.Data.Span;
+        for (int i = 0; i < _biases.Length; i++)
+            bSpan[i] = parameters[idx++];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_inputWeights);
@@ -1180,6 +1184,14 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// only the temporary state information.
     /// </para>
     /// </remarks>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _inputWeightsGradient = null;
+        _hiddenWeightsGradient = null;
+        _biasesGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

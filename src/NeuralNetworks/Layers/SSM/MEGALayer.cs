@@ -406,7 +406,7 @@ public class MEGALayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T headScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Store attention scores: [batch, numHeads, seqLen, seqLen]
@@ -669,7 +669,7 @@ public class MEGALayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> EmaBackward(Tensor<T> dOutput, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _emaDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _emaDimension });
 
         for (int d = 0; d < _emaDimension; d++)
         {
@@ -777,6 +777,29 @@ public class MEGALayer<T> : LayerBase<T>
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_emaAlphaLogitGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_emaAlphaLogitGradient!.ToArray()),
+            new Vector<T>(_emaProjectInWeightsGradient!.ToArray()),
+            new Vector<T>(_emaProjectInBiasGradient!.ToArray()),
+            new Vector<T>(_emaProjectOutWeightsGradient!.ToArray()),
+            new Vector<T>(_emaProjectOutBiasGradient!.ToArray()),
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _emaAlphaLogitGradient = null; _emaProjectInWeightsGradient = null; _emaProjectInBiasGradient = null; _emaProjectOutWeightsGradient = null; _emaProjectOutBiasGradient = null; _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

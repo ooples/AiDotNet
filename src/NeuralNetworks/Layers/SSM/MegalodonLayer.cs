@@ -498,7 +498,7 @@ public class MegalodonLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -934,7 +934,7 @@ public class MegalodonLayer<T> : LayerBase<T>
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var result = new Tensor<T>(template.Shape);
+        var result = TensorAllocator.Rent<T>(template.Shape);
         for (int i = 0; i < result.Length; i++) result[i] = NumOps.One;
         return result;
     }
@@ -997,6 +997,31 @@ public class MegalodonLayer<T> : LayerBase<T>
         _gateWeights, _gateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_emaAlphaRealGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_emaAlphaRealGradient!.ToArray()),
+            new Vector<T>(_emaAlphaImagGradient!.ToArray()),
+            new Vector<T>(_emaInputWeightsGradient!.ToArray()),
+            new Vector<T>(_emaInputBiasGradient!.ToArray()),
+            new Vector<T>(_emaOutputWeightsGradient!.ToArray()),
+            new Vector<T>(_emaOutputBiasGradient!.ToArray()),
+            new Vector<T>(_tsNormGammaGradient!.ToArray()),
+            new Vector<T>(_tsNormBetaGradient!.ToArray()),
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_gateWeightsGradient!.ToArray()),
+            new Vector<T>(_gateBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _emaAlphaRealGradient = null; _emaAlphaImagGradient = null; _emaInputWeightsGradient = null; _emaInputBiasGradient = null; _emaOutputWeightsGradient = null; _emaOutputBiasGradient = null; _tsNormGammaGradient = null; _tsNormBetaGradient = null; _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _gateWeightsGradient = null; _gateBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

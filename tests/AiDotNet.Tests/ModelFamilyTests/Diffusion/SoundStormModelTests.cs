@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class SoundStormModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 8, 32, 32];
+    protected override int[] OutputShape => [1, 8, 32, 32];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new SoundStormModel<double>();
+        => new SoundStormModel<double>(seed: 42);
 }

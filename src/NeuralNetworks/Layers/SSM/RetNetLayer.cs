@@ -346,7 +346,7 @@ public class RetNetLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Pre-compute decay masks: D_h[i,j] = gamma_h^(i-j) for i >= j, 0 otherwise
         // Shape: [numHeads, seqLen, seqLen]
@@ -700,7 +700,7 @@ public class RetNetLayer<T> : LayerBase<T>
         Tensor<T> dNormed, Tensor<T> retentionInput,
         int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(retentionInput.Shape);
+        var dInput = TensorAllocator.Rent<T>(retentionInput.Shape);
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -845,6 +845,27 @@ public class RetNetLayer<T> : LayerBase<T>
         _outputProjectionWeights, _outputProjectionBias,
         _groupNormScale, _groupNormBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_gammasGradient!.ToArray()),
+            new Vector<T>(_groupNormScaleGradient!.ToArray()),
+            new Vector<T>(_groupNormBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null; _gammasGradient = null; _groupNormScaleGradient = null; _groupNormBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

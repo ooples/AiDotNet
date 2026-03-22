@@ -41,6 +41,7 @@ public class MockNeuralNetwork<T, TInput, TOutput> : IFullModel<T, TInput, TOutp
     }
 
     public int ParameterCount => _parameters.Length;
+    public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {

@@ -702,7 +702,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int offset = batchIdx * (numHeads * sliceSize) + headIdx * sliceSize;
 
         // Create result tensor and copy using indexer for cross-assembly compatibility
-        var result = new Tensor<T>([numNodes, features]);
+        var result = TensorAllocator.Rent<T>([numNodes, features]);
         for (int i = 0; i < sliceSize; i++)
         {
             result.SetFlat(i, tensor4D.GetFlat(offset + i));
@@ -784,7 +784,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T> ComputeLeakyReluGradientMatrix(Tensor<T> preSoftmax, Tensor<T> adjMask)
     {
         int numNodes = preSoftmax.Shape[0];
-        var result = new Tensor<T>([numNodes, numNodes]);
+        var result = TensorAllocator.Rent<T>([numNodes, numNodes]);
 
         for (int i = 0; i < numNodes; i++)
         {
@@ -1425,6 +1425,12 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         return metadata;
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null; _attentionWeightsGradient = null; _biasGradient = null;
     }
 
     /// <inheritdoc/>

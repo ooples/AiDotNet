@@ -139,6 +139,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     /// of patterns commonly occur in the input data.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => CellStates.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

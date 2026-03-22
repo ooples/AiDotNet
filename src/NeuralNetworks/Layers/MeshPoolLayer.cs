@@ -680,7 +680,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
         int numKept = RemainingEdgeIndices.Length;
 
         // Create zero-initialized input gradient tensor
-        var inputGrad = new Tensor<T>([numEdges, InputChannels]);
+        var inputGrad = TensorAllocator.Rent<T>([numEdges, InputChannels]);
 
         // Create indices tensor for scatter operation
         var indicesTensor = new Tensor<int>(RemainingEdgeIndices, [numKept]);

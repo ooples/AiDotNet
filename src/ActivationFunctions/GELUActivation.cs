@@ -58,7 +58,12 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
-        // GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/p) * (x + 0.044715 * x^3)))
+        // GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
+        // For large |x|: GELU(x) ≈ x (x > 0) or ≈ 0 (x < 0)
+        double xd = Convert.ToDouble(input);
+        if (xd > 10.0) return input; // tanh → 1, so 0.5 * x * 2 = x
+        if (xd < -10.0) return NumOps.Zero; // tanh → -1, so 0.5 * x * 0 = 0
+
         T sqrt2OverPi = NumOps.Sqrt(NumOps.FromDouble(2.0 / Math.PI));
         T x3 = NumOps.Multiply(NumOps.Multiply(input, input), input);
         T inner = NumOps.Add(input, NumOps.Multiply(NumOps.FromDouble(0.044715), x3));

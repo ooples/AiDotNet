@@ -69,6 +69,7 @@ public class QuantumLayer<T> : LayerBase<T>
     /// automatically adjust to better process your specific data.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _rotationAngles.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -665,6 +666,14 @@ public class QuantumLayer<T> : LayerBase<T>
     /// potentially unstable learning.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumQubits"] = _numQubits.ToString();
+        return metadata;
+    }
+
     public override void UpdateParameters(T learningRate)
     {
         // Use Engine operations for gradient update

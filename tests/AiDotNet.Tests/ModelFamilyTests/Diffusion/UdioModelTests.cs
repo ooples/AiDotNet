@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class UdioModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 64, 32, 32];
+    protected override int[] OutputShape => [1, 64, 32, 32];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new UdioModel<double>();
+        => new UdioModel<double>(seed: 42);
 }

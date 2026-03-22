@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class OpenSora13ModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 4, 32, 32];
+    protected override int[] OutputShape => [1, 4, 32, 32];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new OpenSora13Model<double>();
+        => new OpenSora13Model<double>(seed: 42);
 }

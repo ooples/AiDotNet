@@ -245,7 +245,7 @@ public class SoftTreeLayer<T> : LayerBase<T>
 
         // Backpropagate through tree structure to get gradients for split parameters
         // This is a simplified implementation - full implementation would track all paths
-        var inputGrad = new Tensor<T>([batchSize, _inputDim]);
+        var inputGrad = TensorAllocator.Rent<T>([batchSize, _inputDim]);
 
         return inputGrad;
     }
@@ -347,6 +347,12 @@ public class SoftTreeLayer<T> : LayerBase<T>
         }
 
         return gradients;
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _splitWeightsGrad = null; _splitBiasesGrad = null; _leafValuesGrad = null;
     }
 
     /// <inheritdoc/>

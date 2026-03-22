@@ -548,7 +548,7 @@ internal class MambaBlock<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         var bias2D = _convBias.Reshape(1, _innerDimension);
 
         // Pre-compute weight slices for each kernel position: [innerDim] -> [1, innerDim]
@@ -588,7 +588,7 @@ internal class MambaBlock<T> : LayerBase<T>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
 
         // Per-kernel-position weight gradient accumulators
@@ -785,6 +785,25 @@ internal class MambaBlock<T> : LayerBase<T>
             for (int i = 0; i < tensor.Length; i++)
                 tensor[i] = parameters[index++];
         }
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_convWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_convWeightsGradient!.ToArray()),
+            new Vector<T>(_convBiasGradient!.ToArray()),
+            new Vector<T>(_xProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_aLogGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _convWeightsGradient = null; _convBiasGradient = null; _xProjectionWeightsGradient = null; _dtProjectionWeightsGradient = null; _dtProjectionBiasGradient = null; _aLogGradient = null; _dParamGradient = null;
     }
 
     /// <inheritdoc />

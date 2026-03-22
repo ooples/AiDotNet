@@ -59,6 +59,11 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
+        // Clamp to avoid NaN from exp overflow in MathHelper.Tanh
+        // tanh(x) = 1.0 for x > ~19.1 and -1.0 for x < ~-19.1 (double precision)
+        double xd = Convert.ToDouble(input);
+        if (xd > 20.0) return NumOps.One;
+        if (xd < -20.0) return NumOps.Negate(NumOps.One);
         return MathHelper.Tanh(input);
     }
 

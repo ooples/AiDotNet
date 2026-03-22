@@ -82,6 +82,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// - Which labels are likely to appear at the end of a sequence
     /// </para>
     /// </remarks>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

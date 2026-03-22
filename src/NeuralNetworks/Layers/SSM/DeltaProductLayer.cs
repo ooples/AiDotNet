@@ -385,7 +385,7 @@ public class DeltaProductLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v, Tensor<T> beta,
         Tensor<T> hVecs, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
         var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
@@ -701,7 +701,7 @@ public class DeltaProductLayer<T> : LayerBase<T>
         Tensor<T> dHVecs, int batchSize, int seqLen)
     {
         int total = batchSize * seqLen;
-        var dInput = new Tensor<T>(new[] { total, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { total, _modelDimension });
 
         for (int mi = 0; mi < _numHouseholders; mi++)
         {
@@ -787,6 +787,24 @@ public class DeltaProductLayer<T> : LayerBase<T>
         _householderWeights,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_betaWeightsGradient!.ToArray()),
+            new Vector<T>(_betaBiasGradient!.ToArray()),
+            new Vector<T>(_householderWeightsGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _betaWeightsGradient = null; _betaBiasGradient = null; _householderWeightsGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

@@ -176,6 +176,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private readonly IActivationFunction<T> _ffnActivation;
 
     /// <inheritdoc/>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -883,14 +884,15 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     private Tensor<T> MultiHeadAttention(Tensor<T> input, int batchSize, int numNodes)
     {
-        // Store attention outputs for each head: [batch, numHeads, numNodes, headDim]
-        var headOutputs = new Tensor<T>([batchSize, _numHeads, numNodes, _headDim]);
+        // Rent attention tensors — all fully overwritten in forward pass
+        var headOutputs = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
+        // Attention weights need zero init (sparse graphs don't fill all entries)
         _lastAttentionWeights = new Tensor<T>([batchSize, _numHeads, numNodes, numNodes]);
 
-        // Store Q, K, V for backward pass: [batch, numHeads, numNodes, headDim]
-        _lastQueries = new Tensor<T>([batchSize, _numHeads, numNodes, _headDim]);
-        _lastKeys = new Tensor<T>([batchSize, _numHeads, numNodes, _headDim]);
-        _lastValues = new Tensor<T>([batchSize, _numHeads, numNodes, _headDim]);
+        // Q, K, V are fully overwritten per head — safe to rent
+        _lastQueries = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
+        _lastKeys = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
+        _lastValues = TensorAllocator.Rent<T>([batchSize, _numHeads, numNodes, _headDim]);
 
         T sqrtDk = NumOps.Sqrt(NumOps.FromDouble(_headDim));
 
@@ -1021,7 +1023,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastHeadOutputs = headOutputs;
 
         // Concatenate heads: [batch, numNodes, numHeads * headDim]
-        var concatenated = new Tensor<T>([batchSize, numNodes, _numHeads * _headDim]);
+        var concatenated = TensorAllocator.Rent<T>([batchSize, numNodes, _numHeads * _headDim]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int n = 0; n < numNodes; n++)

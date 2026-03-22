@@ -866,6 +866,13 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null;
+        _biasesGradient = null;
+    }
+
     public override void ResetState()
     {
         _lastInput = null;
@@ -983,7 +990,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> OctonionsToTensor(Octonion<T>[,] octonions, int batchSize, int features)
     {
-        var result = new Tensor<T>([batchSize, features * 8]);
+        var result = TensorAllocator.Rent<T>([batchSize, features * 8]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1022,7 +1029,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         var derivative = DerivativeTensor(ScalarActivation, preActivationTensor);
 
         // Multiply output gradient element-wise by derivative
-        var result = new Tensor<T>(outputGradient.Shape);
+        var result = TensorAllocator.Rent<T>(outputGradient.Shape);
         int totalElements = 1;
         foreach (var dim in outputGradient.Shape)
             totalElements *= dim;

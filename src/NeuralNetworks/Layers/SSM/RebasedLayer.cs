@@ -306,7 +306,7 @@ public class RebasedLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T epsilon = NumOps.FromDouble(1e-6);
 
         // Cache feature maps for backward pass
@@ -725,6 +725,21 @@ public class RebasedLayer<T> : LayerBase<T>
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

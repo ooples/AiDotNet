@@ -347,7 +347,7 @@ public class S5Layer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> MIMOParallelScan(Tensor<T> u, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Compute delta = exp(logDelta): [stateDim]
         var delta = new T[_stateDimension];
@@ -795,6 +795,26 @@ public class S5Layer<T> : LayerBase<T>
         _inputProjectionWeights, _inputProjectionBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_aRealGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_aRealGradient!.ToArray()),
+            new Vector<T>(_aImagGradient!.ToArray()),
+            new Vector<T>(_bRealGradient!.ToArray()),
+            new Vector<T>(_bImagGradient!.ToArray()),
+            new Vector<T>(_cRealGradient!.ToArray()),
+            new Vector<T>(_cImagGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_logDeltaGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _aRealGradient = null; _aImagGradient = null; _bRealGradient = null; _bImagGradient = null; _cRealGradient = null; _cImagGradient = null; _dParamGradient = null; _logDeltaGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

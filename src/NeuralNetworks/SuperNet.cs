@@ -636,7 +636,7 @@ namespace AiDotNet.NeuralNetworks
                 }
             }
 
-            var output = new Tensor<T>(input.Shape);
+            var output = TensorAllocator.Rent<T>(input.Shape);
             var weight = _weights[weightKey];
 
             // Apply operation (simplified) using proper 2D tensor indexing

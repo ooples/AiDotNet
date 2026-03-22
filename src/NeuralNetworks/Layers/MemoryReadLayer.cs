@@ -224,6 +224,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - How to combine everything into a useful output
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -545,6 +546,23 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null || _lastMemory == null || _lastOutput == null || _lastAttentionScores == null || _lastTransformed == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Ensure gradient matches stored output shape for activation derivative
+        if (!outputGradient.Shape.SequenceEqual(_lastOutput.Shape))
+        {
+            if (outputGradient.Length == _lastOutput.Length)
+            {
+                outputGradient = outputGradient.Reshape(_lastOutput.Shape);
+            }
+            else
+            {
+                // Sizes differ — truncate or pad to match
+                var resized = new Tensor<T>(_lastOutput.Shape);
+                int minLen = Math.Min(outputGradient.Length, resized.Length);
+                for (int i = 0; i < minLen; i++)
+                    resized.SetFlat(i, outputGradient.GetFlatIndexValue(i));
+                outputGradient = resized;
+            }
+        }
         var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
 
         // Output weights gradient: transformed^T × activationGradient
@@ -1101,6 +1119,25 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// which is important for correct behavior in many neural network architectures.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_keyWeightsGradient == null || _valueWeightsGradient == null ||
+            _outputWeightsGradient == null || _outputBiasGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()),
+            new Vector<T>(_outputWeightsGradient.ToArray()),
+            new Vector<T>(_outputBiasGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _outputWeightsGradient = null; _outputBiasGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class PixArtSigmaModelTests : DiffusionModelTestBase
 {
+    protected override int[] InputShape => [1, 4, 32, 32];
+    protected override int[] OutputShape => [1, 4, 32, 32];
+
     protected override IDiffusionModel<double> CreateModel()
-        => new PixArtSigmaModel<double>();
+        => new PixArtSigmaModel<double>(seed: 42);
 }

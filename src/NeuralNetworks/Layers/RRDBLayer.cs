@@ -110,6 +110,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     public int GrowthChannels => _growthChannels;
 
     /// <inheritdoc />
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

@@ -904,6 +904,26 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// temporary working data.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (WeightsGradient.Length == 0 || BiasesGradient.Length == 0)
+            return new Vector<T>(ParameterCount);
+        var result = new Vector<T>(ParameterCount);
+        int idx = 0;
+        for (int i = 0; i < WeightsGradient.Length; i++)
+            result[idx++] = WeightsGradient.Data.Span[i];
+        for (int i = 0; i < BiasesGradient.Length; i++)
+            result[idx++] = BiasesGradient.Data.Span[i];
+        return result;
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        WeightsGradient = Tensor<T>.Empty();
+        BiasesGradient = Tensor<T>.Empty();
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

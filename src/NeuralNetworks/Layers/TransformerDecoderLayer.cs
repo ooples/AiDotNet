@@ -488,6 +488,31 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        void Set(ILayer<T> layer) { int c = layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
+        Set(_selfAttention); Set(_norm1); Set(_crossAttention); Set(_norm2);
+        Set(_feedForward); Set(_feedForwardProjection); Set(_norm3);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(
+            _selfAttention.GetParameterGradients(), _norm1.GetParameterGradients(),
+            _crossAttention.GetParameterGradients(), _norm2.GetParameterGradients(),
+            _feedForward.GetParameterGradients(), _feedForwardProjection.GetParameterGradients(),
+            _norm3.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _selfAttention.ClearGradients(); _norm1.ClearGradients();
+        _crossAttention.ClearGradients(); _norm2.ClearGradients();
+        _feedForward.ClearGradients(); _feedForwardProjection.ClearGradients(); _norm3.ClearGradients();
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer can execute on GPU.
     /// </summary>
@@ -651,7 +676,10 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        throw new InvalidOperationException("Use Forward(Tensor<T> input, Tensor<T> encoderOutput) for TransformerDecoderLayer.");
+        // Decoder-only mode (GPT-style): use self-attention only, skip cross-attention
+        // Per Vaswani et al. 2017, the decoder can operate without encoder output
+        // for autoregressive language models
+        return Forward(input, input);
     }
 
     /// <summary>

@@ -345,7 +345,7 @@ public class LonghornLayer<T> : LayerBase<T>
         Tensor<T> alpha,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
         var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -660,7 +660,7 @@ public class LonghornLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(input.Shape);
+        var dInput = TensorAllocator.Rent<T>(input.Shape);
         T epsilon = NumOps.FromDouble(1e-5);
         T headDimT = NumOps.FromDouble(_headDimension);
         var gammaGrad = _groupNormGammaGradient
@@ -818,6 +818,28 @@ public class LonghornLayer<T> : LayerBase<T>
         _groupNormGamma, _groupNormBeta,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_alphaWeightsGradient!.ToArray()),
+            new Vector<T>(_alphaBiasGradient!.ToArray()),
+            new Vector<T>(_groupNormGammaGradient!.ToArray()),
+            new Vector<T>(_groupNormBetaGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null; _alphaWeightsGradient = null; _alphaBiasGradient = null; _groupNormGammaGradient = null; _groupNormBetaGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

@@ -812,7 +812,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// </summary>
     private Tensor<T> ExtractBasisMatrix(Tensor<T> basisMatrices, int basisIndex, int rows, int cols)
     {
-        var result = new Tensor<T>([rows, cols]);
+        var result = TensorAllocator.Rent<T>([rows, cols]);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
@@ -828,7 +828,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// </summary>
     private Tensor<T> ExtractInputFeatures(Tensor<T> input, int batchSize, int numNodes, int inFeatures)
     {
-        var result = new Tensor<T>([batchSize, numNodes, inFeatures]);
+        var result = TensorAllocator.Rent<T>([batchSize, numNodes, inFeatures]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int n = 0; n < numNodes; n++)
@@ -917,7 +917,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// </summary>
     private Tensor<T> ExtractNodeInput(Tensor<T> input, int batchSize, int nodeIndex, int inFeatures)
     {
-        var result = new Tensor<T>([batchSize, inFeatures]);
+        var result = TensorAllocator.Rent<T>([batchSize, inFeatures]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int f = 0; f < inFeatures && f < input.Shape[2]; f++)
@@ -1159,7 +1159,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// </summary>
     private Tensor<T> ExtractBatchSlice(Tensor<T> tensor, int batchIndex, int rows, int cols)
     {
-        var result = new Tensor<T>([rows, cols]);
+        var result = TensorAllocator.Rent<T>([rows, cols]);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)

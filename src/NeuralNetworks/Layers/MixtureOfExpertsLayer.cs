@@ -2087,7 +2087,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = aData.Shape[0];
         int features = aData.Shape[1];
 
-        var result = new Tensor<T>(aData.Shape);
+        var result = TensorAllocator.Rent<T>(aData.Shape);
         for (int i = 0; i < batchSize; i++)
         {
             T divisor = bData[i, 0];

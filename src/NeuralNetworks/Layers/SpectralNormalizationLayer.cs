@@ -83,6 +83,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
     /// <summary>
@@ -663,5 +664,11 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
                 $"Inner layer ({_innerLayer.GetType().Name}) does not support GPU-resident training. " +
                 "Use UpdateParameters() for CPU-based parameter updates.");
         }
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _innerLayer.ClearGradients();
     }
 }

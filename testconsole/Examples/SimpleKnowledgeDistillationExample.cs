@@ -156,6 +156,7 @@ public static class SimpleKnowledgeDistillationExample
         public Vector<double> GetParameters() => new Vector<double>(0);
         public void SetParameters(Vector<double> parameters) { }
         public int ParameterCount => 0;
+        public bool SupportsParameterInitialization => false;
         public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters) => this;
 
         public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputDim);

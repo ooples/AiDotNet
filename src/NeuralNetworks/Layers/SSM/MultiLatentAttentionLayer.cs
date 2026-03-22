@@ -304,7 +304,7 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var allAttnWeights = new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
@@ -598,6 +598,23 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_compressWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_compressWeightsGradient!.ToArray()),
+            new Vector<T>(_compressBiasGradient!.ToArray()),
+            new Vector<T>(_keyUpWeightsGradient!.ToArray()),
+            new Vector<T>(_valueUpWeightsGradient!.ToArray()),
+            new Vector<T>(_queryWeightsGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _compressWeightsGradient = null; _compressBiasGradient = null; _keyUpWeightsGradient = null; _valueUpWeightsGradient = null; _queryWeightsGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

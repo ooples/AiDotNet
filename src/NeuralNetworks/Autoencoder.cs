@@ -117,6 +117,8 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private int _epochs;
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+
     /// <summary>
     /// The size of each batch used in training.
     /// </summary>
@@ -731,6 +733,10 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+
         // Normalize to 2D [batch, features] if needed
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
@@ -827,13 +833,14 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                     outputGradient = Layers[j].Backward(outputGradient);
                 }
 
-                // Update parameters
-                for (int j = 0; j < Layers.Count; j++)
+                // Update parameters using Adam optimizer
+                _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+                var paramGrads = GetParameterGradients();
+                var currentParams = GetParameters();
+                if (paramGrads.Length > 0 && currentParams.Length == paramGrads.Length)
                 {
-                    if (Layers[j].SupportsTraining)
-                    {
-                        Layers[j].UpdateParameters(_learningRate);
-                    }
+                    var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+                    UpdateParameters(updatedParams);
                 }
             }
 

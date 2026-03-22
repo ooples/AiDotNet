@@ -362,7 +362,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     private Tensor<T> AggregateEdgeFeatures(Tensor<T> input, int[,] adjacency, int numEdges, int aggregatedSize)
     {
         // Create result tensor [numEdges, aggregatedSize]
-        var result = new Tensor<T>([numEdges, aggregatedSize]);
+        var result = TensorAllocator.Rent<T>([numEdges, aggregatedSize]);
 
         // Step 1: Copy self-features (first InputChannels columns)
         // Use TensorSetSlice for consistent API usage
@@ -644,7 +644,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     private Tensor<T> ScatterGradients(Tensor<T> aggregatedGrad, int[,] adjacency, int numEdges)
     {
         // Initialize input gradient tensor
-        var inputGrad = new Tensor<T>([numEdges, InputChannels]);
+        var inputGrad = TensorAllocator.Rent<T>([numEdges, InputChannels]);
 
         // Step 1: Add self-gradients (first InputChannels columns)
         var selfGrad = Engine.TensorSlice(aggregatedGrad, [0, 0], [numEdges, InputChannels]);

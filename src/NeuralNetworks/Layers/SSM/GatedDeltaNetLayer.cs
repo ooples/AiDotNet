@@ -333,7 +333,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
         Tensor<T> alpha, Tensor<T> beta,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
         var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -423,7 +423,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var bias2D = _convBias.Reshape(1, _modelDimension);
 
         var weightSlices = new Tensor<T>[_convKernelSize];
@@ -714,7 +714,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         var weightSlices = new Tensor<T>[_convKernelSize];
         for (int ki = 0; ki < _convKernelSize; ki++)
@@ -798,6 +798,27 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_convWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_convWeightsGradient!.ToArray()),
+            new Vector<T>(_convBiasGradient!.ToArray()),
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_betaWeightsGradient!.ToArray()),
+            new Vector<T>(_betaBiasGradient!.ToArray()),
+            new Vector<T>(_alphaWeightsGradient!.ToArray()),
+            new Vector<T>(_alphaBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _convWeightsGradient = null; _convBiasGradient = null; _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _betaWeightsGradient = null; _betaBiasGradient = null; _alphaWeightsGradient = null; _alphaBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

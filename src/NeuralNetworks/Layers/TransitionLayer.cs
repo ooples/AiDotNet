@@ -74,7 +74,19 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount => _bn.ParameterCount + _conv.ParameterCount;
     public override bool SupportsTraining => true;
+
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(_bn.GetParameterGradients(), _conv.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _bn.ClearGradients(); _conv.ClearGradients();
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -430,7 +442,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int poolSize = 2;
         int stride = 2;
 
-        var inputGrad = new Tensor<T>(inputShape);
+        var inputGrad = TensorAllocator.Rent<T>(inputShape);
         var divisor = NumOps.FromDouble((double)poolSize * (double)poolSize);
 
         for (int n = 0; n < batch; n++)

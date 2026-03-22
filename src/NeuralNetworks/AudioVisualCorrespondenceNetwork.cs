@@ -953,7 +953,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     {
         var numFrames = maskedSpectrogram.Shape[0];
         var outputLength = numFrames * SPECTROGRAM_HOP;
-        var output = new Tensor<T>([outputLength]);
+        var output = TensorAllocator.Rent<T>([outputLength]);
 
         // Griffin-Lim style reconstruction approximation
         for (int frame = 0; frame < numFrames; frame++)

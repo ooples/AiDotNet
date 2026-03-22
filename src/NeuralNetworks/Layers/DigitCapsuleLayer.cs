@@ -237,6 +237,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// - It has weights that are updated to make better predictions over time
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _weights.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -439,7 +440,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         var couplings = new Tensor<T>([batchSize, _inputCapsules, _numClasses]);
         couplings.Fill(NumOps.Zero);
 
-        var output = new Tensor<T>([batchSize, _numClasses, _outputCapsuleDimension]);
+        var output = TensorAllocator.Rent<T>([batchSize, _numClasses, _outputCapsuleDimension]);
 
         var softmaxActivation = new SoftmaxActivation<T>();
         for (int iteration = 0; iteration < _routingIterations; iteration++)
@@ -675,7 +676,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         var routingWeightsGradient = softmaxActivation.Derivative(_lastCouplings);
 
         // Tensorized prediction gradients: [B, I, C, outDim]
-        var predGrad = new Tensor<T>([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
+        var predGrad = TensorAllocator.Rent<T>([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < _inputCapsules; i++)

@@ -1600,6 +1600,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Gets all parameter gradients of the layer as a single vector.
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _kernelsGradient = null;
+        _biasesGradient = null;
+    }
+
     /// </summary>
     /// <returns>A vector containing all parameter gradients (kernel gradients followed by bias gradients).</returns>
     public override Vector<T> GetParameterGradients()

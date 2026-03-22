@@ -328,7 +328,7 @@ public class ABCLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         Tensor<T> forgetGate, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Slot values: [batch, numHeads, numSlots, headDim] - the actual slot content
@@ -784,6 +784,24 @@ public class ABCLayer<T> : LayerBase<T>
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_slotKeysGradient!.ToArray()),
+            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
+            new Vector<T>(_forgetGateBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _slotKeysGradient = null; _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

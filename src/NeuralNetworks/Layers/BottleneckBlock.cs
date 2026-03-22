@@ -80,6 +80,10 @@ public class BottleneckBlock<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount =>
+        _conv1.ParameterCount + _bn1.ParameterCount + _conv2.ParameterCount + _bn2.ParameterCount +
+        _conv3.ParameterCount + _bn3.ParameterCount +
+        (_downsampleConv?.ParameterCount ?? 0) + (_downsampleBn?.ParameterCount ?? 0);
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -450,6 +454,48 @@ public class BottleneckBlock<T> : LayerBase<T>
             allParams.AddRange(_downsampleBn.GetParameters().ToArray());
         }
         return new Vector<T>([.. allParams]);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        var grads = new List<T>();
+        grads.AddRange(_conv1.GetParameterGradients().ToArray());
+        grads.AddRange(_bn1.GetParameterGradients().ToArray());
+        grads.AddRange(_conv2.GetParameterGradients().ToArray());
+        grads.AddRange(_bn2.GetParameterGradients().ToArray());
+        grads.AddRange(_conv3.GetParameterGradients().ToArray());
+        grads.AddRange(_bn3.GetParameterGradients().ToArray());
+        if (_downsampleConv is not null && _downsampleBn is not null)
+        {
+            grads.AddRange(_downsampleConv.GetParameterGradients().ToArray());
+            grads.AddRange(_downsampleBn.GetParameterGradients().ToArray());
+        }
+        return new Vector<T>([.. grads]);
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _conv1.ClearGradients(); _bn1.ClearGradients();
+        _conv2.ClearGradients(); _bn2.ClearGradients();
+        _conv3.ClearGradients(); _bn3.ClearGradients();
+        _downsampleConv?.ClearGradients(); _downsampleBn?.ClearGradients();
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        void Set(ILayer<T> layer)
+        {
+            int count = layer.ParameterCount;
+            layer.SetParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        Set(_conv1); Set(_bn1); Set(_conv2); Set(_bn2); Set(_conv3); Set(_bn3);
+        if (_downsampleConv is not null && _downsampleBn is not null)
+        {
+            Set(_downsampleConv); Set(_downsampleBn);
+        }
     }
 
     /// <summary>

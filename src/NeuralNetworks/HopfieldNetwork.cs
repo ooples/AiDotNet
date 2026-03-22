@@ -301,17 +301,21 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     public Vector<T> Recall(Vector<T> input, int maxIterations = 100)
     {
         var current = input;
+        // Convert weights to Tensor for Engine-accelerated MatMul
+        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
+            // VECTORIZED: next = activation(W @ current)
+            var currentTensor = Tensor<T>.FromVector(current).Reshape([_size, 1]);
+            var product = Engine.TensorMatMul(weightsTensor, currentTensor);
+            var productVec = product.Reshape([_size]).ToVector();
+
+            // Apply activation element-wise
             var next = new Vector<T>(_size);
             for (int i = 0; i < _size; i++)
             {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < _size; j++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_weights[i, j], current[j]));
-                }
-                next[i] = _activationFunction.Activate(sum);
+                next[i] = _activationFunction.Activate(productVec[i]);
             }
 
             if (current.Equals(next))

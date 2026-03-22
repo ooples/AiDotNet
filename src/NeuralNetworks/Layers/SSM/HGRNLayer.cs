@@ -309,7 +309,7 @@ public class HGRNLayer<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> forgetGate, Tensor<T> inputGate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var h = new Tensor<T>(new[] { batchSize, _modelDimension });
 
         // Store all hidden states for backward pass: [batch, seqLen+1, modelDim]
@@ -550,6 +550,20 @@ public class HGRNLayer<T> : LayerBase<T>
         _inputGateWeights, _inputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_forgetGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
+            new Vector<T>(_forgetGateBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

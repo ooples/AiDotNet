@@ -124,7 +124,12 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// - The actual learning happens in the inner layer
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
+
+    public override void SetParameters(Vector<T> parameters) => _innerLayer.SetParameters(parameters);
+    public override Vector<T> GetParameterGradients() => _innerLayer.GetParameterGradients();
+    public override void ClearGradients() { base.ClearGradients(); _innerLayer.ClearGradients(); }
 
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
@@ -436,7 +441,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
 
         var innerOutputShape = _innerLayer.GetOutputShape();
         var outputShape = new[] { batchSize, timeSteps }.Concat(innerOutputShape).ToArray();
-        var output = new Tensor<T>(outputShape);
+        var output = TensorAllocator.Rent<T>(outputShape);
 
         for (int t = 0; t < timeSteps; t++)
         {

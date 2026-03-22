@@ -61,7 +61,19 @@ public class DenseBlock<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount => _layers.Sum(l => l.ParameterCount);
     public override bool SupportsTraining => true;
+
+    public override Vector<T> GetParameterGradients()
+    {
+        return new Vector<T>(_layers.SelectMany(l => l.GetParameterGradients().ToArray()).ToArray());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        foreach (var l in _layers) l.ClearGradients();
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer has a GPU implementation.

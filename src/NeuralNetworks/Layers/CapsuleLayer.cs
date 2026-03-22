@@ -131,6 +131,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// and bias values that need to be learned from data.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _transformationMatrix.Length + _bias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -1094,6 +1095,13 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// just the temporary information used during a single forward/backward pass.
     /// </para>
     /// </remarks>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _transformationMatrixGradient = null;
+        _biasGradient = null;
+    }
+
     public override void ResetState()
     {
         _lastInput = null;

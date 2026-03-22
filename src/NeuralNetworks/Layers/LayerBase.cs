@@ -2275,11 +2275,12 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public virtual void Deserialize(BinaryReader reader)
     {
         int count = reader.ReadInt32();
-        Parameters = new Vector<T>(count);
+        var parameters = new Vector<T>(count);
         for (int i = 0; i < count; i++)
         {
-            Parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+        SetParameters(parameters);
     }
 
     /// <summary>

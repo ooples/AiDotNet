@@ -397,7 +397,7 @@ public class BASEDLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T epsilon = NumOps.FromDouble(1e-6);
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
@@ -511,7 +511,7 @@ public class BASEDLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Store attention scores for backward pass: [batch, seqLen, numHeads, windowSize]
@@ -1147,6 +1147,27 @@ public class BASEDLayer<T> : LayerBase<T>
         _mixingGateWeights, _mixingGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_linearQueryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_linearQueryWeightsGradient!.ToArray()),
+            new Vector<T>(_linearKeyWeightsGradient!.ToArray()),
+            new Vector<T>(_linearValueWeightsGradient!.ToArray()),
+            new Vector<T>(_windowQueryWeightsGradient!.ToArray()),
+            new Vector<T>(_windowKeyWeightsGradient!.ToArray()),
+            new Vector<T>(_windowValueWeightsGradient!.ToArray()),
+            new Vector<T>(_featureMapScaleGradient!.ToArray()),
+            new Vector<T>(_mixingGateWeightsGradient!.ToArray()),
+            new Vector<T>(_mixingGateBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _linearQueryWeightsGradient = null; _linearKeyWeightsGradient = null; _linearValueWeightsGradient = null; _windowQueryWeightsGradient = null; _windowKeyWeightsGradient = null; _windowValueWeightsGradient = null; _featureMapScaleGradient = null; _mixingGateWeightsGradient = null; _mixingGateBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

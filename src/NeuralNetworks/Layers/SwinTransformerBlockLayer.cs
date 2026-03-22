@@ -470,7 +470,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         }
 
         // Compute attention per window
-        var output = new Tensor<T>([numWindows, windowArea, c]);
+        var output = TensorAllocator.Rent<T>([numWindows, windowArea, c]);
 
         for (int win = 0; win < numWindows; win++)
         {
@@ -575,7 +575,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = x.Shape[0];
         int seqLen = x.Shape[1];
 
-        var result = new Tensor<T>(x.Shape);
+        var result = TensorAllocator.Rent<T>(x.Shape);
 
         for (int b = 0; b < batch; b++)
         {
@@ -635,7 +635,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        var result = new Tensor<T>(gradient.Shape);
+        var result = TensorAllocator.Rent<T>(gradient.Shape);
 
         for (int b = 0; b < batch; b++)
         {
@@ -667,7 +667,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        var result = new Tensor<T>(gradient.Shape);
+        var result = TensorAllocator.Rent<T>(gradient.Shape);
 
         for (int b = 0; b < batch; b++)
         {

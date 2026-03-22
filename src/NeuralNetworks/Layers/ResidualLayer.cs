@@ -783,4 +783,10 @@ public class ResidualLayer<T> : LayerBase<T>
 
         return activatedOutput;
     }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _innerLayer?.ClearGradients();
+    }
 }

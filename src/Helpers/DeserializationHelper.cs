@@ -515,7 +515,11 @@ public static class DeserializationHelper
         {
             int inputSize = inputShape[0];
             int reservoirSize = outputShape[0];
-            instance = new ReservoirLayer<T>(inputSize, reservoirSize);
+            double connProb = TryGetDouble(additionalParams, "ConnectionProbability") ?? 0.1;
+            double specRadius = TryGetDouble(additionalParams, "SpectralRadius") ?? 0.9;
+            double inpScaling = TryGetDouble(additionalParams, "InputScaling") ?? 1.0;
+            double leakRate = TryGetDouble(additionalParams, "LeakingRate") ?? 1.0;
+            instance = new ReservoirLayer<T>(inputSize, reservoirSize, connProb, specRadius, inpScaling, leakRate);
         }
         else if (genericDef == typeof(RBFLayer<>))
         {
@@ -554,6 +558,44 @@ public static class DeserializationHelper
         {
             int featureSize = inputShape.Length > 0 ? inputShape[^1] : outputShape[0];
             instance = new SequenceLastLayer<T>(featureSize);
+        }
+        else if (genericDef == typeof(RBMLayer<>))
+        {
+            int visibleUnits = inputShape[0];
+            int hiddenUnits = outputShape[0];
+            instance = new RBMLayer<T>(visibleUnits, hiddenUnits, (IActivationFunction<T>?)null);
+        }
+        else if (genericDef == typeof(SpikingLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            instance = new SpikingLayer<T>(inputSize, outputSize);
+        }
+        else if (genericDef == typeof(TemporalMemoryLayer<>))
+        {
+            int columnCount = inputShape[0];
+            int totalCells = outputShape[0];
+            int cellsPerColumn = totalCells / Math.Max(1, columnCount);
+            instance = new TemporalMemoryLayer<T>(columnCount, cellsPerColumn);
+        }
+        else if (genericDef == typeof(SpatialPoolerLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int columnCount = outputShape[0];
+            double sparsityThreshold = TryGetDouble(additionalParams, "SparsityThreshold") ?? 0.02;
+            instance = new SpatialPoolerLayer<T>(inputSize, columnCount, sparsityThreshold);
+        }
+        else if (genericDef == typeof(MeasurementLayer<>))
+        {
+            int size = inputShape[0];
+            instance = new MeasurementLayer<T>(size);
+        }
+        else if (genericDef == typeof(QuantumLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            int numQubits = TryGetInt(additionalParams, "NumQubits") ?? Math.Max(4, (int)(Math.Log(Math.Max(inputSize, outputSize)) / Math.Log(2)));
+            instance = new QuantumLayer<T>(inputSize, outputSize, numQubits);
         }
         else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
         {

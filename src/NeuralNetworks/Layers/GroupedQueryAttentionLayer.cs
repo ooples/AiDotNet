@@ -373,7 +373,7 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
         T negInf = NumOps.MinValue;
 
-        var output = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
         attentionWeightsOut = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, seqLenKV });
 
         for (int b = 0; b < batchSize; b++)

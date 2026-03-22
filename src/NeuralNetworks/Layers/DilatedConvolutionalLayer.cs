@@ -334,7 +334,16 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// trainable parameters and therefore don't "learn" in the same way.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_kernelGradients == null || _biasGradients == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(new Vector<T>(_kernelGradients.ToArray()), new Vector<T>(_biasGradients.ToArray()));
+    }
+
+    public override void ClearGradients() { base.ClearGradients(); _kernelGradients = null; _biasGradients = null; }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.

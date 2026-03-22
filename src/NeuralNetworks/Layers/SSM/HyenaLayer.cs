@@ -439,7 +439,7 @@ public class HyenaLayer<T> : LayerBase<T>
         // input: [batch, seqLen, modelDim]
         // filter: [seqLen, modelDim] (implicit filter, same for all batches)
         // output: [batch, seqLen, modelDim]
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         for (int bi = 0; bi < batchSize; bi++)
         {

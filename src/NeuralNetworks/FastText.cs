@@ -114,7 +114,7 @@ namespace AiDotNet.NeuralNetworks
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 768,
-            outputSize: 768))
+            outputSize: 10000)) // Must match default vocabSize=10000
     {
     }
 

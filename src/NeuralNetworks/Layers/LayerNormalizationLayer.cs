@@ -615,6 +615,14 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// - Starting a new training episode
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+    }
+
+    public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
+
     public override void ResetState()
     {
         // Clear GPU cached values

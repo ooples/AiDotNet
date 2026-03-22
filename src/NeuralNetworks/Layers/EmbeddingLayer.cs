@@ -737,9 +737,11 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
 
         int inputFeatures = _projectionWeights.Shape[0];
         int embeddingDim = _projectionWeights.Shape[1];
-        int totalSamples = _lastInput.Length / inputFeatures;
+        int totalSamples = outputGradient.Length / embeddingDim;
 
-        var input2D = _lastInput.Reshape([totalSamples, inputFeatures]);
+        var input2D = _lastInput.Length == inputFeatures
+            ? _lastInput.Reshape([1, inputFeatures])
+            : _lastInput.Reshape([_lastInput.Length / inputFeatures, inputFeatures]);
         var grad2D = outputGradient.Reshape([totalSamples, embeddingDim]);
 
         var input2DTransposed = Engine.TensorTranspose(input2D);
@@ -1201,6 +1203,23 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     /// working data used during computation.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_embeddingGradient == null)
+            return new Vector<T>(ParameterCount);
+        var embGrad = new Vector<T>(_embeddingGradient.ToArray());
+        if (_projectionWeightsGradient == null || _projectionWeights == null)
+            return embGrad;
+        return Vector<T>.Concatenate(embGrad, new Vector<T>(_projectionWeightsGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _embeddingGradient = null;
+        _projectionWeightsGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

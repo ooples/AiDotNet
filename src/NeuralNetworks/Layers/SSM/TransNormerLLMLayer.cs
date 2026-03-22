@@ -397,7 +397,7 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State matrix per head: [batch, numHeads, headDim, headDim]
         var state = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -638,7 +638,7 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         Tensor<T> dOutput, Tensor<T> input, Tensor<T> scale, Tensor<T> rmsInv,
         Tensor<T> scaleGradient, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(input.Shape);
+        var dInput = TensorAllocator.Rent<T>(input.Shape);
 
         for (int bi = 0; bi < batchSize; bi++)
         {
@@ -762,6 +762,24 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_queryNormScaleGradient!.ToArray()),
+            new Vector<T>(_keyNormScaleGradient!.ToArray()),
+            new Vector<T>(_gammasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _queryNormScaleGradient = null; _keyNormScaleGradient = null; _gammasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

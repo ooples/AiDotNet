@@ -104,6 +104,10 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </summary>
     private double _threshold = 0.5;
 
+    // Cached tensors for hot-loop operations (avoid per-call allocation)
+    private Tensor<T>? _cachedOnes;
+    private Tensor<T>? _cachedZeros;
+
     /// <summary>
     /// Connection weights between input and output neurons.
     /// </summary>
@@ -633,13 +637,9 @@ public class SpikingLayer<T> : LayerBase<T>
 
         // Initialize weights with small random values as Tensor<T>
         // CreateRandom gives [0,1], scale to [-0.1, 0.1]
-        _weights = Tensor<T>.CreateRandom(inputSize, outputSize);
-        var scaleFactor = NumOps.FromDouble(0.2); // scale [0,1] to [0, 0.2]
-        _weights = Engine.TensorMultiplyScalar(_weights, scaleFactor);
-        var offset = NumOps.FromDouble(0.1); // shift to [-0.1, 0.1]
-        var offsetTensor = new Tensor<T>([inputSize, outputSize]);
-        offsetTensor.Fill(offset);
-        _weights = Engine.TensorSubtract(_weights, offsetTensor);
+        // Initialize weights with Xavier-like init [-0.1, 0.1] using InitializeLayerWeights
+        _weights = new Tensor<T>([inputSize, outputSize]);
+        InitializeLayerWeights(_weights, inputSize, outputSize);
 
         _bias = new Tensor<T>([outputSize]);
         _bias.Fill(NumOps.Zero);
@@ -942,25 +942,23 @@ public class SpikingLayer<T> : LayerBase<T>
         T decayFactor = NumOps.FromDouble(1.0 - 1.0 / _tau);
         _membranePotential = Engine.TensorMultiplyScalar(_membranePotential, decayFactor);
 
-        // Create threshold tensor for comparison
-        var zeroTensor = new Tensor<T>([_membranePotential.Length]);
-        zeroTensor.Fill(NumOps.Zero);
+        // Cache ones/zeros tensors to avoid per-call allocation (hot loop)
+        if (_cachedOnes == null || _cachedOnes.Length != _membranePotential.Length)
+        {
+            _cachedOnes = Tensor<T>.CreateDefault([_membranePotential.Length], NumOps.One);
+            _cachedZeros = new Tensor<T>([_membranePotential.Length]);
+        }
 
-        // Create mask for neurons not in refractory period (refractoryCountdown <= 0)
-        // Use Engine.TensorLessThan to create binary mask
+        // Create mask for neurons not in refractory period
         var notInRefractoryMask = Engine.TensorLessThan(_refractoryCountdown, NumOps.FromDouble(0.001));
-        var onesTensorForMask = new Tensor<T>([_membranePotential.Length]);
-        onesTensorForMask.Fill(NumOps.One);
-        var inRefractoryMask = Engine.TensorSubtract(onesTensorForMask, notInRefractoryMask);
+        var inRefractoryMask = Engine.TensorSubtract(_cachedOnes, notInRefractoryMask);
 
         // Apply current to neurons not in refractory period
         var currentMasked = Engine.TensorMultiply(current, notInRefractoryMask);
         _membranePotential = Engine.TensorAdd(_membranePotential, currentMasked);
 
         // Decrement refractory countdown for neurons in refractory
-        var onesTensor = new Tensor<T>([_membranePotential.Length]);
-        onesTensor.Fill(NumOps.One);
-        var refractoryDecrement = Engine.TensorMultiply(onesTensor, inRefractoryMask);
+        var refractoryDecrement = Engine.TensorMultiply(_cachedOnes, inRefractoryMask);
         _refractoryCountdown = Engine.TensorSubtract(_refractoryCountdown, refractoryDecrement);
 
         // Generate spikes: where membrane potential >= threshold
@@ -968,7 +966,7 @@ public class SpikingLayer<T> : LayerBase<T>
         _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(_threshold - 0.0001));
 
         // Reset membrane potential where spikes occurred
-        var resetMask = Engine.TensorSubtract(onesTensor, _spikes);
+        var resetMask = Engine.TensorSubtract(_cachedOnes, _spikes);
         _membranePotential = Engine.TensorMultiply(_membranePotential, resetMask);
 
         // Set refractory countdown where spikes occurred
@@ -1008,27 +1006,29 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> UpdateIntegrateAndFire(Tensor<T> current)
     {
-        // Similar to LIF but without leak - use Engine operations
-        var onesTensor = new Tensor<T>([_membranePotential.Length]);
-        onesTensor.Fill(NumOps.One);
+        // Cache ones tensor (reuse across calls)
+        if (_cachedOnes == null || _cachedOnes.Length != _membranePotential.Length)
+        {
+            _cachedOnes = Tensor<T>.CreateDefault([_membranePotential.Length], NumOps.One);
+        }
 
         // Create mask for neurons not in refractory period
         var notInRefractoryMask = Engine.TensorLessThan(_refractoryCountdown, NumOps.FromDouble(0.001));
-        var inRefractoryMask = Engine.TensorSubtract(onesTensor, notInRefractoryMask);
+        var inRefractoryMask = Engine.TensorSubtract(_cachedOnes, notInRefractoryMask);
 
         // Add current to neurons not in refractory
         var currentMasked = Engine.TensorMultiply(current, notInRefractoryMask);
         _membranePotential = Engine.TensorAdd(_membranePotential, currentMasked);
 
         // Decrement refractory countdown
-        var refractoryDecrement = Engine.TensorMultiply(onesTensor, inRefractoryMask);
+        var refractoryDecrement = Engine.TensorMultiply(_cachedOnes, inRefractoryMask);
         _refractoryCountdown = Engine.TensorSubtract(_refractoryCountdown, refractoryDecrement);
 
         // Generate spikes where membrane potential >= 1.0
         _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(_threshold - 0.0001));
 
         // Reset membrane potential where spikes occurred
-        var resetMask = Engine.TensorSubtract(onesTensor, _spikes);
+        var resetMask = Engine.TensorSubtract(_cachedOnes, _spikes);
         _membranePotential = Engine.TensorMultiply(_membranePotential, resetMask);
 
         // Set refractory countdown where spikes occurred
@@ -1439,10 +1439,54 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatWeights = new Vector<T>(_weights.ToArray());
-        var flatBias = new Vector<T>(_bias.ToArray());
-        return Vector<T>.Concatenate(flatWeights, flatBias);
+        var result = new Vector<T>(ParameterCount);
+        int idx = 0;
+        int rows = _weights.Shape[0];
+        int cols = _weights.Shape[1];
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                result[idx++] = _weights[i, j];
+        for (int i = 0; i < _bias.Length; i++)
+            result[idx++] = _bias[i];
+        return result;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
+
+        // Use 2D indexer for reliable write (Data.Span and SetFlat don't work for all tensor types)
+        int idx = 0;
+        int rows = _weights.Shape[0];
+        int cols = _weights.Shape[1];
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                _weights[i, j] = parameters[idx++];
+
+        for (int i = 0; i < _bias.Length; i++)
+            _bias[i] = parameters[idx++];
+
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_bias);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightGradients == null || _biasGradients == null)
+            return new Vector<T>(ParameterCount);
+
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weightGradients.ToArray()),
+            new Vector<T>(_biasGradients.ToArray())
+        );
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightGradients.Fill(NumOps.Zero);
+        _biasGradients.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -1782,9 +1826,13 @@ public class SpikingLayer<T> : LayerBase<T>
             ? _lastInput
             : _lastInput.Reshape([_lastInput.Length]);
 
-        var inputReshaped = inputFlat.Reshape([inputFlat.Length, 1]);
-        var scaledGradReshaped = scaledGrad.Reshape([1, scaledGrad.Length]);
-        var weightGradUpdate = Engine.TensorMatMul(inputReshaped, scaledGradReshaped);
+        // Manual outer product: weightGradUpdate[i,j] = inputFlat[i] * scaledGrad[j]
+        int inLen = inputFlat.Length;
+        int outLen = scaledGrad.Length;
+        var weightGradUpdate = new Tensor<T>([inLen, outLen]);
+        for (int i = 0; i < inLen; i++)
+            for (int j = 0; j < outLen; j++)
+                weightGradUpdate[i, j] = NumOps.Multiply(inputFlat[i], scaledGrad[j]);
 
         // Accumulate weight gradients
         _weightGradients = Engine.TensorAdd(_weightGradients, weightGradUpdate);
@@ -1792,12 +1840,15 @@ public class SpikingLayer<T> : LayerBase<T>
         // Bias gradients = scaledGrad (already computed)
         _biasGradients = Engine.TensorAdd(_biasGradients, scaledGrad);
 
-        // Compute input gradients: dL/dX = W @ scaledGrad
-        // weights: [inputSize, outputSize], scaledGrad: [outputSize]
-        // result: [inputSize]
-        var scaledGradCol = scaledGrad.Reshape([scaledGrad.Length, 1]);
-        var inputGradCol = Engine.TensorMatMul(_weights, scaledGradCol);
-        var inputGradient = inputGradCol.Reshape([inputFlat.Length]);
+        // Manual input gradient: inputGrad[i] = sum_j(W[i,j] * scaledGrad[j])
+        var inputGradient = new Tensor<T>([inLen]);
+        for (int i = 0; i < inLen; i++)
+        {
+            T sum = NumOps.Zero;
+            for (int j = 0; j < outLen; j++)
+                sum = NumOps.Add(sum, NumOps.Multiply(_weights[i, j], scaledGrad[j]));
+            inputGradient[i] = sum;
+        }
 
         // Reshape to match input shape if needed
         if (_lastInput.Shape.Length > 1)

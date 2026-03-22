@@ -242,8 +242,8 @@ public class SparseLinearLayer<T> : LayerBase<T>
         // Sparse matrix multiplication
         var outputMatrix = _engine.SpMM(_weights, inputTransposed);
 
-        // Transpose back and add biases
-        var output = new Tensor<T>([batchSize, OutputFeatures]);
+        // Transpose back and add biases (output fully overwritten, safe to rent)
+        var output = TensorAllocator.Rent<T>([batchSize, OutputFeatures]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int o = 0; o < OutputFeatures; o++)
@@ -497,6 +497,13 @@ public class SparseLinearLayer<T> : LayerBase<T>
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null;
+        _biasesGradient = null;
+    }
+
     public override void ResetState()
     {
         _lastInput = null;

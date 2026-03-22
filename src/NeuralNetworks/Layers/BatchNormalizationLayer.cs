@@ -458,7 +458,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         var inputData = input.Data.Span;
         var scaleData = scale.Data.Span;
         var shiftData = shift.Data.Span;
-        var outputData = new T[inputData.Length];
+
+        // Rent output tensor (fully overwritten) and write via Span
+        var output = TensorAllocator.Rent<T>(input.Shape);
+        var outputData = output.Data.Span;
 
         for (int n = 0; n < batch; n++)
         {
@@ -477,7 +480,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             }
         }
 
-        return new Tensor<T>(input.Shape, new Vector<T>(outputData));
+        return output;
     }
 
     /// <summary>
@@ -1131,6 +1134,20 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// long-term learning.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_gammaGradient == null || _betaGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _gammaGradient = null;
+        _betaGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear CPU cached values

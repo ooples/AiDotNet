@@ -1002,6 +1002,22 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         }
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient.ToArray()),
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+    }
+
     /// <inheritdoc/>
     public override void ResetState()
     {

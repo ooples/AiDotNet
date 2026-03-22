@@ -237,7 +237,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T scaleK = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Matrix cell state per head: C[batch, head, headDim, headDim]
@@ -438,7 +438,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
             .Reshape(batchSize, seqLen, _modelDimension);
 
         // Accumulate input gradient through all projection paths
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Running cell/norm state gradients for BPTT
         var dCellState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -677,6 +677,23 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
         _queryWeights, _keyWeights, _valueWeights,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_forgetGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
+            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null; _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

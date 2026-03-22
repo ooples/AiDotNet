@@ -792,6 +792,14 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
     }
 
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _epsilonGradient = NumOps.Zero;
+        _mlpWeights1Gradient = null; _mlpWeights2Gradient = null;
+        _mlpBias1Gradient = null; _mlpBias2Gradient = null;
+    }
+
     /// <inheritdoc/>
     public override void ResetState()
     {

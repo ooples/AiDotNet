@@ -31,6 +31,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// <summary>
     /// Indicates whether this layer supports training. CMS always supports training.
     /// </summary>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

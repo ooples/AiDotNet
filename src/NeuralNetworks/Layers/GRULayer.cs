@@ -175,6 +175,9 @@ public class GRULayer<T> : LayerBase<T>
     /// </remarks>
     private readonly int _hiddenSize;
 
+    // Cached ones tensor for (1-z) computation — avoids per-timestep allocation
+    private Tensor<T>? _cachedOnesForGate;
+
     /// <summary>
     /// Determines whether the layer returns the full sequence of hidden states or just the final state.
     /// </summary>
@@ -844,13 +847,12 @@ public class GRULayer<T> : LayerBase<T>
             var z = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WzT), Engine.TensorMatMul(currentHiddenState, UzT)), _bz), true);
             var r = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WrT), Engine.TensorMatMul(currentHiddenState, UrT)), _br), true);
             var h_candidate = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT), Engine.TensorMatMul(r.ElementwiseMultiply(currentHiddenState), UhT)), _bh), false);
-            // Vectorized: compute (1 - z) using Tensor operations
-
-            var ones = new Tensor<T>(z.Shape);
-
-            ones.Fill(NumOps.One);
-
-            var oneMinusZ = ones.Subtract(z);
+            // Compute (1 - z) using cached ones tensor — avoids per-timestep allocation
+            if (_cachedOnesForGate == null || !_cachedOnesForGate.Shape.SequenceEqual(z.Shape))
+            {
+                _cachedOnesForGate = Tensor<T>.CreateDefault(z.Shape, NumOps.One);
+            }
+            var oneMinusZ = Engine.TensorSubtract(_cachedOnesForGate, z);
 
 
             var h = z.ElementwiseMultiply(currentHiddenState).Add(
@@ -1698,6 +1700,36 @@ public class GRULayer<T> : LayerBase<T>
         CopyToTensor(_bz);
         CopyToTensor(_br);
         CopyToTensor(_bh);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_dWz == null || _dWr == null || _dWh == null ||
+            _dUz == null || _dUr == null || _dUh == null ||
+            _dbz == null || _dbr == null || _dbh == null)
+        {
+            return new Vector<T>(ParameterCount);
+        }
+
+        return Vector<T>.Concatenate(
+            new Vector<T>(_dWz.ToArray()),
+            new Vector<T>(_dWr.ToArray()),
+            new Vector<T>(_dWh.ToArray()),
+            new Vector<T>(_dUz.ToArray()),
+            new Vector<T>(_dUr.ToArray()),
+            new Vector<T>(_dUh.ToArray()),
+            new Vector<T>(_dbz.ToArray()),
+            new Vector<T>(_dbr.ToArray()),
+            new Vector<T>(_dbh.ToArray())
+        );
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _dWz = null; _dWr = null; _dWh = null;
+        _dUz = null; _dUr = null; _dUh = null;
+        _dbz = null; _dbr = null; _dbh = null;
     }
 
     /// <summary>

@@ -868,6 +868,13 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null;
+        _biasesGradient = null;
+    }
+
     public override void ResetState()
     {
         _lastInput = null;

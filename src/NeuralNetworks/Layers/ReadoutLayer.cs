@@ -127,6 +127,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// automatically adjust to better recognize patterns specific to your data.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

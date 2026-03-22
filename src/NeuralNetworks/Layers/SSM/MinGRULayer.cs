@@ -312,7 +312,7 @@ public class MinGRULayer<T> : LayerBase<T>
         Tensor<T> gate, Tensor<T> candidate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _expandedDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
 
         // Store all hidden states including h_0 for backward pass: [batch, seqLen+1, expandedDim]
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _expandedDimension });
@@ -533,6 +533,22 @@ public class MinGRULayer<T> : LayerBase<T>
         _candidateWeights, _candidateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_gateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_gateWeightsGradient!.ToArray()),
+            new Vector<T>(_gateBiasGradient!.ToArray()),
+            new Vector<T>(_candidateWeightsGradient!.ToArray()),
+            new Vector<T>(_candidateBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _gateWeightsGradient = null; _gateBiasGradient = null; _candidateWeightsGradient = null; _candidateBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

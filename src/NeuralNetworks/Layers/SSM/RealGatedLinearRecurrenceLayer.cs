@@ -277,7 +277,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> recGate, Tensor<T> inpGate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _recurrenceDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
         var h = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
         var allDecay = new Tensor<T>(new[] { batchSize, seqLen, _recurrenceDimension });
@@ -543,6 +543,22 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _valueProjectionWeights, _decayParam,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_recurrenceGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_recurrenceGateWeightsGradient!.ToArray()),
+            new Vector<T>(_recurrenceGateBiasGradient!.ToArray()),
+            new Vector<T>(_valueProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_decayParamGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _recurrenceGateWeightsGradient = null; _recurrenceGateBiasGradient = null; _valueProjectionWeightsGradient = null; _decayParamGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

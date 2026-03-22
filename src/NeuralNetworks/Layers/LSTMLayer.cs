@@ -1053,11 +1053,16 @@ public class LSTMLayer<T> : LayerBase<T>
         int batchSize;
         int timeSteps;
 
-        if (rank == 2)
+        if (rank == 1)
         {
-            // 2D input for LSTM is always interpreted as [timeSteps, features] with batchSize=1
-            // This is the standard sequence format for LSTM processing.
-            // If users want batch processing, they should provide 3D input [batchSize, timeSteps, features]
+            // 1D input [features]: treat as single timestep, single batch → [1, 1, features]
+            batchSize = 1;
+            timeSteps = 1;
+            input3D = input.Reshape([1, 1, input.Shape[0]]);
+        }
+        else if (rank == 2)
+        {
+            // 2D input [timeSteps, features]: single batch
             batchSize = 1;
             timeSteps = input.Shape[0];
             int featureSize = input.Shape[1];
@@ -1083,13 +1088,14 @@ public class LSTMLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        var output = new Tensor<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        // Use TensorAllocator.Rent for forward pass tensors to reduce GC pressure
+        var output = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
 
-        _cachedHiddenStates = new Tensor<T>(new int[] { batchSize, timeSteps, _hiddenSize });
-        _cachedCellStates = new Tensor<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        _cachedHiddenStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        _cachedCellStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
 
-        var currentH = new Tensor<T>(new int[] { batchSize, _hiddenSize });
-        var currentC = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+        var currentH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
+        var currentC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
 
         // Pre-transpose weights for efficiency
         var WfiT = Engine.TensorTranspose(_weightsFi);
@@ -1987,8 +1993,8 @@ public class LSTMLayer<T> : LayerBase<T>
         var dBiasC = new Tensor<T>(_biasC.Shape);
         var dBiasO = new Tensor<T>(_biasO.Shape);
 
-        var dNextH = new Tensor<T>(new int[] { batchSize, _hiddenSize });
-        var dNextC = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+        var dNextH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
+        var dNextC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
 
         for (int t = timeSteps - 1; t >= 0; t--)
         {
@@ -2640,6 +2646,35 @@ public class LSTMLayer<T> : LayerBase<T>
             new Vector<T>(_biasC.ToArray()),
             new Vector<T>(_biasO.ToArray())
         );
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (Gradients == null || Gradients.Count == 0)
+            return new Vector<T>(ParameterCount);
+
+        Tensor<T> Get(string key) => Gradients.TryGetValue(key, out var t) ? t : new Tensor<T>([0]);
+
+        return Vector<T>.Concatenate(
+            new Vector<T>(Get("weightsFi").ToArray()),
+            new Vector<T>(Get("weightsIi").ToArray()),
+            new Vector<T>(Get("weightsCi").ToArray()),
+            new Vector<T>(Get("weightsOi").ToArray()),
+            new Vector<T>(Get("weightsFh").ToArray()),
+            new Vector<T>(Get("weightsIh").ToArray()),
+            new Vector<T>(Get("weightsCh").ToArray()),
+            new Vector<T>(Get("weightsOh").ToArray()),
+            new Vector<T>(Get("biasF").ToArray()),
+            new Vector<T>(Get("biasI").ToArray()),
+            new Vector<T>(Get("biasC").ToArray()),
+            new Vector<T>(Get("biasO").ToArray())
+        );
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        Gradients?.Clear();
     }
 
     /// <summary>

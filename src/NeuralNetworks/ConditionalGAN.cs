@@ -593,7 +593,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         int conditionSize = conditions.Shape[1];
 
         // Create result tensor with space for both image and condition
-        var result = new Tensor<T>(new int[] { batchSize, imageSize + conditionSize });
+        var result = TensorAllocator.Rent<T>(new int[] { batchSize, imageSize + conditionSize });
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -680,7 +680,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         int[] outputShape = isChannelsFirst
             ? new int[] { batchSize, channels + conditionSize, height, width }
             : new int[] { batchSize, height, width, channels + conditionSize };
-        var result = new Tensor<T>(outputShape);
+        var result = TensorAllocator.Rent<T>(outputShape);
 
         for (int b = 0; b < batchSize; b++)
         {

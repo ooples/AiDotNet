@@ -89,6 +89,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
     private Tensor<T>? _biasGradient;
 
     /// <inheritdoc/>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
