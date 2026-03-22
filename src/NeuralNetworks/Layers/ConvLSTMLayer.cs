@@ -1938,10 +1938,11 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             Tensor<T> xt, Tensor<T> prevH, Tensor<T> prevC)
     {
         // Use Engine.Sigmoid for vectorized/GPU-accelerated sigmoid activations
-        var f = Engine.Sigmoid(Convolve(xt, _weightsFi).Add(Convolve(prevH, _weightsFh)).Add(_biasF));
-        var i = Engine.Sigmoid(Convolve(xt, _weightsIi).Add(Convolve(prevH, _weightsIh)).Add(_biasI));
-        var c = ApplyActivation(Convolve(xt, _weightsCi).Add(Convolve(prevH, _weightsCh)).Add(_biasC));
-        var o = Engine.Sigmoid(Convolve(xt, _weightsOi).Add(Convolve(prevH, _weightsOh)).Add(_biasO));
+        // Bias is [1,1,1,filters] — use BroadcastAdd since Tensor.Add doesn't broadcast
+        var f = Engine.Sigmoid(Engine.TensorBroadcastAdd(Convolve(xt, _weightsFi).Add(Convolve(prevH, _weightsFh)), _biasF));
+        var i = Engine.Sigmoid(Engine.TensorBroadcastAdd(Convolve(xt, _weightsIi).Add(Convolve(prevH, _weightsIh)), _biasI));
+        var c = ApplyActivation(Engine.TensorBroadcastAdd(Convolve(xt, _weightsCi).Add(Convolve(prevH, _weightsCh)), _biasC));
+        var o = Engine.Sigmoid(Engine.TensorBroadcastAdd(Convolve(xt, _weightsOi).Add(Convolve(prevH, _weightsOh)), _biasO));
 
         var newC = f.Multiply(prevC).Add(i.Multiply(c));
         var newH = o.Multiply(ApplyActivation(newC));
