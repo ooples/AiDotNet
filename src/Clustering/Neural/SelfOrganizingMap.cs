@@ -359,16 +359,19 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         int bmuCol = 0;
         T minDist = NumOps.MaxValue;
 
+        var sampleVec = new Vector<T>(sample);
+
         for (int r = 0; r < _options.GridHeight; r++)
         {
             for (int c = 0; c < _options.GridWidth; c++)
             {
-                T dist = NumOps.Zero;
+                var weightVec = new Vector<T>(_weights![r, c]);
+                var diff = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
                 {
-                    T diff = NumOps.Subtract(sample[j], _weights![r, c][j]);
-                    dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
+                    diff[j] = NumOps.Subtract(sampleVec[j], weightVec[j]);
                 }
+                T dist = Engine.DotProduct(diff, diff);
 
                 if (NumOps.LessThan(dist, minDist))
                 {
