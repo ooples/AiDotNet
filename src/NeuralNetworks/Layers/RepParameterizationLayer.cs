@@ -139,8 +139,15 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public RepParameterizationLayer(int[] inputShape)
-        : base(inputShape, inputShape)
+        : base(inputShape, ComputeOutputShape(inputShape))
     {
+    }
+
+    private static int[] ComputeOutputShape(int[] inputShape)
+    {
+        var outputShape = (int[])inputShape.Clone();
+        outputShape[^1] = inputShape[^1] / 2;
+        return outputShape;
     }
 
     /// <summary>
@@ -211,8 +218,16 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         _lastMean = Engine.TensorSlice(processInput, [0, 0], [batchSize, latentSize]);
         _lastLogVar = Engine.TensorSlice(processInput, [0, latentSize], [batchSize, latentSize]);
 
-        // Generate random epsilon using Tensor<T>.CreateRandom
-        _lastEpsilon = Tensor<T>.CreateRandom(batchSize, latentSize);
+        // Generate random epsilon during training; use zero epsilon for deterministic inference
+        if (IsTrainingMode)
+        {
+            _lastEpsilon = Tensor<T>.CreateRandom(batchSize, latentSize);
+        }
+        else
+        {
+            _lastEpsilon = new Tensor<T>([batchSize, latentSize]);
+            _lastEpsilon.Fill(NumOps.Zero);
+        }
 
         // Compute stdDev = exp(logvar * 0.5) using Engine operations
         var halfTensor = new Tensor<T>([batchSize, latentSize]);
@@ -441,29 +456,53 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         if (_lastMean == null || _lastLogVar == null || _lastEpsilon == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int batchSize = outputGradient.Shape[0];
-        int latentSize = outputGradient.Shape[1];
+        // Collapse to 2D matching _lastMean shape
+        int rank = outputGradient.Shape.Length;
+        int flatBatch;
+        int latentSize;
+        Tensor<T> outGrad2D;
+
+        if (rank <= 2)
+        {
+            flatBatch = rank == 1 ? 1 : outputGradient.Shape[0];
+            latentSize = outputGradient.Shape[^1];
+            outGrad2D = rank == 1 ? outputGradient.Reshape([1, latentSize]) : outputGradient;
+        }
+        else
+        {
+            flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++)
+                flatBatch *= outputGradient.Shape[d];
+            latentSize = outputGradient.Shape[^1];
+            outGrad2D = outputGradient.Reshape([flatBatch, latentSize]);
+        }
 
         // Compute stdDev = exp(logvar * 0.5) using Engine operations
-        var halfTensor = new Tensor<T>([batchSize, latentSize]);
+        var halfTensor = new Tensor<T>([flatBatch, latentSize]);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var scaledLogVar = Engine.TensorMultiply(_lastLogVar, halfTensor);
         var stdDev = Engine.TensorExp(scaledLogVar);
 
         // Gradient for mean = outputGradient (unchanged)
-        var gradMean = outputGradient;
+        var gradMean = outGrad2D;
 
         // Gradient for log variance = outputGradient * epsilon * stdDev * 0.5
         var gradLogVar = Engine.TensorMultiply(
             Engine.TensorMultiply(
-                Engine.TensorMultiply(outputGradient, _lastEpsilon),
+                Engine.TensorMultiply(outGrad2D, _lastEpsilon),
                 stdDev),
             halfTensor);
 
-        // Concatenate gradients: [gradMean, gradLogVar]
-        var inputGradient = new Tensor<T>([batchSize, latentSize * 2]);
+        // Concatenate gradients: [gradMean, gradLogVar] along last dim
+        var inputGradient = new Tensor<T>([flatBatch, latentSize * 2]);
         inputGradient = Engine.TensorSetSlice(inputGradient, gradMean, [0, 0]);
         inputGradient = Engine.TensorSetSlice(inputGradient, gradLogVar, [0, latentSize]);
+
+        // Restore original input shape
+        if (_originalInputShape != null && _originalInputShape.Length != 2)
+        {
+            return inputGradient.Reshape(_originalInputShape);
+        }
 
         return inputGradient;
     }

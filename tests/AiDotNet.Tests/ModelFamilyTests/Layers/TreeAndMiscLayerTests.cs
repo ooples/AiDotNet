@@ -37,6 +37,9 @@ public class RepParameterizationLayerTests : LayerTestBase
     protected override ILayer<double> CreateLayer()
         => new RepParameterizationLayer<double>(inputShape: [1, 4, 4]);
     protected override int[] InputShape => [1, 1, 4, 4];
+    // VAE reparameterization trick: no trainable parameters, stochastic sampling
+    protected override bool ExpectsTrainableParameters => false;
+    protected override bool ExpectsNonZeroGradients => false;
 }
 
 public class AnomalyDetectorLayerTests : LayerTestBase
