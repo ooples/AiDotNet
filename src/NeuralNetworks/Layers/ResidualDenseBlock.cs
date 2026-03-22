@@ -145,6 +145,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     public int NumFeatures => _numFeatures;
 
     /// <inheritdoc />
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc />

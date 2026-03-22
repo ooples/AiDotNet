@@ -346,6 +346,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// The spatial transformer will gradually learn the best transformations for the task at hand.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
