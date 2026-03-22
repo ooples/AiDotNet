@@ -742,20 +742,16 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
             xRecon[j] = sum;
         }
 
-        // Compute reconstruction features
-        T eucDistSq = NumOps.Zero;
-        T dotProduct = NumOps.Zero;
-        T normXSq = NumOps.Zero;
-        T normReconSq = NumOps.Zero;
-
+        // Compute reconstruction features using Engine.DotProduct
+        var diffVec = new Vector<T>(_inputDim);
         for (int i = 0; i < _inputDim; i++)
         {
-            T diff = NumOps.Subtract(x[i], xRecon[i]);
-            eucDistSq = NumOps.Add(eucDistSq, NumOps.Multiply(diff, diff));
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(x[i], xRecon[i]));
-            normXSq = NumOps.Add(normXSq, NumOps.Multiply(x[i], x[i]));
-            normReconSq = NumOps.Add(normReconSq, NumOps.Multiply(xRecon[i], xRecon[i]));
+            diffVec[i] = NumOps.Subtract(x[i], xRecon[i]);
         }
+        T eucDistSq = Engine.DotProduct(diffVec, diffVec);
+        T dotProduct = Engine.DotProduct(x, xRecon);
+        T normXSq = Engine.DotProduct(x, x);
+        T normReconSq = Engine.DotProduct(xRecon, xRecon);
 
         double eucDist = Math.Sqrt(NumOps.ToDouble(eucDistSq));
         double normX = Math.Sqrt(NumOps.ToDouble(normXSq));
@@ -819,20 +815,16 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         // Decode
         var xRecon = Decode(z);
 
-        // Compute reconstruction features
-        T eucDistSq = NumOps.Zero;
-        T dotProduct = NumOps.Zero;
-        T normXSq = NumOps.Zero;
-        T normReconSq = NumOps.Zero;
-
+        // Compute reconstruction features using Engine.DotProduct
+        var diffVec2 = new Vector<T>(_inputDim);
         for (int j = 0; j < _inputDim; j++)
         {
-            T diff = NumOps.Subtract(x[j], xRecon[j]);
-            eucDistSq = NumOps.Add(eucDistSq, NumOps.Multiply(diff, diff));
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(x[j], xRecon[j]));
-            normXSq = NumOps.Add(normXSq, NumOps.Multiply(x[j], x[j]));
-            normReconSq = NumOps.Add(normReconSq, NumOps.Multiply(xRecon[j], xRecon[j]));
+            diffVec2[j] = NumOps.Subtract(x[j], xRecon[j]);
         }
+        T eucDistSq = Engine.DotProduct(diffVec2, diffVec2);
+        T dotProduct = Engine.DotProduct(x, xRecon);
+        T normXSq = Engine.DotProduct(x, x);
+        T normReconSq = Engine.DotProduct(xRecon, xRecon);
 
         double eucDist = Math.Sqrt(NumOps.ToDouble(eucDistSq));
         double normX = Math.Sqrt(NumOps.ToDouble(normXSq));
