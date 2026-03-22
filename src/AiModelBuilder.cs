@@ -2505,8 +2505,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
             // These models use their own internal optimizers and don't benefit from the outer
             // optimizer's clone-evaluate-select loop. Train directly on the full training data.
-            // For clustering/density models, use full data (not split) since cluster
-            // structure depends on having all points. For TS models, use XTrain (split).
+            // For clustering/density models, train on the full preprocessed dataset (not the
+            // train/test split) since cluster structure depends on having all data points.
+            // Note: preprocessedX/preprocessedY contain ALL preprocessed samples.
             bool useFullData = model is Clustering.Base.ClusteringBase<T>;
             // Use preprocessed data (not raw x/y) so models operate in the same
             // coordinate space as the validation/test predictions
