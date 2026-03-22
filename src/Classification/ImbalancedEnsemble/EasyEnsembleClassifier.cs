@@ -48,6 +48,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// </list>
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Use AiModelBuilder facade for easy ensemble classification

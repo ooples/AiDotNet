@@ -43,6 +43,7 @@ namespace AiDotNet.Classification.MultiLabel;
 /// For problems where labels are correlated, consider using Classifier Chains or Label Powerset instead.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Use AiModelBuilder facade for binaryrelevance classification

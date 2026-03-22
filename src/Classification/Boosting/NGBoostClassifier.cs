@@ -35,6 +35,7 @@ namespace AiDotNet.Classification.Boosting;
 /// Prediction" (2019). https://arxiv.org/abs/1910.03225
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create NGBoost classifier for well-calibrated probabilistic predictions

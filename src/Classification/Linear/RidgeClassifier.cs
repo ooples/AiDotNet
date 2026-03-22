@@ -34,6 +34,7 @@ namespace AiDotNet.Classification.Linear;
 /// - Assumes linear relationship between features and class labels
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create ridge classifier with L2 regularized least squares

@@ -23,6 +23,7 @@ namespace AiDotNet.AutoML;
 /// This often improves stability and accuracy.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create an ensemble from multiple trained models

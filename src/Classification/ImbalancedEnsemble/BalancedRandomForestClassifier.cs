@@ -47,6 +47,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// </list>
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create balanced random forest for imbalanced fraud detection

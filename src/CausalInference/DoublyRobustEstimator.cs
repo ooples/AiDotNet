@@ -50,6 +50,7 @@ namespace AiDotNet.CausalInference;
 /// - Bang &amp; Robins (2005). "Doubly Robust Estimation"
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// var dr = new DoublyRobustEstimator&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);

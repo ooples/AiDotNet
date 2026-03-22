@@ -49,6 +49,7 @@ namespace AiDotNet.Classification.Boosting;
 /// </list>
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create histogram-based gradient boosting classifier for fast training

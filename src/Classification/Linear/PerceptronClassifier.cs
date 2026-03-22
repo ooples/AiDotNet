@@ -34,6 +34,7 @@ namespace AiDotNet.Classification.Linear;
 /// and was one of the first machine learning algorithms ever created!
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create the classic Perceptron classifier
