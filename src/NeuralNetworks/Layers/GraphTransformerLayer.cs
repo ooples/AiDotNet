@@ -1742,6 +1742,35 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <inheritdoc/>
+    public override void Serialize(BinaryWriter writer)
+    {
+        base.Serialize(writer);
+        bool hasBias = _structuralBias != null;
+        writer.Write(hasBias);
+        if (hasBias)
+        {
+            writer.Write(_structuralBias!.Shape.Length);
+            foreach (var dim in _structuralBias.Shape) writer.Write(dim);
+            for (int i = 0; i < _structuralBias.Length; i++)
+                writer.Write(NumOps.ToDouble(_structuralBias[i]));
+        }
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        base.Deserialize(reader);
+        bool hasBias = reader.ReadBoolean();
+        if (hasBias)
+        {
+            int rank = reader.ReadInt32();
+            var shape = new int[rank];
+            for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
+            _structuralBias = new Tensor<T>(shape);
+            for (int i = 0; i < _structuralBias.Length; i++)
+                _structuralBias[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+    }
+
     public override void ResetState()
     {
         _lastInput = null;
