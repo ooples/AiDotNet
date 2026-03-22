@@ -259,18 +259,24 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
     {
         int n = x.Columns;
 
+        // Pre-extract columns from X as Vector<T> for Engine.DotProduct
+        var xCols = new Vector<T>[n];
+        for (int col = 0; col < n; col++)
+        {
+            xCols[col] = new Vector<T>(x.Rows);
+            for (int row = 0; row < x.Rows; row++)
+            {
+                xCols[col][row] = x[row, col];
+            }
+        }
+
         // Compute X'X + alpha*I
         var xtx = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < x.Rows; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(x[k, i], x[k, j]));
-                }
-                xtx[i, j] = sum;
+                xtx[i, j] = Engine.DotProduct(xCols[i], xCols[j]);
 
                 if (i == j)
                 {
@@ -283,12 +289,7 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
         var xty = new Vector<T>(n);
         for (int j = 0; j < n; j++)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < x.Rows; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(x[i, j], y[i]));
-            }
-            xty[j] = sum;
+            xty[j] = Engine.DotProduct(xCols[j], y);
         }
 
         // Solve using simple Gauss-Jordan elimination

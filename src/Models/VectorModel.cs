@@ -298,17 +298,17 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
         var predictionGradient = loss.CalculateDerivative(predictions, target);
 
         // Compute gradient w.r.t. coefficients: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
+        // Pre-extract columns from input for Engine.DotProduct
         var gradients = new Vector<T>(Coefficients.Length);
         for (int j = 0; j < Coefficients.Length; j++)
         {
-            T sum = NumOps.Zero;
+            var col = new Vector<T>(input.Rows);
             for (int i = 0; i < input.Rows; i++)
             {
-                // gradient[j] += input[i,j] * predictionGradient[i]
-                sum = NumOps.Add(sum, NumOps.Multiply(input[i, j], predictionGradient[i]));
+                col[i] = input[i, j];
             }
-            // Average over all samples
-            gradients[j] = NumOps.Divide(sum, NumOps.FromDouble(input.Rows));
+            // gradient[j] = (1/n) * X[:,j] · predictionGradient
+            gradients[j] = NumOps.Divide(Engine.DotProduct(col, predictionGradient), NumOps.FromDouble(input.Rows));
         }
 
         return gradients;
@@ -394,13 +394,7 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
             throw new ArgumentException($"Input vector length ({input.Length}) must match coefficients length ({Coefficients.Length}).", nameof(input));
         }
 
-        T result = NumOps.Zero;
-        for (int i = 0; i < input.Length; i++)
-        {
-            result = NumOps.Add(result, NumOps.Multiply(Coefficients[i], input[i]));
-        }
-
-        return result;
+        return Engine.DotProduct(Coefficients, input);
     }
 
     /// <summary>

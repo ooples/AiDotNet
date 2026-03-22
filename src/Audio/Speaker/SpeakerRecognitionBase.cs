@@ -80,16 +80,9 @@ public abstract class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase<T>
             throw new ArgumentException("Embeddings must have the same dimension.");
         }
 
-        T dotProduct = NumOps.Zero;
-        T norm1 = NumOps.Zero;
-        T norm2 = NumOps.Zero;
-
-        for (int i = 0; i < embedding1.Length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(embedding1[i], embedding2[i]));
-            norm1 = NumOps.Add(norm1, NumOps.Multiply(embedding1[i], embedding1[i]));
-            norm2 = NumOps.Add(norm2, NumOps.Multiply(embedding2[i], embedding2[i]));
-        }
+        T dotProduct = Engine.DotProduct(embedding1, embedding2);
+        T norm1 = Engine.DotProduct(embedding1, embedding1);
+        T norm2 = Engine.DotProduct(embedding2, embedding2);
 
         T normProduct = NumOps.Multiply(NumOps.Sqrt(norm1), NumOps.Sqrt(norm2));
 
@@ -128,13 +121,9 @@ public abstract class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> NormalizeEmbedding(Tensor<T> embedding)
     {
-        T sumSquares = NumOps.Zero;
         var data = embedding.ToArray();
-
-        for (int i = 0; i < data.Length; i++)
-        {
-            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(data[i], data[i]));
-        }
+        var dataVec = new Vector<T>(data);
+        T sumSquares = Engine.DotProduct(dataVec, dataVec);
 
         T norm = NumOps.Sqrt(sumSquares);
 

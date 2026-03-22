@@ -129,18 +129,24 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
         // Compute ridge regression solution: w = (X'X + alpha*I)^(-1) X'y
         T alpha = NumOps.FromDouble(Options.Alpha);
 
-        // Compute X'X
+        // Pre-extract columns from X as Vector<T> for Engine.DotProduct
+        var xCols = new Vector<T>[NumFeatures];
+        for (int col = 0; col < NumFeatures; col++)
+        {
+            xCols[col] = new Vector<T>(x.Rows);
+            for (int row = 0; row < x.Rows; row++)
+            {
+                xCols[col][row] = xCentered[row, col];
+            }
+        }
+
+        // Compute X'X using Engine.DotProduct
         var xtx = new Matrix<T>(NumFeatures, NumFeatures);
         for (int i = 0; i < NumFeatures; i++)
         {
             for (int j = 0; j < NumFeatures; j++)
             {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < x.Rows; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(xCentered[k, i], xCentered[k, j]));
-                }
-                xtx[i, j] = sum;
+                xtx[i, j] = Engine.DotProduct(xCols[i], xCols[j]);
 
                 // Add regularization to diagonal
                 if (i == j)
@@ -150,16 +156,11 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
             }
         }
 
-        // Compute X'y
+        // Compute X'y using Engine.DotProduct
         var xty = new Vector<T>(NumFeatures);
         for (int j = 0; j < NumFeatures; j++)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < x.Rows; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(xCentered[i, j], yRegression[i]));
-            }
-            xty[j] = sum;
+            xty[j] = Engine.DotProduct(xCols[j], yRegression);
         }
 
         // Solve the linear system using Cholesky or simple Gaussian elimination
@@ -169,11 +170,7 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
         if (Options.FitIntercept && xMean is not null)
         {
             // intercept = y_mean - w'x_mean
-            Intercept = yMean;
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                Intercept = NumOps.Subtract(Intercept, NumOps.Multiply(Weights[j], xMean[j]));
-            }
+            Intercept = NumOps.Subtract(yMean, Engine.DotProduct(Weights, xMean));
         }
         else
         {
