@@ -2012,18 +2012,18 @@ public class LSTMLayer<T> : LayerBase<T>
             dNextH = dprevH;
             dNextC = dprevC;
 
-            dWeightsFi.Add(dWfi);
-            dWeightsIi.Add(dWii);
-            dWeightsCi.Add(dWci);
-            dWeightsOi.Add(dWoi);
-            dWeightsFh.Add(dWfh);
-            dWeightsIh.Add(dWih);
-            dWeightsCh.Add(dWch);
-            dWeightsOh.Add(dWoh);
-            dBiasF.Add(dbf);
-            dBiasI.Add(dbi);
-            dBiasC.Add(dbc);
-            dBiasO.Add(dbo);
+            dWeightsFi = dWeightsFi.Add(dWfi);
+            dWeightsIi = dWeightsIi.Add(dWii);
+            dWeightsCi = dWeightsCi.Add(dWci);
+            dWeightsOi = dWeightsOi.Add(dWoi);
+            dWeightsFh = dWeightsFh.Add(dWfh);
+            dWeightsIh = dWeightsIh.Add(dWih);
+            dWeightsCh = dWeightsCh.Add(dWch);
+            dWeightsOh = dWeightsOh.Add(dWoh);
+            dBiasF = dBiasF.Add(dbf);
+            dBiasI = dBiasI.Add(dbi);
+            dBiasC = dBiasC.Add(dbc);
+            dBiasO = dBiasO.Add(dbo);
         }
 
         // Store gradients for use in UpdateParameters
