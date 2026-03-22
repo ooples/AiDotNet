@@ -332,14 +332,13 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            // Count model linear predictor
+            // Count model linear predictor using Engine.DotProduct
             T etaCount = _countIntercept;
             if (_countCoefficients != null)
             {
-                for (int j = 0; j < _numFeatures; j++)
-                {
-                    etaCount = NumOps.Add(etaCount, NumOps.Multiply(_countCoefficients[j], x[i, j]));
-                }
+                var xRow = new Vector<T>(_numFeatures);
+                for (int j = 0; j < _numFeatures; j++) xRow[j] = x[i, j];
+                etaCount = NumOps.Add(etaCount, Engine.DotProduct(_countCoefficients, xRow));
             }
 
             // Apply count link inverse (boundary: special math functions)
@@ -362,14 +361,13 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
             lambdas[i] = lambda;
 
-            // Zero-inflation model linear predictor
+            // Zero-inflation model linear predictor using Engine.DotProduct
             T etaZero = _zeroIntercept;
             if (_options.ModelZeroInflation && _zeroCoefficients != null)
             {
-                for (int j = 0; j < _numFeatures; j++)
-                {
-                    etaZero = NumOps.Add(etaZero, NumOps.Multiply(_zeroCoefficients[j], x[i, j]));
-                }
+                var xRow2 = new Vector<T>(_numFeatures);
+                for (int j = 0; j < _numFeatures; j++) xRow2[j] = x[i, j];
+                etaZero = NumOps.Add(etaZero, Engine.DotProduct(_zeroCoefficients, xRow2));
             }
 
             // Apply zero link inverse (boundary: special math functions for Probit/CLogLog)

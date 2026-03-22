@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SelfSupervisedLearning.Losses;
 
@@ -39,6 +40,7 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 public class BarlowTwinsLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly double _lambda;
     private readonly bool _normalize;

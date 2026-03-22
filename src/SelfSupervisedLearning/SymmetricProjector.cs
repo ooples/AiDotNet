@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -37,6 +38,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 public class SymmetricProjector<T> : IProjectorHead<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly int _inputDim;
     private readonly int _hiddenDim;
