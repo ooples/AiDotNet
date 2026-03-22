@@ -52,6 +52,8 @@ public class SwinPatchMergingLayerTests : LayerTestBase
     protected override ILayer<double> CreateLayer()
         => new SwinPatchMergingLayer<double>(inputDim: 4);
     protected override int[] InputShape => [1, 4, 4]; // [batch, seqLen=4 (2x2), dim=4]
+    // Contains LayerNorm which normalizes constant inputs identically
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }
 
 public class ResidualDenseBlockTests : LayerTestBase

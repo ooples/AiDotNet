@@ -25,6 +25,8 @@ public class ConditionalRandomFieldLayerTests : LayerTestBase
         => new ConditionalRandomFieldLayer<double>(numClasses: 3, sequenceLength: 4,
             scalarActivation: new IdentityActivation<double>() as IActivationFunction<double>);
     protected override int[] InputShape => [4, 3]; // [seqLen, numClasses]
+    // CRF uses Viterbi decoding producing discrete class labels — constant inputs give same labels
+    protected override bool ExpectsDifferentOutputForConstantInputs => false;
 }
 
 public class SwinPatchEmbeddingLayerTests : LayerTestBase
