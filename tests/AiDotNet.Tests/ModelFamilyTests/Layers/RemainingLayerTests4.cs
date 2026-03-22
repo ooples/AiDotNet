@@ -40,10 +40,11 @@ public class ExpertLayerTests : LayerTestBase
 {
     protected override ILayer<double> CreateLayer()
     {
+        // Second dense receives 8 features from first dense's output
         var experts = new System.Collections.Generic.List<ILayer<double>>
         {
             new DenseLayer<double>(4, 8),
-            new DenseLayer<double>(4, 8)
+            new DenseLayer<double>(8, 8)
         };
         return new ExpertLayer<double>(experts, inputShape: [4], outputShape: [8],
             activationFunction: new ReLUActivation<double>() as IActivationFunction<double>);

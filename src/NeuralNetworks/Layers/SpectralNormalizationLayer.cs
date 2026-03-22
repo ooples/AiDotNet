@@ -519,7 +519,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     {
         _lastInput = null;
         _lastOutput = null;
-        RestoreOriginalWeights(); // Ensure weights are restored when resetting
+        RestoreOriginalWeights();
         _innerLayer.ResetState();
     }
 
