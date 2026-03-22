@@ -582,11 +582,11 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        var gammaVec = parameters.Slice(0, _gamma.Length);
-        var betaVec = parameters.Slice(_gamma.Length, _beta.Length);
-
-        _gamma = Tensor<T>.FromVector(gammaVec, _gamma.Shape);
-        _beta = Tensor<T>.FromVector(betaVec, _beta.Shape);
+        // Write in-place to preserve engine persistent tensor references
+        var gSpan = _gamma.Data.Span;
+        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
+        var bSpan = _beta.Data.Span;
+        for (int i = 0; i < _beta.Length; i++) bSpan[i] = parameters[_gamma.Length + i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
