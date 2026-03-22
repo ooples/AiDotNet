@@ -1143,10 +1143,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var dV = _lastAttentionWeights.Transpose(attnPerm).Multiply(dAttnOutput);
 
         // Compute V with same shape as in forward pass - should be 3D [B, S, A]
-        // Forward: inputFlat @ _Wv^T -> reshape to [B, S, A]
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-        var inputFlat = _lastInput.Reshape([batchSize * seqLen, _inputSize]);
+        // Use _lastQueryInput which is always 3D (Forward normalizes 2D→3D)
+        var input3D = _lastQueryInput ?? _lastInput;
+        int batchSize = input3D.Shape[0];
+        int seqLen = input3D.Shape.Length >= 2 ? input3D.Shape[1] : 1;
+        var inputFlat = input3D.Reshape([batchSize * seqLen, _inputSize]);
         var wvTransposed = Engine.TensorTranspose(_Wv);
         var vProjected = Engine.TensorMatMul(inputFlat, wvTransposed);
         var V = vProjected.Reshape([batchSize, seqLen, _attentionSize]);
