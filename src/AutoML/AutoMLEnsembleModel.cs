@@ -156,6 +156,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
 
     public override byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var settings = new JsonSerializerSettings
         {
             TypeNameHandling = TypeNameHandling.Auto,
@@ -169,6 +170,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
 
     public override void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data is null)
         {
             throw new ArgumentNullException(nameof(data));
@@ -200,12 +202,20 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
 
     public override void SaveModel(string filePath)
     {
-        File.WriteAllBytes(filePath, Serialize());
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
     }
 
     public override void LoadModel(string filePath)
     {
-        Deserialize(File.ReadAllBytes(filePath));
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(File.ReadAllBytes(filePath));
+        }
     }
 
     public override void SaveState(Stream stream)

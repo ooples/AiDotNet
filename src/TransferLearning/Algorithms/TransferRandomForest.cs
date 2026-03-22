@@ -308,6 +308,7 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     /// <inheritdoc/>
     public override byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
         var baseBytes = BaseModel.Serialize();
@@ -318,6 +319,7 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     /// <inheritdoc/>
     public override void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
         if (TryReadWrapper(reader, out var baseBytes))
@@ -346,6 +348,8 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         // Persist wrapper metadata and base model bytes together
         using var ms = new MemoryStream();
         using (var writer = new BinaryWriter(ms))
@@ -365,6 +369,8 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     /// <inheritdoc/>
     public override void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (!File.Exists(filePath))
         {
             throw new FileNotFoundException($"The specified model file does not exist: {filePath}", filePath);

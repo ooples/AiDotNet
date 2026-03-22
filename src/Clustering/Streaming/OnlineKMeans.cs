@@ -65,8 +65,8 @@ public class OnlineKMeans<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private T[,]? _centers;
-    private int[]? _clusterCounts;
+    private Matrix<T> _centers = new Matrix<T>(0, 0);
+    private int[] _clusterCounts = Array.Empty<int>();
     private long _totalPointsSeen;
 
     /// <summary>
@@ -166,7 +166,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             : RandomHelper.CreateSecureRandom();
 
         // Initialize centers if not already initialized
-        if (_centers is null)
+        if (_centers.Rows == 0)
         {
             InitializeCenters(x, k, d, rand);
         }
@@ -197,7 +197,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             UpdateCenter(point, nearest, d);
 
             _totalPointsSeen++;
-            _clusterCounts![nearest]++;
+            _clusterCounts[nearest]++;
 
             // Decay learning rate
             if (_options.DecayLearningRate)
@@ -210,17 +210,9 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         }
         } // end multi-pass loop
 
-        // Set results
-        ClusterCenters = new Matrix<T>(k, d);
+        // Set results — clone internal centers to base class property (avoid aliasing)
+        ClusterCenters = _centers.Clone();
         Labels = new Vector<T>(n);
-
-        for (int c = 0; c < k; c++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                ClusterCenters[c, j] = _centers![c, j];
-            }
-        }
 
         for (int i = 0; i < n; i++)
         {
@@ -233,7 +225,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
 
     private void InitializeCenters(Matrix<T> x, int k, int d, Random rand)
     {
-        _centers = new T[k, d];
+        _centers = new Matrix<T>(k, d);
         _clusterCounts = new int[k];
 
         // K-Means++ initialization: select well-separated initial centers
@@ -294,7 +286,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             T dist = NumOps.Zero;
             for (int j = 0; j < d; j++)
             {
-                T diff = NumOps.Subtract(point[j], _centers![c, j]);
+                T diff = NumOps.Subtract(point[j], _centers[c, j]);
                 dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
             }
 
@@ -313,7 +305,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         T lr = NumOps.FromDouble(CurrentLearningRate);
         for (int j = 0; j < d; j++)
         {
-            T diff = NumOps.Subtract(point[j], _centers![clusterIdx, j]);
+            T diff = NumOps.Subtract(point[j], _centers[clusterIdx, j]);
             _centers[clusterIdx, j] = NumOps.Add(_centers[clusterIdx, j], NumOps.Multiply(lr, diff));
         }
     }
@@ -327,7 +319,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     {
         int d = point.Length;
 
-        if (_centers is null)
+        if (_centers.Rows == 0)
         {
             throw new InvalidOperationException("Model must be initialized before calling PartialFit. " +
                 "Call Train with initial data first, or use InitializeWithRandom.");
@@ -343,7 +335,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         UpdateCenter(pointArray, nearest, d);
 
         _totalPointsSeen++;
-        _clusterCounts![nearest]++;
+        _clusterCounts[nearest]++;
 
         if (_options.DecayLearningRate)
         {
@@ -369,7 +361,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         NumFeatures = d;
         NumClusters = k;
 
-        _centers = new T[k, d];
+        _centers = new Matrix<T>(k, d);
         _clusterCounts = new int[k];
 
         var rand = Options.Seed.HasValue

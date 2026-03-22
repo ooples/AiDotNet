@@ -1,0 +1,629 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+---
+
+<AdminLayout title="License Management - AiDotNet Admin" description="Manage BSL license keys, view activations, and administer license tiers." activeTab="licenses">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">License Keys</h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage BSL license keys, view activations, and administer tiers</p>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+          <span><span id="active-count" class="font-semibold text-green-500">--</span> active</span>
+          <span><span id="suspended-count" class="font-semibold text-yellow-500">--</span> suspended</span>
+          <span><span id="revoked-count" class="font-semibold text-red-500">--</span> revoked</span>
+        </div>
+        <button
+          id="issue-license-btn"
+          class="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-brand-blue to-brand-purple text-white text-sm font-medium rounded-xl hover:shadow-lg transition-all"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Issue License
+        </button>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-col sm:flex-row gap-3">
+      <div class="flex-1">
+        <input
+          id="search-input"
+          type="text"
+          placeholder="Search by license key, owner, or organization..."
+          class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+        />
+      </div>
+      <select
+        id="filter-tier"
+        class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+      >
+        <option value="">All Tiers</option>
+        <option value="community">Community</option>
+        <option value="professional">Professional</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+      <select
+        id="filter-status"
+        class="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+      >
+        <option value="">All Status</option>
+        <option value="active">Active</option>
+        <option value="suspended">Suspended</option>
+        <option value="revoked">Revoked</option>
+        <option value="expired">Expired</option>
+      </select>
+    </div>
+
+    <!-- Licenses table -->
+    <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+      <div id="licenses-loading" class="p-12 text-center">
+        <p class="text-sm text-slate-500 dark:text-slate-400">Loading licenses...</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table id="licenses-table" class="hidden w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700">
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">License Key</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Owner</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tier</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Activations</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Issued</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Expires</th>
+              <th class="text-left py-3 px-4 text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="licenses-body" class="divide-y divide-slate-100 dark:divide-slate-800">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Issue License Modal -->
+    <div id="issue-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 w-full max-w-md shadow-xl">
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4">Issue New License</h2>
+        <form id="issue-form" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">User Email</label>
+            <input
+              id="issue-email"
+              type="email"
+              required
+              placeholder="user@example.com"
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Tier</label>
+            <select
+              id="issue-tier"
+              required
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            >
+              <option value="community">Community (Free)</option>
+              <option value="professional">Professional ($29/mo)</option>
+              <option value="enterprise">Enterprise ($99/mo)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Max Activations</label>
+            <input
+              id="issue-max-activations"
+              type="number"
+              min="1"
+              max="100"
+              value="3"
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Organization (optional)</label>
+            <input
+              id="issue-org"
+              type="text"
+              placeholder="Company name"
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Notes (optional)</label>
+            <textarea
+              id="issue-notes"
+              rows="2"
+              placeholder="Internal notes about this license..."
+              class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            ></textarea>
+          </div>
+          <div id="issue-error" class="hidden text-sm text-red-500"></div>
+          <div class="flex gap-3 pt-2">
+            <button
+              type="button"
+              id="cancel-issue-btn"
+              class="flex-1 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+            >Cancel</button>
+            <button
+              type="submit"
+              class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-brand-blue to-brand-purple rounded-xl hover:shadow-lg transition-all"
+            >Issue License</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Activations Modal -->
+    <div id="activations-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 w-full max-w-lg shadow-xl">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-slate-900 dark:text-white">Machine Activations</h2>
+          <button id="close-activations-btn" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div id="activations-content" class="space-y-3 max-h-96 overflow-y-auto">
+          <p class="text-sm text-slate-500">Loading...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { supabase } from '../../../lib/supabase';
+
+    interface LicenseKey {
+      id: string;
+      user_id: string;
+      license_key: string;
+      tier: string;
+      status: string;
+      max_activations: number;
+      organization_name: string | null;
+      notes: string | null;
+      stripe_subscription_id: string | null;
+      issued_at: string;
+      expires_at: string | null;
+      created_at: string;
+      ownerName?: string;
+      activationCount?: number;
+    }
+
+    interface Activation {
+      id: string;
+      machine_id_hash: string;
+      hostname: string | null;
+      os_description: string | null;
+      first_seen_at: string;
+      last_seen_at: string;
+      is_active: boolean;
+    }
+
+    let allLicenses: LicenseKey[] = [];
+    let filteredLicenses: LicenseKey[] = [];
+
+    async function fetchAllPaginated<T>(table: string, select: string, orderCol: string): Promise<T[]> {
+      const pageSize = 1000;
+      let allData: T[] = [];
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const from = page * pageSize;
+        const to = from + pageSize - 1;
+        const { data, error } = await supabase
+          .from(table)
+          .select(select)
+          .order(orderCol, { ascending: false })
+          .range(from, to);
+        if (error || !data) break;
+        allData = allData.concat(data as T[]);
+        hasMore = data.length === pageSize;
+        page++;
+      }
+      return allData;
+    }
+
+    async function loadLicenses() {
+      // Load profiles for name lookup
+      const profiles = await fetchAllPaginated<{ id: string; full_name: string }>('profiles', 'id, full_name', 'id');
+
+      const nameMap = new Map<string, string>();
+      for (const p of profiles) {
+        nameMap.set(p.id, p.full_name || 'Unknown');
+      }
+
+      // Load all license keys
+      let licenses: LicenseKey[];
+      try {
+        licenses = await fetchAllPaginated<LicenseKey>('license_keys', 'id, user_id, license_key, tier, status, max_activations, organization_name, notes, stripe_subscription_id, issued_at, expires_at, created_at', 'created_at');
+      } catch (err) {
+        const loading = document.getElementById('licenses-loading');
+        if (loading) loading.innerHTML = '<p class="text-sm text-red-500">Failed to load licenses.</p>';
+        console.error('License load error:', err);
+        return;
+      }
+
+      // Load activation counts per license
+      const { data: activations } = await supabase
+        .from('license_activations')
+        .select('license_key_id')
+        .eq('is_active', true)
+        .range(0, 9999);
+
+      const activationCounts = new Map<string, number>();
+      if (activations) {
+        for (const a of activations) {
+          activationCounts.set(a.license_key_id, (activationCounts.get(a.license_key_id) || 0) + 1);
+        }
+      }
+
+      allLicenses = licenses.map(l => ({
+        ...l,
+        ownerName: nameMap.get(l.user_id) || 'Unknown',
+        activationCount: activationCounts.get(l.id) || 0,
+      }));
+
+      // Stats
+      const activeCount = allLicenses.filter(l => l.status === 'active').length;
+      const suspendedCount = allLicenses.filter(l => l.status === 'suspended').length;
+      const revokedCount = allLicenses.filter(l => l.status === 'revoked').length;
+
+      const activeEl = document.getElementById('active-count');
+      const suspendedEl = document.getElementById('suspended-count');
+      const revokedEl = document.getElementById('revoked-count');
+      if (activeEl) activeEl.textContent = String(activeCount);
+      if (suspendedEl) suspendedEl.textContent = String(suspendedCount);
+      if (revokedEl) revokedEl.textContent = String(revokedCount);
+
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const search = (document.getElementById('search-input') as HTMLInputElement).value.toLowerCase().trim();
+      const tierFilter = (document.getElementById('filter-tier') as HTMLSelectElement).value;
+      const statusFilter = (document.getElementById('filter-status') as HTMLSelectElement).value;
+
+      filteredLicenses = allLicenses.filter(l => {
+        if (search) {
+          const haystack = `${l.license_key} ${l.ownerName || ''} ${l.organization_name || ''}`.toLowerCase();
+          if (!haystack.includes(search)) return false;
+        }
+        if (tierFilter && l.tier !== tierFilter) return false;
+        if (statusFilter && l.status !== statusFilter) return false;
+        return true;
+      });
+
+      renderTable();
+    }
+
+    function tierBadge(tier: string): string {
+      const colors: Record<string, string> = {
+        community: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300',
+        professional: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+        enterprise: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+      };
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${colors[tier] || colors.community}">${tier}</span>`;
+    }
+
+    function statusBadge(status: string): string {
+      const colors: Record<string, string> = {
+        active: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+        suspended: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+        revoked: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+        expired: 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400',
+      };
+      return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${colors[status] || colors.expired}">${status}</span>`;
+    }
+
+    function renderTable() {
+      const loading = document.getElementById('licenses-loading');
+      const table = document.getElementById('licenses-table');
+      const tbody = document.getElementById('licenses-body');
+
+      if (loading) loading.classList.add('hidden');
+      if (table) table.classList.remove('hidden');
+      if (!tbody) return;
+
+      if (filteredLicenses.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-sm text-slate-500 dark:text-slate-400">No licenses found</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filteredLicenses.map(l => {
+        const keyPreview = l.license_key.length > 16
+          ? l.license_key.substring(0, 8) + '...' + l.license_key.substring(l.license_key.length - 4)
+          : l.license_key;
+        const issued = new Date(l.issued_at).toLocaleDateString();
+        const expires = l.expires_at ? new Date(l.expires_at).toLocaleDateString() : 'Never';
+        const activations = `${l.activationCount || 0} / ${l.max_activations}`;
+
+        let actions = '';
+        if (l.status === 'active') {
+          actions = `
+            <button class="suspend-btn text-sm font-medium text-yellow-500 hover:underline mr-2" data-id="${l.id}">Suspend</button>
+            <button class="revoke-btn text-sm font-medium text-red-500 hover:underline" data-id="${l.id}">Revoke</button>
+          `;
+        } else if (l.status === 'suspended') {
+          actions = `
+            <button class="reactivate-btn text-sm font-medium text-green-500 hover:underline mr-2" data-id="${l.id}">Reactivate</button>
+            <button class="revoke-btn text-sm font-medium text-red-500 hover:underline" data-id="${l.id}">Revoke</button>
+          `;
+        } else {
+          actions = '<span class="text-xs text-slate-400">--</span>';
+        }
+
+        return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
+          <td class="py-3 px-4">
+            <button class="activations-btn font-mono text-xs text-brand-blue hover:underline" data-id="${l.id}" title="View activations">${escapeHtml(keyPreview)}</button>
+          </td>
+          <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${escapeHtml(l.ownerName || 'Unknown')}${l.organization_name ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.organization_name)}</span>` : ''}</td>
+          <td class="py-3 px-4">${tierBadge(l.tier)}</td>
+          <td class="py-3 px-4">${statusBadge(l.status)}</td>
+          <td class="py-3 px-4 text-slate-500 dark:text-slate-400 text-sm">${activations}</td>
+          <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-sm">${issued}</td>
+          <td class="py-3 px-4 text-slate-400 dark:text-slate-500 text-sm">${expires}</td>
+          <td class="py-3 px-4">${actions}</td>
+        </tr>`;
+      }).join('');
+
+      // Attach event handlers
+      attachHandlers();
+    }
+
+    function attachHandlers() {
+      const tbody = document.getElementById('licenses-body');
+      if (!tbody) return;
+
+      tbody.querySelectorAll('.suspend-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id || !confirm('Suspend this license? The user will lose access until reactivated.')) return;
+          await updateLicenseStatus(id, 'suspended');
+        });
+      });
+
+      tbody.querySelectorAll('.revoke-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id || !confirm('Revoke this license permanently? This cannot be undone.')) return;
+          await updateLicenseStatus(id, 'revoked');
+        });
+      });
+
+      tbody.querySelectorAll('.reactivate-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id) return;
+          await updateLicenseStatus(id, 'active');
+        });
+      });
+
+      tbody.querySelectorAll('.activations-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id) return;
+          await showActivations(id);
+        });
+      });
+    }
+
+    async function updateLicenseStatus(id: string, status: string) {
+      const updateData: Record<string, string | null> = { status };
+      if (status === 'revoked') {
+        updateData.revoked_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase
+        .from('license_keys')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) {
+        console.error('Update error:', error);
+        alert('Failed to update license. Please try again.');
+        return;
+      }
+
+      // Update local data
+      const license = allLicenses.find(l => l.id === id);
+      if (license) license.status = status;
+
+      // Refresh stats
+      const activeCount = allLicenses.filter(l => l.status === 'active').length;
+      const suspendedCount = allLicenses.filter(l => l.status === 'suspended').length;
+      const revokedCount = allLicenses.filter(l => l.status === 'revoked').length;
+      const activeEl = document.getElementById('active-count');
+      const suspendedEl = document.getElementById('suspended-count');
+      const revokedEl = document.getElementById('revoked-count');
+      if (activeEl) activeEl.textContent = String(activeCount);
+      if (suspendedEl) suspendedEl.textContent = String(suspendedCount);
+      if (revokedEl) revokedEl.textContent = String(revokedCount);
+
+      applyFilters();
+    }
+
+    async function showActivations(licenseKeyId: string) {
+      const modal = document.getElementById('activations-modal');
+      const content = document.getElementById('activations-content');
+      if (!modal || !content) return;
+
+      modal.classList.remove('hidden');
+      content.innerHTML = '<p class="text-sm text-slate-500">Loading activations...</p>';
+
+      const { data: activations, error } = await supabase
+        .from('license_activations')
+        .select('id, machine_id_hash, hostname, os_description, first_seen_at, last_seen_at, is_active')
+        .eq('license_key_id', licenseKeyId)
+        .order('last_seen_at', { ascending: false });
+
+      if (error || !activations) {
+        content.innerHTML = '<p class="text-sm text-red-500">Failed to load activations.</p>';
+        return;
+      }
+
+      if (activations.length === 0) {
+        content.innerHTML = '<p class="text-sm text-slate-500">No activations found for this license.</p>';
+        return;
+      }
+
+      content.innerHTML = activations.map((a: Activation) => {
+        const statusBadge = a.is_active
+          ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Active</span>'
+          : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-700 text-slate-500">Inactive</span>';
+        const firstSeen = new Date(a.first_seen_at).toLocaleDateString();
+        const lastSeen = new Date(a.last_seen_at).toLocaleDateString();
+        const machinePreview = a.machine_id_hash.substring(0, 12) + '...';
+
+        const deactivateBtn = a.is_active
+          ? `<button class="deactivate-activation-btn text-xs text-red-500 hover:underline" data-id="${a.id}" data-license="${licenseKeyId}">Deactivate</button>`
+          : '';
+
+        return `<div class="p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-mono text-xs text-slate-500">${escapeHtml(machinePreview)}</span>
+            <div class="flex items-center gap-2">
+              ${statusBadge}
+              ${deactivateBtn}
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <div><span class="font-medium">Hostname:</span> ${escapeHtml(a.hostname || 'Unknown')}</div>
+            <div><span class="font-medium">OS:</span> ${escapeHtml(a.os_description || 'Unknown')}</div>
+            <div><span class="font-medium">First seen:</span> ${firstSeen}</div>
+            <div><span class="font-medium">Last seen:</span> ${lastSeen}</div>
+          </div>
+        </div>`;
+      }).join('');
+
+      // Attach deactivation handlers
+      content.querySelectorAll('.deactivate-activation-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const activationId = (btn as HTMLElement).dataset.id;
+          const licenseId = (btn as HTMLElement).dataset.license;
+          if (!activationId || !confirm('Deactivate this machine?')) return;
+
+          const { error } = await supabase
+            .from('license_activations')
+            .update({ is_active: false, deactivated_at: new Date().toISOString() })
+            .eq('id', activationId);
+
+          if (error) {
+            alert('Failed to deactivate. Please try again.');
+            return;
+          }
+
+          // Refresh the activations modal
+          if (licenseId) await showActivations(licenseId);
+
+          // Update activation count in local data
+          const license = allLicenses.find(l => l.id === licenseId);
+          if (license && license.activationCount) {
+            license.activationCount--;
+            applyFilters();
+          }
+        });
+      });
+    }
+
+    // Issue License form
+    async function issueLicense(e: Event) {
+      e.preventDefault();
+      const errorEl = document.getElementById('issue-error');
+
+      const email = (document.getElementById('issue-email') as HTMLInputElement).value.trim();
+      const tier = (document.getElementById('issue-tier') as HTMLSelectElement).value;
+      const maxActivations = parseInt((document.getElementById('issue-max-activations') as HTMLInputElement).value);
+      const org = (document.getElementById('issue-org') as HTMLInputElement).value.trim();
+      const notes = (document.getElementById('issue-notes') as HTMLTextAreaElement).value.trim();
+
+      // Look up user by email
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .limit(1);
+
+      if (profileError || !profiles || profiles.length === 0) {
+        if (errorEl) {
+          errorEl.textContent = 'User not found. They must sign up first.';
+          errorEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      const userId = profiles[0].id;
+
+      // Generate a license key (format: aidn.{random}.{random})
+      const keyPart1 = crypto.randomUUID().replace(/-/g, '').substring(0, 12);
+      const keyPart2 = crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+      const licenseKey = `aidn.${keyPart1}.${keyPart2}`;
+
+      const { error: insertError } = await supabase
+        .from('license_keys')
+        .insert({
+          user_id: userId,
+          license_key: licenseKey,
+          tier: tier,
+          status: 'active',
+          max_activations: maxActivations,
+          organization_name: org || null,
+          notes: notes || null,
+        });
+
+      if (insertError) {
+        if (errorEl) {
+          errorEl.textContent = `Failed to issue license: ${insertError.message}`;
+          errorEl.classList.remove('hidden');
+        }
+        console.error('Insert error:', insertError);
+        return;
+      }
+
+      // Close modal and refresh
+      const modal = document.getElementById('issue-modal');
+      if (modal) modal.classList.add('hidden');
+      (document.getElementById('issue-form') as HTMLFormElement).reset();
+      if (errorEl) errorEl.classList.add('hidden');
+
+      await loadLicenses();
+    }
+
+    function escapeHtml(str: string): string {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    // Modal handlers
+    document.getElementById('issue-license-btn')?.addEventListener('click', () => {
+      document.getElementById('issue-modal')?.classList.remove('hidden');
+    });
+    document.getElementById('cancel-issue-btn')?.addEventListener('click', () => {
+      document.getElementById('issue-modal')?.classList.add('hidden');
+    });
+    document.getElementById('close-activations-btn')?.addEventListener('click', () => {
+      document.getElementById('activations-modal')?.classList.add('hidden');
+    });
+    document.getElementById('issue-form')?.addEventListener('submit', issueLicense);
+
+    // Close modals on escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.getElementById('issue-modal')?.classList.add('hidden');
+        document.getElementById('activations-modal')?.classList.add('hidden');
+      }
+    });
+
+    // Filter handlers
+    document.getElementById('search-input')?.addEventListener('input', applyFilters);
+    document.getElementById('filter-tier')?.addEventListener('change', applyFilters);
+    document.getElementById('filter-status')?.addEventListener('change', applyFilters);
+
+    await (window as any).__adminReady;
+    loadLicenses();
+  </script>
+</AdminLayout>

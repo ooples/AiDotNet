@@ -46,11 +46,11 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nComponents;
     private readonly int _maxIterations;
-    private Vector<T>[]? _means;
-    private Matrix<T>[]? _covariances;
-    private Vector<T>? _weights;
+    private Vector<T>[] _means = Array.Empty<Vector<T>>();
+    private Matrix<T>[] _covariances = Array.Empty<Matrix<T>>();
+    private Vector<T> _weights = new Vector<T>(0);
     private int _nFeatures;
-    private double[]? _globalVariance;
+    private Vector<T> _globalVariance = new Vector<T>(0);
 
     /// <summary>
     /// Gets the number of Gaussian components.
@@ -160,22 +160,27 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
         // Compute global variance per feature for use as a covariance floor.
         // This prevents components with very few points (e.g., a singleton outlier)
         // from collapsing to a tiny covariance that produces astronomically high density.
-        _globalVariance = new double[d];
-        var featureMeans = new double[d];
+        _globalVariance = new Vector<T>(d);
+        var featureMeans = new Vector<T>(d);
+        T nT = NumOps.FromDouble(n);
+        T minVariance = NumOps.FromDouble(1e-6);
         for (int j = 0; j < d; j++)
         {
+            T sum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                featureMeans[j] += NumOps.ToDouble(X[i, j]);
+                sum = NumOps.Add(sum, X[i, j]);
             }
-            featureMeans[j] /= n;
+            featureMeans[j] = NumOps.Divide(sum, nT);
 
+            T varSum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                double diff = NumOps.ToDouble(X[i, j]) - featureMeans[j];
-                _globalVariance[j] += diff * diff;
+                T diff = NumOps.Subtract(X[i, j], featureMeans[j]);
+                varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
             }
-            _globalVariance[j] = Math.Max(_globalVariance[j] / n, 1e-6);
+            T variance = NumOps.Divide(varSum, nT);
+            _globalVariance[j] = NumOps.GreaterThan(variance, minVariance) ? variance : minVariance;
         }
 
         // Initialize means using k-means++ style
@@ -236,8 +241,8 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
 
                 for (int c = 0; c < _nComponents; c++)
                 {
-                    double weight = NumOps.ToDouble(_weights![c]);
-                    double density = GaussianDensity(point, _means![c], _covariances![c]);
+                    double weight = NumOps.ToDouble(_weights[c]);
+                    double density = GaussianDensity(point, _means[c], _covariances[c]);
                     probs[c] = weight * density;
                     totalProb += probs[c];
                 }
@@ -258,7 +263,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                 }
 
                 // Update weight
-                _weights![c] = NumOps.FromDouble(Nc / n);
+                _weights[c] = NumOps.FromDouble(Nc / n);
 
                 // Update mean
                 var newMean = new Vector<T>(d);
@@ -272,7 +277,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                 }
                 for (int j = 0; j < d; j++)
                 {
-                    _means![c][j] = Nc > 0 ? NumOps.Divide(newMean[j], NumOps.FromDouble(Nc)) : _means[c][j];
+                    _means[c][j] = Nc > 0 ? NumOps.Divide(newMean[j], NumOps.FromDouble(Nc)) : _means[c][j];
                 }
 
                 // Update covariance
@@ -281,7 +286,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                 {
                     for (int j1 = 0; j1 < d; j1++)
                     {
-                        T diff1 = NumOps.Subtract(X[i, j1], _means![c][j1]);
+                        T diff1 = NumOps.Subtract(X[i, j1], _means[c][j1]);
                         for (int j2 = j1; j2 < d; j2++)
                         {
                             T diff2 = NumOps.Subtract(X[i, j2], _means[c][j2]);
@@ -303,7 +308,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                     {
                         for (int j2 = 0; j2 < d; j2++)
                         {
-                            _covariances![c][j1, j2] = NumOps.Divide(newCov[j1, j2], NumOps.FromDouble(Nc));
+                            _covariances[c][j1, j2] = NumOps.Divide(newCov[j1, j2], NumOps.FromDouble(Nc));
                         }
                     }
 
@@ -312,11 +317,14 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                     // variance, which would cause astronomically high density and break anomaly scoring.
                     for (int j = 0; j < d; j++)
                     {
-                        double currentVar = NumOps.ToDouble(_covariances![c][j, j]);
-                        double minVar = Math.Max(_globalVariance![j] * 0.01, 1e-6);
-                        if (currentVar < minVar)
+                        T currentVar = _covariances[c][j, j];
+                        T floorFraction = NumOps.FromDouble(0.01);
+                        T minFloor = NumOps.FromDouble(1e-6);
+                        T varFloor = NumOps.Multiply(_globalVariance[j], floorFraction);
+                        T minVar = NumOps.GreaterThan(varFloor, minFloor) ? varFloor : minFloor;
+                        if (NumOps.LessThan(currentVar, minVar))
                         {
-                            _covariances[c][j, j] = NumOps.FromDouble(minVar);
+                            _covariances[c][j, j] = minVar;
                         }
                     }
                 }
@@ -337,8 +345,8 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
 
         for (int c = 0; c < _nComponents; c++)
         {
-            double weight = NumOps.ToDouble(_weights![c]);
-            double density = GaussianDensity(point, _means![c], _covariances![c]);
+            double weight = NumOps.ToDouble(_weights[c]);
+            double density = GaussianDensity(point, _means[c], _covariances[c]);
             likelihood += weight * density;
         }
 
@@ -364,7 +372,8 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
         {
             double variance = NumOps.ToDouble(covariance[i, i]);
             // Use global variance floor to prevent density explosion for singleton components
-            double minVar = _globalVariance != null ? _globalVariance[i] * 0.01 : 1e-6;
+            double globalVar = _globalVariance.Length > i ? NumOps.ToDouble(_globalVariance[i]) : 0.0;
+            double minVar = Math.Max(globalVar * 0.01, 1e-6);
             variance = Math.Max(variance, minVar);
             mahalanobis += diff[i] * diff[i] / variance;
             logDet += Math.Log(variance);

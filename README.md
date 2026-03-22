@@ -10,7 +10,7 @@
 [![CodeQL](https://github.com/ooples/AiDotNet/security/code-scanning/badge.svg)](https://github.com/ooples/AiDotNet/security/code-scanning)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/59242b2fb53c4ffc871212d346de752f)](https://app.codacy.com/gh/ooples/AiDotNet/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![NuGet](https://img.shields.io/nuget/v/AiDotNet.svg)](https://www.nuget.org/packages/AiDotNet/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](https://ooples.github.io/AiDotNet/license/)
 
 ![Neural Networks](https://img.shields.io/badge/Neural_Networks-160+-blue)
 ![Classical ML](https://img.shields.io/badge/Classical_ML-155+-green)
@@ -1209,7 +1209,32 @@ Areas where we especially welcome help:
 
 ## License
 
-Apache License 2.0 - see [LICENSE](LICENSE) for details.
+**Business Source License 1.1** — see [LICENSE](LICENSE) for full terms.
+
+### What's free (always, no license needed)
+
+- Model training (all algorithms, all configurations)
+- Model inference and prediction
+- Data preprocessing, feature engineering, AutoML
+- GPU acceleration on any hardware
+- All utility functions and helpers
+
+### What requires a license
+
+- Model save/load operations (SaveModel, LoadModel, Serialize, Deserialize)
+- Free trial: 30 days or 10 operations, whichever comes first
+
+### License tiers
+
+| Tier | Price | Who qualifies |
+|------|-------|---------------|
+| **Community** | Free | Open-source, education, personal projects, companies <$1M revenue with <5 devs |
+| **Professional** | $29/mo per seat | Commercial use, individual developers and small teams |
+| **Enterprise** | $99/mo per seat | Large organizations, dedicated support, custom SLAs |
+
+See the [pricing page](https://ooples.github.io/AiDotNet/pricing/) for details and to register for a free community license.
+
+Each version automatically converts to **Apache License 2.0** three years after release.
 
 ---
 

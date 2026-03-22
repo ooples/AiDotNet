@@ -4796,13 +4796,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         try
         {
             var modelToSerialize = Model ?? OptimizationResult?.BestSolution;
             if (modelToSerialize != null)
             {
                 // Persist a model-owned snapshot so deserialization can restore state without relying on JSON for model internals.
-                SerializedModelData = modelToSerialize.Serialize();
+                // Wrap in InternalOperation to avoid double-counting (guard already fired above)
+                using (ModelPersistenceGuard.InternalOperation())
+                {
+                    SerializedModelData = modelToSerialize.Serialize();
+                }
 
                 // Refresh metadata for consistency and to keep ModelMetaData aligned with the persisted snapshot.
                 ModelMetaData = modelToSerialize.GetModelMetadata();
@@ -4870,6 +4875,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public void Deserialize(byte[] data)
     {
+        if (data is null || data.Length == 0)
+            throw new ArgumentException("Deserialization data cannot be null or empty.", nameof(data));
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         try
         {
             // Decompress if needed (CompressionHelper automatically detects compressed data)
@@ -5010,7 +5018,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public void SaveModel(string filePath)
     {
-        File.WriteAllBytes(filePath, Serialize());
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
     }
 
     /// <summary>
@@ -5053,8 +5067,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new FileNotFoundException($"Model file not found at path: {filePath}", filePath);
         }
 
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         var data = File.ReadAllBytes(filePath);
-        Deserialize(data);
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(data);
+        }
     }
 
     /// <summary>

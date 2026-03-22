@@ -395,15 +395,23 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void SaveModel(string filepath)
     {
-        var data = Serialize();
-        System.IO.File.WriteAllBytes(filepath, data);
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            var data = Serialize();
+            System.IO.File.WriteAllBytes(filepath, data);
+        }
     }
 
     /// <inheritdoc/>
     public override void LoadModel(string filepath)
     {
-        var data = System.IO.File.ReadAllBytes(filepath);
-        Deserialize(data);
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            var data = System.IO.File.ReadAllBytes(filepath);
+            Deserialize(data);
+        }
     }
 }
 

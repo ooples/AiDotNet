@@ -391,15 +391,21 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
-        string fullPath = Path.GetFullPath(filePath);
-        string? directory = Path.GetDirectoryName(fullPath);
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
+        // Each rank saves its own shard for correct distributed checkpoint round-trip
+        string rankPath = $"{Path.GetFullPath(filePath)}.rank{Rank}";
+        string? directory = Path.GetDirectoryName(rankPath);
         if (directory is not null && !Directory.Exists(directory))
             Directory.CreateDirectory(directory);
 
-        byte[] data = Serialize();
-        byte[] envelopedData = ModelFileHeader.WrapWithHeader(
-            data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
-        File.WriteAllBytes(fullPath, envelopedData);
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] data = Serialize();
+            byte[] envelopedData = ModelFileHeader.WrapWithHeader(
+                data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+            File.WriteAllBytes(rankPath, envelopedData);
+        }
     }
 
     /// <inheritdoc/>
@@ -408,7 +414,12 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
         if (string.IsNullOrWhiteSpace(filePath))
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
 
-        string fullPath = Path.GetFullPath(filePath);
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
+        // Try per-rank filename first (matching SaveModel's behavior)
+        string rankPath = $"{Path.GetFullPath(filePath)}.rank{Rank}";
+        string fullPath = File.Exists(rankPath) ? rankPath : Path.GetFullPath(filePath);
+
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Model file not found: {fullPath}", fullPath);
 
@@ -417,7 +428,10 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
         // Extract payload from AIMF envelope
         data = ModelFileHeader.ExtractPayload(data);
 
-        Deserialize(data);
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(data);
+        }
     }
 
     /// <inheritdoc/>

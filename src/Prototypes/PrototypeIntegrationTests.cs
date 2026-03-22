@@ -246,7 +246,8 @@ public static class PrototypeIntegrationTests
 
         var weights = model.GetWeights();
         var bias = model.GetBias();
-        Console.WriteLine($"  Learned Weights: [{weights![0]:F2}, {weights[1]:F2}, {weights[2]:F2}]");
+        if (weights is null) throw new InvalidOperationException("Model has not been trained.");
+        Console.WriteLine($"  Learned Weights: [{weights[0]:F2}, {weights[1]:F2}, {weights[2]:F2}]");
         Console.WriteLine($"  Learned Bias: {bias:F2}");
         Console.WriteLine($"  True Weights: [2.00, 3.00, -1.00]");
         Console.WriteLine($"  True Bias: 5.00");

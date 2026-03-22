@@ -418,11 +418,11 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
+        // Synchronize ranks, then delegate to base which handles AIMF envelope + per-rank paths
         Config.CommunicationBackend.Barrier();
         try
         {
-            if (Rank == 0)
-                File.WriteAllBytes(filePath, Serialize());
+            base.SaveModel(filePath);
         }
         finally
         {
@@ -436,8 +436,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         Config.CommunicationBackend.Barrier();
         try
         {
-            var data = File.ReadAllBytes(filePath);
-            Deserialize(data);
+            base.LoadModel(filePath);
         }
         finally
         {

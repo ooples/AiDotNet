@@ -75,11 +75,11 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private readonly Random _random;
-    private Matrix<T>? _trainFeatures;
-    private Matrix<T>? _trainLabels;
+    private Matrix<T> _trainFeatures = new Matrix<T>(0, 0);
+    private Matrix<T> _trainLabels = new Matrix<T>(0, 0);
     private double[]? _priorProbs; // P(H_l = 1)
-    private double[,]? _condProbsPos; // P(E_l = j | H_l = 1) for j = 0..k
-    private double[,]? _condProbsNeg; // P(E_l = j | H_l = 0) for j = 0..k
+    private double[,] _condProbsPos = new double[0, 0]; // P(E_l = j | H_l = 1) for j = 0..k
+    private double[,] _condProbsNeg = new double[0, 0]; // P(E_l = j | H_l = 0) for j = 0..k
 
     /// <summary>
     /// Creates a new ML-kNN classifier.
@@ -184,7 +184,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
                 int neighborCount = 0;
                 foreach (int neighborIdx in neighbors)
                 {
-                    if (NumOps.GreaterThan(_trainLabels![neighborIdx, l], NumOps.FromDouble(0.5)))
+                    if (NumOps.GreaterThan(_trainLabels[neighborIdx, l], NumOps.FromDouble(0.5)))
                     {
                         neighborCount++;
                     }
@@ -224,7 +224,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
 
     private int[] FindKNearestNeighborsInTraining(Matrix<T> query, int queryIdx, int k)
     {
-        int n = _trainFeatures!.Rows;
+        int n = _trainFeatures.Rows;
         var distances = new List<(int Index, double Distance)>();
 
         for (int i = 0; i < n; i++)
@@ -278,7 +278,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         {
             for (int j = 0; j <= k; j++)
             {
-                parameters[idx++] = NumOps.FromDouble(_condProbsPos![l, j]);
+                parameters[idx++] = NumOps.FromDouble(_condProbsPos[l, j]);
             }
         }
 
@@ -286,7 +286,7 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         {
             for (int j = 0; j <= k; j++)
             {
-                parameters[idx++] = NumOps.FromDouble(_condProbsNeg![l, j]);
+                parameters[idx++] = NumOps.FromDouble(_condProbsNeg[l, j]);
             }
         }
 

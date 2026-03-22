@@ -254,6 +254,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     /// <inheritdoc/>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var json = JsonConvert.SerializeObject(options, Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
@@ -261,6 +262,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
             throw new ArgumentNullException(nameof(data));
@@ -293,6 +295,8 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
 
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         var fullPath = Path.GetFullPath(filePath);
         var directory = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
@@ -300,7 +304,10 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             Directory.CreateDirectory(directory);
         }
 
-        File.WriteAllBytes(fullPath, Serialize());
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            File.WriteAllBytes(fullPath, Serialize());
+        }
     }
 
     /// <inheritdoc/>
@@ -311,13 +318,18 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
         }
 
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         var fullPath = Path.GetFullPath(filePath);
         if (!File.Exists(fullPath))
         {
             throw new FileNotFoundException("Model file not found.", fullPath);
         }
 
-        Deserialize(File.ReadAllBytes(fullPath));
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(File.ReadAllBytes(fullPath));
+        }
     }
 
     private Func<Vector<T>, Vector<T>, double> TrainRewardModel(AlignmentFeedbackData<T> feedbackData)

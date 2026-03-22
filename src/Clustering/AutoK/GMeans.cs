@@ -117,7 +117,8 @@ public class GMeans<T> : ClusteringBase<T>
         var currentLabels = new int[n];
         for (int i = 0; i < n; i++)
         {
-            currentLabels[i] = (int)NumOps.ToDouble(kmeans.Labels![i]);
+            var kmeansLabels = kmeans.Labels ?? throw new InvalidOperationException("K-means has not been trained.");
+            currentLabels[i] = (int)NumOps.ToDouble(kmeansLabels[i]);
         }
 
         var currentCenters = new List<T[]>();
@@ -199,7 +200,8 @@ public class GMeans<T> : ClusteringBase<T>
                     // Update labels for points in this cluster
                     for (int i = 0; i < clusterPoints.Count; i++)
                     {
-                        int subLabel = (int)NumOps.ToDouble(subKMeans.Labels![i]);
+                        var subLabels = subKMeans.Labels ?? throw new InvalidOperationException("K-means has not been trained.");
+                        int subLabel = (int)NumOps.ToDouble(subLabels[i]);
                         newLabels[clusterPoints[i]] = newCenters.Count - 2 + subLabel;
                     }
 

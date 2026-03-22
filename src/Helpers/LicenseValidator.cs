@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Models;
@@ -6,20 +7,31 @@ using Newtonsoft.Json;
 namespace AiDotNet.Helpers;
 
 /// <summary>
-/// Client-side license validator that contacts an optional license server
+/// Client-side license validator that contacts the AiDotNet license server (Supabase Edge Function)
 /// and caches the result for an offline grace period.
 /// </summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> When a license has a <see cref="AiDotNetLicenseKey.ServerUrl"/>,
-/// this validator will contact the server to check whether the key is valid, how many seats are
-/// used, and whether it has expired. If the server is unreachable, the validator uses its cached
-/// result until the offline grace period expires.</para>
+/// <para><b>For Beginners:</b> When a license has a <see cref="AiDotNetLicenseKey.ServerUrl"/>
+/// (or uses the default server), this validator contacts the server to check whether the key is valid,
+/// what tier it belongs to, and whether the machine activation limit has been reached.
+/// If the server is unreachable, the validator uses its cached result until the offline grace
+/// period expires.</para>
 ///
-/// <para>When no server URL is configured (offline-only mode), the validator always returns
-/// <see cref="LicenseKeyStatus.Active"/>.</para>
+/// <para>When no server URL is configured (offline-only mode), the validator performs offline
+/// format/signature validation and returns <see cref="LicenseKeyStatus.Active"/> for valid keys.</para>
+///
+/// <para><b>Default server:</b> The default license validation endpoint is
+/// <c>https://yfkqwpgjahoamlgckjib.supabase.co/functions/v1/validate-license</c>.
+/// Set <see cref="AiDotNetLicenseKey.ServerUrl"/> to override.</para>
 /// </remarks>
 internal sealed class LicenseValidator
 {
+    /// <summary>
+    /// Default license validation endpoint (Supabase Edge Function).
+    /// </summary>
+    internal const string DefaultServerUrl =
+        "https://yfkqwpgjahoamlgckjib.supabase.co/functions/v1/validate-license";
+
     private readonly AiDotNetLicenseKey _licenseKey;
     private LicenseValidationResult? _cached;
     private readonly object _cacheLock = new();
@@ -51,13 +63,15 @@ internal sealed class LicenseValidator
     }
 
     /// <summary>
-    /// Validates the license key, contacting the server if configured.
+    /// Validates the license key. Uses the default AiDotNet license server unless
+    /// <see cref="AiDotNetLicenseKey.ServerUrl"/> is set to a custom URL or explicitly
+    /// set to empty string for offline-only mode.
     /// </summary>
     /// <returns>A <see cref="LicenseValidationResult"/> describing the current key status.</returns>
     public LicenseValidationResult Validate()
     {
-        // Offline-only mode: validate key format before accepting
-        if (string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
+        // Offline-only mode: when ServerUrl is explicitly set to empty string
+        if (_licenseKey.ServerUrl is not null && _licenseKey.ServerUrl.Trim().Length == 0)
         {
             var offlineResult = ValidateOffline();
             lock (_cacheLock)
@@ -148,6 +162,14 @@ internal sealed class LicenseValidator
                 message: "License key is empty or missing.");
         }
 
+        // Validate the key format: must be aidn.{id}.{signature}
+        if (!ValidateKeyFormat(_licenseKey.Key))
+        {
+            return new LicenseValidationResult(
+                LicenseKeyStatus.Invalid,
+                message: "License key format is invalid. Expected format: aidn.{id}.{signature}");
+        }
+
         // When an official build key is available, verify the license key's HMAC signature.
         // The key is expected to be in the format: payload.signature (base64url-encoded).
         var buildKey = BuildKeyProvider.GetBuildKey();
@@ -200,6 +222,39 @@ internal sealed class LicenseValidator
     }
 
     /// <summary>
+    /// Validates that the license key has the expected format: aidn.{id}.{signature}
+    /// where id is at least 1 character and signature is at least 1 character,
+    /// and both parts contain only alphanumeric characters.
+    /// </summary>
+    internal static bool ValidateKeyFormat(string key)
+    {
+        var parts = key.Split('.');
+        if (parts.Length != 3 || parts[0] != "aidn" || parts[1].Length == 0 || parts[2].Length == 0)
+        {
+            return false;
+        }
+
+        // Verify both id and signature contain only alphanumeric characters
+        for (int i = 0; i < parts[1].Length; i++)
+        {
+            if (!char.IsLetterOrDigit(parts[1][i]))
+            {
+                return false;
+            }
+        }
+
+        for (int i = 0; i < parts[2].Length; i++)
+        {
+            if (!char.IsLetterOrDigit(parts[2][i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Constant-time comparison to prevent timing attacks on signature verification.
     /// </summary>
     private static bool CryptographicEquals(byte[] a, byte[] b)
@@ -220,17 +275,9 @@ internal sealed class LicenseValidator
 
     private LicenseValidationResult ValidateOnline()
     {
-        string serverUrl = _licenseKey.ServerUrl ?? string.Empty;
-        string url = serverUrl.TrimEnd('/') + "/api/licenses/validate";
+        string url = _licenseKey.ServerUrl ?? DefaultServerUrl;
 
-        var requestBody = new
-        {
-            key = _licenseKey.Key,
-            machineId = _licenseKey.EnableTelemetry ? MachineFingerprint.GetMachineId() : null as string,
-            machineName = _licenseKey.EnableTelemetry ? System.Environment.MachineName : null as string,
-            environment = _licenseKey.Environment
-        };
-
+        var requestBody = BuildRequestBody();
         string json = JsonConvert.SerializeObject(requestBody);
 
 #if NET471
@@ -240,34 +287,77 @@ internal sealed class LicenseValidator
 #endif
     }
 
+    /// <summary>
+    /// Builds the request body for the license validation endpoint.
+    /// Includes machine_id_hash (always) and optional hostname/os_description (when telemetry is enabled).
+    /// </summary>
+    internal Dictionary<string, string?> BuildRequestBody()
+    {
+        var body = new Dictionary<string, string?>
+        {
+            ["license_key"] = _licenseKey.Key,
+            ["machine_id_hash"] = GetMachineIdHash()
+        };
+
+        if (_licenseKey.EnableTelemetry)
+        {
+            try { body["hostname"] = System.Environment.MachineName; }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning("LicenseValidator: unable to read MachineName: " + ex.Message);
+            }
+
+            try
+            {
+                body["os_description"] = System.Runtime.InteropServices.RuntimeInformation.OSDescription;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning("LicenseValidator: unable to read OSDescription: " + ex.Message);
+            }
+        }
+
+        return body;
+    }
+
+    /// <summary>
+    /// Generates a one-way SHA-256 hash of the machine fingerprint for license activation tracking.
+    /// Uses a different salt than telemetry to prevent correlation between the two systems.
+    /// </summary>
+    internal static string GetMachineIdHash()
+    {
+        string rawId = MachineFingerprint.GetMachineId();
+        byte[] bytes = Encoding.UTF8.GetBytes("license-validation:" + rawId);
+
+#if NET471
+        using var sha = SHA256.Create();
+        byte[] hash = sha.ComputeHash(bytes);
+#else
+        byte[] hash = SHA256.HashData(bytes);
+#endif
+
+        var sb = new StringBuilder(hash.Length * 2);
+        for (int i = 0; i < hash.Length; i++)
+        {
+            sb.Append(hash[i].ToString("x2"));
+        }
+
+        return sb.ToString();
+    }
+
 #if !NET471
     private async System.Threading.Tasks.Task<LicenseValidationResult> ValidateOnlineAsync(
         System.Threading.CancellationToken cancellationToken = default)
     {
-        string serverUrl = _licenseKey.ServerUrl ?? string.Empty;
-        string url = serverUrl.TrimEnd('/') + "/api/licenses/validate";
+        string url = _licenseKey.ServerUrl ?? DefaultServerUrl;
 
-        var requestBody = new
-        {
-            key = _licenseKey.Key,
-            machineId = _licenseKey.EnableTelemetry ? MachineFingerprint.GetMachineId() : null as string,
-            machineName = _licenseKey.EnableTelemetry ? System.Environment.MachineName : null as string,
-            environment = _licenseKey.Environment
-        };
-
+        var requestBody = BuildRequestBody();
         string json = JsonConvert.SerializeObject(requestBody);
         var content = new System.Net.Http.StringContent(json, Encoding.UTF8, "application/json");
         var response = await SharedHttpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(false);
         string responseJson = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
-        if (!response.IsSuccessStatusCode)
-        {
-            return new LicenseValidationResult(
-                LicenseKeyStatus.Invalid,
-                message: $"Server returned HTTP {(int)response.StatusCode}.");
-        }
-
-        return ParseResponse(responseJson);
+        return ParseResponse(responseJson, (int)response.StatusCode);
     }
 
     /// <summary>
@@ -277,7 +367,8 @@ internal sealed class LicenseValidator
     public async System.Threading.Tasks.Task<LicenseValidationResult> ValidateAsync(
         System.Threading.CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_licenseKey.ServerUrl))
+        // Offline-only mode: when ServerUrl is explicitly set to empty string
+        if (_licenseKey.ServerUrl is not null && _licenseKey.ServerUrl.Trim().Length == 0)
         {
             var offlineResult = ValidateOffline();
             lock (_cacheLock) { _cached = offlineResult; }
@@ -334,8 +425,17 @@ internal sealed class LicenseValidator
     {
         using var client = new System.Net.WebClient();
         client.Headers[System.Net.HttpRequestHeader.ContentType] = "application/json";
-        string responseJson = client.UploadString(url, "POST", json);
-        return ParseResponse(responseJson);
+        try
+        {
+            string responseJson = client.UploadString(url, "POST", json);
+            return ParseResponse(responseJson, 200);
+        }
+        catch (System.Net.WebException ex) when (ex.Response is System.Net.HttpWebResponse httpResponse)
+        {
+            using var reader = new System.IO.StreamReader(httpResponse.GetResponseStream()!);
+            string errorJson = reader.ReadToEnd();
+            return ParseResponse(errorJson, (int)httpResponse.StatusCode);
+        }
     }
 #else
     private LicenseValidationResult ValidateOnlineModern(string url, string json)
@@ -344,28 +444,27 @@ internal sealed class LicenseValidator
         var response = SharedHttpClient.PostAsync(url, content).ConfigureAwait(false).GetAwaiter().GetResult();
         string responseJson = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
 
-        if (!response.IsSuccessStatusCode)
-        {
-            return new LicenseValidationResult(
-                LicenseKeyStatus.Invalid,
-                message: $"Server returned HTTP {(int)response.StatusCode}.");
-        }
-
-        return ParseResponse(responseJson);
+        return ParseResponse(responseJson, (int)response.StatusCode);
     }
 #endif
 
-    private static LicenseValidationResult ParseResponse(string responseJson)
+    /// <summary>
+    /// Parses the JSON response from the Supabase Edge Function validate-license endpoint.
+    /// The response schema is: { valid: bool, tier?: string, error?: string, message?: string,
+    /// license_id?: string, activation_id?: string, current_activations?: int, max_activations?: int }
+    /// </summary>
+    internal static LicenseValidationResult ParseResponse(string responseJson, int httpStatusCode)
     {
         var obj = JsonConvert.DeserializeAnonymousType(responseJson, new
         {
-            status = string.Empty,
+            valid = false,
             tier = (string?)null,
-            expiresAt = (DateTimeOffset?)null,
-            seatsUsed = 0,
-            seatsMax = (int?)null,
+            error = (string?)null,
             message = (string?)null,
-            decryptionToken = (string?)null
+            license_id = (string?)null,
+            activation_id = (string?)null,
+            current_activations = (int?)null,
+            max_activations = (int?)null
         });
 
         if (obj is null)
@@ -373,38 +472,34 @@ internal sealed class LicenseValidator
             return new LicenseValidationResult(LicenseKeyStatus.Invalid, message: "Invalid server response.");
         }
 
-        if (!Enum.TryParse<LicenseKeyStatus>(obj.status, ignoreCase: true, out var status))
+        // Map the Edge Function response to our LicenseKeyStatus enum
+        LicenseKeyStatus status;
+        if (obj.valid)
         {
-            status = LicenseKeyStatus.Invalid;
+            status = LicenseKeyStatus.Active;
         }
-
-        // Parse decryption token from base64
-        byte[]? tokenBytes = null;
-        if (!string.IsNullOrWhiteSpace(obj.decryptionToken))
+        else
         {
-            try
+            status = obj.error switch
             {
-                byte[] decoded = Convert.FromBase64String(obj.decryptionToken);
-                // Validate minimum key length (at least 16 bytes / 128 bits)
-                if (decoded.Length >= 16)
-                {
-                    tokenBytes = decoded;
-                }
-            }
-            catch (FormatException)
-            {
-                // Ignore malformed token — will use null
-            }
+                "invalid_key" => LicenseKeyStatus.Invalid,
+                "license_expired" => LicenseKeyStatus.Expired,
+                "license_revoked" => LicenseKeyStatus.Revoked,
+                "license_suspended" => LicenseKeyStatus.Revoked,
+                "activation_limit" => LicenseKeyStatus.SeatLimitReached,
+                "server_error" => LicenseKeyStatus.ValidationPending,
+                "missing_fields" => LicenseKeyStatus.Invalid,
+                "method_not_allowed" => LicenseKeyStatus.Invalid,
+                _ => httpStatusCode >= 500 ? LicenseKeyStatus.ValidationPending : LicenseKeyStatus.Invalid
+            };
         }
 
         return new LicenseValidationResult(
             status,
             tier: obj.tier,
-            expiresAt: obj.expiresAt,
-            seatsUsed: obj.seatsUsed,
-            seatsMax: obj.seatsMax,
+            seatsUsed: obj.current_activations ?? 0,
+            seatsMax: obj.max_activations,
             validatedAt: DateTimeOffset.UtcNow,
-            message: obj.message,
-            decryptionToken: tokenBytes);
+            message: obj.message);
     }
 }

@@ -113,22 +113,22 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// <summary>
     /// The symmetrically normalized affinity matrix (Laplacian-style normalization).
     /// </summary>
-    private Matrix<T>? _normalizedAffinity;
+    private Matrix<T> _normalizedAffinity = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The combined feature matrix (labeled + unlabeled) after training.
     /// </summary>
-    private Matrix<T>? _allFeatures;
+    private Matrix<T> _allFeatures = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The label distribution matrix where each row is a sample and each column is a class.
     /// </summary>
-    private Matrix<T>? _labelDistributions;
+    private Matrix<T> _labelDistributions = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The initial label distributions (before propagation).
     /// </summary>
-    private Matrix<T>? _initialDistributions;
+    private Matrix<T> _initialDistributions = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Number of labeled samples stored during training.
@@ -472,7 +472,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private void SpreadLabels()
     {
-        int n = _labelDistributions!.Rows;
+        int n = _labelDistributions.Rows;
         T oneMinusAlpha = NumOps.Subtract(NumOps.One, _alpha);
 
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -481,7 +481,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
             var prevDistributions = CloneMatrix(_labelDistributions);
 
             // Spread: Y = S @ Y
-            var spread = MultiplyMatrices(_normalizedAffinity!, _labelDistributions);
+            var spread = MultiplyMatrices(_normalizedAffinity, _labelDistributions);
 
             // Clamp: Y = alpha * Y_0 + (1 - alpha) * spread
             for (int i = 0; i < n; i++)
@@ -489,7 +489,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
                 for (int c = 0; c < NumClasses; c++)
                 {
                     _labelDistributions[i, c] = NumOps.Add(
-                        NumOps.Multiply(_alpha, _initialDistributions![i, c]),
+                        NumOps.Multiply(_alpha, _initialDistributions[i, c]),
                         NumOps.Multiply(oneMinusAlpha, spread[i, c]));
                 }
             }
@@ -619,7 +619,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private void ExtractPseudoLabels()
     {
-        int numUnlabeled = _labelDistributions!.Rows - _numLabeled;
+        int numUnlabeled = _labelDistributions.Rows - _numLabeled;
         if (numUnlabeled <= 0) return;
 
         PseudoLabels = new Vector<T>(numUnlabeled);
@@ -640,7 +640,8 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
                 }
             }
 
-            PseudoLabels[i] = ClassLabels![bestClass];
+            var classLabels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+            PseudoLabels[i] = classLabels[bestClass];
             PseudoLabelConfidences[i] = bestProb;
         }
     }
@@ -662,7 +663,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (_allFeatures is null || _labelDistributions is null)
+        if (_allFeatures.Rows == 0 || _labelDistributions.Rows == 0)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
@@ -692,7 +693,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private T PredictSingle(Vector<T> sample)
     {
-        int n = _allFeatures!.Rows;
+        int n = _allFeatures.Rows;
         var similarities = new Vector<T>(n);
         T sumSim = NumOps.Zero;
 
@@ -727,7 +728,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
             for (int i = 0; i < n; i++)
             {
                 weightedSum = NumOps.Add(weightedSum,
-                    NumOps.Multiply(similarities[i], _labelDistributions![i, c]));
+                    NumOps.Multiply(similarities[i], _labelDistributions[i, c]));
             }
             distribution[c] = weightedSum;
         }
@@ -743,7 +744,8 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
             }
         }
 
-        return ClassLabels![bestClass];
+        var classLabels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+        return classLabels[bestClass];
     }
 
     /// <summary>
@@ -759,7 +761,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     public Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_allFeatures is null || _labelDistributions is null)
+        if (_allFeatures.Rows == 0 || _labelDistributions.Rows == 0)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
@@ -792,7 +794,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private Vector<T> PredictProbabilitiesSingle(Vector<T> sample)
     {
-        int n = _allFeatures!.Rows;
+        int n = _allFeatures.Rows;
         var similarities = new Vector<T>(n);
         T sumSim = NumOps.Zero;
 
@@ -827,7 +829,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
             for (int i = 0; i < n; i++)
             {
                 weightedSum = NumOps.Add(weightedSum,
-                    NumOps.Multiply(similarities[i], _labelDistributions![i, c]));
+                    NumOps.Multiply(similarities[i], _labelDistributions[i, c]));
             }
             distribution[c] = weightedSum;
         }
@@ -851,7 +853,8 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private int GetClassIndex(T label)
     {
-        for (int i = 0; i < ClassLabels!.Length; i++)
+        if (ClassLabels is null) return -1;
+        for (int i = 0; i < ClassLabels.Length; i++)
         {
             if (NumOps.Compare(ClassLabels[i], label) == 0)
             {

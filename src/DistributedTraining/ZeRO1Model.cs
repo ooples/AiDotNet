@@ -221,8 +221,7 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         Config.CommunicationBackend.Barrier();
         try
         {
-            if (Rank == 0)
-                File.WriteAllBytes(filePath, Serialize());
+            base.SaveModel(filePath);
         }
         finally
         {
@@ -236,8 +235,7 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         Config.CommunicationBackend.Barrier();
         try
         {
-            var data = File.ReadAllBytes(filePath);
-            Deserialize(data);
+            base.LoadModel(filePath);
         }
         finally
         {

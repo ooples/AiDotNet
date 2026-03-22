@@ -731,6 +731,7 @@ public class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
     /// </remarks>
     public override byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using MemoryStream ms = new();
         using BinaryWriter writer = new(ms);
         Serialize(writer);
@@ -748,6 +749,7 @@ public class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
     /// </remarks>
     public override void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         using MemoryStream ms = new(data);
         using BinaryReader reader = new(ms);
         ExpressionTree<T, TInput, TOutput> deserializedTree = Deserialize(reader);

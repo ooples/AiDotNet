@@ -61,12 +61,12 @@ public class TLearner<T> : CausalModelBase<T>
     /// <summary>
     /// Weights for the treatment model.
     /// </summary>
-    private Vector<T>? _weightsTreated;
+    private Vector<T> _weightsTreated = new Vector<T>(0);
 
     /// <summary>
     /// Weights for the control model.
     /// </summary>
-    private Vector<T>? _weightsControl;
+    private Vector<T> _weightsControl = new Vector<T>(0);
 
     /// <summary>
     /// Bias for the treatment model.
@@ -206,12 +206,12 @@ public class TLearner<T> : CausalModelBase<T>
             // Predict with treatment model
             double predTreated = NumOps.ToDouble(_biasTreated);
             for (int j = 0; j < features.Columns; j++)
-                predTreated += NumOps.ToDouble(_weightsTreated![j]) * NumOps.ToDouble(features[i, j]);
+                predTreated += NumOps.ToDouble(_weightsTreated[j]) * NumOps.ToDouble(features[i, j]);
 
             // Predict with control model
             double predControl = NumOps.ToDouble(_biasControl);
             for (int j = 0; j < features.Columns; j++)
-                predControl += NumOps.ToDouble(_weightsControl![j]) * NumOps.ToDouble(features[i, j]);
+                predControl += NumOps.ToDouble(_weightsControl[j]) * NumOps.ToDouble(features[i, j]);
 
             effects[i] = NumOps.FromDouble(predTreated - predControl);
         }
@@ -231,7 +231,7 @@ public class TLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_biasTreated);
             for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weightsTreated![j]) * NumOps.ToDouble(features[i, j]);
+                pred += NumOps.ToDouble(_weightsTreated[j]) * NumOps.ToDouble(features[i, j]);
             result[i] = NumOps.FromDouble(pred);
         }
         return result;
@@ -249,7 +249,7 @@ public class TLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_biasControl);
             for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weightsControl![j]) * NumOps.ToDouble(features[i, j]);
+                pred += NumOps.ToDouble(_weightsControl[j]) * NumOps.ToDouble(features[i, j]);
             result[i] = NumOps.FromDouble(pred);
         }
         return result;
