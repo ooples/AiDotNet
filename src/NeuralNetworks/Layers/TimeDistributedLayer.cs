@@ -128,8 +128,9 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
     public override void SetParameters(Vector<T> parameters) => _innerLayer.SetParameters(parameters);
-    public override Vector<T> GetParameterGradients() => _innerLayer.GetParameterGradients();
-    public override void ClearGradients() { base.ClearGradients(); _innerLayer.ClearGradients(); }
+    public override Vector<T> GetParameterGradients() =>
+        _accumulatedGradients ?? _innerLayer.GetParameterGradients();
+    public override void ClearGradients() { base.ClearGradients(); _innerLayer.ClearGradients(); _accumulatedGradients = null; }
 
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
@@ -510,6 +511,8 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// through each time step and delegating to the inner layer's backward pass.
     /// </para>
     /// </remarks>
+    private Vector<T>? _accumulatedGradients;
+
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
@@ -541,12 +544,35 @@ public class TimeDistributedLayer<T> : LayerBase<T>
             outputGrad = outputGrad.ElementwiseMultiply(VectorActivation.Derivative(lastOutput));
         }
 
+        // Accumulate inner layer gradients across timesteps
+        _accumulatedGradients = null;
+        _innerLayer.ClearGradients();
+
         for (int t = 0; t < timeSteps; t++)
         {
             var stepOutputGradient = outputGrad.Slice(1, t, t + 1);
             stepOutputGradient = SqueezeAxis(stepOutputGradient, 1);
+
+            // Re-forward this timestep to set inner layer's cached input
+            var stepInput = _lastInput.Slice(1, t, t + 1);
+            stepInput = SqueezeAxis(stepInput, 1);
+            _innerLayer.Forward(stepInput);
+
+            _innerLayer.ClearGradients();
             var stepInputGradient = _innerLayer.Backward(stepOutputGradient);
             inputGradient.SetSlice(1, t, stepInputGradient);
+
+            // Accumulate weight gradients
+            var stepGrads = _innerLayer.GetParameterGradients();
+            if (_accumulatedGradients == null)
+            {
+                _accumulatedGradients = stepGrads.Clone();
+            }
+            else
+            {
+                for (int i = 0; i < _accumulatedGradients.Length; i++)
+                    _accumulatedGradients[i] = NumOps.Add(_accumulatedGradients[i], stepGrads[i]);
+            }
         }
 
         if (_originalInputShape != null && _originalInputShape.Length == 2)
