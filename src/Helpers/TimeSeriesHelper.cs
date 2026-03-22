@@ -57,8 +57,34 @@ public static class TimeSeriesHelper<T>
     /// </remarks>
     public static Vector<T> EstimateARCoefficients(Vector<T> y, int p, MatrixDecompositionType decompositionType)
     {
-        Matrix<T> X = new Matrix<T>(y.Length - p, p);
-        Vector<T> Y = new Vector<T>(y.Length - p);
+        int nRows = y.Length - p;
+
+        // Under-determined system: not enough data for reliable estimation.
+        // Fall back to simple correlation-based estimation.
+        if (nRows < p)
+        {
+            var fallback = new Vector<T>(p);
+            // Use simple lag-1 autocorrelation for the first coefficient, zeros for rest
+            if (nRows > 0 && y.Length > 1)
+            {
+                var numOps = MathHelper.GetNumericOperations<T>();
+                T sum = numOps.Zero;
+                T sumSq = numOps.Zero;
+                for (int i = 1; i < y.Length; i++)
+                {
+                    sum = numOps.Add(sum, numOps.Multiply(y[i], y[i - 1]));
+                    sumSq = numOps.Add(sumSq, numOps.Multiply(y[i - 1], y[i - 1]));
+                }
+                if (!numOps.Equals(sumSq, numOps.Zero))
+                {
+                    fallback[0] = numOps.Divide(sum, sumSq);
+                }
+            }
+            return fallback;
+        }
+
+        Matrix<T> X = new Matrix<T>(nRows, p);
+        Vector<T> Y = new Vector<T>(nRows);
 
         for (int i = p; i < y.Length; i++)
         {

@@ -350,8 +350,9 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
             var memberFeatures = member.SelectedFeatures ?? throw new InvalidOperationException("SelectedFeatures has not been initialized.");
             var memberTree = member.Tree ?? throw new InvalidOperationException("Tree has not been initialized.");
 
-            // Cold trees (not yet trained) get uniform weight to avoid empty-vote fallback
-            bool isCold = !memberTree.IsWarm;
+            // Skip cold trees (not yet trained) — they can't predict meaningfully
+            if (!memberTree.IsWarm)
+                continue;
 
             var selectedFeatures = ExtractSelectedFeatures(features, memberFeatures);
             var treePrediction = memberTree.Predict(ConvertToMatrix(selectedFeatures));
@@ -359,8 +360,7 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
             int classIdx = GetClassIndex(treePrediction[0]);
             if (classIdx >= 0)
             {
-                // Cold trees get uniform weight (1.0) to avoid label-order fallback
-                double weight = isCold ? 1.0 : member.AccuracyEstimate;
+                double weight = member.AccuracyEstimate;
                 if (!voteWeights.ContainsKey(classIdx))
                 {
                     voteWeights[classIdx] = 0;

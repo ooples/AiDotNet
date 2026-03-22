@@ -421,10 +421,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         if (processed > 0)
         {
             var sampleCount = NumOps.FromDouble(processed);
-            for (int i = 0; i < paramCount; i++)
-            {
-                omega[i] = NumOps.Divide(omega[i], sampleCount);
-            }
+            omega = (Vector<T>)Engine.Divide(omega, sampleCount);
         }
 
         return omega;
@@ -619,10 +616,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         if (totalCount > 0)
         {
             var divisor = NumOps.FromDouble(totalCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                omega[i] = NumOps.Divide(omega[i], divisor);
-            }
+            omega = (Vector<T>)Engine.Divide(omega, divisor);
         }
 
         return omega;
@@ -704,10 +698,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         if (_importanceInputs.Count > 0)
         {
             var divisor = NumOps.FromDouble(_importanceInputs.Count);
-            for (int i = 0; i < paramCount; i++)
-            {
-                omega[i] = NumOps.Divide(omega[i], divisor);
-            }
+            omega = (Vector<T>)Engine.Divide(omega, divisor);
         }
 
         return omega;
@@ -870,15 +861,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     private Vector<T> ComputeOutputNormGradient(Vector<T> output)
     {
         // d||y||²/dy = 2y
-        var gradient = new Vector<T>(output.Length);
-        var two = NumOps.FromDouble(2.0);
-
-        for (int i = 0; i < output.Length; i++)
-        {
-            gradient[i] = NumOps.Multiply(two, output[i]);
-        }
-
-        return gradient;
+        return Engine.Multiply(output, NumOps.FromDouble(2.0));
     }
 
     /// <summary>
@@ -936,10 +919,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         switch (_accumulationMode)
         {
             case ImportanceAccumulationMode.Sum:
-                for (int i = 0; i < _omega.Length; i++)
-                {
-                    _omega[i] = NumOps.Add(_omega[i], taskImportance[i]);
-                }
+                _omega = Engine.Add(_omega, taskImportance);
                 break;
 
             case ImportanceAccumulationMode.Max:
@@ -980,11 +960,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         if (maxDouble < 1e-10)
             return importance;
 
-        var normalized = new Vector<T>(importance.Length);
-        for (int i = 0; i < importance.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(importance[i], maxVal);
-        }
+        var normalized = (Vector<T>)Engine.Divide(importance, maxVal);
         return normalized;
     }
 

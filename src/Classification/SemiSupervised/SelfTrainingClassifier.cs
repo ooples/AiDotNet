@@ -44,6 +44,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// - Triguero et al. (2015). "Self-labeled techniques for semi-supervised learning"
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Use AiModelBuilder facade for selftrainingclassifier classification

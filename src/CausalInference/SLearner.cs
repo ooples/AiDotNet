@@ -42,6 +42,7 @@ namespace AiDotNet.CausalInference;
 /// <para><b>Reference:</b> Künzel et al., "Metalearners for Estimating Heterogeneous Treatment Effects" (2019)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// var sLearner = new SLearner&lt;double&gt;(maxIterations: 100, learningRate: 0.1);

@@ -104,7 +104,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                 features[idx, 3] = cov[j, j];
             }
 
-        double prevHW = (double)d; // initial h(W) = tr(I) - d = 0, but use d as conservative start
+        double prevHW = 0; // Initial h(W) = 0 (no edges yet = acyclic)
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
             // Compute Q, K, V for each pair
@@ -132,6 +132,11 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             var attended = new Matrix<T>(numPairs, headDim);
             var attnWeights = new Matrix<T>(numPairs, d); // attention weights for backprop
 
+            // Pre-allocate reusable vectors outside the attention loop
+            var scores = new Vector<T>(d);
+            var qRow = new Vector<T>(headDim);
+            var kRow = new Vector<T>(headDim);
+
             for (int j = 0; j < d; j++)
             {
                 // Pairs targeting j: indices i*d+j for i in [0..d)
@@ -142,14 +147,11 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
 
                     // Compute attention scores against all keys for target j
                     T maxScore = NumOps.FromDouble(-1e10);
-                    var scores = new Vector<T>(d);
                     // Extract Q row for this query
-                    var qRow = new Vector<T>(headDim);
                     for (int k = 0; k < headDim; k++) qRow[k] = Q[qIdx, k];
                     for (int ki = 0; ki < d; ki++)
                     {
                         int kIdx = ki * d + j;
-                        var kRow = new Vector<T>(headDim);
                         for (int k = 0; k < headDim; k++) kRow[k] = K[kIdx, k];
                         T score = NumOps.Multiply(Engine.DotProduct(qRow, kRow), headScale);
                         scores[ki] = score;
@@ -255,8 +257,9 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     // NOTEARS acyclicity gradient: (α + ρ·h(W)) · ∂h/∂W_ij
                     // where ∂h/∂W_ij = 2·W_ij·[e^{W⊙W}]_ji (Zheng et al. 2018)
                     // Approximation: use 2·pij as proxy for ∂h/∂W_ij (ignores matrix exponential)
-                    T acycGrad2 = NumOps.Multiply(
-                        NumOps.Add(alpha, NumOps.Multiply(rho, NumOps.FromDouble(prevHW))),
+                    // Use consistent acyclicity formula: (alpha + rho * pij) * 2 * pij
+                    // (matches the main path at line 213, not prevHW)
+                    T acycGrad2 = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
                         NumOps.Multiply(NumOps.FromDouble(2), pij));
                     T totalGrad2 = NumOps.Add(dataGrad2, acycGrad2);
                     T sigDeriv2 = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
@@ -317,7 +320,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
             {
                 T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
-                T rhoMax = NumOps.FromDouble(1e+16);
+                T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
                 rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
             }
         }

@@ -22,10 +22,10 @@ namespace AiDotNet.Attributes;
 /// public class AiModelResult&lt;T, TInput, TOutput&gt; : IFullModel&lt;T, TInput, TOutput&gt; { }
 /// </code>
 /// </para>
-/// </remarks>
-/// <remarks>
+/// <para>
 /// This attribute is intentionally public so that external consumers extending the library
 /// can exempt their own IFullModel implementations from metadata validation diagnostics.
+/// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class ModelMetadataExemptAttribute : Attribute

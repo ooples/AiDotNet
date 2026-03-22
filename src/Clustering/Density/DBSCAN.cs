@@ -73,6 +73,9 @@ public class DBSCAN<T> : ClusteringBase<T>
     private double[]? _featureMeans;
     private double[]? _featureStds;
 
+    // Cluster centers in normalized space for Predict comparison
+    private Matrix<T>? _normalizedClusterCenters;
+
     /// <summary>
     /// Noise label (points not assigned to any cluster).
     /// </summary>
@@ -154,6 +157,14 @@ public class DBSCAN<T> : ClusteringBase<T>
             for (int i = 0; i < ClusterCenters.Rows; i++)
                 for (int j = 0; j < ClusterCenters.Columns; j++)
                     clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        if (_normalizedClusterCenters is not null)
+        {
+            clone._normalizedClusterCenters = new Matrix<T>(_normalizedClusterCenters.Rows, _normalizedClusterCenters.Columns);
+            for (int i = 0; i < _normalizedClusterCenters.Rows; i++)
+                for (int j = 0; j < _normalizedClusterCenters.Columns; j++)
+                    clone._normalizedClusterCenters[i, j] = _normalizedClusterCenters[i, j];
         }
 
         clone.NumClusters = NumClusters;
@@ -319,10 +330,16 @@ public class DBSCAN<T> : ClusteringBase<T>
         {
             ComputeClusterCenters(x, labels, currentCluster);
 
-            // De-normalize cluster centers back to original space so users get
-            // meaningful values (not normalized values that only make sense internally).
+            // Save normalized centers for Predict (where input is also normalized)
             if (_featureMeans is not null && _featureStds is not null && ClusterCenters is not null)
             {
+                _normalizedClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+                for (int k = 0; k < ClusterCenters.Rows; k++)
+                    for (int j = 0; j < ClusterCenters.Columns; j++)
+                        _normalizedClusterCenters[k, j] = ClusterCenters[k, j];
+
+                // De-normalize cluster centers back to original space so users get
+                // meaningful values (not normalized values that only make sense internally).
                 for (int k = 0; k < ClusterCenters.Rows; k++)
                     for (int j = 0; j < ClusterCenters.Columns; j++)
                     {
@@ -511,11 +528,14 @@ public class DBSCAN<T> : ClusteringBase<T>
             double minDist = double.MaxValue;
             int nearestCluster = NoiseLabel;
 
-            if (ClusterCenters is not null)
+            // Use normalized centers when input was normalized, to ensure
+            // distances are computed in the same space
+            var centersForPrediction = _normalizedClusterCenters ?? ClusterCenters;
+            if (centersForPrediction is not null)
             {
                 for (int k = 0; k < NumClusters; k++)
                 {
-                    var center = GetRow(ClusterCenters, k);
+                    var center = GetRow(centersForPrediction, k);
                     T dist = distanceMetric.Compute(point, center);
                     double distDouble = NumOps.ToDouble(dist);
 

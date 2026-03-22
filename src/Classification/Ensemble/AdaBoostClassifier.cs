@@ -34,6 +34,7 @@ namespace AiDotNet.Classification.Ensemble;
 /// This creates a powerful classifier from many weak ones.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create AdaBoost classifier that combines weak learners

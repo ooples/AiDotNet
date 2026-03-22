@@ -129,17 +129,46 @@ public class SimpleRegression<T> : RegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
+        if (x.Columns != 1)
+        {
+            throw new Exceptions.InvalidInputDimensionException(
+                $"SimpleRegression requires exactly 1 feature column, but got {x.Columns}. " +
+                "Use MultipleRegression for multi-feature input.");
+        }
+
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS for all data (handles both single and multi-feature input)
-        var xWithInt = x.AddConstantColumn(NumOps.One);
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var solution = SolveSystem(xTx, xTy);
-        Intercept = solution[0];
-        Coefficients = solution.Slice(1, x.Columns);
+        if (Options.UseIntercept)
+        {
+            // OLS with intercept: augment X with a constant column
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            // Scale-adaptive regularization: use relative epsilon based on diagonal magnitude
+            for (int i = 0; i < xTx.Rows; i++)
+            {
+                double diagVal = Math.Abs(NumOps.ToDouble(xTx[i, i]));
+                double eps = Math.Max(diagVal * 1e-12, 1e-30);
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(eps));
+            }
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+        }
+        else
+        {
+            // OLS without intercept: slope = (X'X)^(-1) X'y
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+            {
+                double diagVal = Math.Abs(NumOps.ToDouble(xTx[i, i]));
+                double eps = Math.Max(diagVal * 1e-12, 1e-30);
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(eps));
+            }
+            Coefficients = SolveSystem(xTx, xTy);
+            Intercept = NumOps.Zero;
+        }
     }
 
     /// <summary>

@@ -161,17 +161,17 @@ else
 
 ## Implementation Plan (Ordered by Priority)
 
-### Phase 1: Missing IEngine "Into" Methods (AiDotNet.Tensors)
-Add SwishInto/InPlace, GELUInto/InPlace, TanhInto/InPlace, MishInto/InPlace, MatMulInto, ConcatInto, TransposeInto to IEngine, CpuEngine, DirectGpuTensorEngine.
+### Phase 1: IEngine "Into" Methods (AiDotNet.Tensors) — COMPLETE
+Added Into/InPlace variants for all major operations to IEngine, CpuEngine, and DirectGpuTensorEngine.
 
-### Phase 2: WorkspaceCodeGenerator (AiDotNet)
-New code generator that emits IEngine calls with workspace slots. Handles all current IR operations via their Into/InPlace equivalents.
+### Phase 2: WorkspaceCodeGenerator (AiDotNet) — COMPLETE
+Emits IEngine calls with workspace slots for 63 IR operations via Into/InPlace equivalents.
 
-### Phase 3: True Fused Kernels (AiDotNet.Tensors)
+### Phase 3: True Fused Kernels (AiDotNet.Tensors) — FUTURE
 GroupNormSwishInto, AddGroupNormInto — single-pass kernels that eliminate intermediates.
 
-### Phase 4: Integration
-Wire CompileForward into NeuralNetworkBase and UNetNoisePredictor. Add IsCompiled flag and automatic fallback.
+### Phase 4: Integration — COMPLETE
+CompileWithWorkspace wired into JitCompiler and UNetNoisePredictor. Automatic fallback to interpreted path.
 
 ### Phase 5: Benchmarks
 BenchmarkDotNet project comparing:
@@ -180,10 +180,10 @@ BenchmarkDotNet project comparing:
 - Operation-level comparisons (Conv2D, GroupNorm, Attention)
 - Memory usage comparisons
 
-## Gaps in Current Code (Status: Resolved in PR #1018)
+## Implementation Status (PR #1018)
 
-1. **CodeGenerator fused ops**: Generate the SAME allocating calls as unfused — zero benefit
-2. **CompileForward**: Chains ExportComputationGraph through layers but still targets TensorOperations — zero benefit
-3. ~~**UNet CompileForward**: Exports graph but doesn't handle skip connections~~ � FIXED: Wired to CompileWithWorkspace
-4. **FusedGroupNormActivationConv2DOp code gen**: Calls GroupNorm then Swish then Conv2D separately — no fusion
-5. **FusedAddGroupNormOp code gen**: Calls Add then GroupNorm separately — no fusion
+1. **WorkspaceCodeGenerator**: Supports 63 IR ops with Into/InPlace calls targeting TensorWorkspace slots
+2. **CompileWithWorkspace**: Wired into JitCompiler, generates workspace-backed compiled functions
+3. **UNet CompileForward**: Wired to CompileWithWorkspace with skip connection support
+4. **Fused ops (future)**: FusedGroupNormActivationConv2DOp and FusedAddGroupNormOp currently decompose into sequential calls; true kernel fusion requires new IEngine methods (GroupNormSwishInto, AddGroupNormInto)
+5. **Integration tests**: WorkspaceCompilationTests validate Add, Multiply, ReLU, Sigmoid, MatMul, and chained ops

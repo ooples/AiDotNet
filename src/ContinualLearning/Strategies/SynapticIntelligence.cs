@@ -503,10 +503,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         switch (_accumulationMode)
         {
             case ImportanceAccumulationMode.Sum:
-                for (int i = 0; i < _omega.Length; i++)
-                {
-                    _omega[i] = NumOps.Add(_omega[i], taskImportance[i]);
-                }
+                _omega = Engine.Add(_omega, taskImportance);
                 break;
 
             case ImportanceAccumulationMode.Max:
@@ -548,12 +545,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         if (maxDouble < 1e-10)
             return importance;
 
-        var normalized = new Vector<T>(importance.Length);
-        for (int i = 0; i < importance.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(importance[i], maxVal);
-        }
-        return normalized;
+        return (Vector<T>)Engine.Divide(importance, maxVal);
     }
 
     /// <summary>

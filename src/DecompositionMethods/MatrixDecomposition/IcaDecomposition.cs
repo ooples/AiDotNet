@@ -571,11 +571,7 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
         // We approximate: x ~= unmixing_matrix * whitening_matrix^T * (b - mean)
 
         // Center b
-        Vector<T> bCentered = new Vector<T>(b.Length);
-        for (int i = 0; i < b.Length; i++)
-        {
-            bCentered[i] = NumOps.Subtract(b[i], Mean[i]);
-        }
+        Vector<T> bCentered = Engine.Subtract(b, Mean);
 
         // Apply whitening and unmixing
         Vector<T> whitened = WhiteningMatrix.Multiply(bCentered);

@@ -99,25 +99,27 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
                     mask[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
 
+            // Pre-allocate reusable vectors outside the sample/target loops
+            var xMasked = new Vector<T>(d);
+            var hidden = new Vector<T>(h);
+            var whCol = new Vector<T>(d);
+            var woCol = new Vector<T>(h);
+
             for (int s = 0; s < n; s++)
             {
                 for (int j = 0; j < d; j++)
                 {
                     // Masked input: x_masked[i] = x[i] * mask[i,j]
-                    var xMasked = new Vector<T>(d);
                     for (int i = 0; i < d; i++)
                         xMasked[i] = NumOps.Multiply(data[s, i], mask[i, j]);
 
-                    var hidden = new Vector<T>(h);
                     for (int k = 0; k < h; k++)
                     {
-                        var whCol = new Vector<T>(d);
                         for (int i = 0; i < d; i++) whCol[i] = Wh[i, k];
                         double sv = NumOps.ToDouble(Engine.DotProduct(xMasked, whCol));
                         hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                     }
 
-                    var woCol = new Vector<T>(h);
                     for (int k = 0; k < h; k++) woCol[k] = Wo[k, 0];
                     T pred = Engine.DotProduct(hidden, woCol);
 

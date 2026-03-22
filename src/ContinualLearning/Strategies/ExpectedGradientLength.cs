@@ -329,12 +329,7 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
         if (Convert.ToDouble(maxVal) < 1e-10)
             return importance;
 
-        var normalized = new Vector<T>(importance.Length);
-        for (int i = 0; i < importance.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(importance[i], maxVal);
-        }
-        return normalized;
+        return (Vector<T>)Engine.Divide(importance, maxVal);
     }
 
     /// <inheritdoc/>

@@ -142,6 +142,10 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
 
         T invN = NumOps.FromDouble(1.0 / n);
 
+        // Pre-allocate reusable buffers for ForwardMLP
+        var hiddenBuf = new Vector<T>(h);
+        var woColBuf = new Vector<T>(h);
+
         for (int step = 0; step < MaxEpochs; step++)
         {
             var gWh = new Matrix<T>(2, h);
@@ -150,7 +154,7 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
             for (int s = 0; s < n; s++)
             {
                 T noise = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-                var (pred, hidden) = ForwardMLP(data[s, source], noise, wh, wo, h);
+                var (pred, hidden) = ForwardMLP(data[s, source], noise, wh, wo, h, hiddenBuf, woColBuf);
 
                 T residual = NumOps.Multiply(NumOps.Subtract(pred, data[s, target]), invN);
 
@@ -180,7 +184,7 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
         for (int s = 0; s < n; s++)
         {
             T noise = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-            var (pred, _) = ForwardMLP(data[s, source], noise, wh, wo, h);
+            var (pred, _) = ForwardMLP(data[s, source], noise, wh, wo, h, hiddenBuf, woColBuf);
             predictions[s] = pred;
             meanPred = NumOps.Add(meanPred, pred);
             meanActual = NumOps.Add(meanActual, data[s, target]);
@@ -205,22 +209,22 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
 
     /// <summary>
     /// Forward pass through the 2-input MLP: sigmoid hidden layer, linear output.
+    /// Uses pre-allocated buffers to avoid per-call allocations.
     /// </summary>
-    private (T prediction, Vector<T> hidden) ForwardMLP(T sourceVal, T noise, Matrix<T> wh, Matrix<T> wo, int h)
+    private (T prediction, Vector<T> hidden) ForwardMLP(T sourceVal, T noise, Matrix<T> wh, Matrix<T> wo, int h,
+        Vector<T> hiddenBuf, Vector<T> woColBuf)
     {
-        var hidden = new Vector<T>(h);
         for (int k = 0; k < h; k++)
         {
             T z = NumOps.Add(NumOps.Multiply(sourceVal, wh[0, k]),
                              NumOps.Multiply(noise, wh[1, k]));
             double sv = NumOps.ToDouble(z);
-            hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
+            hiddenBuf[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
         }
 
-        var woCol = new Vector<T>(h);
-        for (int k = 0; k < h; k++) woCol[k] = wo[k, 0];
-        T pred = Engine.DotProduct(hidden, woCol);
+        for (int k = 0; k < h; k++) woColBuf[k] = wo[k, 0];
+        T pred = Engine.DotProduct(hiddenBuf, woColBuf);
 
-        return (pred, hidden);
+        return (pred, hiddenBuf);
     }
 }

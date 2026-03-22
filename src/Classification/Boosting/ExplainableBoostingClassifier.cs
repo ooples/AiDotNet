@@ -39,6 +39,7 @@ namespace AiDotNet.Classification.Boosting;
 /// Pneumonia Risk and Hospital 30-day Readmission" (2012).
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create EBM classifier for interpretable predictions

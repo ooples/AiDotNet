@@ -49,6 +49,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// with Feature Fusion and Keyword-to-Caption Augmentation.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create a CLAP model for audio-text alignment

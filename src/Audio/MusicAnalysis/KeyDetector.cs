@@ -32,7 +32,6 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// var detector = new KeyDetector&lt;float&gt;();
 /// var key = detector.Detect(audioTensor);
 /// // Result is available in the returned value
-/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

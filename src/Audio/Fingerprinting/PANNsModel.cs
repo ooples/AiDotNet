@@ -48,6 +48,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// for Audio Pattern Recognition.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create a PANNs model for audio pattern recognition

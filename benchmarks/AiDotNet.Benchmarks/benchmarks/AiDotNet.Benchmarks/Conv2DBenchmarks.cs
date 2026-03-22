@@ -9,7 +9,7 @@ namespace AiDotNet.Benchmarks;
 /// Benchmarks Conv2D at various channel counts and spatial sizes.
 /// Compares allocating Conv2D vs zero-allocation Conv2DInto.
 /// </summary>
-[SimpleJob(RuntimeMoniker.Net90)]
+[SimpleJob(RuntimeMoniker.Net10_0)]
 [MemoryDiagnoser]
 [RankColumn]
 public class Conv2DBenchmarks

@@ -100,6 +100,9 @@ internal static class AutoMLTabularModelFactory<T>
 
     public static IFullModel<T, Matrix<T>, Vector<T>> Create(Type modelType, IReadOnlyDictionary<string, object> parameters)
     {
+        if (modelType is null)
+            throw new ArgumentNullException(nameof(modelType));
+
         var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
 
         if (_factories.TryGetValue(lookupType, out var factory))

@@ -212,10 +212,7 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
 
         if (!NumOps.Equals(sum, NumOps.Zero))
         {
-            for (int i = 0; i < VectorSize; i++)
-            {
-                vector[i] = NumOps.Divide(vector[i], sum);
-            }
+            vector = (Vector<T>)Engine.Divide(vector, sum);
         }
 
         return vector;

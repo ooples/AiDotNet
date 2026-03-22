@@ -388,11 +388,7 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Output error: d_output = reconstruction - input (MSE derivative)
-        var outputError = new Vector<T>(reconstruction.Length);
-        for (int i = 0; i < reconstruction.Length; i++)
-        {
-            outputError[i] = NumOps.Subtract(reconstruction[i], input[i]);
-        }
+        var outputError = Engine.Subtract(reconstruction, input);
 
         // Decoder gradients
         for (int i = 0; i < decoderWeights.Rows; i++)
@@ -473,13 +469,8 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
 
     private T ComputeReconstructionError(Vector<T> original, Vector<T> reconstruction)
     {
-        // Mean Squared Error using Engine.DotProduct
-        var diff = new Vector<T>(original.Length);
-        for (int i = 0; i < original.Length; i++)
-        {
-            diff[i] = NumOps.Subtract(original[i], reconstruction[i]);
-        }
-
+        // Mean Squared Error using Engine.Subtract + Engine.DotProduct
+        var diff = Engine.Subtract(original, reconstruction);
         return NumOps.Divide(Engine.DotProduct(diff, diff), NumOps.FromDouble(original.Length));
     }
 

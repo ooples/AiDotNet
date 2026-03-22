@@ -341,9 +341,7 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
         var scores = DecisionFunctionBatch(input);
 
         // Compute error vector once: error = scores - target
-        var errors = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
-            errors[i] = NumOps.Subtract(scores[i], target[i]);
+        var errors = Engine.Subtract(scores, target);
 
         // Gradient: grad[j] = mean(error · x[:,j]) using Engine.DotProduct
         T invN = NumOps.FromDouble(1.0 / input.Rows);

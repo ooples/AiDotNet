@@ -89,11 +89,7 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
         }
 
         // Compute difference vector: d = a - b
-        var diff = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            diff[i] = NumOps.Subtract(a[i], b[i]);
-        }
+        var diff = Engine.Subtract(a, b);
 
         // Compute Σ^(-1) × (a - b)
         var temp = MultiplyMatrixVector(_inverseCovarianceMatrix, diff);

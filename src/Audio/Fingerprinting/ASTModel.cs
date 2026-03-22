@@ -55,6 +55,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// Reference: Gong, Y., Chung, Y. A., &amp; Glass, J. (2021). AST: Audio Spectrogram Transformer.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create an AST model for audio classification

@@ -58,6 +58,7 @@ public class OPTICS<T> : ClusteringBase<T>
     private readonly OPTICSOptions<T> _options;
     private double[]? _featureMeans;
     private double[]? _featureStds;
+    private Matrix<T>? _normalizedClusterCenters;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -136,6 +137,13 @@ public class OPTICS<T> : ClusteringBase<T>
         clone._predecessor = _predecessor?.ToArray() ?? Array.Empty<int>();
         clone._featureMeans = _featureMeans?.ToArray();
         clone._featureStds = _featureStds?.ToArray();
+        if (_normalizedClusterCenters is not null)
+        {
+            clone._normalizedClusterCenters = new Matrix<T>(_normalizedClusterCenters.Rows, _normalizedClusterCenters.Columns);
+            for (int i = 0; i < _normalizedClusterCenters.Rows; i++)
+                for (int j = 0; j < _normalizedClusterCenters.Columns; j++)
+                    clone._normalizedClusterCenters[i, j] = _normalizedClusterCenters[i, j];
+        }
         clone.NumClusters = NumClusters;
         clone.NumFeatures = NumFeatures;
         clone.IsTrained = IsTrained;
@@ -281,9 +289,15 @@ public class OPTICS<T> : ClusteringBase<T>
         // Compute cluster centers
         ComputeClusterCenters(x);
 
-        // De-normalize cluster centers back to original space
+        // Save normalized centers for Predict (where input is also normalized)
         if (_featureMeans is not null && _featureStds is not null && ClusterCenters is not null)
         {
+            _normalizedClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int k = 0; k < ClusterCenters.Rows; k++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    _normalizedClusterCenters[k, j] = ClusterCenters[k, j];
+
+            // De-normalize cluster centers back to original space for user consumption
             for (int k = 0; k < ClusterCenters.Rows; k++)
                 for (int j = 0; j < ClusterCenters.Columns; j++)
                 {
@@ -622,11 +636,13 @@ public class OPTICS<T> : ClusteringBase<T>
             T minDist = NumOps.MaxValue;
             int nearestCluster = NoiseLabel;
 
-            if (ClusterCenters is not null)
+            // Use normalized centers when input was normalized
+            var centersForPrediction = _normalizedClusterCenters ?? ClusterCenters;
+            if (centersForPrediction is not null)
             {
                 for (int k = 0; k < NumClusters; k++)
                 {
-                    var center = GetRow(ClusterCenters, k);
+                    var center = GetRow(centersForPrediction, k);
                     T dist = metric.Compute(point, center);
 
                     if (NumOps.LessThan(dist, minDist))

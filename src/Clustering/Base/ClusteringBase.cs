@@ -719,9 +719,9 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
             double range = colMax - colMin;
             if (range > maxRange) maxRange = range;
         }
-        // Merge degenerate clusters: when cluster centers are closer than half the maximum
-        // feature range, they represent the same region of the data space.
-        double mergeThreshold = Math.Max(1e-6, maxRange * 0.5);
+        // Merge degenerate clusters: when cluster centers are closer than 10% of the maximum
+        // feature range, they likely represent the same region of the data space.
+        double mergeThreshold = Math.Max(1e-6, maxRange * 0.1);
 
         // First: identify which clusters actually have data points
         var clusterPopulations = new int[NumClusters];
@@ -736,18 +736,23 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
         // and merge nearby populated clusters
         var mergedId = Enumerable.Range(0, NumClusters).ToArray();
 
-        // Merge empty clusters into the first populated cluster
+        // Find first populated cluster
         int firstPopulated = -1;
         for (int c = 0; c < NumClusters; c++)
         {
             if (clusterPopulations[c] > 0)
             {
-                if (firstPopulated < 0) firstPopulated = c;
+                firstPopulated = c;
+                break;
             }
-            else
+        }
+
+        // Merge all empty clusters into the first populated one
+        if (firstPopulated >= 0)
+        {
+            for (int c = 0; c < NumClusters; c++)
             {
-                // Empty cluster — merge into first populated
-                if (firstPopulated >= 0)
+                if (clusterPopulations[c] == 0)
                     mergedId[c] = firstPopulated;
             }
         }

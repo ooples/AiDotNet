@@ -170,32 +170,30 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
         var scores = new Vector<T>(X.Rows);
         int d = X.Columns;
 
+        // Pre-allocate reusable vectors outside the loop
+        var centered = new Vector<T>(d);
+        var projected = new Vector<T>(_fittedComponents);
+        var reconstructed = new Vector<T>(d);
+        var compCol = new Vector<T>(_fittedComponents);
+
         for (int i = 0; i < X.Rows; i++)
         {
             // Center the point
-            var centered = new Vector<T>(d);
             for (int j = 0; j < d; j++)
-            {
                 centered[j] = NumOps.Subtract(X[i, j], _mean![j]);
-            }
 
             // Project onto components
-            var projected = new Vector<T>(_fittedComponents);
             for (int c = 0; c < _fittedComponents; c++)
             {
                 T dot = NumOps.Zero;
                 for (int j = 0; j < d; j++)
-                {
                     dot = NumOps.Add(dot, NumOps.Multiply(centered[j], _components![c, j]));
-                }
                 projected[c] = dot;
             }
 
             // Reconstruct from projection
-            var reconstructed = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                var compCol = new Vector<T>(_fittedComponents);
                 for (int c = 0; c < _fittedComponents; c++) compCol[c] = _components![c, j];
                 reconstructed[j] = Engine.DotProduct(projected, compCol);
             }
@@ -236,11 +234,14 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < d; i++)
         {
+            // Pre-allocate column vectors outside inner loop
+            var colI = new Vector<T>(n);
+            var colJ = new Vector<T>(n);
+            for (int k = 0; k < n; k++) colI[k] = centered[k, i];
+
             for (int j = i; j < d; j++)
             {
-                var colI = new Vector<T>(n);
-                var colJ = new Vector<T>(n);
-                for (int k = 0; k < n; k++) { colI[k] = centered[k, i]; colJ[k] = centered[k, j]; }
+                for (int k = 0; k < n; k++) colJ[k] = centered[k, j];
                 cov[i, j] = NumOps.Divide(Engine.DotProduct(colI, colJ), NumOps.FromDouble(n - 1));
                 cov[j, i] = cov[i, j];
             }
@@ -282,9 +283,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 }
 
                 // Normalize
-                T norm = NumOps.Zero;
-                norm = NumOps.Add(norm, Engine.DotProduct(Av, Av));
-                norm = NumOps.Sqrt(norm);
+                T norm = NumOps.Sqrt(Engine.DotProduct(Av, Av));
 
                 if (NumOps.LessThan(norm, NumOps.FromDouble(1e-10))) break;
 
@@ -306,8 +305,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 Av2[i] = sum;
             }
 
-            T eigenvalue = NumOps.Zero;
-            eigenvalue = NumOps.Add(eigenvalue, Engine.DotProduct(v, Av2));
+            T eigenvalue = Engine.DotProduct(v, Av2);
 
             eigenvalues[e] = eigenvalue;
             for (int j = 0; j < d; j++)

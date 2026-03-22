@@ -43,16 +43,19 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// var classifier = new MultinomialNaiveBayes&lt;double&gt;(options);
 ///
 /// // Prepare word count features (bag-of-words representation)
-/// var features = Matrix&lt;double&gt;.Build.Dense(4, 3, new double[] {
-///     5, 1, 0,  3, 2, 0,  // Class 0: high word1 frequency
-///     0, 1, 4,  0, 2, 3 });  // Class 1: high word3 frequency
+/// var features = new Matrix&lt;double&gt;(4, 3);
+/// features[0, 0] = 5; features[0, 1] = 1; features[0, 2] = 0; // Class 0: high word1
+/// features[1, 0] = 3; features[1, 1] = 2; features[1, 2] = 0; // Class 0
+/// features[2, 0] = 0; features[2, 1] = 1; features[2, 2] = 4; // Class 1: high word3
+/// features[3, 0] = 0; features[3, 1] = 2; features[3, 2] = 3; // Class 1
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
 ///
 /// // Train by learning word frequency distributions per class
 /// classifier.Train(features, labels);
 ///
 /// // Predict class based on word count likelihoods
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 4, 1, 0 });
+/// var newSample = new Matrix&lt;double&gt;(1, 3);
+/// newSample[0, 0] = 4; newSample[0, 1] = 1; newSample[0, 2] = 0;
 /// var prediction = classifier.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
@@ -284,6 +287,11 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
             }
         }
 
+        if (_featureMinShift is not null)
+        {
+            clone._featureMinShift = _featureMinShift.ToArray();
+        }
+
         return clone;
     }
 
@@ -326,6 +334,14 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
             modelData["LogFeatureProbs"] = featureProbsArray;
             modelData["LogFeatureProbsRows"] = _logFeatureProbs.Rows;
             modelData["LogFeatureProbsCols"] = _logFeatureProbs.Columns;
+        }
+
+        if (_featureMinShift is not null)
+        {
+            var shiftArray = new double[_featureMinShift.Length];
+            for (int i = 0; i < _featureMinShift.Length; i++)
+                shiftArray[i] = NumOps.ToDouble(_featureMinShift[i]);
+            modelData["FeatureMinShift"] = shiftArray;
         }
 
         var modelMetadata = GetModelMetadata();
@@ -398,6 +414,18 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
                 for (int i = 0; i < rows; i++)
                     for (int j = 0; j < cols; j++)
                         _logFeatureProbs[i, j] = NumOps.FromDouble(featureProbsArray[idx++]);
+            }
+        }
+
+        var shiftToken = modelDataObj["FeatureMinShift"];
+        if (shiftToken is not null)
+        {
+            var shiftArray = shiftToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (shiftArray.Length > 0)
+            {
+                _featureMinShift = new T[shiftArray.Length];
+                for (int i = 0; i < shiftArray.Length; i++)
+                    _featureMinShift[i] = NumOps.FromDouble(shiftArray[i]);
             }
         }
     }

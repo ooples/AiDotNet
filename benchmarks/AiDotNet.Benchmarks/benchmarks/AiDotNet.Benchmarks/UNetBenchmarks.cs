@@ -9,7 +9,7 @@ namespace AiDotNet.Benchmarks;
 /// Benchmarks the full UNet forward pass at various scales.
 /// SD15 paper dimensions: base=320, [1,2,4,4], input=[1,4,64,64].
 /// </summary>
-[SimpleJob(RuntimeMoniker.Net90)]
+[SimpleJob(RuntimeMoniker.Net10_0)]
 [MemoryDiagnoser]
 [RankColumn]
 public class UNetBenchmarks

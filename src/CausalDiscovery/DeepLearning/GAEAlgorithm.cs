@@ -49,10 +49,10 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        // For small problems, use a smaller embedding dimension and higher learning rate
+        // Respect caller-supplied options without overriding
         int embDim = Math.Min(HiddenUnits, Math.Max(d * 2, 8));
-        double effectiveLr = d <= 10 ? Math.Max(LearningRate, 0.01) : LearningRate;
-        int effectiveEpochs = d <= 10 ? Math.Max(MaxEpochs, 200) : MaxEpochs;
+        double effectiveLr = LearningRate;
+        int effectiveEpochs = MaxEpochs;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);

@@ -123,28 +123,28 @@ public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
         var scores = new Vector<T>(X.Rows);
         int d = X.Columns;
 
+        // Pre-allocate reusable vectors outside the loop
+        var diff = new Vector<T>(d);
+        var temp = new Vector<T>(d);
+        var precRow = new Vector<T>(d);
+        var location = _location ?? throw new InvalidOperationException("_location has not been initialized.");
+        var precMat = _precisionMatrix ?? throw new InvalidOperationException("_precisionMatrix has not been initialized.");
+
         for (int i = 0; i < X.Rows; i++)
         {
             // Compute Mahalanobis distance: sqrt((x - mu)' * Precision * (x - mu))
-            var diff = new Vector<T>(d);
             for (int j = 0; j < d; j++)
-            {
-                diff[j] = NumOps.Subtract(X[i, j], (_location ?? throw new InvalidOperationException("_location has not been initialized."))[j]);
-            }
+                diff[j] = NumOps.Subtract(X[i, j], location[j]);
 
             // temp = Precision * diff
-            var temp = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                var precRow = new Vector<T>(d);
-                var precMat = _precisionMatrix ?? throw new InvalidOperationException("_precisionMatrix has not been initialized.");
                 for (int k = 0; k < d; k++) precRow[k] = precMat[j, k];
                 temp[j] = Engine.DotProduct(precRow, diff);
             }
 
             // distance^2 = diff' * temp
-            T distSquared = NumOps.Zero;
-            distSquared = NumOps.Add(distSquared, Engine.DotProduct(diff, temp));
+            T distSquared = Engine.DotProduct(diff, temp);
 
             scores[i] = NumOps.Sqrt(distSquared);
         }

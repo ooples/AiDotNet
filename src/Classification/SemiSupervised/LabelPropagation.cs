@@ -33,6 +33,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// can be captured through a graph structure.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create label propagation for semi-supervised learning

@@ -9,7 +9,7 @@ namespace AiDotNet.Benchmarks;
 /// Benchmarks the DiffusionResBlock forward pass at various channel counts.
 /// Measures: GroupNorm -> SiLU -> Conv3x3 -> GroupNorm -> SiLU -> Conv3x3 + skip
 /// </summary>
-[SimpleJob(RuntimeMoniker.Net90)]
+[SimpleJob(RuntimeMoniker.Net10_0)]
 [MemoryDiagnoser]
 [RankColumn]
 public class DiffusionResBlockBenchmarks

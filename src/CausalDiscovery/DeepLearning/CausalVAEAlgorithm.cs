@@ -138,52 +138,54 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
             var gWout = new Matrix<T>(h, d);
             T invN = NumOps.FromDouble(1.0 / n);
 
+            // Pre-allocate reusable vectors outside the sample loop
+            var xRow = new Vector<T>(d);
+            var hEnc = new Vector<T>(h);
+            var wCol = new Vector<T>(d);
+            var epsNoise = new Vector<T>(d);
+            var wmuCol = new Vector<T>(h);
+            var z = new Vector<T>(d);
+            var invRow = new Vector<T>(d);
+            var hDec = new Vector<T>(h);
+            var wdecCol = new Vector<T>(d);
+            var xhat = new Vector<T>(d);
+            var woutCol = new Vector<T>(h);
+
             for (int s = 0; s < n; s++)
             {
                 // Encoder forward: hidden_enc = sigmoid(x * Wenc) using Engine.DotProduct
-                var xRow = new Vector<T>(d);
                 for (int i = 0; i < d; i++) xRow[i] = data[s, i];
-                var hEnc = new Vector<T>(h);
                 for (int k = 0; k < h; k++)
                 {
-                    var wCol = new Vector<T>(d);
                     for (int i = 0; i < d; i++) wCol[i] = Wenc[i, k];
                     double sv = NumOps.ToDouble(Engine.DotProduct(xRow, wCol));
                     hEnc[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
 
                 // Exogenous noise: epsilon_j = mu_j(hEnc) using Engine.DotProduct
-                var epsNoise = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
                 {
-                    var wmuCol = new Vector<T>(h);
                     for (int k = 0; k < h; k++) wmuCol[k] = Wmu[k, j];
                     epsNoise[j] = Engine.DotProduct(hEnc, wmuCol);
                 }
 
                 // Causal layer: z = (I - A)^{-1} * epsilon using Engine.DotProduct
-                var z = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
                 {
-                    var invRow = new Vector<T>(d);
                     for (int i = 0; i < d; i++) invRow[i] = IminusAinv[j, i];
                     z[j] = Engine.DotProduct(invRow, epsNoise);
                 }
 
                 // Decoder: hidden_dec = sigmoid(z * Wdec), xhat = hidden_dec * Wout
-                var hDec = new Vector<T>(h);
                 for (int k = 0; k < h; k++)
                 {
-                    var wdecCol = new Vector<T>(d);
                     for (int j = 0; j < d; j++) wdecCol[j] = Wdec[j, k];
                     double sv = NumOps.ToDouble(Engine.DotProduct(z, wdecCol));
                     hDec[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
 
-                var xhat = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
                 {
-                    var woutCol = new Vector<T>(h);
                     for (int k = 0; k < h; k++) woutCol[k] = Wout[k, j];
                     xhat[j] = Engine.DotProduct(hDec, woutCol);
                 }

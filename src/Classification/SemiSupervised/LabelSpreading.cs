@@ -36,6 +36,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// have unequal sizes.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
 /// // Create label spreading with symmetric normalization

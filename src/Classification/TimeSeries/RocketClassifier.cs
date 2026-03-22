@@ -42,24 +42,32 @@ namespace AiDotNet.Classification.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create ROCKET classifier with 10,000 random convolutional kernels
-/// var options = new RocketOptions&lt;double&gt;();
+/// // Create ROCKET classifier with short kernel lengths matching the data
+/// var options = new RocketOptions&lt;double&gt; { KernelLengths = new[] { 3, 5 } };
 /// var classifier = new RocketClassifier&lt;double&gt;(options);
 ///
 /// // Prepare time series data: rows are samples, columns are time steps
-/// var features = new Matrix&lt;double&gt;(4, 5);
-/// features[0, 0] = 1.0; features[0, 1] = 1.2; features[0, 2] = 1.5; features[0, 3] = 1.3; features[0, 4] = 1.1;
-/// features[1, 0] = 1.1; features[1, 1] = 1.3; features[1, 2] = 1.4; features[1, 3] = 1.2; features[1, 4] = 1.0;
-/// features[2, 0] = 2.0; features[2, 1] = 2.5; features[2, 2] = 2.3; features[2, 3] = 2.8; features[2, 4] = 3.0;
-/// features[3, 0] = 2.1; features[3, 1] = 2.4; features[3, 2] = 2.6; features[3, 3] = 2.9; features[3, 4] = 3.1;
+/// // Series length must be >= max kernel length
+/// var features = new Matrix&lt;double&gt;(4, 8);
+/// // Class 0: low-amplitude oscillation
+/// features[0, 0] = 1.0; features[0, 1] = 1.2; features[0, 2] = 1.5; features[0, 3] = 1.3;
+/// features[0, 4] = 1.1; features[0, 5] = 1.4; features[0, 6] = 1.2; features[0, 7] = 1.0;
+/// features[1, 0] = 1.1; features[1, 1] = 1.3; features[1, 2] = 1.4; features[1, 3] = 1.2;
+/// features[1, 4] = 1.0; features[1, 5] = 1.3; features[1, 6] = 1.1; features[1, 7] = 1.2;
+/// // Class 1: high-amplitude trend
+/// features[2, 0] = 2.0; features[2, 1] = 2.5; features[2, 2] = 2.3; features[2, 3] = 2.8;
+/// features[2, 4] = 3.0; features[2, 5] = 3.2; features[2, 6] = 3.5; features[2, 7] = 3.8;
+/// features[3, 0] = 2.1; features[3, 1] = 2.4; features[3, 2] = 2.6; features[3, 3] = 2.9;
+/// features[3, 4] = 3.1; features[3, 5] = 3.3; features[3, 6] = 3.4; features[3, 7] = 3.7;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
 ///
 /// // Train: extract max and PPV features from random kernels and fit classifier
 /// classifier.Train(features, labels);
 ///
 /// // Predict class for new time series
-/// var newSample = new Matrix&lt;double&gt;(1, 5);
-/// newSample[0, 0] = 1.0; newSample[0, 1] = 1.1; newSample[0, 2] = 1.3; newSample[0, 3] = 1.2; newSample[0, 4] = 1.0;
+/// var newSample = new Matrix&lt;double&gt;(1, 8);
+/// newSample[0, 0] = 1.0; newSample[0, 1] = 1.1; newSample[0, 2] = 1.3; newSample[0, 3] = 1.2;
+/// newSample[0, 4] = 1.0; newSample[0, 5] = 1.2; newSample[0, 6] = 1.1; newSample[0, 7] = 1.0;
 /// var predictions = classifier.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>

@@ -61,10 +61,10 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
         ApplyTimeSeriesOptions(options);
         _convergenceThreshold = options?.EdgeThreshold ?? 0.05;
         _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
-        if (_convergenceThreshold < 0 || _convergenceThreshold > 1)
-            throw new ArgumentException("EdgeThreshold (convergence threshold) must be between 0 and 1.");
-        if (_correlationThreshold < 0 || _correlationThreshold > 1)
-            throw new ArgumentException("CorrelationThreshold must be between 0 and 1.");
+        if (double.IsNaN(_convergenceThreshold) || _convergenceThreshold < 0 || _convergenceThreshold > 1)
+            throw new ArgumentException("EdgeThreshold (convergence threshold) must be a finite number between 0 and 1.");
+        if (double.IsNaN(_correlationThreshold) || _correlationThreshold < 0 || _correlationThreshold > 1)
+            throw new ArgumentException("CorrelationThreshold must be a finite number between 0 and 1.");
     }
 
     /// <inheritdoc/>
