@@ -170,12 +170,7 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
         var result = new Vector<T>(matrix.Rows);
         for (int i = 0; i < matrix.Rows; i++)
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(matrix[i, j], vector[j]));
-            }
-            result[i] = sum;
+            result[i] = Engine.DotProduct(matrix.GetRow(i), vector);
         }
         return result;
     }

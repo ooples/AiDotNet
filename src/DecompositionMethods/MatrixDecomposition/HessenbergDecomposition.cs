@@ -181,12 +181,13 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
             // For rows k+1 to n-1, columns 0 to n-1
             for (int j = 0; j < n; j++)
             {
-                T dot = NumOps.Zero;
+                // Extract column slice H[k+1:k+1+v.Length, j]
+                var colSlice = new Vector<T>(v.Length);
                 for (int i = 0; i < v.Length; i++)
                 {
-                    dot = NumOps.Add(dot, NumOps.Multiply(v[i], H[k + 1 + i, j]));
+                    colSlice[i] = H[k + 1 + i, j];
                 }
-                dot = NumOps.Multiply(NumOps.FromDouble(2), dot);
+                T dot = NumOps.Multiply(NumOps.FromDouble(2), Engine.DotProduct(v, colSlice));
 
                 for (int i = 0; i < v.Length; i++)
                 {
@@ -198,12 +199,13 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
             // For rows 0 to n-1, columns k+1 to n-1
             for (int i = 0; i < n; i++)
             {
-                T dot = NumOps.Zero;
+                // Extract row slice H[i, k+1:k+1+v.Length]
+                var rowSlice = new Vector<T>(v.Length);
                 for (int j = 0; j < v.Length; j++)
                 {
-                    dot = NumOps.Add(dot, NumOps.Multiply(H[i, k + 1 + j], v[j]));
+                    rowSlice[j] = H[i, k + 1 + j];
                 }
-                dot = NumOps.Multiply(NumOps.FromDouble(2), dot);
+                T dot = NumOps.Multiply(NumOps.FromDouble(2), Engine.DotProduct(rowSlice, v));
 
                 for (int j = 0; j < v.Length; j++)
                 {
@@ -215,12 +217,13 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
             // Q = Q * P is equivalent to updating columns k+1 to n-1 of Q
             for (int i = 0; i < n; i++)
             {
-                T dot = NumOps.Zero;
+                // Extract row slice Q[i, k+1:k+1+v.Length]
+                var qRowSlice = new Vector<T>(v.Length);
                 for (int j = 0; j < v.Length; j++)
                 {
-                    dot = NumOps.Add(dot, NumOps.Multiply(Q[i, k + 1 + j], v[j]));
+                    qRowSlice[j] = Q[i, k + 1 + j];
                 }
-                dot = NumOps.Multiply(NumOps.FromDouble(2), dot);
+                T dot = NumOps.Multiply(NumOps.FromDouble(2), Engine.DotProduct(qRowSlice, v));
 
                 for (int j = 0; j < v.Length; j++)
                 {
