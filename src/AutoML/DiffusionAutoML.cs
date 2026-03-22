@@ -998,18 +998,27 @@ namespace AiDotNet.AutoML
 
         public override void SaveModel(string filePath)
         {
-            var data = Serialize();
-            File.WriteAllBytes(filePath, data);
+            Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
+            {
+                var data = Serialize();
+                File.WriteAllBytes(filePath, data);
+            }
         }
 
         public override void LoadModel(string filePath)
         {
-            var data = File.ReadAllBytes(filePath);
-            Deserialize(data);
+            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
+            {
+                var data = File.ReadAllBytes(filePath);
+                Deserialize(data);
+            }
         }
 
         public override byte[] Serialize()
         {
+            Helpers.ModelPersistenceGuard.EnforceBeforeSerialize();
             // Serialize parameters as doubles for portability across numeric types.
             // This allows models trained with float to be loaded as double and vice versa.
             // The format is: [version byte] [parameter count (4 bytes)] [parameters as doubles]
@@ -1036,6 +1045,8 @@ namespace AiDotNet.AutoML
 
         public override void Deserialize(byte[] data)
         {
+            Helpers.ModelPersistenceGuard.EnforceBeforeDeserialize();
+
             // Check minimum header size
             int headerSize = 1 + sizeof(int);
             if (data.Length < headerSize)
@@ -1066,9 +1077,12 @@ namespace AiDotNet.AutoML
             if (stream is null)
                 throw new ArgumentNullException(nameof(stream));
 
-            var data = Serialize();
-            stream.Write(data, 0, data.Length);
-            stream.Flush();
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
+            {
+                var data = Serialize();
+                stream.Write(data, 0, data.Length);
+                stream.Flush();
+            }
         }
 
         public override void LoadState(Stream stream)
@@ -1076,10 +1090,13 @@ namespace AiDotNet.AutoML
             if (stream is null)
                 throw new ArgumentNullException(nameof(stream));
 
-            using var ms = new MemoryStream();
-            stream.CopyTo(ms);
-            var data = ms.ToArray();
-            Deserialize(data);
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
+            {
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                var data = ms.ToArray();
+                Deserialize(data);
+            }
         }
 
         public override Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)

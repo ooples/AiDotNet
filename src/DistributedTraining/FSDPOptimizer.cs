@@ -218,23 +218,35 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// FSDP saves per-rank checkpoint files with rank suffix (e.g., "model.bin.rank0").
+    /// Each rank saves its own shard for correct round-trip across distributed workers.
+    /// </remarks>
     public override void SaveModel(string filePath)
     {
-        // Barrier before rank check to prevent deadlock if rank 0 fails
         Config.CommunicationBackend.Barrier();
 
         try
         {
-            // Only rank 0 saves to avoid file write conflicts
-            if (Rank == 0)
+            // Validate and normalize filePath
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
+
+            string normalizedPath = Path.GetFullPath(filePath.Trim());
+
+            // Each rank saves its own shard for correct round-trip
+            string rankPath = $"{normalizedPath}.rank{Rank}";
+            Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
             {
                 var data = Serialize();
-                File.WriteAllBytes(filePath, data);
+                var envelopedData = ModelFileHeader.WrapWithHeader(
+                    data, this, GetInputShape(), GetOutputShape(), SerializationFormat.Binary);
+                File.WriteAllBytes(rankPath, envelopedData);
             }
         }
         finally
         {
-            // Ensure all processes reach this barrier even if rank 0 fails
             Config.CommunicationBackend.Barrier();
         }
     }
@@ -242,18 +254,33 @@ public class FSDPOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput,
     /// <inheritdoc/>
     public override void LoadModel(string filePath)
     {
-        // Barrier before loading to ensure all processes start together
         Config.CommunicationBackend.Barrier();
 
         try
         {
-            // All processes read the same file (read-only, no conflicts)
-            var data = File.ReadAllBytes(filePath);
-            Deserialize(data);
+            // Validate and normalize filePath
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("File path cannot be null, empty, or whitespace.", nameof(filePath));
+
+            string normalizedPath = Path.GetFullPath(filePath.Trim());
+
+            // Each rank loads its own shard
+            string rankPath = $"{normalizedPath}.rank{Rank}";
+            if (!File.Exists(rankPath))
+                throw new FileNotFoundException($"Checkpoint file not found for rank {Rank}.", rankPath);
+            Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+            var fileData = File.ReadAllBytes(rankPath);
+            using (Helpers.ModelPersistenceGuard.InternalOperation())
+            {
+                // Extract from AIMF envelope, with legacy raw-bytes fallback
+                var payload = ModelFileHeader.HasHeader(fileData)
+                    ? ModelFileHeader.ExtractPayload(fileData)
+                    : fileData;
+                Deserialize(payload);
+            }
         }
         finally
         {
-            // Ensure all processes finish loading before proceeding
             Config.CommunicationBackend.Barrier();
         }
     }

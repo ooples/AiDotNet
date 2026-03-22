@@ -68,27 +68,27 @@ public class XLearner<T> : CausalModelBase<T>
     /// <summary>
     /// Weights for the control outcome model μ₀.
     /// </summary>
-    private Vector<T>? _weightsControl;
+    private Vector<T> _weightsControl = new Vector<T>(0);
 
     /// <summary>
     /// Weights for the treatment outcome model μ₁.
     /// </summary>
-    private Vector<T>? _weightsTreated;
+    private Vector<T> _weightsTreated = new Vector<T>(0);
 
     /// <summary>
     /// Weights for the treatment effect model τ₀ (trained on control imputed effects).
     /// </summary>
-    private Vector<T>? _weightsTau0;
+    private Vector<T> _weightsTau0 = new Vector<T>(0);
 
     /// <summary>
     /// Weights for the treatment effect model τ₁ (trained on treated imputed effects).
     /// </summary>
-    private Vector<T>? _weightsTau1;
+    private Vector<T> _weightsTau1 = new Vector<T>(0);
 
     /// <summary>
     /// Weights for the propensity score model.
     /// </summary>
-    private Vector<T>? _weightsPropensity;
+    private Vector<T> _weightsPropensity = new Vector<T>(0);
 
     /// <summary>
     /// Bias terms for each model.
@@ -167,7 +167,7 @@ public class XLearner<T> : CausalModelBase<T>
         {
             int i = treatedIndices[idx];
             double actualOutcome = NumOps.ToDouble(outcome[i]);
-            double predictedControl = PredictSingle(features, i, _weightsControl!, _biasControl);
+            double predictedControl = PredictSingle(features, i, _weightsControl, _biasControl);
             imputedTreated[idx] = NumOps.FromDouble(actualOutcome - predictedControl);
         }
 
@@ -176,7 +176,7 @@ public class XLearner<T> : CausalModelBase<T>
         for (int idx = 0; idx < controlIndices.Count; idx++)
         {
             int i = controlIndices[idx];
-            double predictedTreated = PredictSingle(features, i, _weightsTreated!, _biasTreated);
+            double predictedTreated = PredictSingle(features, i, _weightsTreated, _biasTreated);
             double actualOutcome = NumOps.ToDouble(outcome[i]);
             imputedControl[idx] = NumOps.FromDouble(predictedTreated - actualOutcome);
         }
@@ -342,18 +342,18 @@ public class XLearner<T> : CausalModelBase<T>
             // Compute propensity score e(X)
             double z = NumOps.ToDouble(_biasPropensity);
             for (int j = 0; j < features.Columns; j++)
-                z += NumOps.ToDouble(_weightsPropensity![j]) * NumOps.ToDouble(features[i, j]);
+                z += NumOps.ToDouble(_weightsPropensity[j]) * NumOps.ToDouble(features[i, j]);
             double propensity = 1.0 / (1.0 + Math.Exp(-z));
 
             // Compute τ₀(X) - effect estimated from control group
             double tau0 = NumOps.ToDouble(_biasTau0);
             for (int j = 0; j < features.Columns; j++)
-                tau0 += NumOps.ToDouble(_weightsTau0![j]) * NumOps.ToDouble(features[i, j]);
+                tau0 += NumOps.ToDouble(_weightsTau0[j]) * NumOps.ToDouble(features[i, j]);
 
             // Compute τ₁(X) - effect estimated from treated group
             double tau1 = NumOps.ToDouble(_biasTau1);
             for (int j = 0; j < features.Columns; j++)
-                tau1 += NumOps.ToDouble(_weightsTau1![j]) * NumOps.ToDouble(features[i, j]);
+                tau1 += NumOps.ToDouble(_weightsTau1[j]) * NumOps.ToDouble(features[i, j]);
 
             // Combine: τ(X) = e(X)·τ₀(X) + (1-e(X))·τ₁(X)
             double effect = propensity * tau0 + (1 - propensity) * tau1;
@@ -375,7 +375,7 @@ public class XLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_biasTreated);
             for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weightsTreated![j]) * NumOps.ToDouble(features[i, j]);
+                pred += NumOps.ToDouble(_weightsTreated[j]) * NumOps.ToDouble(features[i, j]);
             result[i] = NumOps.FromDouble(pred);
         }
         return result;
@@ -393,7 +393,7 @@ public class XLearner<T> : CausalModelBase<T>
         {
             double pred = NumOps.ToDouble(_biasControl);
             for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weightsControl![j]) * NumOps.ToDouble(features[i, j]);
+                pred += NumOps.ToDouble(_weightsControl[j]) * NumOps.ToDouble(features[i, j]);
             result[i] = NumOps.FromDouble(pred);
         }
         return result;
@@ -456,7 +456,7 @@ public class XLearner<T> : CausalModelBase<T>
         {
             double z = NumOps.ToDouble(_biasPropensity);
             for (int j = 0; j < x.Columns; j++)
-                z += NumOps.ToDouble(_weightsPropensity![j]) * NumOps.ToDouble(x[i, j]);
+                z += NumOps.ToDouble(_weightsPropensity[j]) * NumOps.ToDouble(x[i, j]);
             double prob = 1.0 / (1.0 + Math.Exp(-z));
             result[i] = NumOps.FromDouble(prob);
         }
@@ -466,7 +466,7 @@ public class XLearner<T> : CausalModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        int p = _weightsControl?.Length ?? 0;
+        int p = _weightsControl.Length;
         if (p == 0)
             return new Vector<T>(5); // Just biases
 
@@ -481,11 +481,11 @@ public class XLearner<T> : CausalModelBase<T>
         int offset = 5;
         for (int i = 0; i < p; i++)
         {
-            parameters[offset + i] = _weightsControl![i];
-            parameters[offset + p + i] = _weightsTreated![i];
-            parameters[offset + 2 * p + i] = _weightsTau0![i];
-            parameters[offset + 3 * p + i] = _weightsTau1![i];
-            parameters[offset + 4 * p + i] = _weightsPropensity![i];
+            parameters[offset + i] = _weightsControl[i];
+            parameters[offset + p + i] = _weightsTreated[i];
+            parameters[offset + 2 * p + i] = _weightsTau0[i];
+            parameters[offset + 3 * p + i] = _weightsTau1[i];
+            parameters[offset + 4 * p + i] = _weightsPropensity[i];
         }
 
         return parameters;

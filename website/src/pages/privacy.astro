@@ -1,0 +1,133 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout
+  title="Privacy Policy - AiDotNet"
+  description="AiDotNet privacy policy. Learn how we handle your data, telemetry, and license information."
+>
+  <div class="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+      <h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-2">Privacy Policy</h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-8">Last updated: March 14, 2026</p>
+
+      <div class="prose prose-slate dark:prose-invert max-w-none space-y-8">
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Overview</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            AiDotNet ("we", "us", "our") is committed to protecting your privacy. This privacy policy explains
+            how we collect, use, and protect information when you use the AiDotNet library, website, and related services.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Information We Collect</h2>
+
+          <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mt-4">Account Information</h3>
+          <p class="text-slate-600 dark:text-slate-300">
+            When you create an account on aidotnet.dev, we collect your email address and display name.
+            This information is stored securely in our Supabase-hosted database and is used for authentication,
+            license management, and account communications.
+          </p>
+
+          <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mt-4">License Validation Data</h3>
+          <p class="text-slate-600 dark:text-slate-300">
+            When your application validates a license key, we collect:
+          </p>
+          <ul class="list-disc pl-6 text-slate-600 dark:text-slate-300 space-y-1">
+            <li><strong>Machine ID hash:</strong> A one-way SHA-256 hash of your machine fingerprint. This cannot be reversed to identify you or your machine.</li>
+            <li><strong>Hostname</strong> (optional, only if telemetry is enabled): Your machine's hostname, used to help you identify which machines are activated.</li>
+            <li><strong>OS description</strong> (optional, only if telemetry is enabled): Your operating system version, used for compatibility tracking.</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            We <strong>never</strong> collect: model weights, training data, predictions, source code, file paths, or any personally identifiable information beyond what is listed above.
+          </p>
+
+          <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mt-4">Anonymous Telemetry (Opt-In Only)</h3>
+          <p class="text-slate-600 dark:text-slate-300">
+            AiDotNet includes an optional, anonymous telemetry system that is <strong>disabled by default</strong>.
+            You must explicitly opt in by setting the environment variable <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-xs">AIDOTNET_TELEMETRY=true</code>.
+          </p>
+          <p class="text-slate-600 dark:text-slate-300">
+            When enabled, telemetry collects:
+          </p>
+          <ul class="list-disc pl-6 text-slate-600 dark:text-slate-300 space-y-1">
+            <li>Event type (e.g., "trial_operation", "licensed_operation")</li>
+            <li>A hashed machine identifier (not reversible to PII)</li>
+            <li>Library version</li>
+            <li>Operation counts and trial status</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            Telemetry data is sent to our Supabase-hosted database and is used solely to understand library usage patterns
+            and improve the product. You can disable telemetry at any time by removing the environment variable or setting it to <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-xs">false</code>.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">How We Use Information</h2>
+          <ul class="list-disc pl-6 text-slate-600 dark:text-slate-300 space-y-1">
+            <li>To authenticate your account and manage your license keys</li>
+            <li>To enforce license activation limits (max machines per license)</li>
+            <li>To provide license management features in your account dashboard</li>
+            <li>To understand library usage patterns and prioritize development (telemetry only, opt-in)</li>
+            <li>To send important account-related communications (e.g., license expiration notices)</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Data Storage and Security</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            All data is stored in Supabase-hosted PostgreSQL databases with row-level security (RLS) policies.
+            Data is encrypted in transit (TLS) and at rest. We use industry-standard security practices
+            including parameterized queries, service role key separation, and minimal data collection.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Third-Party Services</h2>
+          <ul class="list-disc pl-6 text-slate-600 dark:text-slate-300 space-y-1">
+            <li><strong>Supabase:</strong> Authentication, database hosting, and edge functions</li>
+            <li><strong>Stripe:</strong> Payment processing for paid license tiers (Professional, Enterprise)</li>
+            <li><strong>Vercel:</strong> Website hosting and analytics</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            Each third-party service has its own privacy policy. We only share the minimum data necessary for each service to function.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Your Rights</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            You have the right to:
+          </p>
+          <ul class="list-disc pl-6 text-slate-600 dark:text-slate-300 space-y-1">
+            <li>Access your personal data through your account dashboard</li>
+            <li>Delete your account and all associated data</li>
+            <li>Opt out of telemetry at any time</li>
+            <li>Request a copy of your data</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            To exercise these rights, contact us at <a href="mailto:privacy@aidotnet.dev" class="text-brand-blue hover:underline">privacy@aidotnet.dev</a>
+            or manage your data through your <a href={`${base}account/settings/`} class="text-brand-blue hover:underline">account settings</a>.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Changes to This Policy</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            We may update this privacy policy from time to time. We will notify you of significant changes
+            by posting a notice on our website or sending an email to your registered address.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Contact</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            For privacy-related questions, contact <a href="mailto:privacy@aidotnet.dev" class="text-brand-blue hover:underline">privacy@aidotnet.dev</a>.
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</BaseLayout>

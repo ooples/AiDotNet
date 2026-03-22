@@ -1170,6 +1170,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using var memoryStream = new MemoryStream();
         using var writer = new BinaryWriter(memoryStream);
 
@@ -1212,6 +1213,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         using MemoryStream ms = new(data);
         using BinaryReader reader = new(ms);
 

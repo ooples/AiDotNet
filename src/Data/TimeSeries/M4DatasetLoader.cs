@@ -248,9 +248,10 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
         var batch = new List<M4TimeSeries<T>>();
         int endIndex = Math.Min(_currentSeriesIndex + BatchSize, TotalCount);
 
+        var trainSeries = _trainingSeries ?? throw new InvalidOperationException("Data has not been loaded.");
         for (int i = _currentSeriesIndex; i < endIndex; i++)
         {
-            batch.Add(_trainingSeries![i]);
+            batch.Add(trainSeries[i]);
         }
 
         _currentSeriesIndex = endIndex;
@@ -271,7 +272,9 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
         if (index < 0 || index >= TotalCount)
             throw new ArgumentOutOfRangeException(nameof(index));
 
-        return (_trainingSeries![index], _testSeries![index]);
+        var trainSeries = _trainingSeries ?? throw new InvalidOperationException("Data has not been loaded.");
+        var testSeries = _testSeries ?? throw new InvalidOperationException("Data has not been loaded.");
+        return (trainSeries[index], testSeries[index]);
     }
 
     /// <summary>

@@ -264,23 +264,63 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     /// <inheritdoc/>
     public byte[] Serialize()
     {
-        var json = JsonConvert.SerializeObject(_options, Formatting.None);
-        return Encoding.UTF8.GetBytes(json);
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        var state = new Newtonsoft.Json.Linq.JObject
+        {
+            ["options"] = Newtonsoft.Json.Linq.JToken.FromObject(_options),
+            ["adversarialRatio"] = _adversarialRatio,
+            ["perturbationBudget"] = _perturbationBudget,
+            ["adversarialSteps"] = _adversarialSteps
+        };
+        return Encoding.UTF8.GetBytes(state.ToString(Formatting.None));
     }
 
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null) throw new ArgumentNullException(nameof(data));
         var json = Encoding.UTF8.GetString(data);
-        _options = JsonConvert.DeserializeObject<AlignmentMethodOptions<T>>(json) ?? new AlignmentMethodOptions<T>();
+
+        var state = Newtonsoft.Json.Linq.JObject.Parse(json);
+        var optionsToken = state["options"];
+
+        if (optionsToken != null)
+        {
+            // New format with "options" key
+            _options = optionsToken.ToObject<AlignmentMethodOptions<T>>() ?? new AlignmentMethodOptions<T>();
+        }
+        else
+        {
+            // Legacy format: try to deserialize entire state as AlignmentMethodOptions<T>
+            var legacyOptions = state.ToObject<AlignmentMethodOptions<T>>();
+            _options = legacyOptions ?? new AlignmentMethodOptions<T>();
+        }
     }
 
     /// <inheritdoc/>
-    public void SaveModel(string filePath) => File.WriteAllBytes(filePath, Serialize());
+    public void SaveModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
+    }
 
     /// <inheritdoc/>
-    public void LoadModel(string filePath) => Deserialize(File.ReadAllBytes(filePath));
+    public void LoadModel(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(File.ReadAllBytes(filePath));
+        }
+    }
 
     private Func<Vector<T>, Vector<T>, double> TrainRobustRewardModel(AlignmentFeedbackData<T> feedbackData)
     {

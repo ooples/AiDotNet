@@ -92,7 +92,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Random number generator.
     /// </summary>
-    private Random? _random;
+    private Random _random = Tensors.Helpers.RandomHelper.CreateSecureRandom();
 
     /// <summary>
     /// Feature indices selected for each estimator.
@@ -238,7 +238,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
         // Randomly select feature indices without replacement
         // Sort the selected indices to maintain consistent ordering and avoid bias
         var featureIndices = Enumerable.Range(0, x.Columns)
-            .OrderBy(_ => _random!.Next())
+            .OrderBy(_ => _random.Next())
             .Take(numFeatures)
             .OrderBy(i => i)
             .ToArray();
@@ -380,7 +380,8 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
                 {
                     for (int c = 0; c < NumClasses; c++)
                     {
-                        if (NumOps.Compare(preds[i], ClassLabels![c]) == 0)
+                        var classLabels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+                        if (NumOps.Compare(preds[i], classLabels[c]) == 0)
                         {
                             estProbs[i, c] = NumOps.One;
                         }

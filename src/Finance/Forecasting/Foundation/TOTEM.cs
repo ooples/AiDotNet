@@ -229,14 +229,16 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private T GetCodebookValue(int codebook, int entry, int dim)
     {
         int idx = codebook * _codebookSize * _codebookDimension + entry * _codebookDimension + dim;
-        return _codebooks![idx];
+        var codebooks = _codebooks ?? throw new InvalidOperationException("Codebooks not initialized.");
+        return codebooks[idx];
     }
 
     /// <summary>Sets a codebook value at the given indices.</summary>
     private void SetCodebookValue(int codebook, int entry, int dim, T value)
     {
         int idx = codebook * _codebookSize * _codebookDimension + entry * _codebookDimension + dim;
-        _codebooks!.Data.Span[idx] = value;
+        var codebooks = _codebooks ?? throw new InvalidOperationException("Codebooks not initialized.");
+        codebooks.Data.Span[idx] = value;
     }
 
     #endregion

@@ -83,22 +83,22 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Class means for each class.
     /// </summary>
-    private Matrix<T>? _classMeans;
+    private Matrix<T> _classMeans = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Pooled within-class covariance matrix (shared by all classes).
     /// </summary>
-    private Matrix<T>? _pooledCovariance;
+    private Matrix<T> _pooledCovariance = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Inverse of the pooled covariance matrix.
     /// </summary>
-    private Matrix<T>? _covarianceInverse;
+    private Matrix<T> _covarianceInverse = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Class priors (prior probabilities).
     /// </summary>
-    private Vector<T>? _classPriors;
+    private Vector<T> _classPriors = new Vector<T>(0);
 
     /// <summary>
     /// Initializes a new instance of the LinearDiscriminantAnalysis class.
@@ -158,7 +158,7 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 
         for (int c = 0; c < NumClasses; c++)
         {
-            T classLabel = ClassLabels![c];
+            T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
             int count = 0;
 
             // Sum features for this class
@@ -198,7 +198,7 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 
         for (int c = 0; c < NumClasses; c++)
         {
-            T classLabel = ClassLabels![c];
+            T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
             int count = 0;
 
             for (int i = 0; i < n; i++)
@@ -225,13 +225,13 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 
         for (int c = 0; c < NumClasses; c++)
         {
-            T classLabel = ClassLabels![c];
+            T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
 
             // Get class mean
             var mean = new Vector<T>(NumFeatures);
             for (int j = 0; j < NumFeatures; j++)
             {
-                mean[j] = _classMeans![c, j];
+                mean[j] = _classMeans[c, j];
             }
 
             // Accumulate (x - mean)(x - mean)^T for this class
@@ -412,7 +412,7 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels![bestClass];
+            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
         }
 
         return predictions;
@@ -702,10 +702,14 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
             }
         }
 
-        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans");
-        _pooledCovariance = DeserializeMatrix(modelDataObj, "PooledCovariance");
-        _covarianceInverse = DeserializeMatrix(modelDataObj, "CovarianceInverse");
-        _classPriors = DeserializeVector(modelDataObj, "ClassPriors");
+        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans")
+            ?? throw new InvalidOperationException("Missing required 'ClassMeans' in serialized model data.");
+        _pooledCovariance = DeserializeMatrix(modelDataObj, "PooledCovariance")
+            ?? throw new InvalidOperationException("Missing required 'PooledCovariance' in serialized model data.");
+        _covarianceInverse = DeserializeMatrix(modelDataObj, "CovarianceInverse")
+            ?? throw new InvalidOperationException("Missing required 'CovarianceInverse' in serialized model data.");
+        _classPriors = DeserializeVector(modelDataObj, "ClassPriors")
+            ?? throw new InvalidOperationException("Missing required 'ClassPriors' in serialized model data.");
     }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)

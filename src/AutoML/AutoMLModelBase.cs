@@ -694,10 +694,14 @@ namespace AiDotNet.AutoML
     /// </summary>
     public virtual byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         if (BestModel == null)
             throw new InvalidOperationException("No best model to serialize.");
 
-        return BestModel.Serialize();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return BestModel.Serialize();
+        }
     }
 
     /// <summary>
@@ -705,6 +709,7 @@ namespace AiDotNet.AutoML
     /// </summary>
     public virtual void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (BestModel == null)
         {
             throw new InvalidOperationException(
@@ -713,7 +718,10 @@ namespace AiDotNet.AutoML
                 "to load the underlying model type directly.");
         }
 
-        BestModel.Deserialize(data);
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            BestModel.Deserialize(data);
+        }
     }
 
     #endregion

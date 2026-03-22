@@ -117,7 +117,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
         for (int i = 0; i < _options.NumStacks; i++)
         {
-            int poolingSize = _options.PoolingKernelSizes![i];
+            int poolingSize = _options.PoolingKernelSizes[i];
             int downsampledLength = _options.LookbackWindow / poolingSize;
 
             var stack = new NHiTSStackTensor<T>(

@@ -456,8 +456,7 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         Config.CommunicationBackend.Barrier();
         try
         {
-            if (Rank == 0)
-                File.WriteAllBytes(filePath, Serialize());
+            base.SaveModel(filePath);
         }
         finally
         {
@@ -471,8 +470,7 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         Config.CommunicationBackend.Barrier();
         try
         {
-            var data = File.ReadAllBytes(filePath);
-            Deserialize(data);
+            base.LoadModel(filePath);
         }
         finally
         {

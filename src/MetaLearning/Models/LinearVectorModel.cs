@@ -16,28 +16,13 @@ namespace AiDotNet.MetaLearning.Models;
 /// <remarks>
 /// <para>Computes y = X * w + b where w is a weight vector and b is a bias scalar.
 /// Provides gradient computation via MSE loss for use with gradient-based meta-learners.</para>
-/// <para><b>For Beginners:</b> This is a simple linear model used mainly for testing and
-/// demonstrating meta-learning algorithms. It takes a matrix of inputs and produces predictions
-/// using a straightforward linear formula (y = inputs * weights + bias). Its simplicity makes
-/// it ideal for verifying that meta-learning algorithms like MAML work correctly before
-/// scaling up to more complex models.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// // Create a simple linear model for meta-learning testing
-/// var model = new LinearVectorModel(inputDim: 5, learningRate: 0.01);
-/// var input = new Matrix&lt;double&gt;(10, 5);  // 10 samples, 5 features
-/// var labels = new Vector&lt;double&gt;(10);
-/// model.Train(input, labels);
-/// Vector&lt;double&gt; predictions = model.Predict(input);
-/// </code>
-/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double>>, ICloneable
+public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<double>>, ICloneable
 {
     private Vector<double> _parameters;
     private readonly int _inputDim;
@@ -63,7 +48,7 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override Vector<double> Predict(Matrix<double> input)
+    public Vector<double> Predict(Matrix<double> input)
     {
         Guard.NotNull(input);
         var output = new Vector<double>(input.Rows);
@@ -86,14 +71,14 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override void Train(Matrix<double> input, Vector<double> expectedOutput)
+    public void Train(Matrix<double> input, Vector<double> expectedOutput)
     {
         var gradients = ComputeGradients(input, expectedOutput, DefaultLossFunction);
         ApplyGradients(gradients, _learningRate);
     }
 
     /// <inheritdoc/>
-    public override ModelMetadata<double> GetModelMetadata() => new()
+    public ModelMetadata<double> GetModelMetadata() => new()
     {
         Name = "LinearVectorModel",
         FeatureCount = _inputDim,
@@ -101,10 +86,10 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     };
 
     /// <inheritdoc/>
-    public override Vector<double> GetParameters() => _parameters.Clone();
+    public Vector<double> GetParameters() => _parameters.Clone();
 
     /// <inheritdoc/>
-    public override void SetParameters(Vector<double> parameters)
+    public void SetParameters(Vector<double> parameters)
     {
         Guard.NotNull(parameters);
         if (parameters.Length != _parameters.Length)
@@ -118,10 +103,10 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount => _parameters.Length;
+    public int ParameterCount => _parameters.Length;
 
     /// <inheritdoc/>
-    public override IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
+    public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
         var model = new LinearVectorModel(_inputDim, _learningRate);
         model.SetParameters(parameters);
@@ -129,20 +114,23 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
+    public virtual IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
     {
         var copy = new LinearVectorModel(_inputDim, _learningRate);
         copy.SetParameters(_parameters);
         return copy;
     }
 
+    /// <inheritdoc/>
+    public virtual IFullModel<double, Matrix<double>, Vector<double>> Clone() => DeepCopy();
+
     object ICloneable.Clone() => DeepCopy();
 
     /// <inheritdoc/>
-    public override ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+    public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 
     /// <inheritdoc/>
-    public override Vector<double> ComputeGradients(
+    public Vector<double> ComputeGradients(
         Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null)
     {
         Guard.NotNull(input);
@@ -177,7 +165,7 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Vector<double> gradients, double learningRate)
+    public void ApplyGradients(Vector<double> gradients, double learningRate)
     {
         Guard.NotNull(gradients);
         if (gradients.Length != _parameters.Length)
@@ -194,18 +182,25 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize() => Encoding.UTF8.GetBytes(SerializeParameters());
+    public byte[] Serialize()
+    {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        return Encoding.UTF8.GetBytes(SerializeParameters());
+    }
 
     /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
+    public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         Guard.NotNull(data);
         DeserializeParameters(Encoding.UTF8.GetString(data));
     }
 
     /// <inheritdoc/>
-    public override void SaveModel(string filePath)
+    public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path is required.", nameof(filePath));
@@ -215,8 +210,10 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override void LoadModel(string filePath)
+    public void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path is required.", nameof(filePath));
@@ -231,7 +228,7 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override void SaveState(Stream stream)
+    public void SaveState(Stream stream)
     {
         Guard.NotNull(stream);
         using var writer = new StreamWriter(stream, Encoding.UTF8, 1024, leaveOpen: true);
@@ -240,7 +237,7 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override void LoadState(Stream stream)
+    public void LoadState(Stream stream)
     {
         Guard.NotNull(stream);
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true,
@@ -249,18 +246,18 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputDim);
+    public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputDim);
 
     /// <inheritdoc/>
-    public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
     }
 
     /// <inheritdoc/>
-    public override bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _inputDim;
+    public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _inputDim;
 
     /// <inheritdoc/>
-    public override Dictionary<string, double> GetFeatureImportance()
+    public Dictionary<string, double> GetFeatureImportance()
     {
         var importance = new Dictionary<string, double>();
         if (_inputDim == 0)
@@ -278,10 +275,10 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
+    public bool SupportsJitCompilation => false;
 
     /// <inheritdoc/>
-    public override ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
+    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
     {
         throw new NotSupportedException("JIT compilation is not supported.");
     }

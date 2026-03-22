@@ -72,27 +72,27 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Class means for each class.
     /// </summary>
-    private Matrix<T>? _classMeans;
+    private Matrix<T> _classMeans = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Covariance matrix for each class.
     /// </summary>
-    private Matrix<T>[]? _classCovariances;
+    private Matrix<T>[] _classCovariances = Array.Empty<Matrix<T>>();
 
     /// <summary>
     /// Inverse of covariance matrix for each class.
     /// </summary>
-    private Matrix<T>[]? _classCovarianceInverses;
+    private Matrix<T>[] _classCovarianceInverses = Array.Empty<Matrix<T>>();
 
     /// <summary>
     /// Log determinant of covariance matrix for each class.
     /// </summary>
-    private Vector<T>? _classLogDets;
+    private Vector<T> _classLogDets = new Vector<T>(0);
 
     /// <summary>
     /// Class priors (prior probabilities).
     /// </summary>
-    private Vector<T>? _classPriors;
+    private Vector<T> _classPriors = new Vector<T>(0);
 
     /// <summary>
     /// Initializes a new instance of the QuadraticDiscriminantAnalysis class.
@@ -160,7 +160,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 
         for (int c = 0; c < NumClasses; c++)
         {
-            T classLabel = ClassLabels![c];
+            T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
             int count = 0;
 
             for (int i = 0; i < x.Rows; i++)
@@ -198,7 +198,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
 
         for (int c = 0; c < NumClasses; c++)
         {
-            T classLabel = ClassLabels![c];
+            T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
             int count = 0;
 
             for (int i = 0; i < n; i++)
@@ -221,14 +221,14 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     private Matrix<T> ComputeClassCovariance(Matrix<T> x, Vector<T> y, int classIndex)
     {
         var covariance = new Matrix<T>(NumFeatures, NumFeatures);
-        T classLabel = ClassLabels![classIndex];
+        T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[classIndex];
         int count = 0;
 
         // Get class mean
         var mean = new Vector<T>(NumFeatures);
         for (int j = 0; j < NumFeatures; j++)
         {
-            mean[j] = _classMeans![classIndex, j];
+            mean[j] = _classMeans[classIndex, j];
         }
 
         // Compute covariance for this class
@@ -464,7 +464,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels![bestClass];
+            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
         }
 
         return predictions;
@@ -790,9 +790,12 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
             }
         }
 
-        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans");
-        _classPriors = DeserializeVector(modelDataObj, "ClassPriors");
-        _classLogDets = DeserializeVector(modelDataObj, "ClassLogDets");
+        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans")
+            ?? throw new InvalidOperationException("Missing required 'ClassMeans' in serialized model data.");
+        _classPriors = DeserializeVector(modelDataObj, "ClassPriors")
+            ?? throw new InvalidOperationException("Missing required 'ClassPriors' in serialized model data.");
+        _classLogDets = DeserializeVector(modelDataObj, "ClassLogDets")
+            ?? throw new InvalidOperationException("Missing required 'ClassLogDets' in serialized model data.");
 
         int numCovMatrices = modelDataObj["NumCovarianceMatrices"]?.ToObject<int>() ?? 0;
         if (numCovMatrices > 0)

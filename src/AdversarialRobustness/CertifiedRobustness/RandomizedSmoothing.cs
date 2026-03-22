@@ -265,6 +265,7 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
     /// <inheritdoc/>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var json = JsonConvert.SerializeObject(options, Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
@@ -272,6 +273,7 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
             throw new ArgumentNullException(nameof(data));
@@ -284,13 +286,21 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
-        File.WriteAllBytes(filePath, Serialize());
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
     }
 
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
-        Deserialize(File.ReadAllBytes(filePath));
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            Deserialize(File.ReadAllBytes(filePath));
+        }
     }
 
     private Vector<T> AddGaussianNoise(Vector<T> input, T sigma)

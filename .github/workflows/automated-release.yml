@@ -65,7 +65,7 @@ jobs:
           df -h /
 
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
 
@@ -324,7 +324,7 @@ jobs:
           df -h /
 
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup .NET
         uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5
@@ -413,7 +413,7 @@ jobs:
     if: needs.version-and-build.outputs.should_release == 'true'
     steps:
       - name: Download package
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v6
         with:
           name: nuget-package-${{ github.sha }}
           path: out/
@@ -455,7 +455,7 @@ jobs:
     if: needs.version-and-build.outputs.should_release == 'true'
     steps:
       - name: Download package
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v6
         with:
           name: nuget-package-${{ github.sha }}
           path: out/
@@ -464,7 +464,7 @@ jobs:
         run: ls -lah out/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
           tag_name: v${{ needs.version-and-build.outputs.package_version }}
           name: Release v${{ needs.version-and-build.outputs.package_version }}

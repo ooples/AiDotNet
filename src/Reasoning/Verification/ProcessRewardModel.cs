@@ -209,9 +209,10 @@ Evaluate the step:";
             string jsonContent = ExtractJsonFromResponse(response);
             var root = JObject.Parse(jsonContent);
 
-            if (root["reward"] != null)
+            var rewardToken = root["reward"];
+            if (rewardToken != null)
             {
-                double rewardValue = root["reward"]!.Value<double>();
+                double rewardValue = rewardToken.Value<double>();
                 return MathHelper.Clamp(rewardValue, 0.0, 1.0);
             }
         }

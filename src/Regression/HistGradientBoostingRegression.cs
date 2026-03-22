@@ -412,6 +412,7 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
     /// </summary>
     public override byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
 
@@ -483,6 +484,7 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
     /// </summary>
     public override void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var ms = new MemoryStream(data);
         using var reader = new BinaryReader(ms);
 
@@ -651,8 +653,12 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
     /// </remarks>
     public override void SaveModel(string filePath)
     {
-        byte[] data = Serialize();
-        File.WriteAllBytes(filePath, data);
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] data = Serialize();
+            File.WriteAllBytes(filePath, data);
+        }
     }
 
     /// <summary>
@@ -667,8 +673,12 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
     /// </remarks>
     public override void LoadModel(string filePath)
     {
-        byte[] data = File.ReadAllBytes(filePath);
-        Deserialize(data);
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+        using (Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] data = File.ReadAllBytes(filePath);
+            Deserialize(data);
+        }
     }
 
     /// <summary>
@@ -1030,7 +1040,7 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
         for (int f = 0; f < _numFeatures; f++)
         {
             double val = NumOps.ToDouble(x[row, f]);
-            var thresholds = _binThresholds![f].Select(t => NumOps.ToDouble(t)).ToList();
+            var thresholds = (_binThresholds ?? throw new InvalidOperationException("Bin thresholds not computed."))[f].Select(t => NumOps.ToDouble(t)).ToList();
             binned[f] = (byte)FindBin(val, thresholds);
         }
 
@@ -1249,7 +1259,7 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
     /// </remarks>
     private HistogramBin[] BuildHistogram(List<int> sampleIndices, int featureIdx, T[] residuals)
     {
-        int numBins = _binThresholds![featureIdx].Length + 1;
+        int numBins = (_binThresholds ?? throw new InvalidOperationException("Bin thresholds not computed."))[featureIdx].Length + 1;
         var histogram = new HistogramBin[numBins];
 
         for (int i = 0; i < numBins; i++)
@@ -1259,7 +1269,7 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
 
         foreach (int idx in sampleIndices)
         {
-            int bin = _binnedData![idx, featureIdx];
+            int bin = (_binnedData ?? throw new InvalidOperationException("Binned data not computed."))[idx, featureIdx];
             histogram[bin].GradientSum = NumOps.Add(histogram[bin].GradientSum, residuals[idx]);
             histogram[bin].HessianSum = NumOps.Add(histogram[bin].HessianSum, NumOps.One); // Squared loss has hessian = 1
             histogram[bin].Count++;
@@ -1372,7 +1382,7 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
 
         foreach (int idx in node.SampleIndices)
         {
-            int bin = _binnedData![idx, split.FeatureIndex];
+            int bin = (_binnedData ?? throw new InvalidOperationException("Binned data not computed."))[idx, split.FeatureIndex];
             if (bin <= split.BinThreshold)
             {
                 leftIndices.Add(idx);
@@ -1388,7 +1398,7 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
         node.BinThreshold = split.BinThreshold;
 
         // Convert bin threshold to actual value for prediction
-        if (split.BinThreshold < _binThresholds![split.FeatureIndex].Length)
+        if (split.BinThreshold < (_binThresholds ?? throw new InvalidOperationException("Bin thresholds not computed."))[split.FeatureIndex].Length)
         {
             node.Threshold = _binThresholds[split.FeatureIndex][split.BinThreshold];
         }
@@ -1464,7 +1474,7 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
 
         while (!node.IsLeaf)
         {
-            int bin = _binnedData![sampleIndex, node.FeatureIndex];
+            int bin = (_binnedData ?? throw new InvalidOperationException("Binned data not computed."))[sampleIndex, node.FeatureIndex];
             if (node.Left is null || node.Right is null)
             {
                 throw new InvalidOperationException("Internal tree node has null children.");

@@ -1,0 +1,177 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+const base = import.meta.env.BASE_URL;
+---
+
+<BaseLayout
+  title="License - AiDotNet"
+  description="AiDotNet Business Source License 1.1. Free for non-commercial use, community license available for qualifying organizations."
+>
+  <div class="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+      <h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-2">License</h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-8">Business Source License 1.1</p>
+
+      <!-- Quick summary -->
+      <div class="bg-gradient-to-r from-brand-blue/5 to-brand-purple/5 dark:from-brand-blue/10 dark:to-brand-purple/10 rounded-2xl border border-brand-blue/20 dark:border-brand-purple/20 p-6 mb-8">
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-3">Quick Summary</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <h3 class="font-semibold text-green-600 dark:text-green-400 mb-1">Free to use:</h3>
+            <ul class="space-y-1 text-slate-600 dark:text-slate-300">
+              <li>Training and inference (always free, no license needed)</li>
+              <li>Non-commercial projects</li>
+              <li>Academic and educational use</li>
+              <li>Personal projects and learning</li>
+              <li>Internal evaluation and testing</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="font-semibold text-brand-blue mb-1">License required for:</h3>
+            <ul class="space-y-1 text-slate-600 dark:text-slate-300">
+              <li>Model save/load operations (after 10-operation trial)</li>
+              <li>Commercial products and services</li>
+              <li>Production deployments</li>
+            </ul>
+            <p class="mt-2 text-xs text-slate-500">
+              <a href={`${base}pricing/`} class="text-brand-blue hover:underline">Free community license available</a> for
+              open-source projects, companies under $1M revenue with fewer than 5 developers.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="prose prose-slate dark:prose-invert max-w-none space-y-6">
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Business Source License 1.1</h2>
+
+          <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 font-mono text-sm leading-relaxed text-slate-700 dark:text-slate-300 space-y-4">
+            <p><strong>Licensor:</strong> Ooples Finance LLC</p>
+            <p><strong>Licensed Work:</strong> AiDotNet (the "Software")</p>
+            <p><strong>Additional Use Grant:</strong> You may use the Licensed Work for any non-commercial purpose, including education, research, personal projects, and internal evaluation. Training and inference operations are unrestricted regardless of license status.</p>
+            <p><strong>Change Date:</strong> Four years from the date of each release</p>
+            <p><strong>Change License:</strong> Apache License 2.0</p>
+
+            <hr class="border-slate-200 dark:border-slate-700" />
+
+            <p><strong>Terms</strong></p>
+
+            <p>
+              The Licensor hereby grants you the right to copy, modify, create derivative works, redistribute,
+              and make non-production use of the Licensed Work. The Licensor may make an Additional Use Grant,
+              above, permitting limited production use.
+            </p>
+
+            <p>
+              Effective on the Change Date, or the fourth anniversary of the first publicly available distribution
+              of a specific version of the Licensed Work under this License, whichever comes first, the Licensor
+              hereby grants you rights under the terms of the Change License, and the rights granted in the
+              paragraph above terminate.
+            </p>
+
+            <p>
+              If your use of the Licensed Work does not comply with the requirements currently in effect as
+              described in this License, you must purchase a commercial license from the Licensor, its affiliated
+              entities, or authorized resellers, or you must refrain from using the Licensed Work.
+            </p>
+
+            <p>
+              All copies of the original and modified Licensed Work, and derivative works of the Licensed Work,
+              are subject to this License. This License applies separately for each version of the Licensed Work
+              and the Change Date may vary for each version of the Licensed Work released by Licensor.
+            </p>
+
+            <p>
+              You must conspicuously display this License on each original or modified copy of the Licensed Work.
+              If you receive the Licensed Work in original or modified form from a third party, the terms and
+              conditions set forth in this License apply to your use of that work.
+            </p>
+
+            <p>
+              Any use of the Licensed Work in violation of this License will automatically terminate your rights
+              under this License for the current and all other versions of the Licensed Work.
+            </p>
+
+            <p>
+              This License does not grant you any right in any trademark or logo of Licensor or its affiliates
+              (provided that you may use a trademark or logo of Licensor as expressly required by this License).
+            </p>
+
+            <p>
+              TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSED WORK IS PROVIDED ON AN "AS IS" BASIS.
+              LICENSOR HEREBY DISCLAIMS ALL WARRANTIES AND CONDITIONS, EXPRESS OR IMPLIED, INCLUDING (WITHOUT
+              LIMITATION) WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT,
+              AND TITLE.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">License Tiers</h2>
+
+          <div class="space-y-4">
+            <div class="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+              <h3 class="font-bold text-slate-900 dark:text-white">Community (Free)</h3>
+              <p class="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                For open-source projects, educational use, personal projects, and companies with annual revenue
+                under $1M USD and fewer than 5 developers. Includes 3 machine activations.
+              </p>
+              <a href={`${base}pricing/`} class="inline-block mt-2 text-sm text-brand-blue hover:underline">Register for free</a>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+              <h3 class="font-bold text-slate-900 dark:text-white">Professional ($29/month per seat)</h3>
+              <p class="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                For commercial use by individual developers and small teams. Includes 5 machine activations
+                per seat, priority support, and all library features.
+              </p>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+              <h3 class="font-bold text-slate-900 dark:text-white">Enterprise ($99/month per seat)</h3>
+              <p class="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                For large organizations. Includes 10 machine activations per seat, dedicated support,
+                custom SLAs, and volume discounts.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">What's Always Free</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            The following operations are <strong>always free</strong> and never require a license, regardless of commercial use:
+          </p>
+          <ul class="list-disc pl-6 text-slate-600 dark:text-slate-300 space-y-1">
+            <li>Model training (all algorithms, all configurations)</li>
+            <li>Model inference and prediction</li>
+            <li>Data preprocessing and feature engineering</li>
+            <li>AutoML and neural architecture search</li>
+            <li>All utility functions and helpers</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            Only model save/load operations (SaveModel, LoadModel, Serialize, Deserialize) require a license
+            after the free trial period (30 days or 10 operations, whichever comes first).
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Apache 2.0 Conversion</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Each version of AiDotNet automatically converts to the Apache License 2.0 four years after its initial release.
+            This means that every version eventually becomes fully open-source with no restrictions.
+            The BSL license ensures the project is sustainable while guaranteeing eventual open-source availability.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Questions?</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            For licensing questions, contact <a href="mailto:licensing@aidotnet.dev" class="text-brand-blue hover:underline">licensing@aidotnet.dev</a>
+            or visit our <a href={`${base}pricing/`} class="text-brand-blue hover:underline">pricing page</a>.
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</BaseLayout>

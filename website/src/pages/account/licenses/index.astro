@@ -1,0 +1,276 @@
+---
+import AccountLayout from '../../../layouts/AccountLayout.astro';
+const base = import.meta.env.BASE_URL;
+---
+
+<AccountLayout title="Licenses - AiDotNet" description="View and manage your AiDotNet BSL license keys and machine activations." activeTab="licenses">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white">License Keys</h1>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage your AiDotNet library license keys and machine activations</p>
+      </div>
+      <a
+        href={`${base}pricing/`}
+        class="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-brand-blue to-brand-purple text-white text-sm font-medium rounded-xl hover:shadow-lg transition-all"
+      >
+        Get a License
+      </a>
+    </div>
+
+    <!-- No licenses placeholder -->
+    <div id="no-licenses" class="hidden bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-12 text-center">
+      <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+        <svg class="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
+        </svg>
+      </div>
+      <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">No license keys yet</h3>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-4 max-w-md mx-auto">
+        Get a free community license for open-source and personal projects, or upgrade to Professional or Enterprise for commercial use.
+      </p>
+      <a
+        href={`${base}pricing/`}
+        class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-brand-blue to-brand-purple text-white text-sm font-medium rounded-xl hover:shadow-lg transition-all"
+      >
+        View Pricing &amp; Get a License
+      </a>
+    </div>
+
+    <!-- Loading state -->
+    <div id="licenses-loading" class="text-center py-12">
+      <p class="text-sm text-slate-500 dark:text-slate-400">Loading your licenses...</p>
+    </div>
+
+    <!-- License cards -->
+    <div id="licenses-container" class="hidden space-y-4">
+    </div>
+
+    <!-- Setup instructions -->
+    <div id="setup-section" class="hidden bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+      <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-3">Setup Instructions</h2>
+      <div class="space-y-4 text-sm text-slate-600 dark:text-slate-300">
+        <div>
+          <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Option 1: Environment Variable</h3>
+          <p class="mb-2">Set the <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-xs">AIDOTNET_LICENSE_KEY</code> environment variable:</p>
+          <pre class="bg-slate-900 text-slate-100 rounded-xl p-4 overflow-x-auto"><code id="env-var-code">AIDOTNET_LICENSE_KEY=your-key-here</code></pre>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Option 2: License File</h3>
+          <p class="mb-2">Save your key to <code class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono text-xs">~/.aidotnet/license.key</code></p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Option 3: Code</h3>
+          <pre class="bg-slate-900 text-slate-100 rounded-xl p-4 overflow-x-auto"><code>var license = new AiDotNetLicenseKey("your-key-here");
+var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { supabase } from '../../../lib/supabase';
+
+    interface LicenseKey {
+      id: string;
+      license_key: string;
+      tier: string;
+      status: string;
+      max_activations: number;
+      organization_name: string | null;
+      issued_at: string;
+      expires_at: string | null;
+    }
+
+    interface Activation {
+      id: string;
+      machine_id_hash: string;
+      license_key_id: string;
+      hostname: string | null;
+      os_description: string | null;
+      first_seen_at: string;
+      last_seen_at: string;
+      is_active: boolean;
+    }
+
+    async function loadLicenses() {
+      const loadingEl = document.getElementById('licenses-loading');
+      const noLicensesEl = document.getElementById('no-licenses');
+      const containerEl = document.getElementById('licenses-container');
+      const setupEl = document.getElementById('setup-section');
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        window.location.href = `${import.meta.env.BASE_URL}login/?redirect=${encodeURIComponent(window.location.pathname)}`;
+        return;
+      }
+
+      const { data: licenses, error } = await supabase
+        .from('license_keys')
+        .select('id, license_key, tier, status, max_activations, organization_name, issued_at, expires_at')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+
+      if (loadingEl) loadingEl.classList.add('hidden');
+
+      if (error) {
+        console.error('Failed to load licenses:', error);
+        if (noLicensesEl) {
+          noLicensesEl.innerHTML = '<p class="text-red-500">Failed to load licenses. Please try again later.</p>';
+          noLicensesEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      if (!licenses || licenses.length === 0) {
+        if (noLicensesEl) noLicensesEl.classList.remove('hidden');
+        return;
+      }
+
+      // Store licenses for secure key lookup (copy button handler)
+      loadedLicenses = licenses.map(l => ({ id: l.id, license_key: l.license_key }));
+
+      if (containerEl) containerEl.classList.remove('hidden');
+      if (setupEl) setupEl.classList.remove('hidden');
+
+      // Load activations for all licenses
+      const licenseIds = licenses.map(l => l.id);
+      const { data: activations, error: activationsError } = await supabase
+        .from('license_activations')
+        .select('id, license_key_id, machine_id_hash, hostname, os_description, first_seen_at, last_seen_at, is_active')
+        .in('license_key_id', licenseIds)
+        .order('last_seen_at', { ascending: false });
+
+      if (activationsError) {
+        console.error('Failed to load activations:', activationsError.message);
+      }
+
+      const activationsByLicense = new Map<string, Activation[]>();
+      if (activations) {
+        for (const a of activations) {
+          const list = activationsByLicense.get(a.license_key_id) || [];
+          list.push(a);
+          activationsByLicense.set(a.license_key_id, list);
+        }
+      }
+
+      if (containerEl) {
+        containerEl.innerHTML = licenses.map(l => renderLicenseCard(l, activationsByLicense.get(l.id) || [])).join('');
+
+        // Update setup instructions with first active key
+        const activeKey = licenses.find(l => l.status === 'active');
+        if (activeKey) {
+          const envCode = document.getElementById('env-var-code');
+          if (envCode) envCode.textContent = `AIDOTNET_LICENSE_KEY=${activeKey.license_key}`;
+        }
+      }
+    }
+
+    function tierBadge(tier: string): string {
+      const colors: Record<string, string> = {
+        community: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300',
+        professional: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
+        enterprise: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
+      };
+      return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${colors[tier] || colors.community}">${tier}</span>`;
+    }
+
+    function statusBadge(status: string): string {
+      const colors: Record<string, string> = {
+        active: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+        suspended: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+        revoked: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+        expired: 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400',
+      };
+      return `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${colors[status] || colors.expired}">${status}</span>`;
+    }
+
+    function renderLicenseCard(license: LicenseKey, activations: Activation[]): string {
+      const activeActivations = activations.filter(a => a.is_active);
+      const issued = new Date(license.issued_at).toLocaleDateString();
+      const expires = license.expires_at ? new Date(license.expires_at).toLocaleDateString() : 'Never';
+
+      // Mask key: show first 8 and last 4 characters
+      const maskedKey = license.license_key.length > 16
+        ? license.license_key.substring(0, 8) + '...' + license.license_key.substring(license.license_key.length - 4)
+        : license.license_key;
+
+      const activationsHtml = activeActivations.length > 0
+        ? activeActivations.map(a => `
+          <div class="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-50 dark:bg-slate-900/50">
+            <div class="text-xs">
+              <span class="font-medium text-slate-700 dark:text-slate-300">${escapeHtml(a.hostname || 'Unknown machine')}</span>
+              <span class="text-slate-400 ml-2">${escapeHtml(a.os_description || '')}</span>
+            </div>
+            <span class="text-xs text-slate-400">Last seen: ${new Date(a.last_seen_at).toLocaleDateString()}</span>
+          </div>
+        `).join('')
+        : '<p class="text-xs text-slate-400 py-2">No active machines. Use your license key to activate.</p>';
+
+      return `
+        <div class="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+          <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+              ${tierBadge(license.tier)}
+              ${statusBadge(license.status)}
+            </div>
+            <button class="copy-key-btn text-xs font-medium text-brand-blue hover:underline" data-key-id="${license.id}">
+              Copy Key
+            </button>
+          </div>
+
+          <div class="mb-4">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="font-mono text-sm text-slate-700 dark:text-slate-300">${escapeHtml(maskedKey)}</span>
+            </div>
+            <div class="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+              <span>Issued: ${issued}</span>
+              <span>Expires: ${expires}</span>
+              ${license.organization_name ? `<span>Org: ${escapeHtml(license.organization_name)}</span>` : ''}
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Machine Activations</h3>
+              <span class="text-xs text-slate-500">${activeActivations.length} / ${license.max_activations}</span>
+            </div>
+            <div class="space-y-1.5">
+              ${activationsHtml}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function escapeHtml(str: string): string {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    }
+
+    // Store loaded licenses for secure key lookup (avoids exposing keys in DOM)
+    let loadedLicenses: Array<{ id: string; license_key: string }> = [];
+
+    // Copy key handler
+    document.addEventListener('click', async (e) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('copy-key-btn')) {
+        const keyId = target.dataset.keyId;
+        const license = loadedLicenses.find(l => l.id === keyId);
+        if (license) {
+          try {
+            await navigator.clipboard.writeText(license.license_key);
+            target.textContent = 'Copied!';
+            setTimeout(() => { target.textContent = 'Copy Key'; }, 2000);
+          } catch {
+            target.textContent = 'Copy failed';
+            setTimeout(() => { target.textContent = 'Copy Key'; }, 2000);
+          }
+        }
+      }
+    });
+
+    loadLicenses();
+  </script>
+</AccountLayout>

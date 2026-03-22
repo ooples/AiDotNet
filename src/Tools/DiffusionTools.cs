@@ -395,10 +395,10 @@ public class ImageTo3DTool<T> : ToolBase
                 // Load image from file path using ImageHelper
                 inputImage = ImageHelper<T>.LoadImage(imagePath, normalize: true);
             }
-            else if (json["image_data"] != null)
+            else if (json["image_data"] is { } imageDataToken)
             {
                 // Parse image data from JSON array
-                var imageDataArray = json["image_data"]!.ToObject<double[,,]>();
+                var imageDataArray = imageDataToken.ToObject<double[,,]>();
                 if (imageDataArray == null)
                 {
                     return "Error: 'image_data' must be a 3D array [height, width, channels].";

@@ -1,44 +1,61 @@
+using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Models;
 
 /// <summary>
-/// Abstract base class for meta-learning adapted models that wrap a base model with task-specific parameters.
+/// Abstract base class for meta-learning adapted models that implement <see cref="IFullModel{T, TInput, TOutput}"/>.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
 /// <remarks>
 /// <para>
-/// Extends <see cref="ModelWrapperBase{T, TInput, TOutput}"/> with meta-learning-specific behavior:
-/// training is not supported directly (use the meta-learning algorithm instead), and parameter
-/// management is abstract so each adapted model can store its own task-specific parameters.
+/// This base class provides default implementations for most <see cref="IFullModel{T, TInput, TOutput}"/>
+/// interface members by delegating to the wrapped base model. Subclasses only need to implement
+/// prediction logic and parameter management specific to their adaptation strategy.
 /// </para>
 /// <para><b>For Beginners:</b> Meta-learning adapted models are created by meta-learning algorithms
 /// (like MAML, ProtoNets, etc.) after adapting to a new task. They wrap a base neural network
 /// with task-specific parameters. This base class handles common concerns like serialization,
 /// gradient computation, and feature awareness by delegating to the wrapped model.</para>
 /// </remarks>
-public abstract class MetaLearningModelBase<T, TInput, TOutput> : ModelWrapperBase<T, TInput, TOutput>
+public abstract class MetaLearningModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Numeric operations for type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// The underlying full model used for feature extraction and prediction.
+    /// </summary>
+    protected IFullModel<T, TInput, TOutput> BaseModel { get; }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MetaLearningModelBase{T, TInput, TOutput}"/> class.
     /// </summary>
     /// <param name="baseModel">The underlying model used for feature extraction.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="baseModel"/> is null.</exception>
     protected MetaLearningModelBase(IFullModel<T, TInput, TOutput> baseModel)
-        : base(baseModel)
     {
+        Guard.NotNull(baseModel);
+        BaseModel = baseModel;
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Direct training is not supported for meta-learning adapted models. Use the corresponding
-    /// meta-learning algorithm to adapt the model to a new task.
-    /// </remarks>
-    public override void Train(TInput input, TOutput expectedOutput)
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
+    /// <inheritdoc/>
+    public abstract TOutput Predict(TInput input);
+
+    /// <inheritdoc/>
+    public virtual void Train(TInput input, TOutput expectedOutput)
     {
         throw new NotSupportedException(
             $"Direct training is not supported for {GetType().Name}. " +
@@ -46,16 +63,45 @@ public abstract class MetaLearningModelBase<T, TInput, TOutput> : ModelWrapperBa
     }
 
     /// <inheritdoc/>
-    public abstract override Vector<T> GetParameters();
+    public virtual ModelMetadata<T> GetModelMetadata() => Metadata;
+
+    // --- IParameterizable ---
 
     /// <inheritdoc/>
-    public abstract override void SetParameters(Vector<T> parameters);
+    public abstract Vector<T> GetParameters();
 
     /// <inheritdoc/>
-    public override int ParameterCount => GetParameters().Length;
+    public abstract void SetParameters(Vector<T> parameters);
 
     /// <inheritdoc/>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public virtual int ParameterCount => GetParameters().Length;
+
+    /// <inheritdoc/>
+    public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);
+
+    // --- ICloneable<IFullModel<T, TInput, TOutput>> ---
+
+    /// <inheritdoc/>
+    public abstract IFullModel<T, TInput, TOutput> DeepCopy();
+
+    /// <inheritdoc/>
+    public virtual IFullModel<T, TInput, TOutput> Clone() => DeepCopy();
+
+    // --- IFullModel ---
+
+    /// <inheritdoc/>
+    public virtual ILossFunction<T> DefaultLossFunction => BaseModel.DefaultLossFunction;
+
+    // --- IGradientComputable ---
+
+    /// <inheritdoc/>
+    public virtual Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+    {
+        return BaseModel.ComputeGradients(input, target, lossFunction ?? DefaultLossFunction);
+    }
+
+    /// <inheritdoc/>
+    public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         var parameters = GetParameters();
         if (gradients.Length != parameters.Length)
@@ -71,6 +117,72 @@ public abstract class MetaLearningModelBase<T, TInput, TOutput> : ModelWrapperBa
         }
 
         SetParameters(parameters);
+    }
+
+    // --- IModelSerializer ---
+
+    /// <inheritdoc/>
+    public virtual byte[] Serialize()
+    {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return BaseModel.Serialize();
+        }
+    }
+
+    /// <inheritdoc/>
+    public virtual void Deserialize(byte[] data)
+    {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
+        Guard.NotNull(data);
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            BaseModel.Deserialize(data);
+        }
+    }
+
+    /// <inheritdoc/>
+    public virtual void SaveModel(string filePath) => BaseModel.SaveModel(filePath);
+
+    /// <inheritdoc/>
+    public virtual void LoadModel(string filePath) => BaseModel.LoadModel(filePath);
+
+    // --- ICheckpointableModel ---
+
+    /// <inheritdoc/>
+    public virtual void SaveState(Stream stream) => BaseModel.SaveState(stream);
+
+    /// <inheritdoc/>
+    public virtual void LoadState(Stream stream) => BaseModel.LoadState(stream);
+
+    // --- IFeatureAware ---
+
+    /// <inheritdoc/>
+    public virtual IEnumerable<int> GetActiveFeatureIndices() => BaseModel.GetActiveFeatureIndices();
+
+    /// <inheritdoc/>
+    public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+        => BaseModel.SetActiveFeatureIndices(featureIndices);
+
+    /// <inheritdoc/>
+    public virtual bool IsFeatureUsed(int featureIndex) => BaseModel.IsFeatureUsed(featureIndex);
+
+    // --- IFeatureImportance ---
+
+    /// <inheritdoc/>
+    public virtual Dictionary<string, T> GetFeatureImportance() => BaseModel.GetFeatureImportance();
+
+    // --- IJitCompilable ---
+
+    /// <inheritdoc/>
+    public virtual bool SupportsJitCompilation => false;
+
+    /// <inheritdoc/>
+    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            $"JIT compilation is not supported for {GetType().Name}.");
     }
 
     /// <summary>

@@ -378,7 +378,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute: input * A (shared, frozen) → [batchSize, rank]
-        Matrix<T> afterA = inputMatrix.Multiply(_sharedMatrixA!);
+        Matrix<T> afterA = inputMatrix.Multiply(_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized."));
 
         // Apply scaling vector b element-wise: afterA * diag(b) → [batchSize, rank]
         Matrix<T> afterB = new Matrix<T>(batchSize, _scalingVectorB.Length);
@@ -391,7 +391,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute: afterB * B (shared, frozen) → [batchSize, outputSize]
-        Matrix<T> afterSharedB = afterB.Multiply(_sharedMatrixB!);
+        Matrix<T> afterSharedB = afterB.Multiply(_sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized."));
         _lastIntermediate = afterSharedB.Clone(); // Store for backward pass
 
         // Apply scaling vector d element-wise: afterSharedB * diag(d) → [batchSize, outputSize]
@@ -513,7 +513,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute intermediate: input * A
-        Matrix<T> afterA = inputMatrix.Multiply(_sharedMatrixA!);
+        Matrix<T> afterA = inputMatrix.Multiply(_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized."));
 
         // Compute gradient for b: sum over batch of (gradAfterB * afterA)
         _scalingVectorBGradient = new Vector<T>(rank);

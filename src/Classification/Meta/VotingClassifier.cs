@@ -85,12 +85,12 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// The list of classifiers in the ensemble.
     /// </summary>
-    private List<IClassifier<T>>? _estimators;
+    private List<IClassifier<T>> _estimators = new();
 
     /// <summary>
     /// The weights for each classifier.
     /// </summary>
-    private double[]? _weights;
+    private double[] _weights = Array.Empty<double>();
 
     /// <summary>
     /// Initializes a new instance of the VotingClassifier class.
@@ -208,6 +208,9 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
     /// </summary>
     private Vector<T> HardVotePredict(Matrix<T> input)
     {
+        if (_weights.Length == 0 || _estimators.Count == 0)
+            throw new InvalidOperationException("Model must be trained before making predictions.");
+
         var predictions = new Vector<T>(input.Rows);
 
         for (int i = 0; i < input.Rows; i++)
@@ -215,7 +218,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
             var votes = new double[NumClasses];
 
             // Get vote from each classifier
-            for (int e = 0; e < _estimators!.Count; e++)
+            for (int e = 0; e < _estimators.Count; e++)
             {
                 // Extract single sample
                 var sample = new Matrix<T>(1, NumFeatures);
@@ -229,9 +232,9 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
                 // Find which class
                 for (int c = 0; c < NumClasses; c++)
                 {
-                    if (NumOps.Compare(pred[0], ClassLabels![c]) == 0)
+                    if (NumOps.Compare(pred[0], (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c]) == 0)
                     {
-                        votes[c] += _weights![e];
+                        votes[c] += _weights[e];
                         break;
                     }
                 }
@@ -249,7 +252,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
                 }
             }
 
-            predictions[i] = ClassLabels![bestClass];
+            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
         }
 
         return predictions;
@@ -258,7 +261,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
     /// <inheritdoc/>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
-        if (_estimators is null)
+        if (_estimators.Count == 0 || _weights.Length == 0)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
@@ -284,7 +287,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
                 {
                     for (int c = 0; c < NumClasses; c++)
                     {
-                        if (NumOps.Compare(preds[i], ClassLabels![c]) == 0)
+                        if (NumOps.Compare(preds[i], (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c]) == 0)
                         {
                             estProbs[i, c] = NumOps.One;
                         }
@@ -293,7 +296,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
             }
 
             // Weighted accumulation
-            T weight = NumOps.FromDouble(_weights![e]);
+            T weight = NumOps.FromDouble(_weights[e]);
             for (int i = 0; i < input.Rows; i++)
             {
                 for (int c = 0; c < NumClasses; c++)
@@ -385,7 +388,7 @@ public class VotingClassifier<T> : MetaClassifierBase<T>
         NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
         NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
         TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
-        _weights = jObj["Weights"]?.ToObject<double[]>();
+        _weights = jObj["Weights"]?.ToObject<double[]>() ?? Array.Empty<double>();
         Options.Voting = (VotingType)(jObj["VotingType"]?.ToObject<int>() ?? (int)VotingType.Hard);
 
         var types = jObj["EstimatorTypes"]?.ToObject<string[]>();

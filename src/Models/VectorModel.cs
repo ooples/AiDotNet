@@ -638,6 +638,7 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
     /// </remarks>
     public override byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         using MemoryStream ms = new MemoryStream();
         using BinaryWriter writer = new BinaryWriter(ms);
 
@@ -692,6 +693,7 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
     /// </remarks>
     public override void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
             throw new ArgumentNullException(nameof(data));
@@ -756,6 +758,8 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
     /// </remarks>
     public override void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         if (filePath == null)
         {
             throw new ArgumentNullException(nameof(filePath));
@@ -806,6 +810,8 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
     /// </remarks>
     public override void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (filePath == null)
         {
             throw new ArgumentNullException(nameof(filePath));

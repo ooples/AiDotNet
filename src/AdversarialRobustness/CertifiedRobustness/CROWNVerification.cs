@@ -279,6 +279,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     /// <inheritdoc/>
     public byte[] Serialize()
     {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
         var data = new SerializationData
         {
             NoiseSigma = _options.NoiseSigma,
@@ -297,6 +298,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     /// <inheritdoc/>
     public void Deserialize(byte[] data)
     {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
             throw new ArgumentNullException(nameof(data));
@@ -330,6 +332,8 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     /// <inheritdoc/>
     public void SaveModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
@@ -348,6 +352,8 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     /// <inheritdoc/>
     public void LoadModel(string filePath)
     {
+        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
+
         if (string.IsNullOrWhiteSpace(filePath))
         {
             throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
