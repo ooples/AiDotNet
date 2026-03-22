@@ -108,7 +108,8 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
                 double convergence = rhoFull - rhoHalf;
                 // Accept edge if: convergence is positive (standard CCM) OR
                 // rhoFull is very high (near-perfect prediction, common for deterministic data)
-                if ((convergence > _convergenceThreshold || rhoFull > 0.95) && rhoFull > _correlationThreshold)
+                const double highCorrelationThreshold = 0.95;
+                if ((convergence > _convergenceThreshold || rhoFull > highCorrelationThreshold) && rhoFull > _correlationThreshold)
                     result[i, j] = NumOps.FromDouble(rhoFull);
             }
 
