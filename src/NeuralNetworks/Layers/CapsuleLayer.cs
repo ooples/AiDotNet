@@ -1069,6 +1069,17 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var matGrad = _transformationMatrixGradient != null
+            ? new Vector<T>(_transformationMatrixGradient.ToArray())
+            : new Vector<T>(_transformationMatrix.Length);
+        var biasGrad = _biasGradient != null
+            ? new Vector<T>(_biasGradient.ToArray())
+            : new Vector<T>(_bias.Length);
+        return Vector<T>.Concatenate(matGrad, biasGrad);
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int matrixSize = _transformationMatrix.Shape.Aggregate(1, (acc, dim) => acc * dim);

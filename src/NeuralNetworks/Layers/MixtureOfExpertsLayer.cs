@@ -881,6 +881,26 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// accidentally corrupting the model.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradVectors = new List<Vector<T>>();
+
+        if (_router.ParameterCount > 0)
+            gradVectors.Add(_router.GetParameterGradients());
+
+        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
+            gradVectors.Add(expert.GetParameterGradients());
+
+        return gradVectors.Count > 0 ? Vector<T>.Concatenate(gradVectors.ToArray()) : new Vector<T>(0);
+    }
+
+    public override void ClearGradients()
+    {
+        _router.ClearGradients();
+        foreach (var expert in _experts)
+            expert.ClearGradients();
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length != ParameterCount)

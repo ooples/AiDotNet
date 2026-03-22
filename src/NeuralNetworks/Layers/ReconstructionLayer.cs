@@ -516,6 +516,21 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(
+            _fc1.GetParameterGradients(),
+            _fc2.GetParameterGradients(),
+            _fc3.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        _fc1.ClearGradients();
+        _fc2.ClearGradients();
+        _fc3.ClearGradients();
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         // Get parameter counts for each sublayer

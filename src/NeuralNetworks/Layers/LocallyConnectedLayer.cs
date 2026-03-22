@@ -1207,6 +1207,23 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// all the unique filters at each spatial location.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var wGrad = _weightGradients != null
+            ? new Vector<T>(_weightGradients.ToArray())
+            : new Vector<T>(_weights.Length);
+        var bGrad = _biasGradients != null
+            ? new Vector<T>(_biasGradients.ToArray())
+            : new Vector<T>(_biases.Length);
+        return Vector<T>.Concatenate(wGrad, bGrad);
+    }
+
+    public override void ClearGradients()
+    {
+        _weightGradients = null;
+        _biasGradients = null;
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int totalParams = _weights.Length + _biases.Length;

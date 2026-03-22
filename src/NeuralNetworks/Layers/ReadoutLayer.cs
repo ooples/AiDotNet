@@ -896,6 +896,19 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var flatWeightGrads = new Vector<T>(_weightGradients.ToArray());
+        var flatBiasGrads = new Vector<T>(_biasGradients.ToArray());
+        return Vector<T>.Concatenate(flatWeightGrads, flatBiasGrads);
+    }
+
+    public override void ClearGradients()
+    {
+        _weightGradients = new Tensor<T>(_weights.Shape);
+        _biasGradients = new Tensor<T>(_bias.Shape);
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int outputSize = _weights.Shape[0];

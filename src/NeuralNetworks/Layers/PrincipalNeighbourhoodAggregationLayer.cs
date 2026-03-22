@@ -1474,6 +1474,34 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
     }
 
     /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gPreTransformWeights = _preTransformWeightsGradient != null ? new Vector<T>(_preTransformWeightsGradient.ToArray()) : new Vector<T>(_preTransformWeights.Length);
+        var gPreTransformBias = _preTransformBiasGradient != null ? new Vector<T>(_preTransformBiasGradient.ToArray()) : new Vector<T>(_preTransformBias.Length);
+        var gPostWeights1 = _postAggregationWeights1Gradient != null ? new Vector<T>(_postAggregationWeights1Gradient.ToArray()) : new Vector<T>(_postAggregationWeights1.Length);
+        var gPostBias1 = _postAggregationBias1Gradient != null ? new Vector<T>(_postAggregationBias1Gradient.ToArray()) : new Vector<T>(_postAggregationBias1.Length);
+        var gPostWeights2 = _postAggregationWeights2Gradient != null ? new Vector<T>(_postAggregationWeights2Gradient.ToArray()) : new Vector<T>(_postAggregationWeights2.Length);
+        var gPostBias2 = _postAggregationBias2Gradient != null ? new Vector<T>(_postAggregationBias2Gradient.ToArray()) : new Vector<T>(_postAggregationBias2.Length);
+        var gSelfWeights = _selfWeightsGradient != null ? new Vector<T>(_selfWeightsGradient.ToArray()) : new Vector<T>(_selfWeights.Length);
+        var gBias = _biasGradient != null ? new Vector<T>(_biasGradient.ToArray()) : new Vector<T>(_bias.Length);
+
+        return Vector<T>.Concatenate(gPreTransformWeights, gPreTransformBias, gPostWeights1, gPostBias1, gPostWeights2, gPostBias2, gSelfWeights, gBias);
+    }
+
+    /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        _preTransformWeightsGradient = null;
+        _preTransformBiasGradient = null;
+        _postAggregationWeights1Gradient = null;
+        _postAggregationWeights2Gradient = null;
+        _postAggregationBias1Gradient = null;
+        _postAggregationBias2Gradient = null;
+        _selfWeightsGradient = null;
+        _biasGradient = null;
+    }
+
+    /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
         int preTransformWeightCount = _preTransformWeights.Length;

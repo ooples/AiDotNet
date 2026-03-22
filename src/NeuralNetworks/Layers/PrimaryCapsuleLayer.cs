@@ -927,6 +927,19 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// ensuring that all matrices and vectors maintain their correct dimensions.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var wGrad = _convWeightsGradient != null ? new Vector<T>(_convWeightsGradient.ToArray()) : new Vector<T>(_convWeights.Length);
+        var bGrad = _convBiasGradient != null ? new Vector<T>(_convBiasGradient.ToArray()) : new Vector<T>(_convBias.Length);
+        return Vector<T>.Concatenate(wGrad, bGrad);
+    }
+
+    public override void ClearGradients()
+    {
+        _convWeightsGradient = null;
+        _convBiasGradient = null;
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int weightSize = _convWeights.Length;

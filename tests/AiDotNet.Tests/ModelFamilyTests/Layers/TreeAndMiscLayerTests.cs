@@ -28,6 +28,8 @@ public class SynapticPlasticityLayerTests : LayerTestBase
     protected override ILayer<double> CreateLayer()
         => new SynapticPlasticityLayer<double>(size: 4);
     protected override int[] InputShape => [4];
+    // STDP layer is pass-through in Forward — weights updated via spike timing, not backprop
+    protected override bool ExpectsNonZeroGradients => false;
 }
 
 public class RepParameterizationLayerTests : LayerTestBase

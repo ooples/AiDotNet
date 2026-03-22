@@ -522,6 +522,21 @@ public class ExpertLayer<T> : LayerBase<T>
     /// If the parameter count doesn't match, an error will be thrown to prevent corruption.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradVectors = _layers
+            .Where(l => l.ParameterCount > 0)
+            .Select(l => l.GetParameterGradients())
+            .ToArray();
+        return gradVectors.Length > 0 ? Vector<T>.Concatenate(gradVectors) : new Vector<T>(0);
+    }
+
+    public override void ClearGradients()
+    {
+        foreach (var layer in _layers)
+            layer.ClearGradients();
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length != ParameterCount)

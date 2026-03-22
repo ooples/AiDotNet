@@ -839,6 +839,60 @@ public class RWKV7Block<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
+    public override Vector<T> GetParameterGradients()
+    {
+        var allParams = GetAllParameterTensors();
+        var allGrads = GetAllGradientTensors();
+        var result = new Vector<T>(ParameterCount);
+        int index = 0;
+
+        for (int i = 0; i < allParams.Length; i++)
+        {
+            var grad = allGrads[i];
+            if (grad != null)
+            {
+                for (int j = 0; j < grad.Length; j++)
+                    result[index++] = grad[j];
+            }
+            else
+            {
+                index += allParams[i].Length;
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public override void ClearGradients()
+    {
+        _timeMixRGrad = null;
+        _timeMixKGrad = null;
+        _timeMixVGrad = null;
+        _timeMixAGrad = null;
+        _timeMixBGrad = null;
+        _receptanceWeightsGrad = null;
+        _keyWeightsGrad = null;
+        _valueWeightsGrad = null;
+        _outputWeightsGrad = null;
+        _aWeightsGrad = null;
+        _aBiasGrad = null;
+        _bWeightsGrad = null;
+        _bBiasGrad = null;
+        _groupNormGammaGrad = null;
+        _groupNormBetaGrad = null;
+        _channelMixRGrad = null;
+        _channelMixKGrad = null;
+        _channelKeyWeightsGrad = null;
+        _channelValueWeightsGrad = null;
+        _channelReceptanceWeightsGrad = null;
+        _normGamma1Grad = null;
+        _normBeta1Grad = null;
+        _normGamma2Grad = null;
+        _normBeta2Grad = null;
+    }
+
+    /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length != ParameterCount)

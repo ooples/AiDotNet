@@ -855,6 +855,20 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         return new Vector<T>([.. allParams]);
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradVectors = _convLayers
+            .Select(c => c.GetParameterGradients())
+            .ToArray();
+        return Vector<T>.Concatenate(gradVectors);
+    }
+
+    public override void ClearGradients()
+    {
+        foreach (var conv in _convLayers)
+            conv.ClearGradients();
+    }
+
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {

@@ -1352,6 +1352,34 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gW1 = _localizationWeights1Gradient != null
+            ? new Vector<T>(_localizationWeights1Gradient.ToArray())
+            : new Vector<T>(_localizationWeights1.Length);
+        var gB1 = _localizationBias1Gradient != null
+            ? new Vector<T>(_localizationBias1Gradient.ToArray())
+            : new Vector<T>(_localizationBias1.Length);
+        var gW2 = _localizationWeights2Gradient != null
+            ? new Vector<T>(_localizationWeights2Gradient.ToArray())
+            : new Vector<T>(_localizationWeights2.Length);
+        var gB2 = _localizationBias2Gradient != null
+            ? new Vector<T>(_localizationBias2Gradient.ToArray())
+            : new Vector<T>(_localizationBias2.Length);
+
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(gW1, gB1),
+            Vector<T>.Concatenate(gW2, gB2));
+    }
+
+    public override void ClearGradients()
+    {
+        _localizationWeights1Gradient = null;
+        _localizationBias1Gradient = null;
+        _localizationWeights2Gradient = null;
+        _localizationBias2Gradient = null;
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int w1Size = _localizationWeights1.Shape[0] * _localizationWeights1.Shape[1];

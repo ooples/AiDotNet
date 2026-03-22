@@ -1613,6 +1613,26 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gW1 = _weights1Gradient != null
+            ? new Vector<T>(_weights1Gradient.ToArray())
+            : new Vector<T>(_weights1.Length);
+        var gB1 = _bias1Gradient != null
+            ? new Vector<T>(_bias1Gradient.ToArray())
+            : new Vector<T>(_bias1.Length);
+        var gW2 = _weights2Gradient != null
+            ? new Vector<T>(_weights2Gradient.ToArray())
+            : new Vector<T>(_weights2.Length);
+        var gB2 = _bias2Gradient != null
+            ? new Vector<T>(_bias2Gradient.ToArray())
+            : new Vector<T>(_bias2.Length);
+
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(gW1, gB1),
+            Vector<T>.Concatenate(gW2, gB2));
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int totalParams = _weights1.Shape[0] * _weights1.Shape[1] +

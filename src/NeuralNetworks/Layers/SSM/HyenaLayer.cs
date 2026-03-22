@@ -790,6 +790,83 @@ public class HyenaLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
+    public override Vector<T> GetParameterGradients()
+    {
+        var result = new Vector<T>(ParameterCount);
+        int index = 0;
+
+        // Input projections — same order as GetAllTensors()
+        for (int i = 0; i <= _order; i++)
+        {
+            var wGrad = _inputProjectionWeightsGradients?[i];
+            var bGrad = _inputProjectionBiasesGradients?[i];
+
+            if (wGrad != null)
+                for (int j = 0; j < wGrad.Length; j++) result[index++] = wGrad[j];
+            else
+                index += _inputProjectionWeights[i].Length;
+
+            if (bGrad != null)
+                for (int j = 0; j < bGrad.Length; j++) result[index++] = bGrad[j];
+            else
+                index += _inputProjectionBiases[i].Length;
+        }
+
+        // Filter networks
+        for (int i = 0; i < _order; i++)
+        {
+            var fw1Grad = _filterWeights1Gradients?[i];
+            var fb1Grad = _filterBiases1Gradients?[i];
+            var fw2Grad = _filterWeights2Gradients?[i];
+            var fb2Grad = _filterBiases2Gradients?[i];
+
+            if (fw1Grad != null)
+                for (int j = 0; j < fw1Grad.Length; j++) result[index++] = fw1Grad[j];
+            else
+                index += _filterWeights1[i].Length;
+
+            if (fb1Grad != null)
+                for (int j = 0; j < fb1Grad.Length; j++) result[index++] = fb1Grad[j];
+            else
+                index += _filterBiases1[i].Length;
+
+            if (fw2Grad != null)
+                for (int j = 0; j < fw2Grad.Length; j++) result[index++] = fw2Grad[j];
+            else
+                index += _filterWeights2[i].Length;
+
+            if (fb2Grad != null)
+                for (int j = 0; j < fb2Grad.Length; j++) result[index++] = fb2Grad[j];
+            else
+                index += _filterBiases2[i].Length;
+        }
+
+        // Output projection
+        if (_outputProjectionWeightsGradient != null)
+            for (int j = 0; j < _outputProjectionWeightsGradient.Length; j++) result[index++] = _outputProjectionWeightsGradient[j];
+        else
+            index += _outputProjectionWeights.Length;
+
+        if (_outputProjectionBiasGradient != null)
+            for (int j = 0; j < _outputProjectionBiasGradient.Length; j++) result[index++] = _outputProjectionBiasGradient[j];
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public override void ClearGradients()
+    {
+        _inputProjectionWeightsGradients = null;
+        _inputProjectionBiasesGradients = null;
+        _filterWeights1Gradients = null;
+        _filterBiases1Gradients = null;
+        _filterWeights2Gradients = null;
+        _filterBiases2Gradients = null;
+        _outputProjectionWeightsGradient = null;
+        _outputProjectionBiasGradient = null;
+    }
+
+    /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length != ParameterCount)

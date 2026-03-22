@@ -404,6 +404,18 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         return new Vector<T>([.. allParams]);
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradVectors = _rdbBlocks.Select(r => r.GetParameterGradients()).ToArray();
+        return Vector<T>.Concatenate(gradVectors);
+    }
+
+    public override void ClearGradients()
+    {
+        foreach (var rdb in _rdbBlocks)
+            rdb.ClearGradients();
+    }
+
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {

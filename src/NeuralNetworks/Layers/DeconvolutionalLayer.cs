@@ -1022,6 +1022,19 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// It's like replacing all the "knowledge" in the layer with new information.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var kGrad = _kernelsGradient != null ? new Vector<T>(_kernelsGradient.ToArray()) : new Vector<T>(_kernels.Length);
+        var bGrad = _biasesGradient != null ? new Vector<T>(_biasesGradient.ToArray()) : new Vector<T>(_biases.Length);
+        return Vector<T>.Concatenate(kGrad, bGrad);
+    }
+
+    public override void ClearGradients()
+    {
+        _kernelsGradient = null;
+        _biasesGradient = null;
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int expectedLength = _kernels.Length + _biases.Length;

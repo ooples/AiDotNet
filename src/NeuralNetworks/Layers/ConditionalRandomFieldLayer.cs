@@ -951,6 +951,28 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var flatTrans = _transitionMatrixGradient != null
+            ? new Vector<T>(_transitionMatrixGradient.ToArray())
+            : new Vector<T>(_numClasses * _numClasses);
+        var flatStart = _startScoresGradient != null
+            ? new Vector<T>(_startScoresGradient.ToArray())
+            : new Vector<T>(_numClasses);
+        var flatEnd = _endScoresGradient != null
+            ? new Vector<T>(_endScoresGradient.ToArray())
+            : new Vector<T>(_numClasses);
+
+        return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
+    }
+
+    public override void ClearGradients()
+    {
+        _transitionMatrixGradient = null;
+        _startScoresGradient = null;
+        _endScoresGradient = null;
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int transSize = _numClasses * _numClasses;

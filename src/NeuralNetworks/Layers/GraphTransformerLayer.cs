@@ -1625,6 +1625,43 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gQuery = _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient.ToArray()) : new Vector<T>(_queryWeights.Length);
+        var gKey = _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient.ToArray()) : new Vector<T>(_keyWeights.Length);
+        var gValue = _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient.ToArray()) : new Vector<T>(_valueWeights.Length);
+        var gOutputWeights = _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient.ToArray()) : new Vector<T>(_outputWeights.Length);
+        var gOutputBias = _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient.ToArray()) : new Vector<T>(_outputBias.Length);
+        var gFfnWeights1 = _ffnWeights1Gradient != null ? new Vector<T>(_ffnWeights1Gradient.ToArray()) : new Vector<T>(_ffnWeights1.Length);
+        var gFfnWeights2 = _ffnWeights2Gradient != null ? new Vector<T>(_ffnWeights2Gradient.ToArray()) : new Vector<T>(_ffnWeights2.Length);
+        var gFfnBias1 = _ffnBias1Gradient != null ? new Vector<T>(_ffnBias1Gradient.ToArray()) : new Vector<T>(_ffnBias1.Length);
+        var gFfnBias2 = _ffnBias2Gradient != null ? new Vector<T>(_ffnBias2Gradient.ToArray()) : new Vector<T>(_ffnBias2.Length);
+        var gLn1Scale = new Vector<T>(_layerNorm1Scale.Length);
+        var gLn1Bias = new Vector<T>(_layerNorm1Bias.Length);
+        var gLn2Scale = new Vector<T>(_layerNorm2Scale.Length);
+        var gLn2Bias = new Vector<T>(_layerNorm2Bias.Length);
+
+        return Vector<T>.Concatenate(
+            gQuery, gKey, gValue, gOutputWeights, gOutputBias,
+            gFfnWeights1, gFfnWeights2, gFfnBias1, gFfnBias2,
+            gLn1Scale, gLn1Bias, gLn2Scale, gLn2Bias);
+    }
+
+    /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputWeightsGradient = null;
+        _outputBiasGradient = null;
+        _ffnWeights1Gradient = null;
+        _ffnWeights2Gradient = null;
+        _ffnBias1Gradient = null;
+        _ffnBias2Gradient = null;
+    }
+
+    /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
         int querySize = _queryWeights.Length;

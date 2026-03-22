@@ -1205,8 +1205,22 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     /// </remarks>
     public override Vector<T> GetParameterGradients()
     {
+        int embeddingParamCount = _embeddingTensor.Shape[0] * _embeddingTensor.Shape[1];
+
+        // In continuous (projection) mode: _embeddingGradient is null, _projectionWeightsGradient holds gradients
+        if (_embeddingGradient == null && _projectionWeightsGradient != null && _projectionWeights != null)
+        {
+            // Return zeros for embedding params + actual projection gradients
+            var embZeros = new Vector<T>(embeddingParamCount);
+            var projGrad = new Vector<T>(_projectionWeightsGradient.ToArray());
+            return Vector<T>.Concatenate(embZeros, projGrad);
+        }
+
+        // Both null: no backward has been run yet, return all-zero vector
         if (_embeddingGradient == null)
             return new Vector<T>(ParameterCount);
+
+        // Discrete embedding mode: return embedding gradients (+ projection if present)
         var embGrad = new Vector<T>(_embeddingGradient.ToArray());
         if (_projectionWeightsGradient == null || _projectionWeights == null)
             return embGrad;

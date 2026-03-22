@@ -956,6 +956,18 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// The method throws an error if the provided vector doesn't contain exactly the right number of values.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightsGradient == null)
+            return new Vector<T>(_weights.Length);
+        return new Vector<T>(_weightsGradient.ToArray());
+    }
+
+    public override void ClearGradients()
+    {
+        _weightsGradient = null;
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length != _weights.Length)

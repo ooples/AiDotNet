@@ -1004,18 +1004,23 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
-            return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient.ToArray()),
-            new Vector<T>(_keyWeightsGradient.ToArray()),
-            new Vector<T>(_valueWeightsGradient.ToArray()));
+            _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient.ToArray()) : new Vector<T>(_queryWeights.Length),
+            _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient.ToArray()) : new Vector<T>(_keyWeights.Length),
+            _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient.ToArray()) : new Vector<T>(_valueWeights.Length),
+            _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient.ToArray()) : new Vector<T>(_outputWeights.Length),
+            _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient.ToArray()) : new Vector<T>(_outputBias.Length)
+        );
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputWeightsGradient = null;
+        _outputBiasGradient = null;
     }
 
     /// <inheritdoc/>
