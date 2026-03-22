@@ -280,6 +280,11 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
             }
         }
 
+        if (_featureMinShift is not null)
+        {
+            clone._featureMinShift = _featureMinShift.ToArray();
+        }
+
         return clone;
     }
 
@@ -316,6 +321,14 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
         }
 
         SerializeMatrix(modelData, "ComplementLogProbs", _complementLogProbs);
+
+        if (_featureMinShift is not null)
+        {
+            var shiftArray = new double[_featureMinShift.Length];
+            for (int i = 0; i < _featureMinShift.Length; i++)
+                shiftArray[i] = NumOps.ToDouble(_featureMinShift[i]);
+            modelData["FeatureMinShift"] = shiftArray;
+        }
 
         var modelMetadata = GetModelMetadata();
         modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
@@ -375,6 +388,18 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
         }
 
         _complementLogProbs = DeserializeMatrix(modelDataObj, "ComplementLogProbs");
+
+        var shiftToken = modelDataObj["FeatureMinShift"];
+        if (shiftToken is not null)
+        {
+            var shiftArray = shiftToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (shiftArray.Length > 0)
+            {
+                _featureMinShift = new T[shiftArray.Length];
+                for (int i = 0; i < shiftArray.Length; i++)
+                    _featureMinShift[i] = NumOps.FromDouble(shiftArray[i]);
+            }
+        }
     }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)

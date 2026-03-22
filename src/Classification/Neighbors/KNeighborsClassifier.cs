@@ -39,7 +39,7 @@ namespace AiDotNet.Classification.Neighbors;
 /// // Create a KNN classifier with k=5 neighbors
 /// // Use AiModelBuilder facade for K-nearest-neighbors classification
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigureModel(new KNeighborsClassifier&lt;double&gt;(new KNeighborsOptions&lt;double&gt;()));
+///     .ConfigureModel(new KNeighborsClassifier&lt;double&gt;(new KNeighborsOptions&lt;double&gt; { NNeighbors = 5 }));
 ///
 /// var result = builder.Build(features, labels);
 /// var prediction = result.Predict(newSample);
@@ -94,6 +94,11 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         if (x.Rows != y.Length)
         {
             throw new ArgumentException("Number of samples in X must match length of y.");
+        }
+
+        if (Options.NNeighbors <= 0)
+        {
+            throw new ArgumentException($"n_neighbors ({Options.NNeighbors}) must be greater than 0.");
         }
 
         if (Options.NNeighbors > x.Rows)
@@ -162,12 +167,11 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         int n = xTrain.Rows;
         int d = xTrain.Columns;
 
-        // Compute distances to all training samples using inline distance
-        // (avoids Vector allocation per sample — major performance win)
+        // Compute distances to all training samples, reusing a single vector
         var distArray = new double[n];
+        var trainRow = new Vector<T>(d);
         for (int i = 0; i < n; i++)
         {
-            var trainRow = new Vector<T>(d);
             for (int j = 0; j < d; j++)
                 trainRow[j] = xTrain[i, j];
             distArray[i] = NumOps.ToDouble(ComputeDistance(sample, trainRow));
