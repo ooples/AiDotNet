@@ -472,7 +472,10 @@ public class CroppingLayer<T> : LayerBase<T>
         var inputNCHW = input4D.Transpose([0, 3, 1, 2]);
 
         // Perform crop on NCHW format
-        var croppedNCHW = Engine.Crop(inputNCHW, _cropTop[1], _cropLeft[2], GetOutputShape()[1], GetOutputShape()[2]);
+        // inputShape is [H, W, C], so _cropTop[0]=H crop, _cropLeft[1]=W crop
+        // GetOutputShape()=[outH, outW, outC]
+        var cropOutShape = GetOutputShape();
+        var croppedNCHW = Engine.Crop(inputNCHW, _cropTop[0], _cropLeft[1], cropOutShape[0], cropOutShape[1]);
 
         // Convert back from NCHW to NHWC [batch, height, width, channels]
         var cropped = croppedNCHW.Transpose([0, 2, 3, 1]);

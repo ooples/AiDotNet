@@ -7,12 +7,14 @@ namespace AiDotNet.Tests.ModelFamilyTests.Layers;
 
 public class CroppingLayerTests : LayerTestBase
 {
-    // CroppingLayer uses NHWC: input [batch, H, W, C], crop arrays per dim of inputShape
+    // CroppingLayer: inputShape=[H,W,C], crop arrays per dim
+    // output[i] = input[i] - top[i] - bottom[i] - left[i] - right[i]
     protected override ILayer<double> CreateLayer()
-        => new CroppingLayer<double>(inputShape: [6, 6, 1],
-            cropTop: [1, 1, 0], cropBottom: [1, 1, 0], cropLeft: [1, 1, 0], cropRight: [1, 1, 0],
+        => new CroppingLayer<double>(inputShape: [8, 8, 1],
+            cropTop: [1, 1, 0], cropBottom: [1, 1, 0], cropLeft: [0, 0, 0], cropRight: [0, 0, 0],
             scalarActivation: new IdentityActivation<double>() as IActivationFunction<double>);
-    protected override int[] InputShape => [1, 6, 6, 1]; // NHWC
+    // Output shape: [8-1-1, 8-1-1, 1] = [6, 6, 1]. Forward adds batch → [1, 6, 6, 1]
+    protected override int[] InputShape => [8, 8, 1]; // 3D HWC (Forward adds batch)
     protected override bool ExpectsTrainableParameters => false;
     protected override bool ExpectsNonZeroGradients => false;
 }

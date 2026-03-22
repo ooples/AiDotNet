@@ -18,7 +18,7 @@ public class PositionalEncodingLayerTests : LayerTestBase
 {
     protected override ILayer<double> CreateLayer()
         => new PositionalEncodingLayer<double>(maxSequenceLength: 8, embeddingSize: 4);
-    protected override int[] InputShape => [1, 2, 4];
+    protected override int[] InputShape => [1, 8, 4]; // match maxSeqLen for OutputShape consistency
     protected override bool ExpectsTrainableParameters => false;
     protected override bool ExpectsNonZeroGradients => false;
 }

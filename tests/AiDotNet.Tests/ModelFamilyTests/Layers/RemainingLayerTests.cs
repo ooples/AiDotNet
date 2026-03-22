@@ -30,7 +30,7 @@ public class RotaryPositionalEncodingLayerTests : LayerTestBase
     protected override ILayer<double> CreateLayer()
         => new RotaryPositionalEncodingLayer<double>(maxSequenceLength: 8, headDimension: 4);
     // Last two dims: [seqLen <= maxSeqLen, headDim matching constructor]
-    protected override int[] InputShape => [1, 4, 4]; // [batch, seqLen=4, headDim=4]
+    protected override int[] InputShape => [1, 8, 4]; // [batch, seqLen=maxSeqLen=8, headDim=4]
     protected override bool ExpectsTrainableParameters => false;
     protected override bool ExpectsNonZeroGradients => false;
 }

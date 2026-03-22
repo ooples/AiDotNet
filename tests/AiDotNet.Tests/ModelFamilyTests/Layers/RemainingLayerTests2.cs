@@ -9,7 +9,7 @@ public class ALiBiPositionalBiasLayerTests : LayerTestBase
 {
     protected override ILayer<double> CreateLayer()
         => new ALiBiPositionalBiasLayer<double>(numHeads: 2, maxSequenceLength: 8);
-    protected override int[] InputShape => [2, 4, 4]; // [numHeads, seqLen, seqLen]
+    protected override int[] InputShape => [2, 8, 8]; // [numHeads, maxSeqLen, maxSeqLen]
     protected override bool ExpectsTrainableParameters => false;
     protected override bool ExpectsNonZeroGradients => false;
 }
