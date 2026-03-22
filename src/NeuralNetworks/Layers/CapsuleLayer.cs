@@ -702,7 +702,20 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int inputCapsules = _lastInput.Shape[1];
         int inputDimension = _lastInput.Shape[2];
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        // Squash activation produces a Jacobian for tensor Derivative — compute element-wise instead
+        Tensor<T> activationGradient;
+        if (ScalarActivation != null)
+        {
+            // Apply scalar derivative element-by-element to avoid Jacobian shape mismatch
+            var deriv = new Tensor<T>(_lastOutput.Shape);
+            for (int i = 0; i < _lastOutput.Length; i++)
+                deriv[i] = ScalarActivation.Derivative(_lastOutput[i]);
+            activationGradient = Engine.TensorMultiply(deriv, outputGradient);
+        }
+        else
+        {
+            activationGradient = outputGradient;
+        }
 
         // === FULLY VECTORIZED Gradient Computation ===
 
