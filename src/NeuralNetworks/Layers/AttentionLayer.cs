@@ -187,7 +187,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override int ParameterCount =>
-        _attentionSize * _inputSize * 3; // Wq, Wk, Wv
+        _attentionSize * _inputSize * 3 + _inputSize * _attentionSize; // Wq, Wk, Wv, Wo
 
     public override void SetParameters(Vector<T> parameters)
     {
@@ -211,9 +211,15 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var wvSpan = _Wv.Data.Span;
         for (int i = 0; i < wvLen; i++) wvSpan[i] = parameters[idx++];
 
+        int woLen = _Wo.Length;
+        _Wo = new Tensor<T>(_Wo.Shape);
+        var woSpan = _Wo.Data.Span;
+        for (int i = 0; i < woLen; i++) woSpan[i] = parameters[idx++];
+
         RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_Wk, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_Wv, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wo, PersistentTensorRole.Weights);
     }
 
     /// <summary>
@@ -1446,7 +1452,24 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var wkVec = _Wk.ToVector();
         var wvVec = _Wv.ToVector();
 
-        return Vector<T>.Concatenate(Vector<T>.Concatenate(wqVec, wkVec), wvVec);
+        var woVec = _Wo.ToVector();
+        return Vector<T>.Concatenate(Vector<T>.Concatenate(wqVec, wkVec), Vector<T>.Concatenate(wvVec, woVec));
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        var gQ = _dWq != null ? _dWq.ToVector() : new Vector<T>(_Wq.Length);
+        var gK = _dWk != null ? _dWk.ToVector() : new Vector<T>(_Wk.Length);
+        var gV = _dWv != null ? _dWv.ToVector() : new Vector<T>(_Wv.Length);
+        var gO = new Vector<T>(_Wo.Length); // Wo gradient not tracked separately yet
+        return Vector<T>.Concatenate(Vector<T>.Concatenate(gQ, gK), Vector<T>.Concatenate(gV, gO));
+    }
+
+    public override void ClearGradients()
+    {
+        _dWq = null;
+        _dWk = null;
+        _dWv = null;
     }
 
     /// <summary>
