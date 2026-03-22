@@ -28,7 +28,7 @@ namespace AiDotNet.Reasoning;
 ///
 /// // Solve a math problem with step-by-step reasoning
 /// var result = await reasoner.SolveAsync("What is 15% of 240?");
-/// Console.WriteLine(result.FinalAnswer);  // "36"
+/// // Result is available in the returned value  // "36"
 ///
 /// // See the reasoning steps
 /// foreach (var step in result.ReasoningChain.Steps)

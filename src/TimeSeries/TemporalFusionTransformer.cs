@@ -59,7 +59,7 @@ namespace AiDotNet.TimeSeries;
 ///
 /// // Generate interpretable forecasts with attention-based temporal patterns
 /// var forecast = model.Predict(features);
-/// Console.WriteLine($"Next predicted value: {forecast[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

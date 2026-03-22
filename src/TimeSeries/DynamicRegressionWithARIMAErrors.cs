@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using Newtonsoft.Json;
@@ -1650,10 +1651,7 @@ public class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T>
         // Compute regression component: y_reg = intercept + sum(coeff[i] * x[i])
         T prediction = _intercept;
         int regLen = Math.Min(input.Length, _regressionCoefficients.Length);
-        for (int i = 0; i < regLen; i++)
-        {
-            prediction = NumOps.Add(prediction, NumOps.Multiply(_regressionCoefficients[i], input[i]));
-        }
+        prediction = NumOps.Add(prediction, Engine.DotProduct(_regressionCoefficients, input));
 
         return GuardPrediction(prediction);
     }

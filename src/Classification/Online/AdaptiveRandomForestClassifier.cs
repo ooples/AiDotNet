@@ -66,7 +66,7 @@ namespace AiDotNet.Classification.Online;
 /// // Predict with weighted voting across adapted trees
 /// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>

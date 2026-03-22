@@ -176,7 +176,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             var centered = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                centered[j] = NumOps.Subtract(X[i, j], (_mean ?? throw new InvalidOperationException("Mean not computed."))[j]);
+                centered[j] = NumOps.Subtract(X[i, j], _mean![j]);
             }
 
             // Project onto components
@@ -186,7 +186,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 T dot = NumOps.Zero;
                 for (int j = 0; j < d; j++)
                 {
-                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], (_components ?? throw new InvalidOperationException("Components not computed."))[c, j]));
+                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], _components![c, j]));
                 }
                 projected[c] = dot;
             }
@@ -195,12 +195,9 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             var reconstructed = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                T sum = NumOps.Zero;
-                for (int c = 0; c < _fittedComponents; c++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(projected[c], (_components ?? throw new InvalidOperationException("Components not computed."))[c, j]));
-                }
-                reconstructed[j] = sum;
+                var compCol = new Vector<T>(_fittedComponents);
+                for (int c = 0; c < _fittedComponents; c++) compCol[c] = _components![c, j];
+                reconstructed[j] = Engine.DotProduct(projected, compCol);
             }
 
             // Compute reconstruction error (residual from unretained components)
@@ -217,7 +214,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             double mahalanobis = 0;
             for (int c = 0; c < _fittedComponents; c++)
             {
-                double eigenvalue = NumOps.ToDouble((_explainedVariance ?? throw new InvalidOperationException("Explained variance not computed."))[c]);
+                double eigenvalue = NumOps.ToDouble(_explainedVariance![c]);
                 if (eigenvalue > EigenvalueFloor)
                 {
                     double proj = NumOps.ToDouble(projected[c]);
@@ -241,12 +238,10 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = i; j < d; j++)
             {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < n; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(centered[k, i], centered[k, j]));
-                }
-                cov[i, j] = NumOps.Divide(sum, NumOps.FromDouble(n - 1));
+                var colI = new Vector<T>(n);
+                var colJ = new Vector<T>(n);
+                for (int k = 0; k < n; k++) { colI[k] = centered[k, i]; colJ[k] = centered[k, j]; }
+                cov[i, j] = NumOps.Divide(Engine.DotProduct(colI, colJ), NumOps.FromDouble(n - 1));
                 cov[j, i] = cov[i, j];
             }
         }

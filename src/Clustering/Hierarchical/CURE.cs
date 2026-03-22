@@ -321,6 +321,8 @@ public class CURE<T> : ClusteringBase<T>
         ComputeClusterCenters(x);
 
         MergeDegenerateClusters(x);
+        // Rebuild _clusters to match post-merge state (Labels/NumClusters/ClusterCenters updated by merge)
+        RebuildClustersFromLabels(x);
         IsTrained = true;
     }
 
@@ -331,7 +333,7 @@ public class CURE<T> : ClusteringBase<T>
         ValidatePredictInput(x);
 
         // Return stored labels for in-sample prediction (preserves merge results)
-        if (Labels is not null && x.Rows == Labels.Length)
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
             return new Vector<T>(Labels);
 
         int n = x.Rows;
@@ -555,6 +557,52 @@ public class CURE<T> : ClusteringBase<T>
         }
 
         return representatives;
+    }
+
+    /// <summary>
+    /// Rebuilds the internal _clusters list from the current Labels after degenerate merge.
+    /// </summary>
+    private void RebuildClustersFromLabels(Matrix<T> x)
+    {
+        if (Labels is null || _clusters is null) return;
+
+        int d = x.Columns;
+        var newClusters = new List<CureCluster>();
+
+        for (int c = 0; c < NumClusters; c++)
+        {
+            var cluster = new CureCluster
+            {
+                Points = new List<int>(),
+                Representatives = new List<T[]>()
+            };
+
+            for (int i = 0; i < Labels.Length; i++)
+            {
+                if ((int)NumOps.ToDouble(Labels[i]) == c)
+                {
+                    cluster.Points.Add(i);
+                }
+            }
+
+            if (cluster.Points.Count > 0)
+            {
+                // Compute centroid as representative point
+                var centroid = new T[d];
+                foreach (int idx in cluster.Points)
+                    for (int j = 0; j < d; j++)
+                        centroid[j] = NumOps.Add(centroid[j], x[idx, j]);
+                T count = NumOps.FromDouble(cluster.Points.Count);
+                for (int j = 0; j < d; j++)
+                    centroid[j] = NumOps.Divide(centroid[j], count);
+                cluster.Center = centroid;
+                cluster.Representatives.Add(centroid);
+            }
+
+            newClusters.Add(cluster);
+        }
+
+        _clusters = newClusters;
     }
 
     private int FindNearestCluster(T[] point)

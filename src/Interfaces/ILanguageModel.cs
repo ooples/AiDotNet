@@ -128,7 +128,7 @@ public interface ILanguageModel<T>
     /// <code>
     /// string prompt = "Write a haiku about programming";
     /// string response = await model.GenerateAsync(prompt);
-    /// Console.WriteLine(response);
+    /// // Result is available in the returned value
     /// // Output: "Code flows like water
     /// //          Bugs emerge then disappear
     /// //          Peace in the logic"
@@ -166,7 +166,7 @@ public interface ILanguageModel<T>
     /// <code>
     /// // Simple script usage
     /// string response = model.Generate("What is 2 + 2?");
-    /// Console.WriteLine(response); // "2 + 2 equals 4."
+    /// // Result is available in the returned value // "2 + 2 equals 4."
     /// </code>
     ///
     /// Note: Many implementations just call GenerateAsync().GetAwaiter().GetResult()

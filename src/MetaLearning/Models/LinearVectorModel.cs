@@ -109,6 +109,9 @@ public class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<doubl
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <inheritdoc/>
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
+
+    /// <inheritdoc/>
     public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
         var model = new LinearVectorModel(_inputDim, _learningRate);

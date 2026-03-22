@@ -39,7 +39,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// <code>
 /// var model = new CRNN&lt;float&gt;(architecture);
 /// var result = model.RecognizeText(croppedTextImage);
-/// Console.WriteLine($"Recognized: {result.Text}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// <para>

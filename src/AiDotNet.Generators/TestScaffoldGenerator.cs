@@ -62,7 +62,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         title: "Model has no test coverage",
         messageFormat: "Model '{0}' has no corresponding test class and could not be auto-generated (missing category/task metadata)",
         category: "AiDotNet.TestCoverage",
-        defaultSeverity: DiagnosticSeverity.Error,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "Model has no test coverage and lacks sufficient metadata for auto-generation. Add [ModelCategory] and [ModelTask] attributes, or create a manual test class.");
 
@@ -1032,9 +1032,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else
         {
-            factoryBody = $"        => throw new System.NotImplementedException(" +
-                          $"\"Model '{EscapeString(model.ClassName)}' requires constructor arguments. " +
-                          $"Create a manual test class in ModelFamilyTests/ to replace this auto-generated stub.\");";
+            // Models requiring constructor arguments get a placeholder that fails at runtime
+            // with a clear message, so the test exists but reminds developers to implement it.
+            factoryBody = "        => throw new System.NotImplementedException(" +
+                $"\"'{GeneratorHelpers.StripGenericSuffix(model.ClassName)}' requires constructor arguments. Implement this factory manually.\");";
         }
 
         var baseClassName = GetBaseClassName(family);

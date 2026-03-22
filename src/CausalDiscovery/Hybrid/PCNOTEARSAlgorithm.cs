@@ -321,7 +321,7 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
         }
 
         int dof = n - condSet.Count - 3;
-        if (dof <= 0) return true;
+        if (dof <= 0) return false; // insufficient samples: conservatively assume NOT independent (keep edge)
 
         double clamped = Math.Max(-0.999999, Math.Min(partialCorr, 0.999999));
         double z = Math.Sqrt(dof) * 0.5 * Math.Log((1 + clamped) / (1 - clamped));

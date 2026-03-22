@@ -940,13 +940,29 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             _preAllocatedOutput = TensorAllocator.Rent<T>(expectedShape);
         }
 
-        // Conv2D + bias broadcast addition + activation
-        var convOutput = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
+        // === Try FusedConv2D: Conv + Bias + Activation in single kernel ===
+        // Eliminates 2 intermediate allocations and enables kernel-level optimization
+        var fusedActivation = GetFusedActivationType();
+        Tensor<T> result;
+        if (fusedActivation != FusedActivationType.None)
+        {
+            // Single fused call: output = activation(conv(input, kernel) + bias)
+            // Reshape bias to [1, C, 1, 1] for proper broadcasting with conv output [B, C, H, W]
+            _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
+            result = Engine.FusedConv2D(_lastInput, _kernels, _biasReshaped4D,
+                Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
+        }
+        else
+        {
+            // Fallback: separate Conv2DInto + in-place bias + activation
+            Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
+            var output = _preAllocatedOutput;
 
-        // Broadcast bias [1, C, 1, 1] across [B, C, H, W] using Engine acceleration
-        _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
-        var withBias = Engine.TensorBroadcastAdd(convOutput, _biasReshaped4D);
-        var result = ApplyActivation(withBias);
+            _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
+            Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
+
+            result = ApplyActivation(output);
+        }
 
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
@@ -966,9 +982,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 1] = result.Shape[3];
             return result.Reshape(outputShape);
         }
-        // Note: Keep the batch dimension even for 3D input.
-        // Downstream layers (Flatten, Dense) expect consistent 4D [B,C,H,W] format.
-        // Removing batch dim causes FlattenLayer to misinterpret channels as batch.
+        if (_addedBatchDimension)
+        {
+            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
+            // Remove the batch dimension we added
+            return result.Reshape([OutputDepth, result.Shape[2], result.Shape[3]]);
+        }
 
         return result;
     }
@@ -1580,6 +1599,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Gets all parameter gradients of the layer as a single vector.
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -1587,8 +1607,6 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         _biasesGradient = null;
     }
 
-    /// <summary>
-    /// Gets all parameter gradients of the layer as a single vector.
     /// </summary>
     /// <returns>A vector containing all parameter gradients (kernel gradients followed by bias gradients).</returns>
     public override Vector<T> GetParameterGradients()

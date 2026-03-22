@@ -969,11 +969,13 @@ namespace AiDotNet.AutoML
 
         /// <summary>
         /// Feature selection is not applicable to diffusion models. All latent dimensions
-        /// are required for coherent generation. This method intentionally does nothing.
+        /// are required for coherent generation.
         /// </summary>
+        /// <exception cref="NotSupportedException">Always thrown. Diffusion models require all latent dimensions.</exception>
         public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
         {
-            _ = featureIndices;
+            throw new NotSupportedException(
+                "Feature selection is not supported for diffusion models. All latent dimensions are required for coherent generation.");
         }
 
         public override ModelMetadata<T> GetModelMetadata()
@@ -1111,29 +1113,33 @@ namespace AiDotNet.AutoML
             var prediction = Predict(input);
             T baseLoss = loss.ComputeLoss(prediction, target);
 
-            // Finite-difference gradient for each parameter
+            // SPSA gradient estimation: 2 forward passes regardless of parameter count.
+            // Per-parameter finite differences don't work for diffusion models because
+            // Predict uses random noise — each call measures sampling noise, not parameter sensitivity.
+            var rng = RandomHelper.CreateSecureRandom();
+            var delta = new Vector<T>(parameters.Length);
+            var perturbedParams = new Vector<T>(parameters.Length);
             for (int i = 0; i < parameters.Length; i++)
-            {
-                T original = parameters[i];
+                delta[i] = NumOps.FromDouble(rng.NextDouble() < 0.5 ? -1.0 : 1.0);
 
-                // Forward perturbation
-                parameters[i] = NumOps.Add(original, epsilon);
-                SetParameters(parameters);
-                var predPlus = Predict(input);
-                T lossPlus = loss.ComputeLoss(predPlus, target);
+            // f(x + eps*delta)
+            for (int i = 0; i < parameters.Length; i++)
+                perturbedParams[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
+            SetParameters(perturbedParams);
+            var predPlus = Predict(input);
+            T lossPlus = loss.ComputeLoss(predPlus, target);
 
-                // Backward perturbation
-                parameters[i] = NumOps.Subtract(original, epsilon);
-                SetParameters(parameters);
-                var predMinus = Predict(input);
-                T lossMinus = loss.ComputeLoss(predMinus, target);
+            // f(x - eps*delta)
+            for (int i = 0; i < parameters.Length; i++)
+                perturbedParams[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
+            SetParameters(perturbedParams);
+            var predMinus = Predict(input);
+            T lossMinus = loss.ComputeLoss(predMinus, target);
 
-                // Central difference
-                gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), twoEps);
-
-                // Restore original
-                parameters[i] = original;
-            }
+            // SPSA gradient: g_i = (f+ - f-) / (2*eps*delta_i)
+            T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
+            for (int i = 0; i < parameters.Length; i++)
+                gradients[i] = NumOps.Divide(lossDiff, NumOps.Multiply(twoEps, delta[i]));
 
             SetParameters(parameters);
             return new Vector<T>(gradients);

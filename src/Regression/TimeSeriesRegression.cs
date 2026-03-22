@@ -42,7 +42,7 @@ namespace AiDotNet.Regression;
 /// // Predict future values
 /// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 3);
 /// var forecast = model.Predict(newFeatures);
-/// Console.WriteLine($"Next predicted value: {forecast[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

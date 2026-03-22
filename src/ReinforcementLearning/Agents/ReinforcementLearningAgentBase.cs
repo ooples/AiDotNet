@@ -210,6 +210,9 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
 
     /// <summary>
     /// Gets the number of input features (state dimensions).

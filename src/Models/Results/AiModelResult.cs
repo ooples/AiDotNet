@@ -858,10 +858,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var metrics = model.AnalyzePrompt("Your prompt here...");
     ///
-    /// Console.WriteLine($"Tokens: {metrics.TokenCount}");      // How many tokens
-    /// Console.WriteLine($"Cost: ${metrics.EstimatedCost}");    // Estimated API cost
-    /// Console.WriteLine($"Complexity: {metrics.ComplexityScore}"); // How complex (0-1)
-    /// Console.WriteLine($"Patterns: {string.Join(", ", metrics.DetectedPatterns)}");
+    /// // Result is available in the returned value      // How many tokens
+    /// // Result is available in the returned value    // Estimated API cost
+    /// // Result is available in the returned value // How complex (0-1)
+    /// // Result is available in the returned value
     /// </code>
     ///
     /// This helps you:
@@ -2829,6 +2829,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <inheritdoc/>
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
+    /// <inheritdoc/>
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => Model?.SanitizeParameters(parameters) ?? parameters;
+
     /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>
@@ -4520,8 +4523,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Example:
     /// <code>
     /// var metadata = result.GetTrainingInfrastructureMetadata();
-    /// Console.WriteLine($"Run ID: {metadata["ExperimentRunId"]}");
-    /// Console.WriteLine($"Model Version: {metadata["ModelVersion"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>
@@ -5604,11 +5607,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// string prompt = "You are a helpful assistant. Translate {text} from English to Spanish.";
     /// var metrics = modelResult.AnalyzePrompt(prompt);
     ///
-    /// Console.WriteLine($"Tokens: {metrics.TokenCount}");           // e.g., 15
-    /// Console.WriteLine($"Estimated cost: ${metrics.EstimatedCost}"); // e.g., $0.0001
-    /// Console.WriteLine($"Complexity: {metrics.ComplexityScore}");   // e.g., 0.3
-    /// Console.WriteLine($"Variables: {metrics.VariableCount}");      // e.g., 1
-    /// Console.WriteLine($"Patterns: {string.Join(", ", metrics.DetectedPatterns)}");
+    /// // Result is available in the returned value           // e.g., 15
+    /// // Result is available in the returned value // e.g., $0.0001
+    /// // Result is available in the returned value   // e.g., 0.3
+    /// // Result is available in the returned value      // e.g., 1
+    /// // Result is available in the returned value
     /// // e.g., "translation, instruction"
     /// </code>
     ///
@@ -5705,10 +5708,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// var result = modelResult.CompressPrompt(longPrompt);
     ///
-    /// Console.WriteLine($"Original tokens: {result.OriginalTokenCount}");    // e.g., 50
-    /// Console.WriteLine($"Compressed tokens: {result.CompressedTokenCount}"); // e.g., 20
-    /// Console.WriteLine($"Saved: {result.TokensSaved} tokens ({result.CompressionRatio:P0})");
-    /// Console.WriteLine($"Compressed: {result.CompressedPrompt}");
+    /// // Result is available in the returned value    // e.g., 50
+    /// // Result is available in the returned value // e.g., 20
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// // e.g., "Translate English to Spanish, preserving meaning and tone: {text}"
     /// </code>
     ///
@@ -5768,7 +5771,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// string spanishDocument = "Documento en español...";
     /// string result = modelResult.RunChain(spanishDocument);
     ///
-    /// Console.WriteLine($"Result: {result}");
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>
@@ -5803,7 +5806,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Example:
     /// <code>
     /// string result = await modelResult.RunChainAsync("Input text...");
-    /// Console.WriteLine(result);
+    /// // Result is available in the returned value
     /// </code>
     ///
     /// For parallel processing:
@@ -6521,8 +6524,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///     "If a train travels 60 mph for 2.5 hours, how far does it go?",
     ///     ReasoningMode.ChainOfThought
     /// );
-    /// Console.WriteLine(result.FinalAnswer);  // "150 miles"
-    /// Console.WriteLine(result.ReasoningChain);  // Shows step-by-step work
+    /// // Result is available in the returned value  // "150 miles"
+    /// // Result is available in the returned value  // Shows step-by-step work
     /// </code>
     ///
     /// **Requirements:**
@@ -6573,7 +6576,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// **Example:**
     /// <code>
     /// string answer = await modelResult.QuickReasonAsync("What is 15% of 240?");
-    /// Console.WriteLine(answer);  // "36"
+    /// // Result is available in the returned value  // "36"
     /// </code>
     /// </para>
     /// </remarks>
@@ -6669,7 +6672,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///     numAttempts: 5
     /// );
     /// // If 4 out of 5 attempts say "3x^2", that's the answer
-    /// Console.WriteLine($"Consensus: {result.Metrics["consensus_ratio"]:P0}");
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>

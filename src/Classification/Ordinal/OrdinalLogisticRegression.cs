@@ -155,6 +155,15 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
         int? seed = null)
         : base()
     {
+        if (double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Must be a positive finite number.");
+        if (maxIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxIterations), "Must be >= 1.");
+        if (double.IsNaN(tolerance) || double.IsInfinity(tolerance) || tolerance <= 0)
+            throw new ArgumentOutOfRangeException(nameof(tolerance), "Must be a positive finite number.");
+        if (double.IsNaN(regularization) || double.IsInfinity(regularization) || regularization < 0)
+            throw new ArgumentOutOfRangeException(nameof(regularization), "Must be a non-negative finite number.");
+
         _learningRate = learningRate;
         _maxIterations = maxIterations;
         _tolerance = tolerance;
@@ -229,38 +238,60 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
             yIndices[i] = GetClassIndex(y[i]);
         }
 
+        // Pre-convert data to double arrays to avoid per-element NumOps.ToDouble in hot loop
+        int N = x.Rows;
+        var xDouble = new double[N, P];
+        for (int i = 0; i < N; i++)
+            for (int p = 0; p < P; p++)
+                xDouble[i, p] = NumOps.ToDouble(x[i, p]);
+
+        var coef = new double[P];
+        for (int p = 0; p < P; p++)
+            coef[p] = NumOps.ToDouble(_coefficients[p]);
+
+        var thresh = new double[K - 1];
+        for (int k = 0; k < K - 1; k++)
+            thresh[k] = NumOps.ToDouble(_thresholds[k]);
+
         // Optimization using the configured gradient-based optimizer (Adam by default).
-        // The optimizer handles adaptive learning rates, momentum, and step size internally.
         double prevLoss = double.MaxValue;
+
+        // Pre-allocate arrays outside the training loop (avoid GC pressure)
+        var gradCoef = new double[P];
+        var gradThresh = new double[K - 1];
+        var cumProbs = new double[K - 1];
+        var probs = new double[K];
+        var etas = new double[N];
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Compute gradients
-            var gradCoef = new double[P];
-            var gradThresh = new double[K - 1];
+            // Zero gradients
+            Array.Clear(gradCoef, 0, P);
+            Array.Clear(gradThresh, 0, K - 1);
             double loss = 0;
 
-            for (int i = 0; i < x.Rows; i++)
+            // Precompute all linear predictors: eta[i] = X[i,:] * coef
+            for (int i = 0; i < N; i++)
             {
-                int yi = yIndices[i];
-
-                // Compute linear predictor
                 double eta = 0;
                 for (int p = 0; p < P; p++)
-                {
-                    eta += NumOps.ToDouble(_coefficients[p]) * NumOps.ToDouble(x[i, p]);
-                }
+                    eta += coef[p] * xDouble[i, p];
+                etas[i] = eta;
+            }
 
-                // Compute cumulative probabilities
-                var cumProbs = new double[K - 1];
+            for (int i = 0; i < N; i++)
+            {
+                int yi = yIndices[i];
+                double eta = etas[i];
+
+                // Compute cumulative probabilities (reuse pre-allocated array)
                 for (int k = 0; k < K - 1; k++)
                 {
-                    double z = NumOps.ToDouble(_thresholds[k]) - eta;
+                    double z = thresh[k] - eta;
                     cumProbs[k] = 1.0 / (1.0 + Math.Exp(-z));
                 }
 
-                // Compute class probabilities
-                var probs = new double[K];
+                // Compute class probabilities (reuse pre-allocated array)
                 probs[0] = cumProbs[0];
                 for (int k = 1; k < K - 1; k++)
                 {
@@ -282,7 +313,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                 // so the chain rule introduces a sign flip: ∂NLL/∂β = -∂NLL/∂η * x.
                 for (int p = 0; p < P; p++)
                 {
-                    double xi = NumOps.ToDouble(x[i, p]);
+                    double xi = xDouble[i, p];
 
                     if (yi == 0)
                     {
@@ -298,9 +329,9 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                     }
                     else
                     {
-                        // Middle classes
-                        double term = cumProbs[yi] * (1 - cumProbs[yi]) - cumProbs[yi - 1] * (1 - cumProbs[yi - 1]);
-                        gradCoef[p] -= xi * term / probs[yi];
+                        // Middle classes: ∂NLL/∂β = x * (σ'(α_{yi-1} - η) - σ'(α_yi - η)) / P(Y=yi)
+                        double term = cumProbs[yi - 1] * (1 - cumProbs[yi - 1]) - cumProbs[yi] * (1 - cumProbs[yi]);
+                        gradCoef[p] += xi * term / probs[yi];
                     }
                 }
 
@@ -358,18 +389,21 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
             for (int p = 0; p < P; p++)
             {
                 _coefficients[p] = updatedParams[p];
+                coef[p] = NumOps.ToDouble(updatedParams[p]);
             }
             for (int k = 0; k < K - 1; k++)
             {
                 _thresholds[k] = updatedParams[P + k];
+                thresh[k] = NumOps.ToDouble(updatedParams[P + k]);
             }
 
             // Ensure thresholds are monotonically increasing
             for (int k = 1; k < K - 1; k++)
             {
-                if (NumOps.LessThanOrEquals(_thresholds[k], _thresholds[k - 1]))
+                if (thresh[k] <= thresh[k - 1])
                 {
-                    _thresholds[k] = NumOps.FromDouble(NumOps.ToDouble(_thresholds[k - 1]) + 0.001);
+                    thresh[k] = thresh[k - 1] + 0.001;
+                    _thresholds[k] = NumOps.FromDouble(thresh[k]);
                 }
             }
 
@@ -575,6 +609,39 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
         }
         model.SetParameters(parameters);
         return model;
+    }
+
+    /// <summary>
+    /// Sanitizes random parameters to ensure ordinal constraints are satisfied.
+    /// Thresholds (parameters after coefficients) must be monotonically increasing.
+    /// </summary>
+    public override Vector<T> SanitizeParameters(Vector<T> parameters)
+    {
+        if (parameters.Length <= NumFeatures) return parameters;
+
+        var sanitized = new Vector<T>(parameters.Length);
+        // Copy coefficients as-is
+        for (int i = 0; i < NumFeatures; i++)
+            sanitized[i] = parameters[i];
+
+        // Sort thresholds to ensure monotonically increasing order
+        int numThresholds = parameters.Length - NumFeatures;
+        var thresholds = new double[numThresholds];
+        for (int i = 0; i < numThresholds; i++)
+            thresholds[i] = NumOps.ToDouble(parameters[NumFeatures + i]);
+        Array.Sort(thresholds);
+
+        // Ensure minimum gap between thresholds
+        for (int i = 1; i < numThresholds; i++)
+        {
+            if (thresholds[i] <= thresholds[i - 1])
+                thresholds[i] = thresholds[i - 1] + 0.1;
+        }
+
+        for (int i = 0; i < numThresholds; i++)
+            sanitized[NumFeatures + i] = NumOps.FromDouble(thresholds[i]);
+
+        return sanitized;
     }
 
     /// <summary>

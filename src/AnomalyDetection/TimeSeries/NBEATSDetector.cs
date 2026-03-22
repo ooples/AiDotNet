@@ -403,12 +403,9 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                         var dH = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            T sum = NumOps.Zero;
-                            for (int j = 0; j < _inputDim; j++)
-                            {
-                                sum = NumOps.Add(sum, NumOps.Multiply(wThetaF[i, j], gradForecast[j]));
-                            }
-                            dH[i] = sum;
+                            var wRow = new Vector<T>(_inputDim);
+                            for (int j = 0; j < _inputDim; j++) wRow[j] = wThetaF[i, j];
+                            dH[i] = Engine.DotProduct(wRow, gradForecast);
                         }
 
                         // Gradient through WTheta_b (backcast theta)
@@ -879,12 +876,9 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
 
         for (int j = 0; j < outputSize; j++)
         {
-            T sum = b[j];
-            for (int i = 0; i < input.Length; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(input[i], W[i, j]));
-            }
-            output[j] = sum;
+            var wCol = new Vector<T>(input.Length);
+            for (int i = 0; i < input.Length; i++) wCol[i] = W[i, j];
+            output[j] = NumOps.Add(b[j], Engine.DotProduct(input, wCol));
         }
 
         return output;

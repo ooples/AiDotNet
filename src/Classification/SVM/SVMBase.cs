@@ -92,12 +92,8 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
     /// </summary>
     protected T ComputeLinearKernel(Vector<T> x, Vector<T> y)
     {
-        T dot = NumOps.Zero;
-        for (int i = 0; i < x.Length; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(x[i], y[i]));
-        }
-        return dot;
+        // Use Engine for hardware-accelerated dot product (SIMD/vectorized)
+        return Engine.DotProduct(x, y);
     }
 
     /// <summary>
@@ -119,12 +115,11 @@ public abstract class SVMBase<T> : ProbabilisticClassifierBase<T>, IDecisionFunc
     /// </summary>
     protected T ComputeRBFKernel(Vector<T> x, Vector<T> y)
     {
-        T squaredNorm = NumOps.Zero;
+        // Use Engine for vectorized ||x - y||^2 computation
+        var diff = new Vector<T>(x.Length);
         for (int i = 0; i < x.Length; i++)
-        {
-            T diff = NumOps.Subtract(x[i], y[i]);
-            squaredNorm = NumOps.Add(squaredNorm, NumOps.Multiply(diff, diff));
-        }
+            diff[i] = NumOps.Subtract(x[i], y[i]);
+        T squaredNorm = Engine.DotProduct(diff, diff);
         T gamma = GetGamma();
         return NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, squaredNorm)));
     }

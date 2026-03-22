@@ -251,8 +251,11 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 T pred = _meanIntercept;
                 if (_meanCoefficients is not null)
                 {
-                    for (int j = 0; j < Math.Min(input.Columns, _meanCoefficients.Length); j++)
-                        pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _meanCoefficients[j]));
+                    int len = Math.Min(input.Columns, _meanCoefficients.Length);
+                    var row = new Vector<T>(len);
+                    var coef = new Vector<T>(len);
+                    for (int j = 0; j < len; j++) { row[j] = input[i, j]; coef[j] = _meanCoefficients[j]; }
+                    pred = NumOps.Add(pred, Engine.DotProduct(row, coef));
                 }
                 predictions[i] = pred;
             }
@@ -360,14 +363,13 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            // Linear predictor for mean
+            // Linear predictor for mean using Engine.DotProduct
             T etaMu = _meanIntercept;
             if (_meanCoefficients != null)
             {
-                for (int j = 0; j < _numFeatures; j++)
-                {
-                    etaMu = NumOps.Add(etaMu, NumOps.Multiply(_meanCoefficients[j], x[i, j]));
-                }
+                var xRow = new Vector<T>(_numFeatures);
+                for (int j = 0; j < _numFeatures; j++) xRow[j] = x[i, j];
+                etaMu = NumOps.Add(etaMu, Engine.DotProduct(new Vector<T>(_meanCoefficients), xRow));
             }
 
             // Apply link function inverse and clamp away from beta distribution endpoints
@@ -375,14 +377,13 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
             double muClamped = Math.Max(MuFloor, Math.Min(MuCeiling, muRaw));
             mus[i] = NumOps.FromDouble(muClamped);
 
-            // Linear predictor for precision
+            // Linear predictor for precision using Engine.DotProduct
             T etaPhi = _precisionIntercept;
             if (_options.ModelVariablePrecision && _precisionCoefficients != null)
             {
-                for (int j = 0; j < _numFeatures; j++)
-                {
-                    etaPhi = NumOps.Add(etaPhi, NumOps.Multiply(_precisionCoefficients[j], x[i, j]));
-                }
+                var xRow2 = new Vector<T>(_numFeatures);
+                for (int j = 0; j < _numFeatures; j++) xRow2[j] = x[i, j];
+                etaPhi = NumOps.Add(etaPhi, Engine.DotProduct(new Vector<T>(_precisionCoefficients), xRow2));
             }
 
             // Precision uses log link

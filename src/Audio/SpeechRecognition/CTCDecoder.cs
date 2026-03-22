@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 34);
 /// var model = new CTCDecoder&lt;float&gt;(arch, "ctc_decoder.onnx");
 /// var result = model.Transcribe(audioWaveform);
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

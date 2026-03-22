@@ -49,11 +49,11 @@ namespace AiDotNet.Validation;
 ///
 /// // Test node classification
 /// var nodeResults = validator.ValidateNodeClassification();
-/// Console.WriteLine($"Cora accuracy: {nodeResults.TestAccuracy:F4}");
+/// // Result is available in the returned value
 ///
 /// // Test graph classification
 /// var graphResults = validator.ValidateGraphClassification();
-/// Console.WriteLine($"Valid: {graphResults.PassedBaseline}");
+/// // Result is available in the returned value
 /// ```
 /// </para>
 /// </remarks>

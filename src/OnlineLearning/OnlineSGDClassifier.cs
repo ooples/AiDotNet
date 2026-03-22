@@ -372,6 +372,22 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
             InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty, _fitIntercept);
     }
 
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (OnlineSGDClassifier<T>)CreateNewInstance();
+        clone.NumFeatures = NumFeatures;
+        clone.IsInitialized = IsInitialized;
+        if (_weights is not null)
+        {
+            clone._weights = new Vector<T>(_weights.Length);
+            for (int i = 0; i < _weights.Length; i++)
+                clone._weights[i] = _weights[i];
+        }
+        clone._bias = _bias;
+        return clone;
+    }
+
     /// <summary>
     /// Gets the feature importance scores (absolute weights).
     /// </summary>

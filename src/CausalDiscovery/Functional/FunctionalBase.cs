@@ -110,13 +110,16 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
         mx = NumOps.Divide(mx, nT);
         my = NumOps.Divide(my, nT);
 
-        T sxy = NumOps.Zero, sxx = NumOps.Zero;
+        // Engine-accelerated regression via centered dot products
+        var centX = new Vector<T>(n);
+        var centY = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            T dx = NumOps.Subtract(x[i], mx);
-            sxy = NumOps.Add(sxy, NumOps.Multiply(dx, NumOps.Subtract(y[i], my)));
-            sxx = NumOps.Add(sxx, NumOps.Multiply(dx, dx));
+            centX[i] = NumOps.Subtract(x[i], mx);
+            centY[i] = NumOps.Subtract(y[i], my);
         }
+        T sxy = Engine.DotProduct(centX, centY);
+        T sxx = Engine.DotProduct(centX, centX);
 
         T beta = NumOps.GreaterThan(sxx, NumOps.FromDouble(1e-10))
             ? NumOps.Divide(sxy, sxx)
@@ -148,15 +151,17 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
         mx = NumOps.Divide(mx, nT);
         my = NumOps.Divide(my, nT);
 
-        T sxx = NumOps.Zero, syy = NumOps.Zero, sxy = NumOps.Zero;
+        // Engine-accelerated correlation via centered dot products
+        var cX = new Vector<T>(n);
+        var cY = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            T dx = NumOps.Subtract(x[i], mx);
-            T dy = NumOps.Subtract(y[i], my);
-            sxx = NumOps.Add(sxx, NumOps.Multiply(dx, dx));
-            syy = NumOps.Add(syy, NumOps.Multiply(dy, dy));
-            sxy = NumOps.Add(sxy, NumOps.Multiply(dx, dy));
+            cX[i] = NumOps.Subtract(x[i], mx);
+            cY[i] = NumOps.Subtract(y[i], my);
         }
+        T sxx = Engine.DotProduct(cX, cX);
+        T syy = Engine.DotProduct(cY, cY);
+        T sxy = Engine.DotProduct(cX, cY);
 
         sxx = NumOps.Divide(sxx, nT);
         syy = NumOps.Divide(syy, nT);

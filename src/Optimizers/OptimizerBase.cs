@@ -1589,11 +1589,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
 
         // Generate random parameters within the computed bounds
-        // Note: InitializeRandomSolution(Vector<T>, Vector<T>) returns Vector<T> (verified at line 1184)
-        // This is the correct return type for SetParameters() below
         var randomParams = InitializeRandomSolution(lowerBounds, upperBounds);
 
-        // Create a new model with these random parameters
+        // Let the model sanitize parameters to satisfy structural constraints
+        // (e.g., monotonically increasing thresholds for ordinal models)
+        randomParams = RequireModel().SanitizeParameters(randomParams);
+
+        // Create a new model with these sanitized random parameters
         var randomModel = RequireModel().Clone();
         randomModel.SetParameters(randomParams);
         return randomModel;

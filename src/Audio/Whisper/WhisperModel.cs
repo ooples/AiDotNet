@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.Whisper;
 ///     encoderPath: "path/to/encoder.onnx",
 ///     decoderPath: "path/to/decoder.onnx");
 /// var result = whisper.Transcribe(audioTensor);
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 ///
 /// Training Mode Example:

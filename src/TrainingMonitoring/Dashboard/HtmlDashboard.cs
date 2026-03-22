@@ -38,7 +38,7 @@ namespace AiDotNet.TrainingMonitoring.Dashboard;
 ///
 /// // Generate report
 /// string reportPath = dashboard.GenerateReport();
-/// Console.WriteLine($"Report saved to: {reportPath}");
+/// // Result is available in the returned value
 /// </code>
 /// </remarks>
 public class HtmlDashboard : ITrainingDashboard

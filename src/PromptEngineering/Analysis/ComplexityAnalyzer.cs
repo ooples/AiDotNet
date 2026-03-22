@@ -17,7 +17,7 @@ namespace AiDotNet.PromptEngineering.Analysis;
 /// var analyzer = new ComplexityAnalyzer();
 /// var metrics = analyzer.Analyze(complexPrompt);
 ///
-/// Console.WriteLine($"Complexity: {metrics.ComplexityScore:P0}");
+/// // Result is available in the returned value
 /// // 0% = very simple, 100% = very complex
 ///
 /// // Access detailed breakdown:

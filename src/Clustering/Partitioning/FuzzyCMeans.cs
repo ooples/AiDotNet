@@ -41,10 +41,12 @@ namespace AiDotNet.Clustering.Partitioning;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new FuzzyCMeansOptions&lt;double&gt;();
-/// var fuzzyCMeans = new FuzzyCMeans&lt;double&gt;(options);
-/// fuzzyCMeans.Train(dataMatrix);
-/// Vector<double> labels = fuzzyCMeans.Labels;
+/// // Use AiModelBuilder facade for fuzzy clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new FuzzyCMeans&lt;double&gt;(new FuzzyCMeansOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

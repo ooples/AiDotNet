@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 ///     architecture,
 ///     modelPath: "path/to/wav2vec2.onnx");
 /// var result = wav2vec2.Transcribe(audioTensor);
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 ///
 /// Training Mode Example:

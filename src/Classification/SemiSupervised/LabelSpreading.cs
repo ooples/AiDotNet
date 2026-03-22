@@ -57,7 +57,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 ///
 /// // Predict labels for all samples
 /// var prediction = classifier.Predict(features);
-/// Console.WriteLine($"Spread label: {prediction[1]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

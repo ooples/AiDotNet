@@ -39,15 +39,17 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a MedSegDiff-V2 model for diffusion-based medical segmentation
+/// // Use AiModelBuilder facade for medical image segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
-/// var model = new MedSegDiffV2Segmentation&lt;double&gt;(architecture, numClasses: 1);
 ///
-/// // Or load a pre-trained ONNX model
-/// var onnxModel = new MedSegDiffV2Segmentation&lt;double&gt;(architecture, "medsegdiffv2_model.onnx");
+/// var builder = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(new MedSegDiffV2Segmentation&lt;double&gt;(architecture, numClasses: 1));
+///
+/// var result = builder.Build(trainingImages, trainingMasks);
+/// var segmentation = result.Predict(medicalImage);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

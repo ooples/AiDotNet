@@ -18,8 +18,8 @@ namespace AiDotNet.Memory;
 /// // ... use the pool for inference operations ...
 ///
 /// var stats = pool.GetStatistics();
-/// Console.WriteLine($"Pool using {stats.MemoryUtilizationPercent:F1}% of max capacity");
-/// Console.WriteLine($"Tensors in pool: {stats.PooledTensorCount}");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

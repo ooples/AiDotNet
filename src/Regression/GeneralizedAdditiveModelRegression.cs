@@ -392,8 +392,8 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// Example:
     /// ```csharp
     /// var metadata = gam.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Number of splines: {metadata.AdditionalInfo["NumSplines"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>

@@ -108,6 +108,9 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
 
     /// <summary>
     /// Initializes a new instance of the ShardedModelBase class.

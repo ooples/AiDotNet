@@ -95,17 +95,45 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         T eps = NumOps.FromDouble(1e-10);
         var result = new Matrix<T>(d, d);
 
+        int edgeCount = 0;
         for (int j = 0; j < d; j++)
         {
             int[] parents = bestAssignment[j];
             foreach (int p in parents)
             {
-                // Weight via regression coefficient
                 T varP = cov[p, p];
                 if (NumOps.GreaterThan(varP, eps))
                     result[p, j] = NumOps.Divide(cov[p, j], varP);
                 else
                     result[p, j] = NumOps.One;
+                edgeCount++;
+            }
+        }
+
+        // Fallback: if ILP produced empty DAG, use single-parent BIC-optimal assignment
+        if (edgeCount == 0)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                // Find best single-parent assignment for each variable
+                double bestSingleScore = double.NegativeInfinity;
+                int bestParent = -1;
+                foreach (var (parents, score) in parentSets[j])
+                {
+                    if (parents.Length == 1 && score > bestSingleScore)
+                    {
+                        bestSingleScore = score;
+                        bestParent = parents[0];
+                    }
+                }
+                if (bestParent >= 0)
+                {
+                    T varP = cov[bestParent, bestParent];
+                    if (NumOps.GreaterThan(varP, eps))
+                        result[bestParent, j] = NumOps.Divide(cov[bestParent, j], varP);
+                    else
+                        result[bestParent, j] = NumOps.One;
+                }
             }
         }
 

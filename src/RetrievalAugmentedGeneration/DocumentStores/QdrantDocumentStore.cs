@@ -152,7 +152,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         /// <code>
         /// // Get all documents
         /// var allDocs = store.GetAll().ToList();
-        /// Console.WriteLine($"Total documents in {_collectionName}: {allDocs.Count}");
+        /// // Result is available in the returned value
         /// 
         /// // Export to JSON
         /// var json = JsonConvert.SerializeObject(allDocs);
@@ -187,7 +187,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         /// Example:
         /// <code>
         /// store.Clear();
-        /// Console.WriteLine($"Documents in {CollectionName}: {store.DocumentCount}"); // 0
+        /// // Result is available in the returned value // 0
         /// </code>
         /// </para>
         /// </remarks>

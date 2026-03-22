@@ -39,7 +39,7 @@ internal interface IReasoner<T>
     ///     "If a train travels 60 mph for 2.5 hours, how far does it go?",
     ///     ReasoningMode.ChainOfThought
     /// );
-    /// Console.WriteLine(result.FinalAnswer);  // "150 miles"
+    /// // Result is available in the returned value  // "150 miles"
     /// </code>
     /// </para>
     /// </remarks>
@@ -61,7 +61,7 @@ internal interface IReasoner<T>
     ///
     /// <code>
     /// string answer = await reasoner.QuickSolveAsync("What is 15% of 240?");
-    /// Console.WriteLine(answer);  // "36"
+    /// // Result is available in the returned value  // "36"
     /// </code>
     /// </para>
     /// </remarks>

@@ -146,6 +146,23 @@ public class JitCompiler : IDisposable
         {
             _optimizationPasses.Add(new AutoTuningPass());
         }
+
+        if (_options.EnableTileScheduling)
+        {
+            _optimizationPasses.Add(new TileSchedulingPass());
+        }
+
+        if (_options.EnableOperatorReordering)
+        {
+            _optimizationPasses.Add(new OperatorReorderingPass());
+        }
+
+        // Memory planning runs LAST — after all fusion/optimization/reordering passes —
+        // because it needs the final operation order to compute tensor lifetimes.
+        if (_options.EnableMemoryPlanning)
+        {
+            _optimizationPasses.Add(new MemoryPlanningPass());
+        }
     }
 
     /// <summary>
@@ -229,6 +246,26 @@ public class JitCompiler : IDisposable
 
         return compiledFunc;
     }
+
+    /// <summary>
+    /// Compiles a computation graph into a zero-allocation executable backed by TensorWorkspace.
+    /// This is the preferred compilation method for inference — all intermediate tensors are
+    /// pre-allocated in a single contiguous buffer and reused across forward passes.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for tensor elements.</typeparam>
+    /// <param name="outputNode">The output node of the computation graph.</param>
+    /// <param name="inputs">The input nodes to the computation graph.</param>
+    // CompileWithWorkspace is pending TensorWorkspace<T> NuGet release.
+    // Uncomment when AiDotNet.Tensors is updated with TensorWorkspace support.
+    // public (Action<Tensor<T>[], IEngine> Execute, TensorWorkspace<T> Workspace, int OutputSlot)
+    //     CompileWithWorkspace<T>(ComputationNode<T> outputNode, List<ComputationNode<T>> inputs)
+    // {
+    //     var irBuilder = new IRBuilder();
+    //     var irGraph = irBuilder.Build(outputNode, inputs);
+    //     var optimizedGraph = ApplyOptimizations(irGraph);
+    //     var wsCodeGen = new WorkspaceCodeGenerator();
+    //     return wsCodeGen.Compile<T>(optimizedGraph);
+    // }
 
     /// <summary>
     /// Compiles a computation graph and returns compilation statistics.

@@ -289,6 +289,19 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     protected bool IsTrainingMode = true;
 
     /// <summary>
+    /// When true, Forward() records operations to a computation graph instead of executing them.
+    /// Used by the JIT compiler to capture the full forward pass for compilation.
+    /// Set via <see cref="SetCaptureMode"/>.
+    /// </summary>
+    protected bool IsCapturing;
+
+    /// <summary>
+    /// The captured computation graph output node from the last capture-mode Forward() call.
+    /// Null when not capturing or when no graph has been captured yet.
+    /// </summary>
+    protected ComputationNode<T>? CapturedGraphOutput;
+
+    /// <summary>
     /// Tracks whether Dispose has been called.
     /// </summary>
     private bool _disposed;
@@ -627,6 +640,22 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         // Layers like GaussianNoiseLayer and DropoutLayer need training mode
         // to control their behavior even though they have no trainable parameters.
         IsTrainingMode = isTraining;
+    }
+
+    /// <summary>
+    /// Sets the graph capture mode for this layer.
+    /// When capturing, Forward() should record operations to a computation graph
+    /// instead of executing them. Used by the JIT compiler to capture the full
+    /// forward pass for compilation and optimization.
+    /// </summary>
+    /// <param name="isCapturing">True to enable capture mode, false to disable.</param>
+    public virtual void SetCaptureMode(bool isCapturing)
+    {
+        IsCapturing = isCapturing;
+        if (!isCapturing)
+        {
+            CapturedGraphOutput = null;
+        }
     }
 
     /// <summary>

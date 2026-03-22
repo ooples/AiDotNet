@@ -38,12 +38,17 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a PIDNet model for real-time semantic segmentation
+/// // Use AiModelBuilder facade for real-time semantic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 1024, inputDepth: 3, outputSize: 19);
-/// var model = new PIDNet&lt;double&gt;(architecture, numClasses: 19);
+///
+/// var builder = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(new PIDNet&lt;double&gt;(architecture, numClasses: 19));
+///
+/// var result = builder.Build(trainingImages, trainingMasks);
+/// var segmentation = result.Predict(inputImage);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

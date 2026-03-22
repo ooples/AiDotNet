@@ -270,11 +270,13 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            // Fixed effects prediction
+            // Fixed effects prediction using Engine.DotProduct
             T pred = _fixedEffects[0];  // Intercept
-            for (int j = 0; j < _numFeatures; j++)
             {
-                pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _fixedEffects[j + 1]));
+                var row = new Vector<T>(_numFeatures);
+                var fe = new Vector<T>(_numFeatures);
+                for (int j = 0; j < _numFeatures; j++) { row[j] = input[i, j]; fe[j] = _fixedEffects[j + 1]; }
+                pred = NumOps.Add(pred, Engine.DotProduct(row, fe));
             }
 
             // Add random effects if group is known

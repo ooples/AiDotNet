@@ -46,23 +46,13 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create self-training classifier that iteratively labels confident predictions
-/// var options = new SelfTrainingOptions&lt;double&gt;();
-/// var classifier = new SelfTrainingClassifier&lt;double&gt;(options);
+/// // Use AiModelBuilder facade for selftrainingclassifier classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SelfTrainingClassifier&lt;double&gt;(
+///         new SelfTrainingClassifierOptions&lt;double&gt;()));
 ///
-/// // Prepare data: -1 indicates unlabeled samples
-/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
-///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
-///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
-/// var labels = new Vector&lt;double&gt;(new double[] { 0, -1, -1, 1, -1, -1 });
-///
-/// // Train iteratively, adding high-confidence predictions to training set
-/// classifier.Train(features, labels);
-///
-/// // Predict class for new sample
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
-/// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

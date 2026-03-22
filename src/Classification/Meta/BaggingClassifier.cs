@@ -39,28 +39,13 @@ namespace AiDotNet.Classification.Meta;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create bagging classifier with bootstrap aggregation
-/// var options = new BaggingClassifierOptions&lt;double&gt;();
-/// var classifier = new BaggingClassifier&lt;double&gt;(options);
+/// // Use AiModelBuilder facade for bagging classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new BaggingClassifier&lt;double&gt;(
+///         new BaggingClassifierOptions&lt;double&gt;()));
 ///
-/// // Prepare training data: 6 samples with 2 features
-/// var features = new Matrix&lt;double&gt;(6, 2);
-/// features[0, 0] = 1.0; features[0, 1] = 1.1;
-/// features[1, 0] = 1.2; features[1, 1] = 0.9;
-/// features[2, 0] = 0.8; features[2, 1] = 1.0;
-/// features[3, 0] = 5.0; features[3, 1] = 5.1;
-/// features[4, 0] = 5.2; features[4, 1] = 4.9;
-/// features[5, 0] = 4.8; features[5, 1] = 5.0;
-/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
-///
-/// // Train classifiers on bootstrap samples
-/// classifier.Train(features, labels);
-///
-/// // Predict using majority vote across all base classifiers
-/// var newSample = new Matrix&lt;double&gt;(1, 2);
-/// newSample[0, 0] = 1.1; newSample[0, 1] = 1.0;
-/// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

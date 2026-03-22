@@ -50,7 +50,7 @@ namespace AiDotNet.Audio.LanguageIdentification;
 /// });
 ///
 /// var result = model.IdentifyLanguage(audioTensor);
-/// Console.WriteLine($"Detected: {result.LanguageName} ({result.Confidence:P0})");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

@@ -75,6 +75,9 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
 
     /// <inheritdoc />
     public virtual bool SupportsTiling => false;

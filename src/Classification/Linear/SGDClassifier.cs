@@ -51,7 +51,7 @@ namespace AiDotNet.Classification.Linear;
 /// // Predict using learned linear decision boundary
 /// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// // prediction[0] contains the predicted class
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

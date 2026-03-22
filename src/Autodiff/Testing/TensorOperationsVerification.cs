@@ -30,7 +30,7 @@ namespace AiDotNet.Autodiff.Testing;
 /// <code>
 /// var verifier = new TensorOperationsVerification&lt;float&gt;();
 /// var result = verifier.VerifyReLU();
-/// Console.WriteLine(result); // "PASSED" or "FAILED" with details
+/// // Result is available in the returned value // "PASSED" or "FAILED" with details
 /// </code>
 /// </para>
 /// </remarks>

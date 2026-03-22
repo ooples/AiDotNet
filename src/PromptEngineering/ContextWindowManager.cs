@@ -113,7 +113,7 @@ public class ContextWindowManager
     ///
     /// ```csharp
     /// var tokens = manager.EstimateTokens("Hello, world!");
-    /// Console.WriteLine($"This text uses approximately {tokens} tokens");
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>
@@ -173,7 +173,7 @@ public class ContextWindowManager
     ///
     /// ```csharp
     /// var remaining = manager.RemainingTokens(currentPrompt);
-    /// Console.WriteLine($"You can add approximately {remaining} more tokens");
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>

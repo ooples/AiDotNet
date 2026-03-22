@@ -39,10 +39,13 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new AgglomerativeClusteringOptions&lt;double&gt;();
-/// var agglomerativeClustering = new AgglomerativeClustering&lt;double&gt;(options);
-/// agglomerativeClustering.Train(dataMatrix);
-/// Vector<double> labels = agglomerativeClustering.Labels;
+/// // Use AiModelBuilder facade for agglomerative clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new AgglomerativeClustering&lt;double&gt;(
+///         new AgglomerativeClusteringOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

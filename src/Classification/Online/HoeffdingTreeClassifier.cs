@@ -60,7 +60,7 @@ namespace AiDotNet.Classification.Online;
 /// // Predict class for new sample
 /// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
@@ -272,7 +272,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     /// (AdaptiveRandomForest) after batch training to ensure trees that received
     /// fewer than GracePeriod samples can still make informed predictions.
     /// </summary>
-    public void ForceBatchSplits()
+    internal void ForceBatchSplits()
     {
         ForceLeafSplits(_root);
     }
@@ -651,6 +651,29 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
 
         InitializeFeatureStats(leaf.Left, NumFeatures);
         InitializeFeatureStats(leaf.Right, NumFeatures);
+
+        // Copy parent's feature ranges to children so they can compute valid bin indices
+        // without needing to see data again (batch replay won't feed data past this point).
+        if (leaf.FeatureStatistics is not null)
+        {
+            foreach (var kvp in leaf.FeatureStatistics)
+            {
+                int f = kvp.Key;
+                var parentStats = kvp.Value;
+                if (leaf.Left.FeatureStatistics is not null && leaf.Left.FeatureStatistics.ContainsKey(f))
+                {
+                    leaf.Left.FeatureStatistics[f].Min = parentStats.Min;
+                    leaf.Left.FeatureStatistics[f].Max = parentStats.Max;
+                    leaf.Left.FeatureStatistics[f].RangeFrozen = parentStats.RangeFrozen;
+                }
+                if (leaf.Right.FeatureStatistics is not null && leaf.Right.FeatureStatistics.ContainsKey(f))
+                {
+                    leaf.Right.FeatureStatistics[f].Min = parentStats.Min;
+                    leaf.Right.FeatureStatistics[f].Max = parentStats.Max;
+                    leaf.Right.FeatureStatistics[f].RangeFrozen = parentStats.RangeFrozen;
+                }
+            }
+        }
 
         // Distribute parent's class counts to children based on the split.
         // In streaming mode, new samples populate children naturally. In batch mode

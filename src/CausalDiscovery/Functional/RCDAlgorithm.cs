@@ -133,7 +133,12 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
             }
 
             // Check if the best variable is sufficiently independent using MI cutoff directly
-            if (bestVar < 0 || bestScore > _independenceCutoff)
+            if (bestVar < 0)
+            {
+                break;
+            }
+
+            if (bestScore > _independenceCutoff && ordering.Count > 0)
             {
                 // Remaining variables are likely confounded — mark as confounded and stop.
                 // Per RCD: confounded variables cannot be cleanly ordered, so we do NOT

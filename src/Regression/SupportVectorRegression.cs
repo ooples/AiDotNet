@@ -282,10 +282,12 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
             var predictions = new Vector<T>(input.Rows);
             for (int i = 0; i < input.Rows; i++)
             {
-                T pred = _olsIntercept;
-                for (int j = 0; j < Math.Min(input.Columns, _olsCoefficients.Length); j++)
-                    pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _olsCoefficients[j]));
-                predictions[i] = pred;
+                // Use Engine for vectorized prediction: pred = intercept + x · coef
+                var row = new Vector<T>(Math.Min(input.Columns, _olsCoefficients.Length));
+                for (int j = 0; j < row.Length; j++) row[j] = input[i, j];
+                var coefVec = new Vector<T>(_olsCoefficients.Length);
+                for (int j = 0; j < _olsCoefficients.Length; j++) coefVec[j] = _olsCoefficients[j];
+                predictions[i] = NumOps.Add(_olsIntercept, Engine.DotProduct(row, coefVec));
             }
             return predictions;
         }

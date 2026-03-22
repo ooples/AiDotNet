@@ -31,7 +31,7 @@ namespace AiDotNet.Audio.Classification;
 /// <code>
 /// var classifier = new SceneClassifier&lt;float&gt;("model.onnx");
 /// var result = classifier.Classify(audioTensor);
-/// Console.WriteLine($"Scene: {result.PredictedScene} ({result.Confidence})");
+/// // Result is available in the returned value
 /// </code>
 ///
 /// Usage for training:

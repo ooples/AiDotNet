@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -213,10 +214,7 @@ public class EmbeddingCopyrightDetector<T> : TextSafetyModuleBase<T>
 
         // L2 normalize
         T sumSq = NumOps.Zero;
-        for (int i = 0; i < _embeddingDim; i++)
-        {
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(embedding[i], embedding[i]));
-        }
+        sumSq = NumOps.Add(sumSq, Engine.DotProduct(embedding, embedding));
 
         double norm = Math.Sqrt(NumOps.ToDouble(sumSq));
         if (norm > 1e-10)

@@ -35,7 +35,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 ///
 /// // Transcribe audio
 /// var result = model.Transcribe(audioTensor);
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

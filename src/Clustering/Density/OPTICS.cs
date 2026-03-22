@@ -281,6 +281,18 @@ public class OPTICS<T> : ClusteringBase<T>
         // Compute cluster centers
         ComputeClusterCenters(x);
 
+        // De-normalize cluster centers back to original space
+        if (_featureMeans is not null && _featureStds is not null && ClusterCenters is not null)
+        {
+            for (int k = 0; k < ClusterCenters.Rows; k++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                {
+                    double normVal = NumOps.ToDouble(ClusterCenters[k, j]);
+                    double origVal = normVal * _featureStds[j] + _featureMeans[j];
+                    ClusterCenters[k, j] = NumOps.FromDouble(origVal);
+                }
+        }
+
         IsTrained = true;
     }
 

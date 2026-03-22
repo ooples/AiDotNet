@@ -47,10 +47,10 @@ namespace AiDotNet.Reasoning.Verification;
 ///
 /// // Only cares about final answer
 /// double reward = await orm.CalculateRewardAsync(chain, correctAnswer: "42");
-/// Console.WriteLine($"Reward: {reward}"); // 1.0 (correct)
+/// // Result is available in the returned value // 1.0 (correct)
 ///
 /// reward = await orm.CalculateRewardAsync(chain, correctAnswer: "43");
-/// Console.WriteLine($"Reward: {reward}"); // 0.0 (incorrect)
+/// // Result is available in the returned value // 0.0 (incorrect)
 /// ```
 ///
 /// **Research:**

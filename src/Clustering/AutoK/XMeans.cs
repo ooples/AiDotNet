@@ -252,6 +252,13 @@ public class XMeans<T> : ClusteringBase<T>
         _bic = ComputeTotalBIC(x, currentLabels, currentCenters, n, d, currentK);
 
         MergeDegenerateClusters(x);
+
+        // Recompute BIC after merge since cluster count and assignments may have changed
+        if (NumClusters < currentK && ClusterCenters is not null && Labels is not null)
+        {
+            _bic = ComputeTotalBIC(x, Labels, ClusterCenters, n, d, NumClusters);
+        }
+
         IsTrained = true;
     }
 
@@ -390,7 +397,7 @@ public class XMeans<T> : ClusteringBase<T>
         ValidateIsTrained();
 
         // Return stored labels for in-sample prediction
-        if (Labels is not null && x.Rows == Labels.Length)
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
             return new Vector<T>(Labels);
 
         var labels = new Vector<T>(x.Rows);

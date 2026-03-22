@@ -256,8 +256,8 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// Example:
     /// ```csharp
     /// var metadata = decisionTree.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Max depth: {metadata.AdditionalInfo["MaxDepth"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>
@@ -305,7 +305,7 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// ```csharp
     /// // Get importance of the first feature (index 0)
     /// var importance = decisionTree.GetFeatureImportance(0);
-    /// Console.WriteLine($"Feature 0 importance: {importance}");
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>

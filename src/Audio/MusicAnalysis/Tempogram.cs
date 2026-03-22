@@ -29,7 +29,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 2048, outputSize: 300);
 /// var model = new Tempogram&lt;float&gt;(arch, "tempogram.onnx");
 /// var result = model.Track(audioTensor);
-/// Console.WriteLine($"Tempo: {result.Tempo} BPM");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -1398,10 +1399,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         for (int i = 0; i < outputSize; i++)
         {
             T sum = NumOps.Zero;
-            for (int j = 0; j < combinedSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(combinedVector[j], _outputWeights[j, i]));
-            }
+            { var _w0 = new Vector<T>(combinedSize); for (int _i = 0; _i < combinedSize; _i++) _w0[_i] = _outputWeights[_i, i]; sum = NumOps.Add(sum, Engine.DotProduct(combinedVector, _w0)); }
             finalOutput[0, i] = sum;
         }
 

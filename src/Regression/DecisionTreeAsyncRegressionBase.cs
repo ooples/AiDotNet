@@ -958,6 +958,9 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     }
 
     /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    /// <inheritdoc/>
     /// <remarks>
     /// <para>
     /// For async tree-based regression models, the default loss function is Mean Squared Error (MSE).

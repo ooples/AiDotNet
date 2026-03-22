@@ -134,8 +134,20 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
                         if (NumOps.GreaterThan(corrJI, bestJtoI)) bestJtoI = corrJI;
                     }
 
-                    // Direction with stronger lagged correlation wins
-                    if (NumOps.GreaterThan(bestItoJ, bestJtoI))
+                    // Direction with stronger lagged correlation wins.
+                    // When equal (deterministic data), use asymmetric cov ratio.
+                    bool iToJ = NumOps.GreaterThan(bestItoJ, bestJtoI);
+                    if (!iToJ && !NumOps.GreaterThan(bestJtoI, bestItoJ))
+                    {
+                        // Equal correlations — use covariance ratio for direction
+                        double varId = NumOps.ToDouble(cov[i, i]);
+                        double varJd = NumOps.ToDouble(cov[j, j]);
+                        double covIJd = NumOps.ToDouble(cov[i, j]);
+                        if (varId > 1e-10 && varJd > 1e-10)
+                            iToJ = Math.Abs(covIJd / varId) >= Math.Abs(covIJd / varJd);
+                    }
+
+                    if (iToJ)
                     {
                         T varI = cov[i, i];
                         if (NumOps.GreaterThan(varI, eps))
@@ -201,7 +213,15 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
         T numerator = NumOps.Subtract(rij, NumOps.Multiply(rik, rjk));
         double dRik = NumOps.ToDouble(rik);
         double dRjk = NumOps.ToDouble(rjk);
-        double denom = Math.Sqrt(Math.Max((1 - dRik * dRik) * (1 - dRjk * dRjk), 1e-15));
-        return NumOps.FromDouble(NumOps.ToDouble(numerator) / denom);
+        double denomSq = (1 - dRik * dRik) * (1 - dRjk * dRjk);
+
+        if (denomSq < 1e-10)
+        {
+            // Both conditioning correlations are near 1.0 — all variables are strongly
+            // related. Return the original correlation to preserve the edge.
+            return rij;
+        }
+
+        return NumOps.FromDouble(NumOps.ToDouble(numerator) / Math.Sqrt(denomSq));
     }
 }

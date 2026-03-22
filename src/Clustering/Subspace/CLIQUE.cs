@@ -229,7 +229,35 @@ public class CLIQUE<T> : ClusteringBase<T>
         // Compute cluster centers
         ComputeClusterCenters(x);
 
+        int premergeK = NumClusters;
         MergeDegenerateClusters(x);
+
+        // Update subspace cluster IDs after merge to match the post-merge label space
+        if (NumClusters < premergeK && _subspaceClustersInternal is not null && Labels is not null)
+        {
+            // Build old→new label map from the merged Labels
+            var oldToNew = new Dictionary<int, int>();
+            for (int i = 0; i < Labels.Length; i++)
+            {
+                int newLabel = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+                // Find which subspace cluster originally owned this point
+                foreach (var sc in _subspaceClustersInternal)
+                {
+                    if (sc.Points.Contains(i) && !oldToNew.ContainsKey(sc.ClusterId))
+                    {
+                        oldToNew[sc.ClusterId] = newLabel;
+                        break;
+                    }
+                }
+            }
+
+            foreach (var sc in _subspaceClustersInternal)
+            {
+                if (oldToNew.TryGetValue(sc.ClusterId, out int newId))
+                    sc.ClusterId = newId;
+            }
+        }
+
         IsTrained = true;
     }
 
@@ -240,7 +268,7 @@ public class CLIQUE<T> : ClusteringBase<T>
         ValidatePredictInput(x);
 
         // Return stored labels for in-sample prediction (preserves merge results)
-        if (Labels is not null && x.Rows == Labels.Length)
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
             return new Vector<T>(Labels);
 
         if (_subspaceClustersInternal is null || _subspaceClustersInternal.Count == 0)

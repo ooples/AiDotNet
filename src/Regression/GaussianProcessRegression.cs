@@ -486,8 +486,8 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// Example:
     /// ```csharp
     /// var metadata = gpr.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Length scale: {metadata.AdditionalInfo["LengthScale"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>

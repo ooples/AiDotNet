@@ -78,7 +78,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 ///
 /// // Classify the entire graph
 /// var prediction = model.Predict(nodeFeatures);
-/// Console.WriteLine($"Predicted class: {prediction}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

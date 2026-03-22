@@ -1018,6 +1018,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
 
     /// <inheritdoc/>
     public virtual int[] GetInputShape()

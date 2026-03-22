@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.LanguageIdentification;
 /// <code>
 /// var model = new Wav2Vec2LanguageIdentifier&lt;float&gt;(architecture, "wav2vec2_lid.onnx");
 /// var result = model.IdentifyLanguage(audioTensor);
-/// Console.WriteLine($"Language: {result.LanguageName}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

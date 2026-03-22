@@ -177,14 +177,12 @@ public class LassoRegression<T> : RegressionBase<T>
 
         // Compute initial residuals
         var residuals = new Vector<T>(n);
+        // Compute initial residuals: residuals = y - X*w using Engine
         for (int i = 0; i < n; i++)
         {
-            T prediction = NumOps.Zero;
-            for (int j = 0; j < p; j++)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(xProcessed[i, j], w[j]));
-            }
-            residuals[i] = NumOps.Subtract(y[i], prediction);
+            var row = new Vector<T>(p);
+            for (int j2 = 0; j2 < p; j2++) row[j2] = xProcessed[i, j2];
+            residuals[i] = NumOps.Subtract(y[i], Engine.DotProduct(row, w));
         }
 
         T alpha = NumOps.FromDouble(Options.Alpha);
@@ -206,12 +204,10 @@ public class LassoRegression<T> : RegressionBase<T>
                     residuals[i] = NumOps.Add(residuals[i], NumOps.Multiply(xProcessed[i, j], oldW));
                 }
 
-                // Compute correlation with residuals
-                T rho = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    rho = NumOps.Add(rho, NumOps.Multiply(xProcessed[i, j], residuals[i]));
-                }
+                // Compute correlation with residuals: rho = x[:,j]' * residuals
+                var xCol = new Vector<T>(n);
+                for (int i = 0; i < n; i++) xCol[i] = xProcessed[i, j];
+                T rho = Engine.DotProduct(xCol, residuals);
 
                 // Apply soft-thresholding (don't regularize intercept)
                 // Intercept or zero column gets no regularization; otherwise apply L1 soft-thresholding

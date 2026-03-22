@@ -270,10 +270,11 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             var predictions = new Vector<T>(input.Rows);
             for (int i = 0; i < input.Rows; i++)
             {
-                T pred = _olsIntercept;
-                for (int j = 0; j < Math.Min(input.Columns, _olsCoefficients.Length); j++)
-                    pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _olsCoefficients[j]));
-                predictions[i] = pred;
+                int len = Math.Min(input.Columns, _olsCoefficients.Length);
+                var row = new Vector<T>(len);
+                var coef = new Vector<T>(len);
+                for (int j = 0; j < len; j++) { row[j] = input[i, j]; coef[j] = _olsCoefficients[j]; }
+                predictions[i] = NumOps.Add(_olsIntercept, Engine.DotProduct(row, coef));
             }
             return await Task.FromResult(predictions);
         }
@@ -802,13 +803,11 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             output[i] = new Vector<T>(outputSize);
             for (int j = 0; j < outputSize; j++)
             {
-                T sum = biases[j];
-                for (int k = 0; k < input[i].Length; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[i][k], weights[k, j]));
-                }
+                // Use Engine.DotProduct for input · weights[:,j]
+                var wCol = new Vector<T>(input[i].Length);
+                for (int k = 0; k < input[i].Length; k++) wCol[k] = weights[k, j];
+                T sum = NumOps.Add(biases[j], Engine.DotProduct(input[i], wCol));
 
-                // Activation functions are calibrated numerical recipes — boundary conversion
                 output[i][j] = applyActivation
                     ? NumOps.FromDouble(ApplyActivation(NumOps.ToDouble(sum)))
                     : sum;

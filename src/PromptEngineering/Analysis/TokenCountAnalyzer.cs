@@ -15,8 +15,8 @@ namespace AiDotNet.PromptEngineering.Analysis;
 /// var analyzer = new TokenCountAnalyzer("gpt-4");
 /// var metrics = analyzer.Analyze("Explain quantum computing in simple terms");
 ///
-/// Console.WriteLine($"Tokens: {metrics.TokenCount}");
-/// Console.WriteLine($"Estimated cost: ${metrics.EstimatedCost}");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 /// </code>
 ///
 /// Supports different models with their pricing:

@@ -132,8 +132,8 @@ namespace AiDotNet.Reasoning.Training;
 ///     validationProblems
 /// );
 ///
-/// Console.WriteLine($"Final accuracy: {results.BestAccuracy:P2}");
-/// Console.WriteLine($"Epochs trained: {results.EpochsTrained}");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 ///
 /// // Save trained model
 /// await learner.SaveCheckpointAsync("model_checkpoint.bin");

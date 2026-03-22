@@ -32,6 +32,12 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
+    /// Reference to the training data matrix. Used for safe in-sample prediction
+    /// checks via ReferenceEquals (not row count which is unreliable).
+    /// </summary>
+    protected Matrix<T>? TrainingDataRef { get; set; }
+
+    /// <summary>
     /// Gets the clustering options.
     /// </summary>
     protected ClusteringOptions<T> Options { get; private set; }
@@ -111,6 +117,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     public virtual void Fit(Matrix<T> x)
     {
+        TrainingDataRef = x;
         var y = new Vector<T>(x.Rows);
         Train(x, y);
     }
@@ -120,6 +127,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     public virtual void Train(Matrix<T> x)
     {
+        TrainingDataRef = x;
         var y = new Vector<T>(x.Rows);
         Train(x, y);
     }
@@ -169,15 +177,12 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     protected virtual T ComputeDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
-        // Inline Euclidean distance to avoid Vector allocation in hot loops
+        // Engine.DotProduct is zero-overhead in 0.13.0 — always use it
         int d = x.Columns;
-        T sumSq = NumOps.Zero;
+        var diff = new Vector<T>(d);
         for (int j = 0; j < d; j++)
-        {
-            T diff = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.Sqrt(sumSq);
+            diff[j] = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
+        return NumOps.Sqrt(Engine.DotProduct(diff, diff));
     }
 
     /// <summary>
@@ -186,13 +191,10 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     protected T ComputeSquaredDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
         int d = x.Columns;
-        T sumSq = NumOps.Zero;
+        var diff = new Vector<T>(d);
         for (int j = 0; j < d; j++)
-        {
-            T diff = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-        }
-        return sumSq;
+            diff[j] = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
+        return Engine.DotProduct(diff, diff);
     }
 
     /// <summary>
@@ -469,11 +471,16 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <inheritdoc/>
     public virtual int ParameterCount => ExpectedParameterCount;
 
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
     /// <summary>
     /// Whether this clustering model supports direct parameter-based initialization.
     /// Hierarchical and density-based models should override to return false.
+    /// Returns true by default; override to false for models that don't support it
+    /// (e.g., density-based models where parameters aren't centroid coordinates).
     /// </summary>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    public virtual bool SupportsParameterInitialization => true;
 
     /// <inheritdoc/>
     public virtual Vector<T> GetParameters()
@@ -509,6 +516,41 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
         if (NumFeatures == 0 && NumClusters > 0 && parameters.Length > 0 && parameters.Length % NumClusters == 0)
         {
             NumFeatures = parameters.Length / NumClusters;
+        }
+
+        // If both are zero (untrained model), try to infer reasonable dimensions
+        // This happens when the optimizer initializes a random solution on a cloned untrained model
+        if (ExpectedParameterCount == 0 && parameters.Length > 0)
+        {
+            // Default to 2 clusters if not set, infer features from parameters
+            if (NumClusters == 0) NumClusters = 2;
+            NumFeatures = parameters.Length / NumClusters;
+            if (NumFeatures == 0) NumFeatures = parameters.Length;
+        }
+
+        // If parameter count doesn't match, re-derive NumFeatures from the parameters.
+        // This handles cloned models where NumFeatures wasn't preserved, and cases where
+        // NumClusters changed after construction.
+        if (parameters.Length != ExpectedParameterCount && parameters.Length > 0 && NumClusters > 0)
+        {
+            if (parameters.Length % NumClusters == 0)
+            {
+                NumFeatures = parameters.Length / NumClusters;
+            }
+            else
+            {
+                // Parameters don't divide evenly into NumClusters — try adjusting NumClusters
+                // This can happen when the optimizer uses different cluster count than the model
+                for (int k = NumClusters; k >= 1; k--)
+                {
+                    if (parameters.Length % k == 0)
+                    {
+                        NumClusters = k;
+                        NumFeatures = parameters.Length / k;
+                        break;
+                    }
+                }
+            }
         }
 
         if (parameters.Length != ExpectedParameterCount)
@@ -677,9 +719,9 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
             double range = colMax - colMin;
             if (range > maxRange) maxRange = range;
         }
-        // Merge clusters whose centers are within 50% of the data range.
-        // This aggressively merges degenerate clusters where all data is tightly grouped.
-        double mergeThreshold = Math.Max(1e-6, maxRange * 0.50);
+        // Merge degenerate clusters: when cluster centers are closer than half the maximum
+        // feature range, they represent the same region of the data space.
+        double mergeThreshold = Math.Max(1e-6, maxRange * 0.5);
 
         // First: identify which clusters actually have data points
         var clusterPopulations = new int[NumClusters];
@@ -711,6 +753,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
         }
 
         // Merge nearby populated clusters
+        double minDist = double.MaxValue;
         for (int a = 0; a < NumClusters; a++)
         {
             if (clusterPopulations[a] == 0) continue;
@@ -723,7 +766,9 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
                     double dd = NumOps.ToDouble(ClusterCenters[a, j]) - NumOps.ToDouble(ClusterCenters[b, j]);
                     dist += dd * dd;
                 }
-                if (Math.Sqrt(dist) < mergeThreshold)
+                double eucDist = Math.Sqrt(dist);
+                if (eucDist < minDist) minDist = eucDist;
+                if (eucDist < mergeThreshold)
                     mergedId[b] = mergedId[a];
             }
         }

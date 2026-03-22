@@ -182,31 +182,17 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         }
 
         // Compute final mask and threshold
-        var result = new Matrix<T>(d, d);
         var cov = ComputeCovarianceMatrix(data);
-        var finalMask = new Matrix<T>(d, d);
+        var learnedP = new double[d, d];
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
                 double sv = NumOps.ToDouble(M[i, j]);
-                finalMask[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
+                learnedP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             }
 
-        T threshold = NumOps.FromDouble(0.5);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                if (NumOps.GreaterThan(finalMask[i, j], threshold))
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, NumOps.FromDouble(1e-10)))
-                        result[i, j] = NumOps.Divide(cov[i, j], varI);
-                }
-            }
-
-        return result;
+        return BuildFinalAdjacency(learnedP, cov, d);
     }
 
 }

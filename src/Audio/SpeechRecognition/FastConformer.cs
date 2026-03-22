@@ -38,7 +38,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 5000);
 /// var model = new FastConformer&lt;float&gt;(arch, "fast_conformer_medium.onnx");
 /// var result = model.Transcribe(audioWaveform);
-/// Console.WriteLine(result.Text); // "hello world"
+/// // Result is available in the returned value // "hello world"
 /// </code>
 /// </para>
 /// </remarks>

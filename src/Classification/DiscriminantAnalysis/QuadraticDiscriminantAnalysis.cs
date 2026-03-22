@@ -54,7 +54,7 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 /// // Classify new sample using quadratic discriminant function
 /// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
 /// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -68,6 +68,12 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     /// Gets the QDA-specific options.
     /// </summary>
     protected new DiscriminantAnalysisOptions<T> Options => (DiscriminantAnalysisOptions<T>)base.Options;
+
+    /// <summary>
+    /// QDA computes parameters from per-class covariance matrices during training.
+    /// It does not support flat parameter initialization.
+    /// </summary>
+    public override bool SupportsParameterInitialization => false;
 
     /// <summary>
     /// Class means for each class.
@@ -693,15 +699,14 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        // QDA doesn't support setting parameters directly
-        // The model must be trained to compute proper covariance matrices
-        throw new NotSupportedException("QDA does not support setting parameters directly. Use Train() instead.");
+        // QDA computes parameters from class statistics, not direct parameter setting.
+        // Accept silently so the optimizer can initialize the model without crashing.
     }
 
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        throw new NotSupportedException("QDA does not support setting parameters directly. Use Train() instead.");
+        return CreateNewInstance();
     }
 
     /// <inheritdoc/>

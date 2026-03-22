@@ -839,7 +839,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///     "Explain why this prediction was made and what factors contributed most?",
     ///     ReasoningMode.ChainOfThought
     /// );
-    /// Console.WriteLine(reasoningResult.FinalAnswer);
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>
@@ -2508,8 +2508,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // For clustering/density models, use full data (not split) since cluster
             // structure depends on having all points. For TS models, use XTrain (split).
             bool useFullData = model is Clustering.Base.ClusteringBase<T>;
-            var directX = useFullData ? x : XTrain;
-            var directY = useFullData ? y : yTrain;
+            // Use preprocessed data (not raw x/y) so models operate in the same
+            // coordinate space as the validation/test predictions
+            var directX = useFullData ? preprocessedX : XTrain;
+            var directY = useFullData ? preprocessedY : yTrain;
             model.Train(directX, directY);
 
             // Compute evaluation metrics
@@ -2540,7 +2542,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 SelectedFeatureIndices = Enumerable.Range(0, inputSize).ToList(),
                 TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
                 {
-                    X = XTrain, Y = yTrain, Predictions = trainPredOutput,
+                    X = directX, Y = directY, Predictions = trainPredOutput,
                     ErrorStats = trainErrorStats,
                     PredictionStats = trainPredStats
                 }
@@ -3760,7 +3762,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// // After training
     /// var result = builder.Build();
     /// var shapExplanation = result.ExplainWithSHAP(inputInstance, backgroundData);
-    /// Console.WriteLine($"Age contributed: {shapExplanation.ShapValues[0]}");
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>
@@ -4648,7 +4650,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///
     /// var advice = await builder.AskAgentAsync(
     ///     "Should I use Ridge or Lasso regression for my dataset with 50 features?");
-    /// Console.WriteLine(advice);
+    /// // Result is available in the returned value
     /// </code>
     /// </remarks>
     public async Task<string> AskAgentAsync(string question)
@@ -4817,7 +4819,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///
     /// // Access the profiling report
     /// var report = result.ProfilingReport;
-    /// Console.WriteLine(report?.GetFormattedSummary());
+    /// // Result is available in the returned value
     /// </code>
     ///
     /// Features tracked:

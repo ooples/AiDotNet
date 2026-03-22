@@ -29,7 +29,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 128, outputSize: 360);
 /// var model = new MelodyExtractor&lt;float&gt;(arch, "melody_extractor.onnx");
 /// var (hasPitch, pitch) = model.DetectPitch(audioFrame);
-/// Console.WriteLine($"Melody pitch: {pitch} Hz");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

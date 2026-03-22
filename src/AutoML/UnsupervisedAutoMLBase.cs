@@ -48,28 +48,53 @@ public abstract class UnsupervisedAutoMLBase<T>
     /// <summary>
     /// Gets the best score achieved during the search.
     /// </summary>
-    public double BestScore { get; protected set; } = double.NegativeInfinity;
+    /// <remarks>
+    /// Initialized lazily based on HigherIsBetter: -Infinity for maximization, +Infinity for minimization.
+    /// </remarks>
+    public double BestScore { get; protected set; } = double.NaN;
 
     /// <summary>
     /// Gets the total number of trials evaluated.
     /// </summary>
     public int TrialsEvaluated { get; protected set; }
 
+    private int _maxTrials = 100;
+    private TimeSpan _timeLimit = TimeSpan.FromMinutes(30);
+
     /// <summary>
     /// Gets or sets the maximum number of trials to run.
     /// </summary>
-    public int MaxTrials { get; set; } = 100;
+    public int MaxTrials
+    {
+        get => _maxTrials;
+        set
+        {
+            if (value < 1)
+                throw new ArgumentOutOfRangeException(nameof(MaxTrials), "Must be >= 1.");
+            _maxTrials = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the time limit for the search.
     /// </summary>
-    public TimeSpan TimeLimit { get; set; } = TimeSpan.FromMinutes(30);
+    public TimeSpan TimeLimit
+    {
+        get => _timeLimit;
+        set
+        {
+            if (value <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(TimeLimit), "Must be a positive duration.");
+            _timeLimit = value;
+        }
+    }
 
     /// <summary>
     /// Determines whether a new score is better than the current best.
     /// </summary>
     protected bool IsBetterScore(double newScore)
     {
+        if (double.IsNaN(BestScore)) return true; // first score always wins
         return HigherIsBetter ? newScore > BestScore : newScore < BestScore;
     }
 

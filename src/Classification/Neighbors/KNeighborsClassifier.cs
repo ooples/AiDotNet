@@ -37,22 +37,12 @@ namespace AiDotNet.Classification.Neighbors;
 /// <example>
 /// <code>
 /// // Create a KNN classifier with k=5 neighbors
-/// var options = new KNeighborsOptions&lt;double&gt;();
-/// var classifier = new KNeighborsClassifier&lt;double&gt;(options);
+/// // Use AiModelBuilder facade for K-nearest-neighbors classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new KNeighborsClassifier&lt;double&gt;(new KNeighborsOptions&lt;double&gt;()));
 ///
-/// // Prepare training data (features and labels)
-/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
-///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,   // Class 0 cluster
-///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 }); // Class 1 cluster
-/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
-///
-/// // Train the classifier (stores all training instances)
-/// classifier.Train(features, labels);
-///
-/// // Predict class for a new sample based on nearest neighbors
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
-/// var prediction = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {prediction[0]}"); // Output: 0
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -169,25 +159,42 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         var xTrain = _xTrain ?? throw new InvalidOperationException("_xTrain has not been initialized.");
         var yTrain = _yTrain ?? throw new InvalidOperationException("_yTrain has not been initialized.");
 
-        // Compute distances to all training samples
-        var distances = new List<(T distance, int index)>();
-        for (int i = 0; i < xTrain.Rows; i++)
-        {
-            var trainSample = new Vector<T>(xTrain.Columns);
-            for (int j = 0; j < xTrain.Columns; j++)
-            {
-                trainSample[j] = xTrain[i, j];
-            }
+        int n = xTrain.Rows;
+        int d = xTrain.Columns;
 
-            T distance = ComputeDistance(sample, trainSample);
-            distances.Add((distance, i));
+        // Compute distances to all training samples using inline distance
+        // (avoids Vector allocation per sample — major performance win)
+        var distArray = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double sumSq = 0;
+            for (int j = 0; j < d; j++)
+            {
+                double diff = NumOps.ToDouble(sample[j]) - NumOps.ToDouble(xTrain[i, j]);
+                sumSq += diff * diff;
+            }
+            distArray[i] = Math.Sqrt(sumSq);
         }
 
-        // Sort by distance and get k nearest
-        var sortedDistances = distances
-            .OrderBy(d => NumOps.ToDouble(d.distance))
-            .Take(Options.NNeighbors)
-            .ToList();
+        // Partial sort: find k nearest using selection rather than full sort
+        int k = Math.Min(Options.NNeighbors, n);
+        var indices = new int[n];
+        for (int i = 0; i < n; i++) indices[i] = i;
+
+        // Simple partial sort: find top-k smallest distances
+        for (int i = 0; i < k; i++)
+        {
+            int minIdx = i;
+            for (int j = i + 1; j < n; j++)
+                if (distArray[indices[j]] < distArray[indices[minIdx]])
+                    minIdx = j;
+            if (minIdx != i)
+                (indices[i], indices[minIdx]) = (indices[minIdx], indices[i]);
+        }
+
+        var sortedDistances = new List<(T distance, int index)>(k);
+        for (int i = 0; i < k; i++)
+            sortedDistances.Add((NumOps.FromDouble(distArray[indices[i]]), indices[i]));
 
         // Compute weighted votes
         var classVotes = new T[NumClasses];

@@ -353,7 +353,7 @@ public static class GradientCheckpointing<T>
     ///     activationSize: 100_000_000,  // 100MB per layer
     ///     segmentSize: 4
     /// );
-    /// Console.WriteLine($"Saves {savings:P1} memory");
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>

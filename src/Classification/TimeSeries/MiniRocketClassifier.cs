@@ -61,7 +61,7 @@ namespace AiDotNet.Classification.TimeSeries;
 /// var newSample = new Matrix&lt;double&gt;(1, 5);
 /// newSample[0, 0] = 1.0; newSample[0, 1] = 1.1; newSample[0, 2] = 1.3; newSample[0, 3] = 1.2; newSample[0, 4] = 1.0;
 /// var predictions = classifier.Predict(newSample);
-/// Console.WriteLine($"Predicted class: {predictions[0]}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>

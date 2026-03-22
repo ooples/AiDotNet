@@ -322,6 +322,9 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
     public virtual void SaveModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();

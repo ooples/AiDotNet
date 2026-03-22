@@ -422,7 +422,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
                 sigma += NumOps.ToDouble(laplacian[j, j]);
             sigma = sigma / n + 1.0;
 
-            for (int iter = 0; iter < 100; iter++)
+            for (int iter = 0; iter < 300; iter++)
             {
                 // Compute (σI - L) * v instead of L * v
                 var lv = MultiplyMatrixVector(laplacian, v, n);
@@ -430,17 +430,20 @@ public class SpectralClustering<T> : ClusteringBase<T>
                 for (int j = 0; j < n; j++)
                     newV[j] = NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(sigma), v[j]), lv[j]);
 
-                // Orthogonalize against previous eigenvectors
-                for (int prev = 0; prev < vec; prev++)
+                // Orthogonalize against previous eigenvectors (two passes for numerical stability)
+                for (int pass = 0; pass < 2; pass++)
                 {
-                    T dot = NumOps.Zero;
-                    for (int j = 0; j < n; j++)
+                    for (int prev = 0; prev < vec; prev++)
                     {
-                        dot = NumOps.Add(dot, NumOps.Multiply(newV[j], eigenvectors[j, prev]));
-                    }
-                    for (int j = 0; j < n; j++)
-                    {
-                        newV[j] = NumOps.Subtract(newV[j], NumOps.Multiply(dot, eigenvectors[j, prev]));
+                        T dot = NumOps.Zero;
+                        for (int j = 0; j < n; j++)
+                        {
+                            dot = NumOps.Add(dot, NumOps.Multiply(newV[j], eigenvectors[j, prev]));
+                        }
+                        for (int j = 0; j < n; j++)
+                        {
+                            newV[j] = NumOps.Subtract(newV[j], NumOps.Multiply(dot, eigenvectors[j, prev]));
+                        }
                     }
                 }
 
@@ -456,10 +459,17 @@ public class SpectralClustering<T> : ClusteringBase<T>
                 }
                 norm = NumOps.Sqrt(norm);
 
+                // Check convergence: ||v_new - v_old|| < tolerance
+                double changeSq = 0;
                 for (int j = 0; j < n; j++)
                 {
-                    v[j] = NumOps.Divide(newV[j], norm);
+                    T newVal = NumOps.Divide(newV[j], norm);
+                    double diff = NumOps.ToDouble(NumOps.Subtract(newVal, v[j]));
+                    changeSq += diff * diff;
+                    v[j] = newVal;
                 }
+
+                if (changeSq < 1e-12) break;
             }
 
             // Store eigenvector
@@ -475,13 +485,14 @@ public class SpectralClustering<T> : ClusteringBase<T>
     private T[] MultiplyMatrixVector(T[,] matrix, T[] vector, int n)
     {
         var result = new T[n];
+        // Engine-accelerated matrix-vector multiply
+        var vecV = new Vector<T>(n);
+        for (int j = 0; j < n; j++) vecV[j] = vector[j];
         for (int i = 0; i < n; i++)
         {
-            result[i] = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                result[i] = NumOps.Add(result[i], NumOps.Multiply(matrix[i, j], vector[j]));
-            }
+            var row = new Vector<T>(n);
+            for (int j = 0; j < n; j++) row[j] = matrix[i, j];
+            result[i] = Engine.DotProduct(row, vecV);
         }
         return result;
     }

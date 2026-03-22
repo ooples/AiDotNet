@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors;
@@ -45,6 +46,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 public abstract class TradingEnvironment<T> : IEnvironment<T>
 {
     protected readonly INumericOperations<T> NumOps;
+    protected IEngine Engine => AiDotNetEngine.Current;
     protected readonly Tensor<T> MarketData;
     protected readonly int WindowSize;
     protected readonly int NumAssets;

@@ -91,6 +91,25 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
             for (int t = 0; t < effectiveN; t++)
                 deltaY[t] = transitions[t, target];
 
+            // Check if transitions are near-constant (deterministic trend).
+            // If so, use raw data values instead, since constant transitions carry no MI.
+            double deltaVar = 0;
+            double deltaMean = 0;
+            for (int t = 0; t < effectiveN; t++)
+                deltaMean += NumOps.ToDouble(deltaY[t]);
+            deltaMean /= effectiveN;
+            for (int t = 0; t < effectiveN; t++)
+            {
+                double diff = NumOps.ToDouble(deltaY[t]) - deltaMean;
+                deltaVar += diff * diff;
+            }
+            if (deltaVar / effectiveN < 1e-10)
+            {
+                // Transitions are constant — fall back to raw data
+                for (int t = 0; t < effectiveN; t++)
+                    deltaY[t] = data[t, target];
+            }
+
             // Greedy forward selection of causal parents
             var selectedParents = new List<int>();
             var candidateSet = new List<int>();

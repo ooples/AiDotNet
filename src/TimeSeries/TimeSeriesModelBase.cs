@@ -961,6 +961,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// They must be trained on sequential data to learn meaningful coefficients.
     /// </summary>
     public virtual bool SupportsParameterInitialization => false;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
 
     public virtual Vector<T> GetParameters()
     {

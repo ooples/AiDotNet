@@ -117,28 +117,37 @@ public class AffinityPropagation<T> : ClusteringBase<T>
             throw new ArgumentException("Need at least 2 samples.");
         }
 
-        // Normalize features for scale-invariant similarity computation
-        int d = x.Columns;
-        var xNorm = new Matrix<T>(n, d);
-        for (int j = 0; j < d; j++)
+        // Skip normalization for precomputed similarity matrices — the input IS the similarity matrix
+        Matrix<T> xForSimilarity;
+        if (_options.AffinityType == AffinityPropagationAffinityType.Precomputed)
         {
-            double sum = 0, varSum = 0;
-            for (int i = 0; i < n; i++)
-                sum += NumOps.ToDouble(x[i, j]);
-            double mean = sum / n;
-            for (int i = 0; i < n; i++)
+            xForSimilarity = x;
+        }
+        else
+        {
+            // Normalize features for scale-invariant similarity computation
+            int d = x.Columns;
+            xForSimilarity = new Matrix<T>(n, d);
+            for (int j = 0; j < d; j++)
             {
-                double diff = NumOps.ToDouble(x[i, j]) - mean;
-                varSum += diff * diff;
+                double sum = 0, varSum = 0;
+                for (int i = 0; i < n; i++)
+                    sum += NumOps.ToDouble(x[i, j]);
+                double mean = sum / n;
+                for (int i = 0; i < n; i++)
+                {
+                    double diff = NumOps.ToDouble(x[i, j]) - mean;
+                    varSum += diff * diff;
+                }
+                double std = Math.Sqrt(varSum / n);
+                if (std < 1e-10) std = 1.0;
+                for (int i = 0; i < n; i++)
+                    xForSimilarity[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - mean) / std);
             }
-            double std = Math.Sqrt(varSum / n);
-            if (std < 1e-10) std = 1.0;
-            for (int i = 0; i < n; i++)
-                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - mean) / std);
         }
 
-        // Compute similarity matrix on normalized data
-        _similarityMatrix = ComputeSimilarityMatrix(xNorm, n);
+        // Compute similarity matrix
+        _similarityMatrix = ComputeSimilarityMatrix(xForSimilarity, n);
 
         // Set preferences (diagonal of similarity matrix)
         T preference = _options.Preference.HasValue
@@ -243,7 +252,37 @@ public class AffinityPropagation<T> : ClusteringBase<T>
         }
 
         // Merge degenerate clusters (handles single natural cluster with many exemplars)
+        int premergeK = NumClusters;
         MergeDegenerateClusters(x);
+
+        // Rebuild _exemplarIndices after merge to match post-merge cluster IDs
+        if (NumClusters < premergeK && Labels is not null && ClusterCenters is not null)
+        {
+            var newExemplars = new int[NumClusters];
+            for (int k = 0; k < NumClusters; k++)
+            {
+                // Find the training sample closest to the merged center
+                double bestDist = double.MaxValue;
+                int bestIdx = 0;
+                for (int i = 0; i < x.Rows; i++)
+                {
+                    if ((int)Math.Round(NumOps.ToDouble(Labels[i])) != k) continue;
+                    double dist = 0;
+                    for (int j = 0; j < x.Columns; j++)
+                    {
+                        double diff = NumOps.ToDouble(x[i, j]) - NumOps.ToDouble(ClusterCenters[k, j]);
+                        dist += diff * diff;
+                    }
+                    if (dist < bestDist)
+                    {
+                        bestDist = dist;
+                        bestIdx = i;
+                    }
+                }
+                newExemplars[k] = bestIdx;
+            }
+            _exemplarIndices = newExemplars;
+        }
 
         IsTrained = true;
     }
@@ -440,7 +479,7 @@ public class AffinityPropagation<T> : ClusteringBase<T>
         ValidateIsTrained();
 
         // Return stored labels for in-sample prediction (preserves merge results)
-        if (Labels is not null && x.Rows == Labels.Length)
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
             return new Vector<T>(Labels);
 
         var labels = new Vector<T>(x.Rows);

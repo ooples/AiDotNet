@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -287,10 +288,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = b1[j];
-            for (int i = 0; i < _inputDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(x[i], w1[i, j]));
-            }
+            { var wCol_0 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_0[ii] = w1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_0)); }
             // ReLU: convert to double at activation boundary
             double val = NumOps.ToDouble(sum);
             h1[j] = NumOps.FromDouble(ReLU(val));
@@ -301,10 +299,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = b2[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(h1[i], w2[i, j]));
-            }
+            { var wCol_1 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_1[ii] = w2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_1)); }
             // ReLU: convert to double at activation boundary
             double val = NumOps.ToDouble(sum);
             h2[j] = NumOps.FromDouble(ReLU(val));
@@ -315,10 +310,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _outputDim; j++)
         {
             T sum = b3[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(h2[i], w3[i, j]));
-            }
+            { var wCol_2 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_2[ii] = w3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_2)); }
             output[j] = sum;
         }
 
@@ -344,10 +336,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = b1[j];
-            for (int i = 0; i < _inputDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(x[i], w1[i, j]));
-            }
+            { var wCol_3 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_3[ii] = w1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_3)); }
             double val = NumOps.ToDouble(sum);
             h1[j] = NumOps.FromDouble(ReLU(val));
         }
@@ -356,10 +345,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = b2[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(h1[i], w2[i, j]));
-            }
+            { var wCol_4 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_4[ii] = w2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_4)); }
             double val = NumOps.ToDouble(sum);
             h2[j] = NumOps.FromDouble(ReLU(val));
         }
@@ -368,10 +354,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _outputDim; j++)
         {
             T sum = b3[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(h2[i], w3[i, j]));
-            }
+            { var wCol_5 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_5[ii] = w3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_5)); }
             output[j] = sum;
         }
 

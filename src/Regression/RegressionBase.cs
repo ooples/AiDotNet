@@ -889,6 +889,9 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
 
     /// <inheritdoc/>
     /// <remarks>

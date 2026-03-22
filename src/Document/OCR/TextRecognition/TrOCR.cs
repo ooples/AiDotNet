@@ -35,7 +35,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// <code>
 /// var trocr = new TrOCR&lt;float&gt;(architecture);
 /// var result = trocr.RecognizeText(croppedTextImage);
-/// Console.WriteLine($"Text: {result.Text}, Confidence: {result.ConfidenceValue}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// <para>

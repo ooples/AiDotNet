@@ -308,8 +308,8 @@ public class TensorPool<T> : IDisposable
     /// <example>
     /// <code>
     /// var stats = pool.GetStatistics();
-    /// Console.WriteLine($"Pool utilization: {stats.MemoryUtilizationPercent:F1}%");
-    /// Console.WriteLine($"Tensors in pool: {stats.PooledTensorCount}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// </code>
     /// </example>
     public PoolStatistics GetStatistics()

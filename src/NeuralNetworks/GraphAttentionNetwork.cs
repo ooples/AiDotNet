@@ -528,8 +528,8 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// gat.EnableLoRAFineTuning(rank: 8, alpha: 16);
     ///
     /// // Now only ~4% of parameters are trainable!
-    /// Console.WriteLine($"LoRA parameters: {gat.GetLoRAParameterCount()}");
-    /// Console.WriteLine($"Total parameters: {gat.GetParameterCount()}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     ///
     /// // Fine-tune on new data
     /// gat.TrainOnGraph(newFeatures, newAdjacency, newLabels, epochs: 50);

@@ -320,30 +320,17 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
-        // Final output: threshold adjacency
-        var result = new Matrix<T>(d, d);
-        T threshold = NumOps.FromDouble(0.5);
+        // Final output: extract learned edge probabilities and build adjacency
+        var learnedP = new double[d, d];
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
                 double sv = NumOps.ToDouble(ALogits[i, j]);
-                double sigVal = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-                T prob = NumOps.FromDouble(sigVal);
-
-                if (NumOps.GreaterThan(prob, threshold))
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(0.1)))
-                            result[i, j] = weight;
-                    }
-                }
+                learnedP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             }
 
-        return result;
+        return BuildFinalAdjacency(learnedP, cov, d);
     }
 
 }

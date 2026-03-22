@@ -228,7 +228,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
     ///     "emotion_model.onnx");
     ///
     /// var result = recognizer.RecognizeEmotion(audioTensor);
-    /// Console.WriteLine($"Emotion: {result.Emotion}, Confidence: {result.Confidence}");
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>

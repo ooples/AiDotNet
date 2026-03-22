@@ -85,6 +85,9 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
 
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
+        // For small problems, use higher learning rate for faster convergence
+        double effectiveLr = d <= 10 ? Math.Max(_learningRateValue, 0.01) : _learningRateValue;
+
         var X = StandardizeData(data);
 
         // Choose rank
@@ -104,7 +107,7 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
                 B[i, r] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
             }
 
-        T lr = NumOps.FromDouble(_learningRateValue);
+        T lr = NumOps.FromDouble(effectiveLr);
 
         // Augmented Lagrangian
         double rho = 1.0;
@@ -169,9 +172,9 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
             if (rho >= _rhoMax) break;
         }
 
-        // Final reconstruction and thresholding
+        // Final reconstruction and thresholding (with covariance fallback)
         var result = ReconstructW(A, B, d, rank);
-        return ThresholdAndClean(result, WThreshold);
+        return ThresholdWithFallback(result, WThreshold, data);
     }
 
     /// <summary>
