@@ -92,20 +92,22 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 {
                     for (int j = 0; j < d; j++)
                     {
-                        // Forward: hidden = sigmoid(W1^T * x), output = W2^T * hidden
-                        var hidden = new T[h];
+                        // Forward using Engine.DotProduct for vectorized matmul
+                        var xRow = new Vector<T>(d);
+                        for (int i = 0; i < d; i++) xRow[i] = data[s, i];
+
+                        var hidden = new Vector<T>(h);
                         for (int k = 0; k < h; k++)
                         {
-                            T sum = NumOps.Zero;
-                            for (int i = 0; i < d; i++)
-                                sum = NumOps.Add(sum, NumOps.Multiply(data[s, i], W1[j][i, k]));
-                            double sv = NumOps.ToDouble(sum);
+                            var w1Col = new Vector<T>(d);
+                            for (int i = 0; i < d; i++) w1Col[i] = W1[j][i, k];
+                            double sv = NumOps.ToDouble(Engine.DotProduct(xRow, w1Col));
                             hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                         }
 
-                        T pred = NumOps.Zero;
-                        for (int k = 0; k < h; k++)
-                            pred = NumOps.Add(pred, NumOps.Multiply(hidden[k], W2[j][k, 0]));
+                        var w2Col = new Vector<T>(h);
+                        for (int k = 0; k < h; k++) w2Col[k] = W2[j][k, 0];
+                        T pred = Engine.DotProduct(hidden, w2Col);
 
                         T residual = NumOps.Multiply(NumOps.Subtract(pred, data[s, j]), invN);
 

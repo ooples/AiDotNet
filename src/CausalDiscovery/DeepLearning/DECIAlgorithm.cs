@@ -129,20 +129,22 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
                 for (int j = 0; j < d; j++)
                 {
                     // Masked input: x_masked[i] = x[i] * P[i,j]
-                    var hidden = new T[h];
+                    var xMasked = new Vector<T>(d);
+                    for (int i = 0; i < d; i++)
+                        xMasked[i] = NumOps.Multiply(data[s, i], P[i, j]);
+
+                    var hidden = new Vector<T>(h);
                     for (int k = 0; k < h; k++)
                     {
-                        T sum = NumOps.Zero;
-                        for (int i = 0; i < d; i++)
-                            sum = NumOps.Add(sum, NumOps.Multiply(
-                                NumOps.Multiply(data[s, i], P[i, j]), W1[j][i, k]));
-                        double sv = NumOps.ToDouble(sum);
+                        var w1Col = new Vector<T>(d);
+                        for (int i = 0; i < d; i++) w1Col[i] = W1[j][i, k];
+                        double sv = NumOps.ToDouble(Engine.DotProduct(xMasked, w1Col));
                         hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                     }
 
-                    T pred = NumOps.Zero;
-                    for (int k = 0; k < h; k++)
-                        pred = NumOps.Add(pred, NumOps.Multiply(hidden[k], W2[j][k, 0]));
+                    var w2Col = new Vector<T>(h);
+                    for (int k = 0; k < h; k++) w2Col[k] = W2[j][k, 0];
+                    T pred = Engine.DotProduct(hidden, w2Col);
 
                     // Gaussian log-likelihood gradient: d/d_mu [ -0.5 * (x-mu)^2 / var ]
                     T noiseVar = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logVar[j])));
