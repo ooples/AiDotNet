@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -27,6 +29,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4")]
 public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>
 {
     /// <summary>
