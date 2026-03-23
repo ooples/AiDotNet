@@ -47,5 +47,11 @@ public enum LossApiShape
     /// Standard CalculateLoss(Vector, Vector) but inputs are complex-interleaved pairs [real, imag, real, imag, ...].
     /// Used by QuantumLoss which operates on quantum state fidelity.
     /// </summary>
-    ComplexInterleaved
+    ComplexInterleaved,
+
+    /// <summary>
+    /// Paired embedding CalculateLoss(Vector, Vector, T) with two embedding vectors and a similarity label.
+    /// Used by ContrastiveLoss.
+    /// </summary>
+    PairedEmbedding
 }

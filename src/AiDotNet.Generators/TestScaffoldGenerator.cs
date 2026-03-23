@@ -1516,7 +1516,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Skip ImageMatrix (requires feature extractor function — can't auto-construct)
                 // Skip SelfSupervised (implements ISelfSupervisedLoss, not LossFunctionBase)
                 // Skip ComplexInterleaved (needs ComplexLossTestBase — TODO)
-                if (loss.ApiShape == ApiShapeImageMatrix || loss.ApiShape == ApiShapeSelfSupervised || loss.ApiShape == ApiShapeComplexInterleaved)
+                if (loss.ApiShape == ApiShapeImageMatrix || loss.ApiShape == ApiShapeSelfSupervised || loss.ApiShape == ApiShapeComplexInterleaved || loss.ApiShape == ApiShapePairedEmbedding)
                 {
                     lossTested++; // Don't count as untested since they can't auto-test
                     continue;
@@ -2085,6 +2085,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const int ApiShapeSelfSupervised = 4;
     private const int ApiShapeSparseIndex = 5;
     private const int ApiShapeComplexInterleaved = 6;
+    private const int ApiShapePairedEmbedding = 7;
 
     // LossTestInputFormat enum values (must match AiDotNet.Enums.LossTestInputFormat)
     private const int InputFormatContinuous = 0;
@@ -2097,7 +2098,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     private static ComponentTestInfo? ExtractLossInfo(INamedTypeSymbol symbol)
     {
-        bool isNonNegative = true, zeroForIdentical = true;
+        bool isNonNegative = true, zeroForIdentical = true, zeroDerivForIdentical = true;
+        bool hasStandardGradientSign = true;
         bool throwsNotSupported = false;
         int apiShape = ApiShapeVectorVector;
         int testInputFormat = 0; // Continuous
@@ -2123,6 +2125,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         break;
                     case "TestInputFormat":
                         testInputFormat = (int)(named.Value.Value ?? 0);
+                        break;
+                    case "ZeroDerivativeForIdentical":
+                        zeroDerivForIdentical = (bool)(named.Value.Value ?? true);
+                        break;
+                    case "HasStandardGradientSign":
+                        hasStandardGradientSign = (bool)(named.Value.Value ?? true);
                         break;
                 }
             }
@@ -2178,6 +2186,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsLossFunctionBase = extendsBase,
             ApiShape = apiShape,
             TestInputFormat = testInputFormat,
+            // Use explicit attribute value; for non-continuous formats, auto-disable
+            HasStandardGradientSign = hasStandardGradientSign && testInputFormat == InputFormatContinuous,
+            // Use explicit attribute if set, otherwise infer from format
+            ZeroDerivativeForIdentical = zeroDerivForIdentical && zeroForIdentical,
             IsActivation = false
         };
     }
@@ -2358,6 +2370,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override bool IsNonNegative => false;");
         if (!loss.ZeroForIdentical)
             sb.AppendLine("    protected override bool ZeroLossForIdentical => false;");
+
+        if (!loss.HasStandardGradientSign)
+            sb.AppendLine("    protected override bool HasStandardGradientSign => false;");
+        if (!loss.ZeroDerivativeForIdentical)
+            sb.AppendLine("    protected override bool ZeroDerivativeForIdentical => false;");
 
         // Emit test data overrides based on TestInputFormat
         EmitTestDataOverrides(sb, loss.TestInputFormat);
@@ -2560,6 +2577,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ExtendsLossFunctionBase { get; set; }
         public int ApiShape { get; set; }
         public int TestInputFormat { get; set; }
+        public bool HasStandardGradientSign { get; set; } = true;
+        public bool ZeroDerivativeForIdentical { get; set; } = true;
     }
 
     private static void EmitTestCoverageClass(

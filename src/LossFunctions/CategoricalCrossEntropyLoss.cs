@@ -75,9 +75,17 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        // When used with softmax, the derivative simplifies to (predicted - actual)
-        // Note: Not averaged since the loss is a sum over classes
-        return predicted.Subtract(actual);
+        // Derivative of -Σ actual_i * log(predicted_i) with respect to predicted_i = -actual_i / predicted_i
+        // Note: When composed with softmax, this simplifies to (predicted - actual),
+        // but the standalone derivative must use the correct formula.
+        Vector<T> derivative = new Vector<T>(predicted.Length);
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            derivative[i] = NumOps.Negate(
+                NumericalStabilityHelper.SafeDiv(actual[i], predicted[i], NumericalStabilityHelper.SmallEpsilon));
+        }
+
+        return derivative;
     }
 
     /// <summary>

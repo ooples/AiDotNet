@@ -44,7 +44,7 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 [LossCategory(LossCategory.Regression)]
 [LossTask(LossTask.Regression)]
-[LossProperty(IsNonNegative = false, ZeroForIdentical = true, ExpectedOutput = OutputType.Continuous)]
+[LossProperty(IsNonNegative = false, ZeroForIdentical = true, ZeroDerivativeForIdentical = false, HasStandardGradientSign = false, ExpectedOutput = OutputType.Continuous)]
 public class MeanBiasErrorLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

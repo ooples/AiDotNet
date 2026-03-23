@@ -60,19 +60,22 @@ public class JaccardLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
+        // Soft IoU (differentiable): intersection = Σ(p*a), union = Σp + Σa - Σ(p*a)
+        // This is the standard formulation used by PyTorch and matches the derivative.
         T intersection = NumOps.Zero;
-        T union = NumOps.Zero;
+        T sumPredicted = NumOps.Zero;
+        T sumActual = NumOps.Zero;
 
         for (int i = 0; i < predicted.Length; i++)
         {
-            // Intersection is the sum of minimums
-            intersection = NumOps.Add(intersection, MathHelper.Min(predicted[i], actual[i]));
-
-            // Union is the sum of maximums
-            union = NumOps.Add(union, MathHelper.Max(predicted[i], actual[i]));
+            intersection = NumOps.Add(intersection, NumOps.Multiply(predicted[i], actual[i]));
+            sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
+            sumActual = NumOps.Add(sumActual, actual[i]);
         }
 
-        // Jaccard loss = 1 - Jaccard Index
+        T union = NumOps.Subtract(NumOps.Add(sumPredicted, sumActual), intersection);
+
+        // Jaccard loss = 1 - IoU
         return NumOps.Subtract(NumOps.One, NumericalStabilityHelper.SafeDiv(intersection, union, NumericalStabilityHelper.SmallEpsilon));
     }
 
@@ -86,41 +89,37 @@ public class JaccardLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        // Calculate intersection and union first
+        // Soft IoU derivative: d(1 - IoU)/d(p_i)
+        // IoU = intersection / union
+        // intersection = Σ(p*a), union = Σp + Σa - Σ(p*a)
+        // d(IoU)/d(p_i) = (a_i * union - intersection * (1 - a_i)) / union²
+        // d(loss)/d(p_i) = -d(IoU)/d(p_i)
         T intersection = NumOps.Zero;
-        T union = NumOps.Zero;
+        T sumPredicted = NumOps.Zero;
+        T sumActual = NumOps.Zero;
 
         for (int i = 0; i < predicted.Length; i++)
         {
-            intersection = NumOps.Add(intersection, MathHelper.Min(predicted[i], actual[i]));
-            union = NumOps.Add(union, MathHelper.Max(predicted[i], actual[i]));
+            intersection = NumOps.Add(intersection, NumOps.Multiply(predicted[i], actual[i]));
+            sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
+            sumActual = NumOps.Add(sumActual, actual[i]);
         }
 
+        T union = NumOps.Subtract(NumOps.Add(sumPredicted, sumActual), intersection);
+        T unionSquared = NumOps.Multiply(union, union);
 
-        // Calculate derivative for each element
         Vector<T> derivative = new Vector<T>(predicted.Length);
-        T unionSquared = NumOps.Power(union, NumOps.FromDouble(2));
-        T numerator = NumOps.Subtract(union, intersection);
-
         for (int i = 0; i < predicted.Length; i++)
         {
-            if (NumOps.GreaterThan(predicted[i], actual[i]))
-            {
-                // If predicted > actual, derivative = (union - intersection) / union²
-                derivative[i] = NumericalStabilityHelper.SafeDiv(numerator, unionSquared, NumericalStabilityHelper.SmallEpsilon);
-            }
-            else if (NumOps.LessThan(predicted[i], actual[i]))
-            {
-                // If predicted < actual, derivative = -(union - intersection) / union²
-                derivative[i] = NumOps.Negate(
-                    NumericalStabilityHelper.SafeDiv(numerator, unionSquared, NumericalStabilityHelper.SmallEpsilon)
-                );
-            }
-            else
-            {
-                // If predicted == actual, derivative = 0
-                derivative[i] = NumOps.Zero;
-            }
+            // d(IoU)/d(p_i) = (a_i * union - intersection * (1 - a_i)) / union²
+            T numerator = NumOps.Subtract(
+                NumOps.Multiply(actual[i], union),
+                NumOps.Multiply(intersection, NumOps.Subtract(NumOps.One, actual[i]))
+            );
+            // loss = 1 - IoU, so derivative is negated
+            derivative[i] = NumOps.Negate(
+                NumericalStabilityHelper.SafeDiv(numerator, unionSquared, NumericalStabilityHelper.SmallEpsilon)
+            );
         }
 
         return derivative;

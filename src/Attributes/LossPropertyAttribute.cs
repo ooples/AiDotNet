@@ -14,6 +14,15 @@ public sealed class LossPropertyAttribute : Attribute
     /// <summary>Whether L(x,x) == 0. Default: true.</summary>
     public bool ZeroForIdentical { get; set; } = true;
 
+    /// <summary>Whether dL/dp == 0 when predicted == actual. Usually same as ZeroForIdentical.
+    /// Override to false for losses with constant derivatives (MeanBiasError).</summary>
+    public bool ZeroDerivativeForIdentical { get; set; } = true;
+
+    /// <summary>Whether the gradient sign follows standard convention (positive when predicted > actual).
+    /// Default: true. Set to false for losses with inverted or non-standard gradient directions
+    /// (MeanBiasError, FocalLoss with probability inputs).</summary>
+    public bool HasStandardGradientSign { get; set; } = true;
+
     /// <summary>Whether L(x,y) == L(y,x). Default: false.</summary>
     public bool IsSymmetric { get; set; }
 

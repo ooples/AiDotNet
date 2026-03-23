@@ -33,7 +33,7 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 [LossCategory(LossCategory.Contrastive)]
 [LossTask(LossTask.Embedding)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = false, TestInputFormat = LossTestInputFormat.SimilarityLabels, ExpectedOutput = OutputType.Distances)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ApiShape = LossApiShape.PairedEmbedding, TestInputFormat = LossTestInputFormat.SimilarityLabels, ExpectedOutput = OutputType.Distances)]
 public class ContrastiveLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
