@@ -801,7 +801,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Apply activation derivative (both _lastOutput and gradient4D are in NCHW format)
-        var delta = ApplyActivationDerivative(_lastOutput, gradient4D);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, gradient4D);
 
         var strideArr = new int[] { _stride, _stride };
         var paddingArr = new int[] { _padding, _padding };

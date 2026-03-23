@@ -454,7 +454,7 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
             : outputGradient.Reshape(batchSize, seqLength, _embeddingDimension);
 
         // Apply activation derivative
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
+        var activationGrad = ApplyActivationDerivativeFromOutput(_lastOutput, grad3D);
 
         // 1. Output bias gradient: sum over batch and sequence
         _outputBiasGradient = activationGrad.Sum([0, 1]);

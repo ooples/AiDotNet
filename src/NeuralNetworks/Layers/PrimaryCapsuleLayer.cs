@@ -670,7 +670,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         int batchSize = _lastInput.Shape[0];
         int outputHeight = activationGradient.Shape[1];

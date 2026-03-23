@@ -701,7 +701,7 @@ public class Conv3DLayer<T> : LayerBase<T>
             ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3])
             : outputGradient;
 
-        var delta = ApplyActivationDerivative(_lastOutput, outGrad5D);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outGrad5D);
 
         Tensor<T> batchedDelta = hasBatch
             ? delta

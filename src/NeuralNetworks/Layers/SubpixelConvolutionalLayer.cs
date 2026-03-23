@@ -907,7 +907,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Apply activation derivative (both _lastOutput and gradient4D are in NCHW format)
-        var delta = ApplyActivationDerivative(_lastOutput, gradient4D);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, gradient4D);
 
         int padSize = _kernelSize / 2;
         var strideArr = new int[] { 1, 1 };

@@ -836,7 +836,7 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastInput == null || _lastOutput == null || _lastValues == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         // Output weights gradient: values^T × activationGradient
         // For Y = X × W, gradient ∂L/∂W = X^T × ∂L/∂Y where X is projected values

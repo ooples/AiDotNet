@@ -572,7 +572,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastPreActivation == null || _lastOutput == null || _lastEdgeAdjacency == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         int numEdges = _lastInput.Shape[0];
         int aggregatedFeatures = InputChannels * (1 + NumNeighbors);

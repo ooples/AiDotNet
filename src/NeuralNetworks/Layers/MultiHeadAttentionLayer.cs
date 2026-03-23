@@ -1126,7 +1126,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastProjectedQueries == null || _lastProjectedKeys == null || _lastProjectedValues == null)
             throw new InvalidOperationException("Projected Q, K, V must be cached from forward pass.");
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         int batchSize = _lastInput.Shape[0];
         int sequenceLength = _lastInput.Shape[1];

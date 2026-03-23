@@ -844,7 +844,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
         if (_spiralIndices == null)
             throw new InvalidOperationException("Spiral indices not set.");
 
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         bool hasBatch = _lastInput.Rank == 3;
         int numVertices = hasBatch ? _lastInput.Shape[1] : _lastInput.Shape[0];

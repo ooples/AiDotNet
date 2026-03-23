@@ -487,7 +487,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
         }
 
-        var delta = ApplyActivationDerivative(_lastOutput, grad);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, grad);
 
         // Calculate gradients using Engine operations
         // weightsGradient = delta^T * input

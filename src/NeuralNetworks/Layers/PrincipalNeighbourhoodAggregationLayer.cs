@@ -929,7 +929,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
 
@@ -1153,7 +1153,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
 

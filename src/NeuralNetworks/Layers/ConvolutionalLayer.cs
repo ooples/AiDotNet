@@ -1272,7 +1272,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         // Apply activation derivative to get delta
         // ApplyActivationDerivative already multiplies by outputGradient (chain rule)
-        var delta = ApplyActivationDerivative(_lastOutput, gradForBackward);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
 
         // === GPU-Accelerated Backward Pass ===
         // Phase B: US-GPU-016 - Replace 7 nested loops with Engine.Conv2DBackward operations

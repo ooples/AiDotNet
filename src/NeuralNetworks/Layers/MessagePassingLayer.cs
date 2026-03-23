@@ -736,7 +736,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Forward pass gate state incomplete.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
 

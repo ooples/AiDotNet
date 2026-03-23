@@ -854,7 +854,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         }
 
         var outputGradient3D = NormalizeOutputGradient(outputGradient);
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient3D);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient3D);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
         int numEdges = _normalizedEdgeFeatures.Shape[1];

@@ -440,7 +440,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         }
 
         // Apply activation derivative
-        outputGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        outputGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         // Industry-standard: dynamically determine axes based on input rank
         var axes = GetReductionAxes(_lastInput.Shape.Length);

@@ -1627,7 +1627,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastPreActivation == null || _lastOutput == null || _diffusedFeatures == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         bool hasBatch = _lastInput.Rank == 3;
         int numVertices = hasBatch ? _lastInput.Shape[1] : _lastInput.Shape[0];

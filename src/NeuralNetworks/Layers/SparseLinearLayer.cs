@@ -285,7 +285,7 @@ public class SparseLinearLayer<T> : LayerBase<T>
         }
 
         // Apply activation derivative to get the true gradient (chain rule)
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         bool wasSingleSample = delta.Rank == 1;
         int batchSize;

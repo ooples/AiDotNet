@@ -691,7 +691,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         // Calculate bias gradient: sum over batch, height, width
         _biasesGradient = Engine.ReduceSum(activationGradient, new[] { 0, 2, 3 }, keepDims: false);

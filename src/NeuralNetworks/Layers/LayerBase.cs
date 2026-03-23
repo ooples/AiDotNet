@@ -2084,13 +2084,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         else if (ScalarActivation != null)
         {
             // Element-wise application of scalar activation derivative
-            // Note: if 'input' is post-activation output, many activation functions
-            // (sigmoid, tanh) re-apply the activation in their Derivative method,
-            // giving wrong results. Use DerivativeFromOutput when available.
-            if (ScalarActivation is IOutputDerivative<T> outputDeriv)
-            {
-                return outputDeriv.DerivativeFromOutput(input).ElementwiseMultiply(outputGradient);
-            }
+            // Optimized to use Tensor operations
             return ScalarActivation.Derivative(input).ElementwiseMultiply(outputGradient);
         }
         else
@@ -2098,6 +2092,22 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             // Identity activation: derivative is just the output gradient
             return outputGradient;
         }
+    }
+
+    /// <summary>
+    /// Applies activation derivative given the POST-activation output value.
+    /// Use this when you have the output (y = f(x)) instead of the pre-activation input (x).
+    /// For sigmoid: derivative = y * (1 - y). For tanh: derivative = 1 - y².
+    /// Falls back to standard Derivative(input) if activation doesn't implement IOutputDerivative.
+    /// </summary>
+    protected Tensor<T> ApplyActivationDerivativeFromOutput(Tensor<T> output, Tensor<T> outputGradient)
+    {
+        if (ScalarActivation is IOutputDerivative<T> outputDeriv)
+        {
+            return outputDeriv.DerivativeFromOutput(output).ElementwiseMultiply(outputGradient);
+        }
+        // Fallback: use standard derivative (may re-apply activation incorrectly for sigmoid/tanh)
+        return ApplyActivationDerivative(output, outputGradient);
     }
 
     /// <summary>

@@ -933,7 +933,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // === GPU-Accelerated LocallyConnectedConv2D Backward ===
         // Apply activation derivative
-        var activationGradient = ApplyActivationDerivative(_lastOutput!, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput!, outputGradient);
 
         // Transpose output gradient from NHWC to NCHW for Engine operations
         // NHWC [batch, height, width, channels] -> NCHW [batch, channels, height, width]

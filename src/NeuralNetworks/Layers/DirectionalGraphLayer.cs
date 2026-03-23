@@ -957,7 +957,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             gradForBackward = outputGradient.Reshape(_lastOutput.Shape);
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, gradForBackward);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
 
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];

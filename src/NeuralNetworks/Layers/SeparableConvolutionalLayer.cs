@@ -677,7 +677,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         // Apply activation derivative
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         // Convert gradients from NHWC to NCHW for Engine operations
         var deltaNCHW = delta.Transpose([0, 3, 1, 2]);

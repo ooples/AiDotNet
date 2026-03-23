@@ -563,7 +563,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 outputGradient = resized;
             }
         }
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         // Output weights gradient: transformed^T × activationGradient
         // For Y = X × W, gradient ∂L/∂W = X^T × ∂L/∂Y where X is _lastTransformed (input to output weights)

@@ -829,7 +829,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Capture non-null adjacency matrix for use in the method
         var adjacencyMatrix = _adjacencyMatrix;
         bool adj2D = adjacencyMatrix.Shape.Length == 2;
-        var rawActivationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var rawActivationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
         T numHeadsT = NumOps.FromDouble(_numHeads);
@@ -991,7 +991,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
         T numHeadsT = NumOps.FromDouble(_numHeads);
