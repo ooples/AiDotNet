@@ -2194,44 +2194,41 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         // Calculate total number of parameters
         int totalParams = 0;
 
-        // Input weights
-        totalParams += _weightsFi.Length;
+        // Input weights (I, C, O gates first — F gate has zero gradient for seqLen=1)
         totalParams += _weightsIi.Length;
         totalParams += _weightsCi.Length;
         totalParams += _weightsOi.Length;
+        totalParams += _weightsFi.Length;
 
         // Hidden weights
-        totalParams += _weightsFh.Length;
         totalParams += _weightsIh.Length;
         totalParams += _weightsCh.Length;
         totalParams += _weightsOh.Length;
+        totalParams += _weightsFh.Length;
 
         // Biases
-        totalParams += _biasF.Length;
         totalParams += _biasI.Length;
         totalParams += _biasC.Length;
         totalParams += _biasO.Length;
+        totalParams += _biasF.Length;
 
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
-        // Copy input weights
-        CopyTensorToVector(_weightsFi, parameters, ref index);
         CopyTensorToVector(_weightsIi, parameters, ref index);
         CopyTensorToVector(_weightsCi, parameters, ref index);
         CopyTensorToVector(_weightsOi, parameters, ref index);
+        CopyTensorToVector(_weightsFi, parameters, ref index);
 
-        // Copy hidden weights
-        CopyTensorToVector(_weightsFh, parameters, ref index);
         CopyTensorToVector(_weightsIh, parameters, ref index);
         CopyTensorToVector(_weightsCh, parameters, ref index);
         CopyTensorToVector(_weightsOh, parameters, ref index);
+        CopyTensorToVector(_weightsFh, parameters, ref index);
 
-        // Copy biases
-        CopyTensorToVector(_biasF, parameters, ref index);
         CopyTensorToVector(_biasI, parameters, ref index);
         CopyTensorToVector(_biasC, parameters, ref index);
         CopyTensorToVector(_biasO, parameters, ref index);
+        CopyTensorToVector(_biasF, parameters, ref index);
 
         return parameters;
     }
@@ -2307,19 +2304,20 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             return new T[length];
         }
 
+        // Order: I, C, O, F (matching GetParameters — F last since its gradient is zero for seqLen=1)
         var result = new List<T>();
-        result.AddRange(GetGrad("weightsFi", _weightsFi.Length));
         result.AddRange(GetGrad("weightsIi", _weightsIi.Length));
         result.AddRange(GetGrad("weightsCi", _weightsCi.Length));
         result.AddRange(GetGrad("weightsOi", _weightsOi.Length));
-        result.AddRange(GetGrad("weightsFh", _weightsFh.Length));
+        result.AddRange(GetGrad("weightsFi", _weightsFi.Length));
         result.AddRange(GetGrad("weightsIh", _weightsIh.Length));
         result.AddRange(GetGrad("weightsCh", _weightsCh.Length));
         result.AddRange(GetGrad("weightsOh", _weightsOh.Length));
-        result.AddRange(GetGrad("biasF", _biasF.Length));
+        result.AddRange(GetGrad("weightsFh", _weightsFh.Length));
         result.AddRange(GetGrad("biasI", _biasI.Length));
         result.AddRange(GetGrad("biasC", _biasC.Length));
         result.AddRange(GetGrad("biasO", _biasO.Length));
+        result.AddRange(GetGrad("biasF", _biasF.Length));
 
         return new Vector<T>(result.ToArray());
     }
@@ -2333,23 +2331,23 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     {
         int index = 0;
 
-        // Set input weights
-        CopyVectorToTensor(parameters, _weightsFi, ref index);
+        // Set input weights (I, C, O, F order matching GetParameters)
         CopyVectorToTensor(parameters, _weightsIi, ref index);
         CopyVectorToTensor(parameters, _weightsCi, ref index);
         CopyVectorToTensor(parameters, _weightsOi, ref index);
+        CopyVectorToTensor(parameters, _weightsFi, ref index);
 
         // Set hidden weights
-        CopyVectorToTensor(parameters, _weightsFh, ref index);
         CopyVectorToTensor(parameters, _weightsIh, ref index);
         CopyVectorToTensor(parameters, _weightsCh, ref index);
         CopyVectorToTensor(parameters, _weightsOh, ref index);
+        CopyVectorToTensor(parameters, _weightsFh, ref index);
 
         // Set biases
-        CopyVectorToTensor(parameters, _biasF, ref index);
         CopyVectorToTensor(parameters, _biasI, ref index);
         CopyVectorToTensor(parameters, _biasC, ref index);
         CopyVectorToTensor(parameters, _biasO, ref index);
+        CopyVectorToTensor(parameters, _biasF, ref index);
 
         // Invalidate GPU cache after parameter updates
         Engine.InvalidatePersistentTensor(_weightsFi);
