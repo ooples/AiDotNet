@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -19,6 +21,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (like float, double, etc.)</typeparam>
+[LayerCategory(LayerCategory.Activation)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, new AiDotNet.ActivationFunctions.ReLUActivation<double>()")]
 public class ActivationLayer<T> : LayerBase<T>
 {
     /// <summary>

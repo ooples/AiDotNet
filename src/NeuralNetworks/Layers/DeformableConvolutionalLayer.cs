@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -31,6 +33,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// https://arxiv.org/abs/1703.06211
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1, 2, 3, 8, 8")]
 public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     #region Fields

@@ -1,4 +1,4 @@
-
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -14,6 +14,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
+[LayerCategory(LayerCategory.Memory)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 2")]
 public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 {
     private readonly DenseLayer<T>[] _mlpBlocks;
