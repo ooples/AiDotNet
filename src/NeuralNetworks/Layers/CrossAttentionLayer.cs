@@ -50,6 +50,10 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     private Tensor<T>? _lastContext;
     private Tensor<T>? _lastAttentionScores;
     private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastProjectedQ;
+    private Tensor<T>? _lastProjectedK;
+    private Tensor<T>? _lastProjectedV;
+    private Tensor<T>? _lastAttendedPreProj;
 
     // Gradient tensors
     private Tensor<T>? _queryWeightsGradient;
@@ -327,10 +331,14 @@ public class CrossAttentionLayer<T> : LayerBase<T>
             scale: 1.0 / Math.Sqrt(_headDim),
             out var attentionWeights);
 
-        // Cache post-softmax attention weights for any downstream use
+        // Cache for backward
+        _lastProjectedQ = Q;
+        _lastProjectedK = K;
+        _lastProjectedV = V;
         _lastAttentionScores = attentionWeights;
 
         // Reshape back: [B, numHeads, queryLen, headDim] -> [B, queryLen, queryDim]
+        _lastAttendedPreProj = attended; // Cache 4D for backward
         attended = ReshapeFromHeads(attended, batch, queryLen, _headCount, _headDim);
 
         // Output projection
@@ -534,28 +542,46 @@ public class CrossAttentionLayer<T> : LayerBase<T>
                 Engine.ReduceSum(gradB, [0], keepDims: false));
         }
 
-        // Q/K/V weight gradients: approximate via chain rule through projection
-        // dL/d(Wq) ≈ query^T @ dL/d(Q), where dL/d(Q) ≈ dAttended (simplified)
+        // Proper attention backward using Engine.ScaledDotProductAttentionBackward
         _queryWeightsGradient = new Tensor<T>(_queryWeights.Shape);
         _keyWeightsGradient = new Tensor<T>(_keyWeights.Shape);
         _valueWeightsGradient = new Tensor<T>(_valueWeights.Shape);
-        for (int b = 0; b < batch; b++)
-        {
-            var queryB = _lastQuery.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
-            var dAttB = dAttended.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
-            _queryWeightsGradient = _queryWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(queryB), dAttB));
 
-            if (_lastContext != null)
+        if (_lastProjectedQ != null && _lastProjectedK != null && _lastProjectedV != null && _lastAttentionScores != null)
+        {
+            // Reshape dAttended to 4D multi-head format
+            var dAttended4D = ReshapeToHeads(dAttended, batch, seqLen, _headCount, _headDim);
+
+            // Use Engine backward for proper dQ, dK, dV through attention
+            Engine.ScaledDotProductAttentionBackward(
+                dAttended4D, _lastProjectedQ, _lastProjectedK, _lastProjectedV,
+                _lastAttentionScores, 1.0 / Math.Sqrt(_headDim),
+                out var dQ4D, out var dK4D, out var dV4D);
+
+            // Reshape back to 3D
+            var dQ = ReshapeFromHeads(dQ4D, batch, seqLen, _headCount, _headDim);
+            int ctxLen = _lastContext!.Shape[1];
+            var dK = ReshapeFromHeads(dK4D, batch, ctxLen, _headCount, _headDim);
+            var dV = ReshapeFromHeads(dV4D, batch, ctxLen, _headCount, _headDim);
+
+            // Weight gradients: dWq = dQ^T @ query, dWk = dK^T @ context, dWv = dV^T @ context
+            for (int b = 0; b < batch; b++)
             {
-                var ctxB = _lastContext.GetSliceAlongDimension(b, 0);
-                int ctxLen = ctxB.Shape[0];
-                ctxB = ctxB.Reshape([ctxLen, _queryDim]);
-                // K and V gradients approximate: context^T @ dAttended (summed over batch)
-                _keyWeightsGradient = _keyWeightsGradient.Add(
-                    Engine.TensorMatMul(Engine.TensorTranspose(ctxB), dAttB));
-                _valueWeightsGradient = _valueWeightsGradient.Add(
-                    Engine.TensorMatMul(Engine.TensorTranspose(ctxB), dAttB));
+                var queryB = _lastQuery.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
+                var dQB = dQ.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
+                _queryWeightsGradient = _queryWeightsGradient.Add(
+                    Engine.TensorMatMul(Engine.TensorTranspose(dQB), queryB));
+
+                if (_lastContext != null)
+                {
+                    var ctxB = _lastContext.GetSliceAlongDimension(b, 0).Reshape([ctxLen, _queryDim]);
+                    var dKB = dK.GetSliceAlongDimension(b, 0).Reshape([ctxLen, _queryDim]);
+                    var dVB = dV.GetSliceAlongDimension(b, 0).Reshape([ctxLen, _queryDim]);
+                    _keyWeightsGradient = _keyWeightsGradient.Add(
+                        Engine.TensorMatMul(Engine.TensorTranspose(dKB), ctxB));
+                    _valueWeightsGradient = _valueWeightsGradient.Add(
+                        Engine.TensorMatMul(Engine.TensorTranspose(dVB), ctxB));
+                }
             }
         }
 
@@ -1068,6 +1094,10 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         _lastContext = null;
         _lastAttentionScores = null;
         _lastOutput = null;
+        _lastProjectedQ = null;
+        _lastProjectedK = null;
+        _lastProjectedV = null;
+        _lastAttendedPreProj = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;
