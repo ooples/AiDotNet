@@ -390,13 +390,15 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Gradient through MLP Layer 2 bias: sum over batch and nodes
         _mlpBias2Gradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
 
-        // Gradient through MLP Layer 2 weights: hidden^T @ grad (batched matmul then sum)
-        // Use permute for batched transpose: [batch, nodes, hidden] -> [batch, hidden, nodes]
-        var hiddenBatchedT = Engine.TensorPermute(_lastMlpHidden, [0, 2, 1]);
-        // Batched matmul: [batch, hidden, nodes] @ [batch, nodes, output] -> [batch, hidden, output]
-        var weights2GradBatched = Engine.BatchMatMul(hiddenBatchedT, activationGradient);
-        // Sum over batch dimension
-        _mlpWeights2Gradient = Engine.ReduceSum(weights2GradBatched, [0], keepDims: false);
+        // Gradient through MLP Layer 2 weights: per-batch matmul (Engine.BatchMatMul has issues)
+        _mlpWeights2Gradient = new Tensor<T>(_mlpWeights2.Shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var hiddenB = _lastMlpHidden.GetSliceAlongDimension(b, 0);
+            var gradB = activationGradient.GetSliceAlongDimension(b, 0);
+            _mlpWeights2Gradient = _mlpWeights2Gradient.Add(
+                Engine.TensorMatMul(Engine.TensorTranspose(hiddenB), gradB));
+        }
 
         // Gradient to hidden layer: grad @ weights2^T (broadcasting over batch)
         var weights2T = Engine.TensorTranspose(_mlpWeights2);
@@ -415,10 +417,15 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Gradient through MLP Layer 1 bias: sum over batch and nodes
         _mlpBias1Gradient = Engine.ReduceSum(hiddenGrad, [0, 1], keepDims: false);
 
-        // Gradient through MLP Layer 1 weights: aggregated^T @ hiddenGrad (batched matmul then sum)
-        var aggBatchedT = Engine.TensorPermute(_lastAggregated, [0, 2, 1]);
-        var weights1GradBatched = Engine.BatchMatMul(aggBatchedT, hiddenGrad);
-        _mlpWeights1Gradient = Engine.ReduceSum(weights1GradBatched, [0], keepDims: false);
+        // Gradient through MLP Layer 1 weights: per-batch matmul
+        _mlpWeights1Gradient = new Tensor<T>(_mlpWeights1.Shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var aggB = _lastAggregated.GetSliceAlongDimension(b, 0);
+            var hGradB = hiddenGrad.GetSliceAlongDimension(b, 0);
+            _mlpWeights1Gradient = _mlpWeights1Gradient.Add(
+                Engine.TensorMatMul(Engine.TensorTranspose(aggB), hGradB));
+        }
 
         // Gradient to aggregated: hiddenGrad @ weights1^T (broadcasting over batch)
         var weights1T = Engine.TensorTranspose(_mlpWeights1);

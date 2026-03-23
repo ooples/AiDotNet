@@ -500,12 +500,16 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         var transposedInput = reshapedInput.Transpose(new[] { 0, 2, 4, 1, 3, 5 });
         var patches = transposedInput.Reshape(batchSize, _numPatches, patchDim);
 
-        // 3. Gradient w.r.t Weights: patches^T @ grad
-        var patchesT = patches.Transpose(new[] { 0, 2, 1 });
-        // [B, P, N] @ [B, N, E] -> [B, P, E]
-        var weightGradBatch = Engine.BatchMatMul(patchesT, activationGradient);
-        // Sum over batch
-        _projectionWeightsGradient = Engine.ReduceSum(weightGradBatch, new[] { 0 });
+        // 3. Gradient w.r.t Weights: sum_b(patches[b]^T @ grad[b])
+        _projectionWeightsGradient = new Tensor<T>([patchDim, _embeddingDim]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var patchB = patches.GetSliceAlongDimension(b, 0).Reshape([_numPatches, patchDim]);
+            var gradB = activationGradient.GetSliceAlongDimension(b, 0).Reshape([_numPatches, _embeddingDim]);
+            var patchBT = Engine.TensorTranspose(patchB); // [P, N]
+            var wGradB = Engine.TensorMatMul(patchBT, gradB); // [P, E]
+            _projectionWeightsGradient = _projectionWeightsGradient.Add(wGradB);
+        }
 
         // 4. Gradient w.r.t Input (Patches)
         // [B*N, E] @ [E, P] -> [B*N, P]

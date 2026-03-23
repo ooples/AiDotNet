@@ -506,21 +506,19 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Bias gradient: sum over batch and nodes
         _biasGradient = Engine.ReduceSum(preNormGradient, [0, 1], keepDims: false);
 
-        // Self weights gradient: input^T @ preNormGradient (batched matmul then sum)
-        // Use permute for batched transpose: [batch, nodes, features] -> [batch, features, nodes]
-        var inputBatchedT = Engine.TensorPermute(_lastInput, [0, 2, 1]);
-        // Batched matmul: [batch, features, nodes] @ [batch, nodes, output] -> [batch, features, output]
-        var selfWeightsGradBatched = Engine.BatchMatMul(inputBatchedT, preNormGradient);
-        // Sum over batch dimension
-        _selfWeightsGradient = Engine.ReduceSum(selfWeightsGradBatched, [0], keepDims: false);
-
-        // Neighbor weights gradient: aggregated^T @ preNormGradient (batched matmul then sum)
-        // Use permute for batched transpose: [batch, nodes, features] -> [batch, features, nodes]
-        var aggBatchedT = Engine.TensorPermute(_lastAggregated, [0, 2, 1]);
-        // Batched matmul: [batch, features, nodes] @ [batch, nodes, output] -> [batch, features, output]
-        var neighborWeightsGradBatched = Engine.BatchMatMul(aggBatchedT, preNormGradient);
-        // Sum over batch dimension
-        _neighborWeightsGradient = Engine.ReduceSum(neighborWeightsGradBatched, [0], keepDims: false);
+        // Self + Neighbor weights gradient: per-batch matmul (Engine.BatchMatMul has issues)
+        _selfWeightsGradient = new Tensor<T>(_selfWeights.Shape);
+        _neighborWeightsGradient = new Tensor<T>(_neighborWeights.Shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var inputB = _lastInput.GetSliceAlongDimension(b, 0);
+            var gradB = preNormGradient.GetSliceAlongDimension(b, 0);
+            var aggB = _lastAggregated.GetSliceAlongDimension(b, 0);
+            _selfWeightsGradient = _selfWeightsGradient.Add(
+                Engine.TensorMatMul(Engine.TensorTranspose(inputB), gradB));
+            _neighborWeightsGradient = _neighborWeightsGradient.Add(
+                Engine.TensorMatMul(Engine.TensorTranspose(aggB), gradB));
+        }
 
         // Input gradient from self path: preNormGradient @ selfWeights^T
         var selfWeightsT = Engine.TensorTranspose(_selfWeights);
