@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -26,6 +28,9 @@ namespace AiDotNet.ActivationFunctions;
 /// - Energy-efficient neural networks for specialized hardware
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Stochastic)]
+[ActivationTask(ActivationTask.SpikingNeuron)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

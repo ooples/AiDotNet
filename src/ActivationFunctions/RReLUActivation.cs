@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -20,6 +22,9 @@ namespace AiDotNet.ActivationFunctions;
 /// During training, this random factor changes; during testing/inference, a fixed average value is used.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Stochastic)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class RReLUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

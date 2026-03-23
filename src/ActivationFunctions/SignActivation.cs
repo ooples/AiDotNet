@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -19,6 +21,9 @@ namespace AiDotNet.ActivationFunctions;
 /// used in modern neural networks that rely on gradient-based learning.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class SignActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

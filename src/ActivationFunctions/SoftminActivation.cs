@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -23,6 +25,9 @@ namespace AiDotNet.ActivationFunctions;
 /// Like Softmax, Softmin outputs values between 0 and 1 that sum to 1, creating a probability distribution.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Normalization)]
+[ActivationTask(ActivationTask.NormalizationOutput)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, IsVectorActivation = true, Cost = ComputeCost.High)]
 public class SoftminActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

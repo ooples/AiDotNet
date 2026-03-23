@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -27,6 +29,9 @@ namespace AiDotNet.ActivationFunctions;
 /// represents important features, and the length represents the probability that those features exist.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.CapsuleSquash)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = true, IsVectorActivation = true, Cost = ComputeCost.Medium)]
 public class SquashActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
