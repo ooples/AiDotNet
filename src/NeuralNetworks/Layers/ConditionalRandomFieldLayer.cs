@@ -558,23 +558,48 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 var prevExpanded = prevViterbi.Reshape([_numClasses, 1]); // [numClasses, 1]
                 var scoresWithTrans = Engine.TensorBroadcastAdd(prevExpanded, _transitionMatrix); // [numClasses, numClasses]
 
-                // Get max over previous classes and store backpointers
+                // During training: use log-sum-exp (smooth, differentiable)
+                // During inference: use max (Viterbi, non-differentiable)
                 var maxScores = new Tensor<T>([_numClasses]);
                 for (int c = 0; c < _numClasses; c++)
                 {
-                    T maxVal = NumOps.MinValue;
-                    int maxIdx = 0;
-                    for (int prevC = 0; prevC < _numClasses; prevC++)
+                    if (IsTrainingMode)
                     {
-                        T val = scoresWithTrans[prevC, c];
-                        if (NumOps.GreaterThan(val, maxVal))
+                        // Log-sum-exp: logsumexp_prevC(score[prevC, c])
+                        // = maxVal + log(sum(exp(score[prevC, c] - maxVal)))
+                        T maxVal = NumOps.MinValue;
+                        for (int prevC = 0; prevC < _numClasses; prevC++)
                         {
-                            maxVal = val;
-                            maxIdx = prevC;
+                            T val = scoresWithTrans[prevC, c];
+                            if (NumOps.GreaterThan(val, maxVal))
+                                maxVal = val;
                         }
+                        T sumExp = NumOps.Zero;
+                        for (int prevC = 0; prevC < _numClasses; prevC++)
+                        {
+                            T val = scoresWithTrans[prevC, c];
+                            sumExp = NumOps.Add(sumExp, NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(val, maxVal)))));
+                        }
+                        maxScores[c] = NumOps.Add(maxVal, NumOps.FromDouble(Math.Log(NumOps.ToDouble(NumOps.Add(sumExp, NumOps.FromDouble(1e-10))))));
+                        backpointers[t, c] = 0; // Not used during training
                     }
-                    maxScores[c] = maxVal;
-                    backpointers[t, c] = maxIdx;
+                    else
+                    {
+                        // Viterbi max
+                        T maxVal = NumOps.MinValue;
+                        int maxIdx = 0;
+                        for (int prevC = 0; prevC < _numClasses; prevC++)
+                        {
+                            T val = scoresWithTrans[prevC, c];
+                            if (NumOps.GreaterThan(val, maxVal))
+                            {
+                                maxVal = val;
+                                maxIdx = prevC;
+                            }
+                        }
+                        maxScores[c] = maxVal;
+                        backpointers[t, c] = maxIdx;
+                    }
                 }
 
                 // Add emissions: maxScores + currentEmissions
@@ -606,11 +631,24 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 bestPath[t] = backpointers[t + 1, bestPath[t + 1]];
             }
 
-            // === VECTORIZED: Set one-hot output ===
-            // Create one-hot tensor for this batch
-            for (int t = 0; t < _sequenceLength; t++)
+            if (IsTrainingMode)
             {
-                output[b, t, bestPath[t]] = NumOps.One;
+                // During training: output the continuous viterbi scores for gradient flow
+                for (int t = 0; t < _sequenceLength; t++)
+                {
+                    for (int c = 0; c < _numClasses; c++)
+                    {
+                        output[b, t, c] = viterbi[t, c];
+                    }
+                }
+            }
+            else
+            {
+                // During inference: one-hot encoded class labels
+                for (int t = 0; t < _sequenceLength; t++)
+                {
+                    output[b, t, bestPath[t]] = NumOps.One;
+                }
             }
         }
 
