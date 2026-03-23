@@ -587,10 +587,13 @@ public class DecoderLayer<T> : LayerBase<T>
             grad3D = outputGradient;
         }
 
+        // Backward through Norm3 first (output = Norm3(residual + ff))
+        var dNorm3 = _norm3.Backward(grad3D);
+
         // Backward through FFN (reverse order: projection then expansion)
-        var dFF2 = _feedForward2.Backward(grad3D);
+        var dFF2 = _feedForward2.Backward(dNorm3);
         var dNormalized2 = _feedForward1.Backward(dFF2);
-        dNormalized2 = dNormalized2.Add(grad3D);
+        dNormalized2 = dNormalized2.Add(dNorm3); // Residual connection gradient
         var dNorm2 = _norm2.Backward(dNormalized2);
 
         var dCrossAttention = _crossAttention.Backward(dNorm2);
