@@ -44,6 +44,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const string ModelInputAttr = "AiDotNet.Attributes.ModelInputAttribute";
     private const string ModelMetadataExemptAttr = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
+    // Activation/Loss/Layer attribute metadata names
+    private const string ActivationPropertyAttr = "AiDotNet.Attributes.ActivationPropertyAttribute";
+    private const string LossPropertyAttr = "AiDotNet.Attributes.LossPropertyAttribute";
+    private const string LayerPropertyAttr = "AiDotNet.Attributes.LayerPropertyAttribute";
+    private const string LossFunctionBasePrefix = "AiDotNet.LossFunctions.LossFunctionBase<";
+    private const string ISelfSupervisedLossPrefix = "AiDotNet.Interfaces.ISelfSupervisedLoss<";
+    private const string ILayerPrefix = "AiDotNet.Interfaces.ILayer<";
+    private const string LayerBasePrefix = "AiDotNet.NeuralNetworks.Layers.LayerBase<";
+
     // ModelCategory enum values (must match AiDotNet.Enums.ModelCategory)
     private const int CategoryGAN = 4;
     private const int CategoryDiffusion = 5;
@@ -76,6 +85,30 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor ActivationCoverageSummary = new(
+        id: "AIDN042",
+        title: "Activation function test coverage summary",
+        messageFormat: "{0} of {1} activation functions have test coverage ({2:F1}%)",
+        category: "AiDotNet.TestCoverage",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor LossCoverageSummary = new(
+        id: "AIDN043",
+        title: "Loss function test coverage summary",
+        messageFormat: "{0} of {1} loss functions have test coverage ({2:F1}%)",
+        category: "AiDotNet.TestCoverage",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor LayerCoverageSummary = new(
+        id: "AIDN044",
+        title: "Layer test coverage summary",
+        messageFormat: "{0} of {1} layers have test coverage ({2:F1}%)",
+        category: "AiDotNet.TestCoverage",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Collect model classes from source (works when running in the source project)
@@ -90,14 +123,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             transform: static (ctx, _) => GetTestClassName(ctx))
             .Where(static s => s is not null);
 
+        // Collect activation function classes from source
+        var activationClasses = context.SyntaxProvider.CreateSyntaxProvider(
+            predicate: static (node, _) => IsModelCandidate(node),
+            transform: static (ctx, _) => GetActivationFunctionOrNull(ctx))
+            .Where(static s => s is not null);
+
+        // Collect loss function classes from source
+        var lossClasses = context.SyntaxProvider.CreateSyntaxProvider(
+            predicate: static (node, _) => IsModelCandidate(node),
+            transform: static (ctx, _) => GetLossFunctionOrNull(ctx))
+            .Where(static s => s is not null);
+
+        // Collect layer classes from source
+        var layerClasses = context.SyntaxProvider.CreateSyntaxProvider(
+            predicate: static (node, _) => IsModelCandidate(node),
+            transform: static (ctx, _) => GetLayerOrNull(ctx))
+            .Where(static s => s is not null);
+
         var combined = modelClasses.Collect()
             .Combine(testClasses.Collect())
+            .Combine(activationClasses.Collect())
+            .Combine(lossClasses.Collect())
+            .Combine(layerClasses.Collect())
             .Combine(context.CompilationProvider);
 
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
-            var ((models, tests), compilation) = source;
+            var (((((models, tests), activations), losses), layers), compilation) = source;
             Execute(spc, models, tests, compilation);
+            ExecuteActivationAndLossGeneration(spc, activations, losses, compilation);
+            ExecuteLayerGeneration(spc, layers, compilation);
         });
     }
 
@@ -178,6 +234,149 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (ctx.Node is not ClassDeclarationSyntax cds)
             return null;
         return cds.Identifier.Text;
+    }
+
+    /// <summary>
+    /// Returns the type symbol if it implements IActivationFunction&lt;T&gt; and has [ActivationProperty].
+    /// </summary>
+    private static INamedTypeSymbol? GetActivationFunctionOrNull(GeneratorSyntaxContext ctx)
+    {
+        var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol;
+        if (symbol is null || symbol.IsAbstract)
+            return null;
+
+        // Check for [ActivationProperty] attribute
+        bool hasActivationProperty = false;
+        foreach (var attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass is not null &&
+                attr.AttributeClass.ToDisplayString().EndsWith("ActivationPropertyAttribute", System.StringComparison.Ordinal))
+            {
+                hasActivationProperty = true;
+                break;
+            }
+        }
+        if (!hasActivationProperty)
+            return null;
+
+        // Verify it implements IActivationFunction<T>
+        foreach (var iface in symbol.AllInterfaces)
+        {
+            if (iface.IsGenericType &&
+                iface.OriginalDefinition.ToDisplayString().StartsWith(IActivationFunctionPrefix, System.StringComparison.Ordinal))
+            {
+                return symbol;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the type symbol if it extends LayerBase&lt;T&gt; (or implements ILayer&lt;T&gt;)
+    /// and has [LayerProperty].
+    /// </summary>
+    private static INamedTypeSymbol? GetLayerOrNull(GeneratorSyntaxContext ctx)
+    {
+        var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol;
+        if (symbol is null || symbol.IsAbstract)
+            return null;
+
+        // Check for [LayerProperty] attribute
+        bool hasLayerProperty = false;
+        foreach (var attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass is not null &&
+                attr.AttributeClass.ToDisplayString().EndsWith("LayerPropertyAttribute", System.StringComparison.Ordinal))
+            {
+                hasLayerProperty = true;
+                break;
+            }
+        }
+        if (!hasLayerProperty)
+            return null;
+
+        // Check if it implements ILayer<T> or extends LayerBase<T>
+        foreach (var iface in symbol.AllInterfaces)
+        {
+            if (iface.IsGenericType &&
+                iface.OriginalDefinition.ToDisplayString().StartsWith(ILayerPrefix, System.StringComparison.Ordinal))
+            {
+                return symbol;
+            }
+        }
+
+        // Check base type chain for LayerBase<T>
+        var baseType = symbol.BaseType;
+        while (baseType is not null)
+        {
+            if (baseType.IsGenericType &&
+                baseType.OriginalDefinition.ToDisplayString().StartsWith(LayerBasePrefix, System.StringComparison.Ordinal))
+            {
+                return symbol;
+            }
+            baseType = baseType.BaseType;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the type symbol if it extends LossFunctionBase&lt;T&gt; (or implements ILossFunction&lt;T&gt;)
+    /// and has [LossProperty].
+    /// </summary>
+    private static INamedTypeSymbol? GetLossFunctionOrNull(GeneratorSyntaxContext ctx)
+    {
+        var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol;
+        if (symbol is null || symbol.IsAbstract)
+            return null;
+
+        // Check for [LossProperty] attribute
+        bool hasLossProperty = false;
+        foreach (var attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass is not null &&
+                attr.AttributeClass.ToDisplayString().EndsWith("LossPropertyAttribute", System.StringComparison.Ordinal))
+            {
+                hasLossProperty = true;
+                break;
+            }
+        }
+        if (!hasLossProperty)
+            return null;
+
+        // Check if it implements ILossFunction<T> or extends LossFunctionBase<T>
+        foreach (var iface in symbol.AllInterfaces)
+        {
+            if (iface.IsGenericType &&
+                iface.OriginalDefinition.ToDisplayString().StartsWith(ILossFunctionPrefix, System.StringComparison.Ordinal))
+            {
+                return symbol;
+            }
+        }
+
+        // Also check base type chain for LossFunctionBase
+        var baseType = symbol.BaseType;
+        while (baseType is not null)
+        {
+            if (baseType.IsGenericType &&
+                baseType.OriginalDefinition.ToDisplayString().StartsWith(LossFunctionBasePrefix, System.StringComparison.Ordinal))
+            {
+                return symbol;
+            }
+            baseType = baseType.BaseType;
+        }
+
+        // Also check for ISelfSupervisedLoss<T>
+        foreach (var iface in symbol.AllInterfaces)
+        {
+            if (iface.IsGenericType &&
+                iface.OriginalDefinition.ToDisplayString().StartsWith(ISelfSupervisedLossPrefix, System.StringComparison.Ordinal))
+            {
+                return symbol;
+            }
+        }
+
+        return null;
     }
 
     private static void Execute(
@@ -1192,6 +1391,1054 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Generates test classes for activation functions and loss functions discovered via attributes.
+    /// </summary>
+    // Test base class metadata names for type-system-based coverage detection
+    private static readonly string[] ActivationTestBases = new[]
+    {
+        "AiDotNet.Tests.ModelFamilyTests.Base.ActivationFunctionTestBase"
+    };
+    private static readonly string[] LossTestBases = new[]
+    {
+        "AiDotNet.Tests.ModelFamilyTests.Base.LossFunctionTestBase",
+        "AiDotNet.Tests.ModelFamilyTests.Base.TripletLossTestBase",
+        "AiDotNet.Tests.ModelFamilyTests.Base.ContrastiveLossTestBase",
+        "AiDotNet.Tests.ModelFamilyTests.Base.SparseCategoricalLossTestBase"
+    };
+
+    private static void ExecuteActivationAndLossGeneration(
+        SourceProductionContext context,
+        ImmutableArray<INamedTypeSymbol?> activationClasses,
+        ImmutableArray<INamedTypeSymbol?> lossClasses,
+        Compilation compilation)
+    {
+        // Only generate in test projects
+        string assemblyName = compilation.AssemblyName ?? string.Empty;
+        bool isTestProject = assemblyName.IndexOf("Test", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+        var activationSeen = new HashSet<string>();
+        var lossSeen = new HashSet<string>();
+
+        // Collect from source
+        var sourceActivations = new List<ComponentTestInfo>();
+        foreach (var symbol in activationClasses)
+        {
+            if (symbol is null) continue;
+            var info = ExtractActivationInfo(symbol);
+            if (info is not null && activationSeen.Add(info.FullyQualifiedName))
+                sourceActivations.Add(info);
+        }
+
+        var sourceLosses = new List<ComponentTestInfo>();
+        foreach (var symbol in lossClasses)
+        {
+            if (symbol is null) continue;
+            var info = ExtractLossInfo(symbol);
+            if (info is not null && lossSeen.Add(info.FullyQualifiedName))
+                sourceLosses.Add(info);
+        }
+
+        bool hasSourceItems = sourceActivations.Count > 0 || sourceLosses.Count > 0;
+        bool isSourceProject = hasSourceItems && !isTestProject;
+
+        // If in test project or no source items, also discover from referenced assemblies
+        if (!isSourceProject)
+        {
+            DiscoverComponentsFromReferencedAssemblies(compilation, activationSeen, lossSeen,
+                sourceActivations, sourceLosses);
+        }
+
+        // Generate test classes (only in test projects)
+        if (!isSourceProject)
+        {
+            // Use Roslyn's type system to find which components already have manual test coverage.
+            // Walk the inheritance chain of all source classes to find those inheriting from our
+            // test base classes, then inspect their factory method to resolve the concrete type
+            // being tested via the semantic model.
+            var coveredActivations = FindCoveredComponentTypes(compilation, ActivationTestBases, "CreateActivation");
+            var coveredLosses = FindCoveredComponentTypes(compilation, LossTestBases, "CreateLoss");
+
+            int activationTested = 0, activationTotal = sourceActivations.Count;
+            var generatedActivationNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
+            foreach (var act in sourceActivations)
+            {
+                // Type-system-based coverage: check if any test class inheriting from
+                // ActivationFunctionTestBase constructs this exact type in its CreateActivation() factory
+                if (coveredActivations.Contains(act.FullyQualifiedName))
+                {
+                    activationTested++;
+                    continue;
+                }
+
+                // Skip vector-only activations (e.g. Softmax) or those with learnable params
+                // that need constructor args
+                if (act.IsVectorActivation || (act.HasLearnableParameters && !act.HasParameterlessConstructor))
+                {
+                    activationTested++; // Don't count as untested since they can't auto-test
+                    continue;
+                }
+
+                if (!act.HasParameterlessConstructor)
+                    continue;
+
+                var testClassName = StripBacktick(act.ClassName) + "Tests";
+                if (!generatedActivationNames.Add(testClassName))
+                    continue;
+
+                EmitActivationTestClass(context, act, testClassName);
+                activationTested++;
+            }
+
+            if (activationTotal > 0)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ActivationCoverageSummary, Location.None,
+                    activationTested, activationTotal,
+                    activationTested * 100.0 / activationTotal));
+            }
+
+            int lossTested = 0, lossTotal = sourceLosses.Count;
+            var generatedLossNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
+            foreach (var loss in sourceLosses)
+            {
+                // Type-system-based coverage
+                if (coveredLosses.Contains(loss.FullyQualifiedName))
+                {
+                    lossTested++;
+                    continue;
+                }
+
+                // Skip ImageMatrix (requires feature extractor function — can't auto-construct)
+                // Skip SelfSupervised (implements ISelfSupervisedLoss, not LossFunctionBase)
+                if (loss.ApiShape == ApiShapeImageMatrix || loss.ApiShape == ApiShapeSelfSupervised)
+                {
+                    lossTested++; // Don't count as untested since they can't auto-test
+                    continue;
+                }
+
+                if (!loss.HasParameterlessConstructor)
+                    continue;
+
+                var testClassName = StripBacktick(loss.ClassName) + "Tests";
+                if (!generatedLossNames.Add(testClassName))
+                    continue;
+
+                // Route to the correct test base class based on API shape
+                switch (loss.ApiShape)
+                {
+                    case ApiShapeTripletMatrix:
+                        EmitTripletLossTestClass(context, loss, testClassName);
+                        break;
+                    case ApiShapeTargetNoiseMatrix:
+                        EmitContrastiveLossTestClass(context, loss, testClassName);
+                        break;
+                    case ApiShapeSparseIndex:
+                        EmitSparseCategoricalLossTestClass(context, loss, testClassName);
+                        break;
+                    default:
+                        // Standard VectorVector API — skip if throws NotSupportedException
+                        if (loss.ThrowsNotSupported || !loss.ExtendsLossFunctionBase)
+                        {
+                            lossTested++;
+                            continue;
+                        }
+                        EmitLossTestClass(context, loss, testClassName);
+                        break;
+                }
+                lossTested++;
+            }
+
+            if (lossTotal > 0)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    LossCoverageSummary, Location.None,
+                    lossTested, lossTotal,
+                    lossTested * 100.0 / lossTotal));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Uses Roslyn's type system to determine which component types already have manual test coverage.
+    /// Walks all source classes in the compilation, checks their inheritance chain against the known
+    /// test base classes, and inspects the factory method's object creation expressions to resolve
+    /// the exact concrete component type being tested via the semantic model.
+    /// </summary>
+    /// <param name="compilation">The current compilation containing both source and referenced types.</param>
+    /// <param name="testBaseClassFullNames">Metadata names of test base classes to search for.</param>
+    /// <param name="factoryMethodName">The factory method name to inspect (e.g., "CreateActivation", "CreateLoss").</param>
+    /// <returns>Set of fully qualified original definition names for covered component types.</returns>
+    private static HashSet<string> FindCoveredComponentTypes(
+        Compilation compilation,
+        string[] testBaseClassFullNames,
+        string factoryMethodName)
+    {
+        var covered = new HashSet<string>();
+
+        // Resolve test base class symbols from the compilation
+        var baseTypeSymbols = new List<INamedTypeSymbol>();
+        foreach (var name in testBaseClassFullNames)
+        {
+            var baseType = compilation.GetTypeByMetadataName(name);
+            if (baseType is not null)
+                baseTypeSymbols.Add(baseType);
+        }
+
+        if (baseTypeSymbols.Count == 0)
+            return covered;
+
+        // Walk every syntax tree in the compilation to find test classes
+        foreach (var syntaxTree in compilation.SyntaxTrees)
+        {
+            var semanticModel = compilation.GetSemanticModel(syntaxTree);
+            var root = syntaxTree.GetRoot();
+
+            foreach (var classDecl in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+            {
+                var classSymbol = semanticModel.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
+                if (classSymbol is null || classSymbol.IsAbstract)
+                    continue;
+
+                // Walk the inheritance chain to check if this class derives from any of our test bases
+                if (!InheritsFromAny(classSymbol, baseTypeSymbols))
+                    continue;
+
+                // Found a test class. Now inspect the factory method override to find
+                // which concrete component type it constructs.
+                ExtractConstructedTypesFromFactory(classSymbol, factoryMethodName, semanticModel, covered);
+            }
+        }
+
+        return covered;
+    }
+
+    /// <summary>
+    /// Walks the base type chain of <paramref name="type"/> to check if it inherits from
+    /// any of the <paramref name="baseTypes"/>.
+    /// </summary>
+    private static bool InheritsFromAny(INamedTypeSymbol type, List<INamedTypeSymbol> baseTypes)
+    {
+        var current = type.BaseType;
+        while (current is not null)
+        {
+            foreach (var baseType in baseTypes)
+            {
+                if (SymbolEqualityComparer.Default.Equals(current, baseType))
+                    return true;
+            }
+            current = current.BaseType;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Finds the override of <paramref name="factoryMethodName"/> in <paramref name="classSymbol"/>,
+    /// walks its syntax tree for object creation expressions, resolves each to its concrete type
+    /// via the semantic model, and adds the original generic definition to <paramref name="covered"/>.
+    /// </summary>
+    private static void ExtractConstructedTypesFromFactory(
+        INamedTypeSymbol classSymbol,
+        string factoryMethodName,
+        SemanticModel semanticModel,
+        HashSet<string> covered)
+    {
+        foreach (var member in classSymbol.GetMembers(factoryMethodName))
+        {
+            if (member is not IMethodSymbol method || !method.IsOverride)
+                continue;
+
+            foreach (var syntaxRef in method.DeclaringSyntaxReferences)
+            {
+                var methodSyntax = syntaxRef.GetSyntax();
+
+                // Find explicit object creation: new SomeType<double>(args)
+                foreach (var creation in methodSyntax.DescendantNodes()
+                    .OfType<ObjectCreationExpressionSyntax>())
+                {
+                    AddResolvedType(semanticModel, creation, covered);
+                }
+
+                // Find implicit object creation: new(args) with target-typed new
+                foreach (var creation in methodSyntax.DescendantNodes()
+                    .OfType<ImplicitObjectCreationExpressionSyntax>())
+                {
+                    AddResolvedType(semanticModel, creation, covered);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resolves the type of an object creation expression via the semantic model and adds
+    /// its original generic definition to the covered set.
+    /// </summary>
+    private static void AddResolvedType(SemanticModel semanticModel, SyntaxNode creationExpr, HashSet<string> covered)
+    {
+        var typeInfo = semanticModel.GetTypeInfo(creationExpr);
+        if (typeInfo.Type is not INamedTypeSymbol createdType)
+            return;
+
+        // Get the unbound generic definition (e.g., ReLUActivation<T> from ReLUActivation<double>)
+        var originalDef = createdType.IsGenericType
+            ? createdType.OriginalDefinition
+            : createdType;
+
+        covered.Add(originalDef.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+    }
+
+    // Layer test base class metadata names
+    private static readonly string[] LayerTestBases = new[]
+    {
+        "AiDotNet.Tests.ModelFamilyTests.Base.LayerTestBase",
+        "AiDotNet.Tests.ModelFamilyTests.Base.DualInputLayerTestBase"
+    };
+
+    // LayerApiShape enum values (must match AiDotNet.Enums.LayerApiShape)
+    private const int LayerApiShapeSingleTensor = 0;
+    private const int LayerApiShapeDualTensor = 1;
+
+    /// <summary>
+    /// Generates test classes for layers discovered via [LayerProperty] attributes.
+    /// </summary>
+    private static void ExecuteLayerGeneration(
+        SourceProductionContext context,
+        ImmutableArray<INamedTypeSymbol?> layerClasses,
+        Compilation compilation)
+    {
+        string assemblyName = compilation.AssemblyName ?? string.Empty;
+        bool isTestProject = assemblyName.IndexOf("Test", System.StringComparison.OrdinalIgnoreCase) >= 0;
+
+
+        var layerSeen = new HashSet<string>();
+        var sourceLayers = new List<LayerTestInfo>();
+
+        // Collect from source
+        foreach (var symbol in layerClasses)
+        {
+            if (symbol is null) continue;
+            var info = ExtractLayerInfo(symbol);
+            if (info is not null && layerSeen.Add(info.FullyQualifiedName))
+                sourceLayers.Add(info);
+        }
+
+        bool hasSourceItems = sourceLayers.Count > 0;
+        bool isSourceProject = hasSourceItems && !isTestProject;
+
+        // Discover from referenced assemblies if in test project
+        if (!isSourceProject)
+        {
+            DiscoverLayersFromReferencedAssemblies(compilation, layerSeen, sourceLayers);
+        }
+
+        // Generate test classes (only in test projects)
+        if (!isSourceProject)
+        {
+            var coveredLayers = FindCoveredComponentTypes(compilation, LayerTestBases, "CreateLayer");
+
+            int layerTested = 0, layerTotal = sourceLayers.Count;
+            var generatedNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
+            foreach (var layer in sourceLayers)
+            {
+                // Type-system-based coverage detection
+                if (coveredLayers.Contains(layer.FullyQualifiedName))
+                {
+                    layerTested++;
+                    continue;
+                }
+
+                // Skip if no accessible constructor
+                if (!layer.HasParameterlessConstructor && string.IsNullOrEmpty(layer.TestConstructorArgs))
+                    continue;
+
+                var testClassName = StripBacktick(layer.ClassName) + "Tests";
+                if (!generatedNames.Add(testClassName))
+                    continue;
+
+                switch (layer.ApiShape)
+                {
+                    case LayerApiShapeDualTensor:
+                        EmitDualInputLayerTestClass(context, layer, testClassName);
+                        break;
+                    default:
+                        EmitLayerTestClass(context, layer, testClassName);
+                        break;
+                }
+                layerTested++;
+            }
+
+            if (layerTotal > 0)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    LayerCoverageSummary, Location.None,
+                    layerTested, layerTotal,
+                    layerTested * 100.0 / layerTotal));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Extracts layer metadata from [LayerProperty] attributes.
+    /// </summary>
+    private static LayerTestInfo? ExtractLayerInfo(INamedTypeSymbol symbol)
+    {
+        bool isTrainable = true, hasTrainingMode = false, changesShape = false, isStateful = false;
+        bool supportsBackprop = true;
+        int apiShape = LayerApiShapeSingleTensor;
+        string testInputShape = "";
+        string testConstructorArgs = "";
+
+        foreach (var attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass is null) continue;
+            if (!attr.AttributeClass.ToDisplayString().EndsWith("LayerPropertyAttribute", System.StringComparison.Ordinal))
+                continue;
+
+            foreach (var named in attr.NamedArguments)
+            {
+                switch (named.Key)
+                {
+                    case "IsTrainable":
+                        isTrainable = (bool)(named.Value.Value ?? true);
+                        break;
+                    case "SupportsBackpropagation":
+                        supportsBackprop = (bool)(named.Value.Value ?? true);
+                        break;
+                    case "HasTrainingMode":
+                        hasTrainingMode = (bool)(named.Value.Value ?? false);
+                        break;
+                    case "ChangesShape":
+                        changesShape = (bool)(named.Value.Value ?? false);
+                        break;
+                    case "IsStateful":
+                        isStateful = (bool)(named.Value.Value ?? false);
+                        break;
+                    case "ApiShape":
+                        apiShape = (int)(named.Value.Value ?? 0);
+                        break;
+                    case "TestInputShape":
+                        testInputShape = (string)(named.Value.Value ?? "");
+                        break;
+                    case "TestConstructorArgs":
+                        testConstructorArgs = (string)(named.Value.Value ?? "");
+                        break;
+                }
+            }
+        }
+
+        bool hasParameterlessCtor = HasAccessibleParameterlessConstructor(symbol);
+
+        return new LayerTestInfo
+        {
+            ClassName = symbol.Name,
+            FullyQualifiedName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            TypeParameterCount = symbol.TypeParameters.Length,
+            HasParameterlessConstructor = hasParameterlessCtor,
+            IsTrainable = isTrainable,
+            SupportsBackpropagation = supportsBackprop,
+            HasTrainingMode = hasTrainingMode,
+            ChangesShape = changesShape,
+            IsStateful = isStateful,
+            ApiShape = apiShape,
+            TestInputShape = testInputShape,
+            TestConstructorArgs = testConstructorArgs
+        };
+    }
+
+    /// <summary>
+    /// Discovers layers from referenced assemblies by checking for [LayerProperty] attributes.
+    /// </summary>
+    private static void DiscoverLayersFromReferencedAssemblies(
+        Compilation compilation,
+        HashSet<string> layerSeen,
+        List<LayerTestInfo> layers)
+    {
+        foreach (var reference in compilation.References)
+        {
+            var symbol = compilation.GetAssemblyOrModuleSymbol(reference);
+            if (symbol is IAssemblySymbol assembly)
+            {
+                CollectLayersFromNamespace(assembly.GlobalNamespace, layerSeen, layers);
+            }
+        }
+    }
+
+    private static void CollectLayersFromNamespace(
+        INamespaceSymbol ns,
+        HashSet<string> layerSeen,
+        List<LayerTestInfo> layers)
+    {
+        foreach (var member in ns.GetMembers())
+        {
+            if (member is INamespaceSymbol childNs)
+            {
+                CollectLayersFromNamespace(childNs, layerSeen, layers);
+            }
+            else if (member is INamedTypeSymbol type)
+            {
+                if (type.TypeKind != TypeKind.Class || type.IsAbstract)
+                    continue;
+
+                bool hasLayerProp = false;
+                foreach (var attr in type.GetAttributes())
+                {
+                    if (attr.AttributeClass is not null &&
+                        attr.AttributeClass.ToDisplayString().EndsWith("LayerPropertyAttribute", System.StringComparison.Ordinal))
+                    {
+                        hasLayerProp = true;
+                        break;
+                    }
+                }
+
+                if (hasLayerProp)
+                {
+                    var info = ExtractLayerInfo(type);
+                    if (info is not null && layerSeen.Add(info.FullyQualifiedName))
+                        layers.Add(info);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Emits a generated test class for a standard single-input layer.
+    /// </summary>
+    private static void EmitLayerTestClass(
+        SourceProductionContext context,
+        LayerTestInfo layer,
+        string testClassName)
+    {
+        var typeName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName);
+        string constructorArgs = string.IsNullOrEmpty(layer.TestConstructorArgs) ? "" : layer.TestConstructorArgs;
+        string constructorExpr = $"new {typeName}<double>({constructorArgs})";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// Auto-generated layer test. Invariant tests are inherited from LayerTestBase.");
+        sb.AppendLine("using AiDotNet.Interfaces;");
+        sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine($"public class {testClassName} : LayerTestBase");
+        sb.AppendLine("{");
+        sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
+        sb.AppendLine($"        => {constructorExpr};");
+
+        // Override InputShape if specified
+        if (!string.IsNullOrEmpty(layer.TestInputShape))
+        {
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ {layer.TestInputShape} }};");
+        }
+
+        // Override ExpectsTrainableParameters
+        if (!layer.IsTrainable)
+            sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
+
+        sb.AppendLine("}");
+
+        var hintName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
+        context.AddSource(hintName, sb.ToString());
+    }
+
+    /// <summary>
+    /// Emits a generated test class for a dual-input layer.
+    /// </summary>
+    private static void EmitDualInputLayerTestClass(
+        SourceProductionContext context,
+        LayerTestInfo layer,
+        string testClassName)
+    {
+        var typeName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName);
+        string constructorArgs = string.IsNullOrEmpty(layer.TestConstructorArgs) ? "" : layer.TestConstructorArgs;
+        string constructorExpr = $"new {typeName}<double>({constructorArgs})";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// Auto-generated dual-input layer test. Invariant tests are inherited from DualInputLayerTestBase.");
+        sb.AppendLine("using AiDotNet.Interfaces;");
+        sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine($"public class {testClassName} : DualInputLayerTestBase");
+        sb.AppendLine("{");
+        sb.AppendLine($"    protected override ILayer<double> CreateLayer()");
+        sb.AppendLine($"        => {constructorExpr};");
+
+        // Override input shapes if specified
+        if (!string.IsNullOrEmpty(layer.TestInputShape))
+        {
+            sb.AppendLine($"    protected override int[] PrimaryInputShape => new[] {{ {layer.TestInputShape} }};");
+        }
+
+        // Override ExpectsTrainableParameters
+        if (!layer.IsTrainable)
+            sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
+
+        sb.AppendLine("}");
+
+        var hintName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
+        context.AddSource(hintName, sb.ToString());
+    }
+
+    /// <summary>
+    /// Info about a layer for test generation.
+    /// </summary>
+    private class LayerTestInfo
+    {
+        public string ClassName { get; set; } = string.Empty;
+        public string FullyQualifiedName { get; set; } = string.Empty;
+        public int TypeParameterCount { get; set; }
+        public bool HasParameterlessConstructor { get; set; }
+        public bool IsTrainable { get; set; } = true;
+        public bool SupportsBackpropagation { get; set; } = true;
+        public bool HasTrainingMode { get; set; }
+        public bool ChangesShape { get; set; }
+        public bool IsStateful { get; set; }
+        public int ApiShape { get; set; }
+        public string TestInputShape { get; set; } = "";
+        public string TestConstructorArgs { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Extracts activation function metadata from attributes.
+    /// </summary>
+    private static ComponentTestInfo? ExtractActivationInfo(INamedTypeSymbol symbol)
+    {
+        bool isMonotonic = true, zeroPreserving = true, isBounded = false;
+        bool isVectorActivation = false, hasLearnableParams = false;
+
+        foreach (var attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass is null) continue;
+            if (!attr.AttributeClass.ToDisplayString().EndsWith("ActivationPropertyAttribute", System.StringComparison.Ordinal))
+                continue;
+
+            foreach (var named in attr.NamedArguments)
+            {
+                switch (named.Key)
+                {
+                    case "IsMonotonic":
+                        isMonotonic = (bool)(named.Value.Value ?? true);
+                        break;
+                    case "ZeroPreserving":
+                        zeroPreserving = (bool)(named.Value.Value ?? true);
+                        break;
+                    case "IsBounded":
+                        isBounded = (bool)(named.Value.Value ?? false);
+                        break;
+                    case "IsVectorActivation":
+                        isVectorActivation = (bool)(named.Value.Value ?? false);
+                        break;
+                    case "HasLearnableParameters":
+                        hasLearnableParams = (bool)(named.Value.Value ?? false);
+                        break;
+                }
+            }
+        }
+
+        bool hasParameterlessCtor = HasAccessibleParameterlessConstructor(symbol);
+
+        return new ComponentTestInfo
+        {
+            ClassName = symbol.Name,
+            FullyQualifiedName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            TypeParameterCount = symbol.TypeParameters.Length,
+            IsMonotonic = isMonotonic,
+            ZeroPreserving = zeroPreserving,
+            IsBounded = isBounded,
+            IsVectorActivation = isVectorActivation,
+            HasLearnableParameters = hasLearnableParams,
+            HasParameterlessConstructor = hasParameterlessCtor,
+            IsActivation = true
+        };
+    }
+
+    /// <summary>
+    /// Extracts loss function metadata from attributes.
+    /// </summary>
+    // LossApiShape enum values (must match AiDotNet.Enums.LossApiShape)
+    private const int ApiShapeVectorVector = 0;
+    private const int ApiShapeTripletMatrix = 1;
+    private const int ApiShapeTargetNoiseMatrix = 2;
+    private const int ApiShapeImageMatrix = 3;
+    private const int ApiShapeSelfSupervised = 4;
+    private const int ApiShapeSparseIndex = 5;
+
+    private static ComponentTestInfo? ExtractLossInfo(INamedTypeSymbol symbol)
+    {
+        bool isNonNegative = true, zeroForIdentical = true;
+        bool throwsNotSupported = false;
+        int apiShape = ApiShapeVectorVector;
+
+        foreach (var attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass is null) continue;
+            if (!attr.AttributeClass.ToDisplayString().EndsWith("LossPropertyAttribute", System.StringComparison.Ordinal))
+                continue;
+
+            foreach (var named in attr.NamedArguments)
+            {
+                switch (named.Key)
+                {
+                    case "IsNonNegative":
+                        isNonNegative = (bool)(named.Value.Value ?? true);
+                        break;
+                    case "ZeroForIdentical":
+                        zeroForIdentical = (bool)(named.Value.Value ?? true);
+                        break;
+                    case "ApiShape":
+                        apiShape = (int)(named.Value.Value ?? 0);
+                        break;
+                }
+            }
+        }
+
+        bool hasParameterlessCtor = HasAccessibleParameterlessConstructor(symbol);
+
+        // Check if the CalculateLoss override throws NotSupportedException (source-mode only)
+        foreach (var member in symbol.GetMembers("CalculateLoss"))
+        {
+            if (member is IMethodSymbol method && method.IsOverride)
+            {
+                // Check if the method body is a single throw statement
+                // We can detect this by looking at the method's declaring syntax references
+                foreach (var syntaxRef in method.DeclaringSyntaxReferences)
+                {
+                    var syntax = syntaxRef.GetSyntax();
+                    var text = syntax.ToString();
+                    if (text.Contains("throw new NotSupportedException") ||
+                        text.Contains("throw new System.NotSupportedException"))
+                    {
+                        throwsNotSupported = true;
+                        break;
+                    }
+                }
+                if (throwsNotSupported) break;
+            }
+        }
+
+        // Check if it extends LossFunctionBase<T>
+        bool extendsBase = false;
+        var baseType = symbol.BaseType;
+        while (baseType is not null)
+        {
+            if (baseType.IsGenericType &&
+                baseType.OriginalDefinition.ToDisplayString().StartsWith(LossFunctionBasePrefix, System.StringComparison.Ordinal))
+            {
+                extendsBase = true;
+                break;
+            }
+            baseType = baseType.BaseType;
+        }
+
+        return new ComponentTestInfo
+        {
+            ClassName = symbol.Name,
+            FullyQualifiedName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            TypeParameterCount = symbol.TypeParameters.Length,
+            IsNonNegative = isNonNegative,
+            ZeroForIdentical = zeroForIdentical,
+            HasParameterlessConstructor = hasParameterlessCtor,
+            ThrowsNotSupported = throwsNotSupported,
+            ExtendsLossFunctionBase = extendsBase,
+            ApiShape = apiShape,
+            IsActivation = false
+        };
+    }
+
+    /// <summary>
+    /// Checks if a type has a public constructor callable with zero arguments.
+    /// </summary>
+    private static bool HasAccessibleParameterlessConstructor(INamedTypeSymbol symbol)
+    {
+        foreach (var ctor in symbol.InstanceConstructors)
+        {
+            if (ctor.DeclaredAccessibility != Accessibility.Public)
+                continue;
+            if (ctor.Parameters.Length == 0)
+                return true;
+            bool allOptional = true;
+            foreach (var param in ctor.Parameters)
+            {
+                if (!param.HasExplicitDefaultValue)
+                {
+                    allOptional = false;
+                    break;
+                }
+            }
+            if (allOptional)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Discovers activation and loss function types from referenced assemblies.
+    /// </summary>
+    private static void DiscoverComponentsFromReferencedAssemblies(
+        Compilation compilation,
+        HashSet<string> activationSeen,
+        HashSet<string> lossSeen,
+        List<ComponentTestInfo> activations,
+        List<ComponentTestInfo> losses)
+    {
+        foreach (var reference in compilation.References)
+        {
+            var symbol = compilation.GetAssemblyOrModuleSymbol(reference);
+            if (symbol is IAssemblySymbol assembly)
+            {
+                CollectComponentsFromNamespace(assembly.GlobalNamespace, activationSeen, lossSeen, activations, losses);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Recursively collects activation/loss types from a namespace.
+    /// </summary>
+    private static void CollectComponentsFromNamespace(
+        INamespaceSymbol ns,
+        HashSet<string> activationSeen,
+        HashSet<string> lossSeen,
+        List<ComponentTestInfo> activations,
+        List<ComponentTestInfo> losses)
+    {
+        foreach (var member in ns.GetMembers())
+        {
+            if (member is INamespaceSymbol childNs)
+            {
+                CollectComponentsFromNamespace(childNs, activationSeen, lossSeen, activations, losses);
+            }
+            else if (member is INamedTypeSymbol type)
+            {
+                if (type.TypeKind != TypeKind.Class || type.IsAbstract)
+                    continue;
+
+                // Check for ActivationProperty attribute
+                bool hasActivationProp = false;
+                bool hasLossProp = false;
+                foreach (var attr in type.GetAttributes())
+                {
+                    if (attr.AttributeClass is null) continue;
+                    var attrName = attr.AttributeClass.ToDisplayString();
+                    if (attrName.EndsWith("ActivationPropertyAttribute", System.StringComparison.Ordinal))
+                        hasActivationProp = true;
+                    else if (attrName.EndsWith("LossPropertyAttribute", System.StringComparison.Ordinal))
+                        hasLossProp = true;
+                }
+
+                if (hasActivationProp)
+                {
+                    var info = ExtractActivationInfo(type);
+                    if (info is not null && activationSeen.Add(info.FullyQualifiedName))
+                        activations.Add(info);
+                }
+
+                if (hasLossProp)
+                {
+                    var info = ExtractLossInfo(type);
+                    if (info is not null && lossSeen.Add(info.FullyQualifiedName))
+                        losses.Add(info);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Emits a generated test class for an activation function.
+    /// </summary>
+    private static void EmitActivationTestClass(
+        SourceProductionContext context,
+        ComponentTestInfo act,
+        string testClassName)
+    {
+        var typeName = GeneratorHelpers.StripGenericSuffix(act.FullyQualifiedName);
+        string constructorExpr = act.TypeParameterCount <= 1
+            ? $"new {typeName}<double>()"
+            : $"new {typeName}<double>()";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// Auto-generated activation function test. Mathematical invariant tests are inherited from ActivationFunctionTestBase.");
+        sb.AppendLine("using AiDotNet.Interfaces;");
+        sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine($"public class {testClassName} : ActivationFunctionTestBase");
+        sb.AppendLine("{");
+        sb.AppendLine($"    protected override IActivationFunction<double> CreateActivation()");
+        sb.AppendLine($"        => {constructorExpr};");
+
+        // Override properties based on attribute metadata
+        if (!act.IsMonotonic)
+            sb.AppendLine("    protected override bool IsMonotonic => false;");
+        if (!act.ZeroPreserving)
+            sb.AppendLine("    protected override bool ZeroMapsToZero => false;");
+        if (act.IsBounded)
+            sb.AppendLine("    protected override bool IsBounded => true;");
+
+        sb.AppendLine("}");
+
+        var hintName = GeneratorHelpers.StripGenericSuffix(act.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
+        context.AddSource(hintName, sb.ToString());
+    }
+
+    /// <summary>
+    /// Emits a generated test class for a loss function.
+    /// </summary>
+    private static void EmitLossTestClass(
+        SourceProductionContext context,
+        ComponentTestInfo loss,
+        string testClassName)
+    {
+        var typeName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName);
+        string constructorExpr = loss.TypeParameterCount <= 1
+            ? $"new {typeName}<double>()"
+            : $"new {typeName}<double>()";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// Auto-generated loss function test. Mathematical invariant tests are inherited from LossFunctionTestBase.");
+        sb.AppendLine("using AiDotNet.Interfaces;");
+        sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine($"public class {testClassName} : LossFunctionTestBase");
+        sb.AppendLine("{");
+        sb.AppendLine($"    protected override ILossFunction<double> CreateLoss()");
+        sb.AppendLine($"        => {constructorExpr};");
+
+        // Override properties based on attribute metadata
+        if (!loss.IsNonNegative)
+            sb.AppendLine("    protected override bool IsNonNegative => false;");
+        if (!loss.ZeroForIdentical)
+            sb.AppendLine("    protected override bool ZeroLossForIdentical => false;");
+
+        sb.AppendLine("}");
+
+        var hintName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
+        context.AddSource(hintName, sb.ToString());
+    }
+
+    /// <summary>
+    /// Emits a generated test class for a triplet-style loss function (anchor, positive, negative matrices).
+    /// </summary>
+    private static void EmitTripletLossTestClass(
+        SourceProductionContext context,
+        ComponentTestInfo loss,
+        string testClassName)
+    {
+        var typeName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName);
+        string constructorExpr = $"new {typeName}<double>()";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// Auto-generated triplet loss test. Invariant tests are inherited from TripletLossTestBase.");
+        sb.AppendLine("using AiDotNet.LossFunctions;");
+        sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine($"public class {testClassName} : TripletLossTestBase");
+        sb.AppendLine("{");
+        sb.AppendLine($"    protected override TripletLoss<double> CreateLoss()");
+        sb.AppendLine($"        => {constructorExpr};");
+        sb.AppendLine("}");
+
+        var hintName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
+        context.AddSource(hintName, sb.ToString());
+    }
+
+    /// <summary>
+    /// Emits a generated test class for a noise contrastive estimation loss (target logits + noise matrix).
+    /// </summary>
+    private static void EmitContrastiveLossTestClass(
+        SourceProductionContext context,
+        ComponentTestInfo loss,
+        string testClassName)
+    {
+        var typeName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName);
+        string constructorExpr = $"new {typeName}<double>()";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// Auto-generated contrastive loss test. Invariant tests are inherited from ContrastiveLossTestBase.");
+        sb.AppendLine("using AiDotNet.LossFunctions;");
+        sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine($"public class {testClassName} : ContrastiveLossTestBase");
+        sb.AppendLine("{");
+        sb.AppendLine($"    protected override NoiseContrastiveEstimationLoss<double> CreateLoss()");
+        sb.AppendLine($"        => {constructorExpr};");
+        sb.AppendLine("}");
+
+        var hintName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
+        context.AddSource(hintName, sb.ToString());
+    }
+
+    /// <summary>
+    /// Emits a generated test class for a sparse categorical loss (different-length predicted/actual vectors).
+    /// </summary>
+    private static void EmitSparseCategoricalLossTestClass(
+        SourceProductionContext context,
+        ComponentTestInfo loss,
+        string testClassName)
+    {
+        var typeName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName);
+        string constructorExpr = $"new {typeName}<double>()";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// Auto-generated sparse categorical loss test. Invariant tests are inherited from SparseCategoricalLossTestBase.");
+        sb.AppendLine("using AiDotNet.Interfaces;");
+        sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine($"public class {testClassName} : SparseCategoricalLossTestBase");
+        sb.AppendLine("{");
+        sb.AppendLine($"    protected override ILossFunction<double> CreateLoss()");
+        sb.AppendLine($"        => {constructorExpr};");
+        sb.AppendLine("}");
+
+        var hintName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
+        context.AddSource(hintName, sb.ToString());
+    }
+
+    /// <summary>
+    /// Info about an activation function or loss function for test generation.
+    /// </summary>
+    private class ComponentTestInfo
+    {
+        public string ClassName { get; set; } = string.Empty;
+        public string FullyQualifiedName { get; set; } = string.Empty;
+        public int TypeParameterCount { get; set; }
+        public bool HasParameterlessConstructor { get; set; }
+        public bool IsActivation { get; set; }
+
+        // Activation-specific
+        public bool IsMonotonic { get; set; } = true;
+        public bool ZeroPreserving { get; set; } = true;
+        public bool IsBounded { get; set; }
+        public bool IsVectorActivation { get; set; }
+        public bool HasLearnableParameters { get; set; }
+
+        // Loss-specific
+        public bool IsNonNegative { get; set; } = true;
+        public bool ZeroForIdentical { get; set; } = true;
+        public bool ThrowsNotSupported { get; set; }
+        public bool ExtendsLossFunctionBase { get; set; }
+        public int ApiShape { get; set; }
     }
 
     private static void EmitTestCoverageClass(

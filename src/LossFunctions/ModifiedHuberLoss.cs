@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -29,6 +31,9 @@ namespace AiDotNet.LossFunctions;
 /// - Problems where you want to balance between being sensitive to errors but not overly influenced by extreme mistakes
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.BinaryClassification)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, IsRobustToOutliers = true, ExpectedOutput = OutputType.Logits)]
 public class ModifiedHuberLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

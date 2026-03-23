@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -31,6 +33,9 @@ namespace AiDotNet.LossFunctions;
 /// and outliers compared to other loss functions like hinge loss or log loss.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.BinaryClassification)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ExpectedOutput = OutputType.Logits)]
 public class ExponentialLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

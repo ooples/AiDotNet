@@ -31,6 +31,13 @@ public sealed class LossPropertyAttribute : Attribute
 
     /// <summary>Expected output format. Default: Continuous.</summary>
     public OutputType ExpectedOutput { get; set; } = OutputType.Continuous;
+
+    /// <summary>
+    /// The method signature shape this loss uses for its primary calculation.
+    /// The test scaffold generator uses this to select the correct test base class.
+    /// Default: VectorVector (standard CalculateLoss(Vector, Vector) interface).
+    /// </summary>
+    public LossApiShape ApiShape { get; set; } = LossApiShape.VectorVector;
 }
 
 /// <summary>

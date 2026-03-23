@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -25,6 +27,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - Output: Spatial features modified to match the text description
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.CrossModalAttention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
 public class CrossAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _queryDim;

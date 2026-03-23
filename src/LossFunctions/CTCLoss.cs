@@ -1,5 +1,8 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -28,6 +31,9 @@ namespace AiDotNet.LossFunctions;
 /// - Any task where input and output sequences have different lengths and unknown alignment
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.TextGeneration)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Probabilities)]
 public class CTCLoss<T> : ISequenceLossFunction<T>
 {
     private readonly INumericOperations<T> _numOps;

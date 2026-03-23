@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -39,6 +42,9 @@ namespace AiDotNet.LossFunctions;
 /// Always use MBE together with metrics like RMSE or MAE.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regression)]
+[LossTask(LossTask.Regression)]
+[LossProperty(IsNonNegative = false, ZeroForIdentical = true, ExpectedOutput = OutputType.Continuous)]
 public class MeanBiasErrorLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

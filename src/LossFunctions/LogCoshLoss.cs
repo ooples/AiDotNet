@@ -1,5 +1,7 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -25,6 +27,9 @@ namespace AiDotNet.LossFunctions;
 /// - You want a compromise between MSE and MAE
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regression)]
+[LossTask(LossTask.Regression)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsSymmetric = true, IsRobustToOutliers = true, ExpectedOutput = OutputType.Continuous)]
 public class LogCoshLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

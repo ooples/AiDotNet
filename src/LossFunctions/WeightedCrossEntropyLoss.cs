@@ -1,4 +1,5 @@
-
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.LossFunctions;
 
@@ -25,6 +26,10 @@ namespace AiDotNet.LossFunctions;
 /// - Situations where you have varying confidence in your training data
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.BinaryClassification)]
+[LossTask(LossTask.MultiLabel)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, SupportsClassWeights = true, HandlesImbalancedData = true, RequiresProbabilityInputs = true, ExpectedOutput = OutputType.Probabilities)]
 public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

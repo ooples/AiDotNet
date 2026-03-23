@@ -1,9 +1,16 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
 /// Represents a quantum-specific loss function for quantum neural networks.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.BinaryClassification)]
+[LossTask(LossTask.MultiClass)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Continuous)]
 public class QuantumLoss<T> : LossFunctionBase<T>
 {
     public QuantumLoss()

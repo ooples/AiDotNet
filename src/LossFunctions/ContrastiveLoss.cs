@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -29,6 +31,9 @@ namespace AiDotNet.LossFunctions;
 /// This approach is simpler than Triplet Loss as it only requires pairs of examples rather than triplets.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Contrastive)]
+[LossTask(LossTask.Embedding)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ExpectedOutput = OutputType.Distances)]
 public class ContrastiveLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

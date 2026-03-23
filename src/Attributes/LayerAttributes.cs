@@ -32,6 +32,29 @@ public sealed class LayerPropertyAttribute : Attribute
 
     /// <summary>Relative computational cost. Default: Medium.</summary>
     public ComputeCost Cost { get; set; } = ComputeCost.Medium;
+
+    /// <summary>
+    /// The Forward method signature shape this layer uses.
+    /// The test scaffold generator uses this to select the correct test base class.
+    /// Default: SingleTensor (standard Forward(Tensor) interface).
+    /// </summary>
+    public LayerApiShape ApiShape { get; set; } = LayerApiShape.SingleTensor;
+
+    /// <summary>
+    /// The input tensor shape to use for auto-generated tests, as a comma-separated string.
+    /// Examples: "1,4" for [batch=1, features=4], "1,3,8,8" for [batch=1, channels=3, h=8, w=8].
+    /// When empty (default), the generator uses the LayerTestBase default of [1, 4].
+    /// This maps to the <c>InputShape</c> override in LayerTestBase.
+    /// </summary>
+    public string TestInputShape { get; set; } = "";
+
+    /// <summary>
+    /// Constructor arguments as a comma-separated string for auto-generated tests.
+    /// Examples: "4,8" for DenseLayer(inputSize=4, outputSize=8), "3,8,8" for Conv2D(channels=3, h=8, w=8).
+    /// When empty (default), the generator assumes a parameterless or all-default-args constructor.
+    /// The generator emits these as integer literal arguments: new LayerType&lt;double&gt;(4, 8).
+    /// </summary>
+    public string TestConstructorArgs { get; set; } = "";
 }
 
 /// <summary>

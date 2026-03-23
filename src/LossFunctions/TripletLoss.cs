@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -30,6 +32,11 @@ namespace AiDotNet.LossFunctions;
 /// similar items cluster together and dissimilar items are pushed apart.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Ranking)]
+[LossCategory(LossCategory.Contrastive)]
+[LossTask(LossTask.Embedding)]
+[LossTask(LossTask.Ranking)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ApiShape = LossApiShape.TripletMatrix, ExpectedOutput = OutputType.Distances)]
 public class TripletLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

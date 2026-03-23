@@ -1,5 +1,8 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -30,6 +33,11 @@ namespace AiDotNet.LossFunctions;
 /// When training models, KL divergence helps push the predicted distribution (Q) to match the target distribution (P).
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regularization)]
+[LossCategory(LossCategory.Generation)]
+[LossTask(LossTask.ImageGeneration)]
+[LossTask(LossTask.TextGeneration)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, RequiresProbabilityInputs = true, ExpectedOutput = OutputType.Probabilities)]
 public class KullbackLeiblerDivergence<T> : LossFunctionBase<T>
 {
     /// <summary>

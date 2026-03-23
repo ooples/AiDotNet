@@ -1,5 +1,8 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -35,6 +38,9 @@ namespace AiDotNet.LossFunctions;
 /// because it directly optimizes for the overlap of segments.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Segmentation)]
+[LossTask(LossTask.SemanticSegmentation)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, HandlesImbalancedData = true, RequiresProbabilityInputs = true, ExpectedOutput = OutputType.Probabilities)]
 public class JaccardLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -33,6 +35,11 @@ namespace AiDotNet.LossFunctions;
 /// for computed imaging", ICIP 1994.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regression)]
+[LossCategory(LossCategory.Reconstruction)]
+[LossTask(LossTask.SuperResolution)]
+[LossTask(LossTask.Denoising)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsRobustToOutliers = true, ExpectedOutput = OutputType.Continuous)]
 public class CharbonnierLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -34,6 +36,10 @@ namespace AiDotNet.LossFunctions;
 /// - You want to balance between model simplicity and prediction accuracy
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regularization)]
+[LossCategory(LossCategory.Regression)]
+[LossTask(LossTask.Regression)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Continuous)]
 public class ElasticNetLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
