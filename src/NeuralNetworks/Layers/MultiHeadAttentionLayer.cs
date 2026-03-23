@@ -1154,18 +1154,64 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Reshape attention output gradient to 4D: [batch, heads, seq, head_dim]
         attentionOutputGradient = attentionOutputGradient.Reshape([batchSize, sequenceLength, _headCount, _headDimension]).Transpose([0, 2, 1, 3]);
 
-        // Use Engine.ScaledDotProductAttentionBackward for efficient gradient computation
-        // Computes dQ, dK, dV gradients through the attention operation
-        Engine.ScaledDotProductAttentionBackward(
-            attentionOutputGradient,
-            _lastProjectedQueries,
-            _lastProjectedKeys,
-            _lastProjectedValues,
-            _lastAttentionScores,
-            1.0 / Math.Sqrt(_headDimension),
-            out var queriesGradient4D,
-            out var keysGradient4D,
-            out var valuesGradient4D);
+        // Manual attention backward (Engine.ScaledDotProductAttentionBackward may have issues)
+        // attentionOutputGradient: [B, H, S, D], _lastAttentionScores: [B, H, S, S]
+        // _lastProjectedQueries/Keys/Values: [B, H, S, D]
+        T scaleVal = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        var queriesGradient4D = new Tensor<T>(_lastProjectedQueries.Shape);
+        var keysGradient4D = new Tensor<T>(_lastProjectedKeys.Shape);
+        var valuesGradient4D = new Tensor<T>(_lastProjectedValues.Shape);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < _headCount; h++)
+            {
+                // Extract 2D slices for this batch+head
+                var dOut = new Tensor<T>([sequenceLength, _headDimension]);
+                var Q = new Tensor<T>([sequenceLength, _headDimension]);
+                var K = new Tensor<T>([sequenceLength, _headDimension]);
+                var V = new Tensor<T>([sequenceLength, _headDimension]);
+                var attnW = new Tensor<T>([sequenceLength, sequenceLength]);
+
+                for (int s = 0; s < sequenceLength; s++)
+                {
+                    for (int d = 0; d < _headDimension; d++)
+                    {
+                        dOut[s, d] = attentionOutputGradient[b, h, s, d];
+                        Q[s, d] = _lastProjectedQueries[b, h, s, d];
+                        K[s, d] = _lastProjectedKeys[b, h, s, d];
+                        V[s, d] = _lastProjectedValues[b, h, s, d];
+                    }
+                    for (int s2 = 0; s2 < sequenceLength; s2++)
+                        attnW[s, s2] = _lastAttentionScores[b, h, s, s2];
+                }
+
+                // dV = attnW^T @ dOut
+                var dV = Engine.TensorMatMul(Engine.TensorTranspose(attnW), dOut);
+                // dAttnW = dOut @ V^T
+                var dAttnW = Engine.TensorMatMul(dOut, Engine.TensorTranspose(V));
+
+                // Softmax backward: dScores = attnW * (dAttnW - sum(attnW * dAttnW, dim=-1))
+                var aDotG = Engine.TensorMultiply(attnW, dAttnW);
+                var rowSums = Engine.ReduceSum(aDotG, [1], keepDims: true);
+                var rowSumsExpanded = Engine.TensorRepeatElements(rowSums, sequenceLength, axis: 1);
+                var dScores = Engine.TensorMultiply(attnW, Engine.TensorSubtract(dAttnW, rowSumsExpanded));
+                dScores = Engine.TensorMultiplyScalar(dScores, scaleVal);
+
+                // dQ = dScores @ K, dK = dScores^T @ Q
+                var dQ = Engine.TensorMatMul(dScores, K);
+                var dK = Engine.TensorMatMul(Engine.TensorTranspose(dScores), Q);
+
+                // Write back
+                for (int s = 0; s < sequenceLength; s++)
+                    for (int d = 0; d < _headDimension; d++)
+                    {
+                        queriesGradient4D[b, h, s, d] = dQ[s, d];
+                        keysGradient4D[b, h, s, d] = dK[s, d];
+                        valuesGradient4D[b, h, s, d] = dV[s, d];
+                    }
+            }
+        }
 
         // Apply inverse RoPE rotation to Q/K gradients before reshaping.
         // The forward pass cached post-RoPE Q/K, so attention backward gives gradients
@@ -1181,8 +1227,8 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var keysGradient = keysGradient4D.Transpose([0, 2, 1, 3]).Reshape([batchSize, sequenceLength, embeddingDimension]);
         var valuesGradient = valuesGradient4D.Transpose([0, 2, 1, 3]).Reshape([batchSize, sequenceLength, embeddingDimension]);
 
-        // Compute weight gradients: per-batch matmul (3D Tensor.Multiply uses broken BatchMatMul)
-        // For Q = input @ Wq^T: dWq = dQ^T @ input = [embed, batch*seq] @ [batch*seq, embed]
+        // Compute weight gradients: per-batch matmul
+        // Forward: Q = input @ Wq (not Wq^T), so dWq = input^T @ dQ
         _queryWeightsGradient = new Tensor<T>([embeddingDimension, embeddingDimension]);
         _keyWeightsGradient = new Tensor<T>([embeddingDimension, embeddingDimension]);
         _valueWeightsGradient = new Tensor<T>([embeddingDimension, embeddingDimension]);
@@ -1193,11 +1239,11 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var dKB = keysGradient.GetSliceAlongDimension(b, 0);
             var dVB = valuesGradient.GetSliceAlongDimension(b, 0);
             _queryWeightsGradient = _queryWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(dQB), inputB));
+                Engine.TensorMatMul(Engine.TensorTranspose(inputB), dQB));
             _keyWeightsGradient = _keyWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(dKB), inputB));
+                Engine.TensorMatMul(Engine.TensorTranspose(inputB), dKB));
             _valueWeightsGradient = _valueWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(dVB), inputB));
+                Engine.TensorMatMul(Engine.TensorTranspose(inputB), dVB));
         }
 
         // Compute input gradient using tensor transpose
