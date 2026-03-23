@@ -682,29 +682,28 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
                 _numOps.Multiply(oneMinusCNorm, oneMinusCNorm),
                 _numOps.FromDouble(4.0));
 
+            // Backward computes Euclidean gradients with exp_map Jacobian correction
+            // The exponential map at origin has Jacobian = 2*I, so gradients need 2x scaling
+            var expMapJacobian = _numOps.FromDouble(2.0);
             for (int o = 0; o < OutputFeatures; o++)
             {
-                T gradOutput = gradTensor[b, o];
-
-                // Scale the output gradient by the conformal factor for Riemannian geometry
-                var riemannianGrad = _numOps.Multiply(gradOutput, conformalFactor);
+                T gradOutput = _numOps.Multiply(gradTensor[b, o], expMapJacobian);
 
                 for (int i = 0; i < InputFeatures; i++)
                 {
-                    // Weight gradient: Riemannian gradient scaled by input direction
+                    // Weight gradient with exp_map Jacobian correction
                     var existingWGrad = _weightsGradient[o, i];
-                    var inputContrib = _numOps.Multiply(riemannianGrad, projectedInput[i]);
+                    var inputContrib = _numOps.Multiply(gradOutput, projectedInput[i]);
                     _weightsGradient[o, i] = _numOps.Add(existingWGrad, inputContrib);
 
-                    // Bias gradient: Riemannian gradient (conformal factor already applied)
-                    // Distributed across input features for the bias point
+                    // Bias gradient
                     var existingBGrad = _biasesGradient[o, i];
-                    var biasContrib = _numOps.Divide(riemannianGrad, _numOps.FromDouble(InputFeatures));
+                    var biasContrib = _numOps.Divide(gradOutput, _numOps.FromDouble(InputFeatures));
                     _biasesGradient[o, i] = _numOps.Add(existingBGrad, biasContrib);
 
-                    // Input gradient: Riemannian gradient scaled by weight direction
+                    // Input gradient
                     var existingIGrad = inputGradient[b, i];
-                    var weightContrib = _numOps.Multiply(riemannianGrad, _weights[o, i]);
+                    var weightContrib = _numOps.Multiply(gradOutput, _weights[o, i]);
                     inputGradient[b, i] = _numOps.Add(existingIGrad, weightContrib);
                 }
             }
