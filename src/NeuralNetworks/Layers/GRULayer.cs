@@ -1253,7 +1253,13 @@ public class GRULayer<T> : LayerBase<T>
             var oneMinusLastZ = ones1.Subtract(_lastZ);
 
             var dh_candidate = dh.ElementwiseMultiply(oneMinusLastZ);
-            var dz = dh.ElementwiseMultiply(_lastHiddenState.Subtract(_lastH));
+            // dh/dz = h_prev - h_candidate. For single timestep, h_prev = 0
+            // _lastH is h_candidate, _lastHiddenState is the final h (= z*h_prev + (1-z)*h_candidate)
+            // We need h_prev, not _lastHiddenState
+            var h_prev_for_dz = (_allHiddenStates != null && _allHiddenStates.Count >= 2)
+                ? _allHiddenStates[_allHiddenStates.Count - 2]
+                : new Tensor<T>(_lastH.Shape); // zeros for first timestep
+            var dz = dh.ElementwiseMultiply(h_prev_for_dz.Subtract(_lastH));
 
             // h_candidate = tanh(Wh @ x + Uh @ (r * h_prev) + bh)
             // tanh derivative: (1 - h_candidate^2)
