@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu; // For IGpuBuffer
 using AiDotNet.Tensors.Engines.Gpu;
@@ -37,6 +39,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "4, 3", TestConstructorArgs = "3, 6, 3")]
 public class SpiralConvLayer<T> : LayerBase<T>
 {
     #region Properties

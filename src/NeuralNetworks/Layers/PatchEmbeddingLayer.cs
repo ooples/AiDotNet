@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -27,6 +28,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// the patches like "words" in a sentence.
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Embedding)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "3, 8, 8", TestConstructorArgs = "3, 8, 8, 4, 16")]
 public class PatchEmbeddingLayer<T> : LayerBase<T>
 {
     /// <summary>

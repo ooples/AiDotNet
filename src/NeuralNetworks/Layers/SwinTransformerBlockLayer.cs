@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -25,6 +27,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Reference: Liu et al., "Swin Transformer: Hierarchical Vision Transformer using Shifted Windows", ICCV 2021
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Transformer)]
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "16, 2, 4")]
 public class SwinTransformerBlockLayer<T> : LayerBase<T>
 {
     private readonly int _dim;

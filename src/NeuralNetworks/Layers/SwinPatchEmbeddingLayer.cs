@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -18,6 +21,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Reference: Liu et al., "Swin Transformer: Hierarchical Vision Transformer using Shifted Windows", ICCV 2021
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Embedding)]
+[LayerCategory(LayerCategory.Transformer)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "3, 8, 8", TestConstructorArgs = "3, 8, 8, 4, 16")]
 public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 {
     private readonly int _patchSize;

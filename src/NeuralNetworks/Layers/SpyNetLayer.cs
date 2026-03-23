@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -32,6 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// CVPR 2017. https://arxiv.org/abs/1611.00850
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "2, 8, 8", TestConstructorArgs = "2, 8, 8")]
 public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     #region Fields

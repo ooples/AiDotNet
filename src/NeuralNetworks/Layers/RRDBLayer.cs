@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -51,6 +52,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// ECCV 2018 Workshops. https://arxiv.org/abs/1809.00219
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Residual)]
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
 public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     #region Fields
