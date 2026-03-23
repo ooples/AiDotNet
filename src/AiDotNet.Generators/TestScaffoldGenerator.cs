@@ -34,6 +34,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const string INeuralNetworkModelName = "AiDotNet.Interfaces.INeuralNetworkModel";
     private const string IDiffusionModelName = "AiDotNet.Interfaces.IDiffusionModel";
     private const string IGaussianProcessPrefix = "AiDotNet.Interfaces.IGaussianProcess<";
+    private const string IActivationFunctionPrefix = "AiDotNet.Interfaces.IActivationFunction<";
+    private const string ILossFunctionPrefix = "AiDotNet.Interfaces.ILossFunction<";
 
     // Attribute metadata names
     private const string ModelDomainAttr = "AiDotNet.Attributes.ModelDomainAttribute";
