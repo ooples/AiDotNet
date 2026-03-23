@@ -1,6 +1,8 @@
 
 
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -33,6 +35,12 @@ namespace AiDotNet.ActivationFunctions;
 /// the function's slope becomes very small, which can slow down learning in deep networks.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationCategory(ActivationCategory.Gate)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationTask(ActivationTask.RecurrentGating)]
+[ActivationTask(ActivationTask.GenerativeOutput)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, Cost = ComputeCost.Medium)]
 public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
 {
     /// <summary>

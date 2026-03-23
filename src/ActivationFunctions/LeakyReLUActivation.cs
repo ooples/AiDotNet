@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -24,6 +26,9 @@ namespace AiDotNet.ActivationFunctions;
 /// - Allows a small "leak" when the input is negative (controlled by the alpha parameter)
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

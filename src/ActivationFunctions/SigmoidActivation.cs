@@ -1,6 +1,8 @@
 
 
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -26,6 +28,11 @@ namespace AiDotNet.ActivationFunctions;
 /// gradient problem").
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Gate)]
+[ActivationCategory(ActivationCategory.Output)]
+[ActivationTask(ActivationTask.RecurrentGating)]
+[ActivationTask(ActivationTask.OutputLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = false, IsBounded = true, Cost = ComputeCost.Medium)]
 public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
 {
     /// <summary>

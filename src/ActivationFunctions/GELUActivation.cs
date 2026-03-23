@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -26,6 +28,10 @@ namespace AiDotNet.ActivationFunctions;
 /// older activation functions in many deep learning tasks.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationTask(ActivationTask.TransformerFFN)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.High)]
 public class GELUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
