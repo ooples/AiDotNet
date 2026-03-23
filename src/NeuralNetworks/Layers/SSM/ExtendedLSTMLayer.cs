@@ -680,19 +680,33 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_forgetGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_inputGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+
+        Vector<T> G(Tensor<T>? grad, Tensor<T> param) =>
+            grad != null ? new Vector<T>(grad.ToArray()) : new Vector<T>(param.Length);
+
         return Vector<T>.Concatenate(
-            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
-            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()));
+            G(_inputGateWeightsGradient, _inputGateWeights),
+            G(_inputGateBiasGradient, _inputGateBias),
+            G(_forgetGateWeightsGradient, _forgetGateWeights),
+            G(_forgetGateBiasGradient, _forgetGateBias),
+            G(_outputGateWeightsGradient, _outputGateWeights),
+            G(_outputGateBiasGradient, _outputGateBias),
+            G(_queryWeightsGradient, _queryWeights),
+            G(_keyWeightsGradient, _keyWeights),
+            G(_valueWeightsGradient, _valueWeights),
+            G(_outputProjectionWeightsGradient, _outputProjectionWeights),
+            G(_outputProjectionBiasGradient, _outputProjectionBias));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null; _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _inputGateWeightsGradient = null; _inputGateBiasGradient = null;
+        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null;
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />
