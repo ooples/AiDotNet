@@ -2012,7 +2012,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static ComponentTestInfo? ExtractActivationInfo(INamedTypeSymbol symbol)
     {
         bool isMonotonic = true, zeroPreserving = true, isBounded = false;
-        bool isVectorActivation = false, hasLearnableParams = false;
+        bool isVectorActivation = false, hasLearnableParams = false, isStochastic = false;
+        double boundLower = -1.0, boundUpper = 1.0;
 
         foreach (var attr in symbol.GetAttributes())
         {
@@ -2039,6 +2040,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     case "HasLearnableParameters":
                         hasLearnableParams = (bool)(named.Value.Value ?? false);
                         break;
+                    case "IsStochastic":
+                        isStochastic = (bool)(named.Value.Value ?? false);
+                        break;
+                    case "BoundLower":
+                        boundLower = (double)(named.Value.Value ?? -1.0);
+                        break;
+                    case "BoundUpper":
+                        boundUpper = (double)(named.Value.Value ?? 1.0);
+                        break;
                 }
             }
         }
@@ -2055,6 +2065,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             IsBounded = isBounded,
             IsVectorActivation = isVectorActivation,
             HasLearnableParameters = hasLearnableParams,
+            IsStochastic = isStochastic,
+            BoundLower = boundLower,
+            BoundUpper = boundUpper,
             HasParameterlessConstructor = hasParameterlessCtor,
             IsActivation = true
         };
@@ -2282,7 +2295,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (!act.ZeroPreserving)
             sb.AppendLine("    protected override bool ZeroMapsToZero => false;");
         if (act.IsBounded)
+        {
             sb.AppendLine("    protected override bool IsBounded => true;");
+            if (act.BoundLower != -1.0)
+                sb.AppendLine($"    protected override double BoundLower => {act.BoundLower.ToString(System.Globalization.CultureInfo.InvariantCulture)};");
+            if (act.BoundUpper != 1.0)
+                sb.AppendLine($"    protected override double BoundUpper => {act.BoundUpper.ToString(System.Globalization.CultureInfo.InvariantCulture)};");
+        }
+        if (act.IsStochastic)
+            sb.AppendLine("    protected override bool IsStochastic => true;");
 
         sb.AppendLine("}");
 
@@ -2430,8 +2451,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool IsMonotonic { get; set; } = true;
         public bool ZeroPreserving { get; set; } = true;
         public bool IsBounded { get; set; }
+        public double BoundLower { get; set; } = -1.0;
+        public double BoundUpper { get; set; } = 1.0;
         public bool IsVectorActivation { get; set; }
         public bool HasLearnableParameters { get; set; }
+        public bool IsStochastic { get; set; }
 
         // Loss-specific
         public bool IsNonNegative { get; set; } = true;

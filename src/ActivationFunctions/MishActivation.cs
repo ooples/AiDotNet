@@ -58,25 +58,27 @@ public class MishActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
-        // Numerically stable softplus: ln(1 + e^x)
-        // For large positive x: ≈ x; For large negative x: ≈ e^x
+        // Numerically stable Mish: x * tanh(softplus(x))
+        // For large positive x: softplus(x) ≈ x, tanh(x) ≈ 1, so Mish(x) ≈ x
+        // For large negative x: softplus(x) ≈ e^x ≈ 0, tanh(0) ≈ 0, so Mish(x) ≈ 0
         T threshold = NumOps.FromDouble(20.0);
         T negThreshold = NumOps.Negate(threshold);
-        T softplus;
 
+        // Large positive: tanh(softplus(x)) → 1, so return x directly
         if (NumOps.GreaterThan(input, threshold))
         {
-            softplus = input;
-        }
-        else if (NumOps.LessThan(input, negThreshold))
-        {
-            softplus = NumOps.Exp(input);
-        }
-        else
-        {
-            softplus = NumericalStabilityHelper.SafeLog(NumOps.Add(NumOps.One, NumOps.Exp(input)));
+            return input;
         }
 
+        // Large negative: tanh(softplus(x)) → 0, so return ≈ 0
+        if (NumOps.LessThan(input, negThreshold))
+        {
+            // More precisely: x * tanh(e^x) ≈ x * e^x for small e^x
+            T expInput = NumOps.Exp(input);
+            return NumOps.Multiply(input, expInput);
+        }
+
+        T softplus = NumericalStabilityHelper.SafeLog(NumOps.Add(NumOps.One, NumOps.Exp(input)));
         T tanh = MathHelper.Tanh(softplus);
 
         return NumOps.Multiply(input, tanh);

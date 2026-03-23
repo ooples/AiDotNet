@@ -24,7 +24,7 @@ namespace AiDotNet.ActivationFunctions;
 /// </remarks>
 [ActivationCategory(ActivationCategory.Stochastic)]
 [ActivationTask(ActivationTask.HiddenLayer)]
-[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = false, Cost = ComputeCost.Low)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = false, IsStochastic = true, Cost = ComputeCost.Low)]
 public class RReLUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

@@ -29,7 +29,7 @@ namespace AiDotNet.ActivationFunctions;
 /// </remarks>
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
-[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, IsDifferentiable = false, Cost = ComputeCost.Low)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, BoundLower = 0.0, BoundUpper = 6.0, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class ReLU6Activation<T> : ActivationFunctionBase<T>
 {
     private readonly T _six;

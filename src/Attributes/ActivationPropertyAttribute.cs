@@ -27,6 +27,26 @@ public sealed class ActivationPropertyAttribute : Attribute
     /// <summary>Whether it's differentiable everywhere. Default: true.</summary>
     public bool IsDifferentiable { get; set; } = true;
 
+    /// <summary>
+    /// Whether the activation uses randomness during training (e.g., RReLU).
+    /// When true, determinism and numerical gradient tests are skipped since
+    /// successive calls with the same input may produce different outputs.
+    /// Default: false.
+    /// </summary>
+    public bool IsStochastic { get; set; }
+
+    /// <summary>
+    /// Lower bound of the output range for bounded activations.
+    /// Only used when IsBounded is true. Default: -1.0 (for tanh-like activations).
+    /// </summary>
+    public double BoundLower { get; set; } = -1.0;
+
+    /// <summary>
+    /// Upper bound of the output range for bounded activations.
+    /// Only used when IsBounded is true. Default: 1.0 (for tanh-like activations).
+    /// </summary>
+    public double BoundUpper { get; set; } = 1.0;
+
     /// <summary>Relative computational cost. Default: Medium.</summary>
     public ComputeCost Cost { get; set; } = ComputeCost.Medium;
 }
