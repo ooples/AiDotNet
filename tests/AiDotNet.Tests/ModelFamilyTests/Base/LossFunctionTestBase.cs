@@ -26,6 +26,42 @@ public abstract class LossFunctionTestBase
     /// </summary>
     protected virtual bool ZeroLossForIdentical => true;
 
+    /// <summary>
+    /// Standard test predicted values. Override for losses that need specific input formats.
+    /// Default: continuous values in [0,1] range.
+    /// </summary>
+    protected virtual double[] TestPredicted => [0.2, 0.5, 0.8];
+
+    /// <summary>
+    /// Standard test actual values. Override for losses that need specific input formats.
+    /// </summary>
+    protected virtual double[] TestActual => [0.3, 0.6, 0.7];
+
+    /// <summary>
+    /// Small-error predicted values for the "larger error produces larger loss" test.
+    /// </summary>
+    protected virtual double[] SmallErrorPredicted => [0.6, 0.6, 0.6];
+
+    /// <summary>
+    /// Large-error predicted values for the "larger error produces larger loss" test.
+    /// </summary>
+    protected virtual double[] LargeErrorPredicted => [0.9, 0.9, 0.9];
+
+    /// <summary>
+    /// Actual values for the error magnitude comparison test.
+    /// </summary>
+    protected virtual double[] ErrorTestActual => [0.5, 0.5, 0.5];
+
+    /// <summary>
+    /// Predicted value for the gradient sign direction test (should be > SignTestActual).
+    /// </summary>
+    protected virtual double[] SignTestPredicted => [0.9];
+
+    /// <summary>
+    /// Actual value for the gradient sign direction test.
+    /// </summary>
+    protected virtual double[] SignTestActual => [0.1];
+
     // =========================================================================
     // INVARIANT 1: Loss is finite for normal inputs
     // =========================================================================
@@ -34,8 +70,8 @@ public abstract class LossFunctionTestBase
     public void CalculateLoss_ShouldBeFinite()
     {
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.2, 0.5, 0.8 });
-        var actual = new Vector<double>(new[] { 0.3, 0.6, 0.7 });
+        var predicted = new Vector<double>(TestPredicted);
+        var actual = new Vector<double>(TestActual);
 
         double value = loss.CalculateLoss(predicted, actual);
 
@@ -53,8 +89,8 @@ public abstract class LossFunctionTestBase
         if (!IsNonNegative) return;
 
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.1, 0.9, 0.5 });
-        var actual = new Vector<double>(new[] { 0.8, 0.2, 0.5 });
+        var predicted = new Vector<double>(TestPredicted);
+        var actual = new Vector<double>(TestActual);
 
         double value = loss.CalculateLoss(predicted, actual);
         Assert.True(value >= -1e-10, $"Loss should be non-negative but got {value}.");
@@ -85,9 +121,9 @@ public abstract class LossFunctionTestBase
     public void CalculateLoss_LargerError_ShouldProduceLargerLoss()
     {
         var loss = CreateLoss();
-        var actual = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
-        var smallError = new Vector<double>(new[] { 0.6, 0.6, 0.6 });
-        var largeError = new Vector<double>(new[] { 0.9, 0.9, 0.9 });
+        var actual = new Vector<double>(ErrorTestActual);
+        var smallError = new Vector<double>(SmallErrorPredicted);
+        var largeError = new Vector<double>(LargeErrorPredicted);
 
         double smallLoss = loss.CalculateLoss(smallError, actual);
         double largeLoss = loss.CalculateLoss(largeError, actual);
@@ -104,8 +140,8 @@ public abstract class LossFunctionTestBase
     public void CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.2, 0.5, 0.8 });
-        var actual = new Vector<double>(new[] { 0.3, 0.6, 0.7 });
+        var predicted = new Vector<double>(TestPredicted);
+        var actual = new Vector<double>(TestActual);
 
         var derivative = loss.CalculateDerivative(predicted, actual);
 
@@ -150,8 +186,8 @@ public abstract class LossFunctionTestBase
     public void CalculateDerivative_ShouldMatchNumericalGradient()
     {
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.3, 0.6, 0.4 });
-        var actual = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
+        var predicted = new Vector<double>(TestPredicted);
+        var actual = new Vector<double>(TestActual);
         double epsilon = 1e-5;
 
         var analyticalGrad = loss.CalculateDerivative(predicted, actual);
@@ -188,9 +224,8 @@ public abstract class LossFunctionTestBase
     public void CalculateDerivative_SignShouldMatchErrorDirection()
     {
         var loss = CreateLoss();
-        // predicted is clearly above actual
-        var predicted = new Vector<double>(new[] { 0.9 });
-        var actual = new Vector<double>(new[] { 0.1 });
+        var predicted = new Vector<double>(SignTestPredicted);
+        var actual = new Vector<double>(SignTestActual);
 
         var derivative = loss.CalculateDerivative(predicted, actual);
 

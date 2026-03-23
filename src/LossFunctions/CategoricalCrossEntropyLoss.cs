@@ -35,7 +35,7 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 [LossCategory(LossCategory.Classification)]
 [LossTask(LossTask.MultiClass)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = true, RequiresProbabilityInputs = true, SupportsClassWeights = true, ExpectedOutput = OutputType.Probabilities)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, RequiresProbabilityInputs = true, SupportsClassWeights = true, TestInputFormat = LossTestInputFormat.ProbabilityDistribution, ExpectedOutput = OutputType.Probabilities)]
 public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

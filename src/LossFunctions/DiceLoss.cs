@@ -34,7 +34,7 @@ namespace AiDotNet.LossFunctions;
 [LossCategory(LossCategory.Segmentation)]
 [LossTask(LossTask.SemanticSegmentation)]
 [LossTask(LossTask.InstanceSegmentation)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = true, HandlesImbalancedData = true, RequiresProbabilityInputs = true, ExpectedOutput = OutputType.Probabilities)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, HandlesImbalancedData = true, RequiresProbabilityInputs = true, TestInputFormat = LossTestInputFormat.SegmentationMask, ExpectedOutput = OutputType.Probabilities)]
 public class DiceLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

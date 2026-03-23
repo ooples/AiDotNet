@@ -1515,7 +1515,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
                 // Skip ImageMatrix (requires feature extractor function — can't auto-construct)
                 // Skip SelfSupervised (implements ISelfSupervisedLoss, not LossFunctionBase)
-                if (loss.ApiShape == ApiShapeImageMatrix || loss.ApiShape == ApiShapeSelfSupervised)
+                // Skip ComplexInterleaved (needs ComplexLossTestBase — TODO)
+                if (loss.ApiShape == ApiShapeImageMatrix || loss.ApiShape == ApiShapeSelfSupervised || loss.ApiShape == ApiShapeComplexInterleaved)
                 {
                     lossTested++; // Don't count as untested since they can't auto-test
                     continue;
@@ -2083,12 +2084,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const int ApiShapeImageMatrix = 3;
     private const int ApiShapeSelfSupervised = 4;
     private const int ApiShapeSparseIndex = 5;
+    private const int ApiShapeComplexInterleaved = 6;
+
+    // LossTestInputFormat enum values (must match AiDotNet.Enums.LossTestInputFormat)
+    private const int InputFormatContinuous = 0;
+    private const int InputFormatSignedLabels = 1;
+    private const int InputFormatProbabilityDistribution = 2;
+    private const int InputFormatSimilarityLabels = 3;
+    private const int InputFormatCriticScores = 4;
+    private const int InputFormatSegmentationMask = 5;
+    private const int InputFormatMarginBased = 6;
 
     private static ComponentTestInfo? ExtractLossInfo(INamedTypeSymbol symbol)
     {
         bool isNonNegative = true, zeroForIdentical = true;
         bool throwsNotSupported = false;
         int apiShape = ApiShapeVectorVector;
+        int testInputFormat = 0; // Continuous
 
         foreach (var attr in symbol.GetAttributes())
         {
@@ -2108,6 +2120,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         break;
                     case "ApiShape":
                         apiShape = (int)(named.Value.Value ?? 0);
+                        break;
+                    case "TestInputFormat":
+                        testInputFormat = (int)(named.Value.Value ?? 0);
                         break;
                 }
             }
@@ -2162,6 +2177,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ThrowsNotSupported = throwsNotSupported,
             ExtendsLossFunctionBase = extendsBase,
             ApiShape = apiShape,
+            TestInputFormat = testInputFormat,
             IsActivation = false
         };
     }
@@ -2343,10 +2359,90 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (!loss.ZeroForIdentical)
             sb.AppendLine("    protected override bool ZeroLossForIdentical => false;");
 
+        // Emit test data overrides based on TestInputFormat
+        EmitTestDataOverrides(sb, loss.TestInputFormat);
+
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(loss.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
         context.AddSource(hintName, sb.ToString());
+    }
+
+    /// <summary>
+    /// Emits virtual property overrides for test data based on the loss input format.
+    /// </summary>
+    private static void EmitTestDataOverrides(StringBuilder sb, int testInputFormat)
+    {
+        switch (testInputFormat)
+        {
+            case InputFormatSignedLabels:
+                // Hinge, SquaredHinge, ModifiedHuber, Exponential: labels in {-1, +1}
+                sb.AppendLine("    protected override double[] TestPredicted => new[] { 0.5, -0.3, 1.2 };");
+                sb.AppendLine("    protected override double[] TestActual => new[] { 1.0, -1.0, 1.0 };");
+                sb.AppendLine("    protected override double[] SmallErrorPredicted => new[] { 0.8, -0.8, 0.8 };");
+                sb.AppendLine("    protected override double[] LargeErrorPredicted => new[] { -0.5, 0.5, -0.5 };");
+                sb.AppendLine("    protected override double[] ErrorTestActual => new[] { 1.0, -1.0, 1.0 };");
+                sb.AppendLine("    protected override double[] SignTestPredicted => new[] { 2.0 };");
+                sb.AppendLine("    protected override double[] SignTestActual => new[] { 1.0 };");
+                break;
+
+            case InputFormatProbabilityDistribution:
+                // CrossEntropy, CategoricalCE, Focal, WeightedCE: probabilities
+                sb.AppendLine("    protected override double[] TestPredicted => new[] { 0.7, 0.2, 0.1 };");
+                sb.AppendLine("    protected override double[] TestActual => new[] { 1.0, 0.0, 0.0 };");
+                sb.AppendLine("    protected override double[] SmallErrorPredicted => new[] { 0.8, 0.1, 0.1 };");
+                sb.AppendLine("    protected override double[] LargeErrorPredicted => new[] { 0.4, 0.3, 0.3 };");
+                sb.AppendLine("    protected override double[] ErrorTestActual => new[] { 1.0, 0.0, 0.0 };");
+                sb.AppendLine("    protected override double[] SignTestPredicted => new[] { 0.9 };");
+                sb.AppendLine("    protected override double[] SignTestActual => new[] { 1.0 };");
+                break;
+
+            case InputFormatSimilarityLabels:
+                // ContrastiveLoss: similarity {0,1} with distance predictions
+                sb.AppendLine("    protected override double[] TestPredicted => new[] { 0.5, 1.2, 0.3 };");
+                sb.AppendLine("    protected override double[] TestActual => new[] { 1.0, 0.0, 1.0 };");
+                sb.AppendLine("    protected override double[] SmallErrorPredicted => new[] { 0.2, 0.8, 0.2 };");
+                sb.AppendLine("    protected override double[] LargeErrorPredicted => new[] { 1.5, 0.1, 1.5 };");
+                sb.AppendLine("    protected override double[] ErrorTestActual => new[] { 1.0, 0.0, 1.0 };");
+                sb.AppendLine("    protected override double[] SignTestPredicted => new[] { 0.5 };");
+                sb.AppendLine("    protected override double[] SignTestActual => new[] { 1.0 };");
+                break;
+
+            case InputFormatCriticScores:
+                // Wasserstein: critic scores with {-1, +1} labels
+                sb.AppendLine("    protected override double[] TestPredicted => new[] { 2.5, -1.3, 0.8 };");
+                sb.AppendLine("    protected override double[] TestActual => new[] { 1.0, -1.0, 1.0 };");
+                sb.AppendLine("    protected override double[] SmallErrorPredicted => new[] { 0.8, -0.8, 0.8 };");
+                sb.AppendLine("    protected override double[] LargeErrorPredicted => new[] { -0.5, 0.5, -0.5 };");
+                sb.AppendLine("    protected override double[] ErrorTestActual => new[] { 1.0, -1.0, 1.0 };");
+                sb.AppendLine("    protected override double[] SignTestPredicted => new[] { 2.0 };");
+                sb.AppendLine("    protected override double[] SignTestActual => new[] { 1.0 };");
+                break;
+
+            case InputFormatSegmentationMask:
+                // Dice, Jaccard: binary mask predictions
+                sb.AppendLine("    protected override double[] TestPredicted => new[] { 0.8, 0.1, 0.9 };");
+                sb.AppendLine("    protected override double[] TestActual => new[] { 1.0, 0.0, 1.0 };");
+                sb.AppendLine("    protected override double[] SmallErrorPredicted => new[] { 0.9, 0.1, 0.9 };");
+                sb.AppendLine("    protected override double[] LargeErrorPredicted => new[] { 0.5, 0.5, 0.5 };");
+                sb.AppendLine("    protected override double[] ErrorTestActual => new[] { 1.0, 0.0, 1.0 };");
+                sb.AppendLine("    protected override double[] SignTestPredicted => new[] { 0.9 };");
+                sb.AppendLine("    protected override double[] SignTestActual => new[] { 1.0 };");
+                break;
+
+            case InputFormatMarginBased:
+                // MarginLoss (capsule networks)
+                sb.AppendLine("    protected override double[] TestPredicted => new[] { 0.85, 0.15, 0.75 };");
+                sb.AppendLine("    protected override double[] TestActual => new[] { 1.0, 0.0, 1.0 };");
+                sb.AppendLine("    protected override double[] SmallErrorPredicted => new[] { 0.88, 0.12, 0.88 };");
+                sb.AppendLine("    protected override double[] LargeErrorPredicted => new[] { 0.5, 0.5, 0.5 };");
+                sb.AppendLine("    protected override double[] ErrorTestActual => new[] { 1.0, 0.0, 1.0 };");
+                sb.AppendLine("    protected override double[] SignTestPredicted => new[] { 0.85 };");
+                sb.AppendLine("    protected override double[] SignTestActual => new[] { 1.0 };");
+                break;
+
+            // InputFormatContinuous (0) = default, no overrides needed
+        }
     }
 
     /// <summary>
@@ -2463,6 +2559,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool ThrowsNotSupported { get; set; }
         public bool ExtendsLossFunctionBase { get; set; }
         public int ApiShape { get; set; }
+        public int TestInputFormat { get; set; }
     }
 
     private static void EmitTestCoverageClass(

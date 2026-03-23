@@ -36,7 +36,7 @@ namespace AiDotNet.LossFunctions;
 [LossCategory(LossCategory.Ranking)]
 [LossTask(LossTask.BinaryClassification)]
 [LossTask(LossTask.Ranking)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ExpectedOutput = OutputType.Logits)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, TestInputFormat = LossTestInputFormat.MarginBased, ExpectedOutput = OutputType.Logits)]
 public class MarginLoss<T> : LossFunctionBase<T>
 {
     private readonly T _mPlus;

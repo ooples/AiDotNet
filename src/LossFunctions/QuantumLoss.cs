@@ -10,7 +10,7 @@ namespace AiDotNet.LossFunctions;
 [LossCategory(LossCategory.Classification)]
 [LossTask(LossTask.BinaryClassification)]
 [LossTask(LossTask.MultiClass)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Continuous)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ApiShape = LossApiShape.ComplexInterleaved, ExpectedOutput = OutputType.Continuous)]
 public class QuantumLoss<T> : LossFunctionBase<T>
 {
     public QuantumLoss()

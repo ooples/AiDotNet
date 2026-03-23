@@ -41,5 +41,11 @@ public enum LossApiShape
     /// Predicted = class probabilities (length = num_classes), actual = class indices (length = batch_size).
     /// Used by SparseCategoricalCrossEntropyLoss.
     /// </summary>
-    SparseIndex
+    SparseIndex,
+
+    /// <summary>
+    /// Standard CalculateLoss(Vector, Vector) but inputs are complex-interleaved pairs [real, imag, real, imag, ...].
+    /// Used by QuantumLoss which operates on quantum state fidelity.
+    /// </summary>
+    ComplexInterleaved
 }

@@ -39,7 +39,7 @@ namespace AiDotNet.LossFunctions;
 [LossCategory(LossCategory.Reconstruction)]
 [LossTask(LossTask.SuperResolution)]
 [LossTask(LossTask.Denoising)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsRobustToOutliers = true, ExpectedOutput = OutputType.Continuous)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, IsRobustToOutliers = true, ExpectedOutput = OutputType.Continuous)]
 public class CharbonnierLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

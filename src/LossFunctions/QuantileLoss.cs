@@ -29,7 +29,7 @@ namespace AiDotNet.LossFunctions;
 [LossCategory(LossCategory.Regression)]
 [LossTask(LossTask.Regression)]
 [LossTask(LossTask.TimeSeriesForecasting)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsRobustToOutliers = true, ExpectedOutput = OutputType.Continuous)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, IsRobustToOutliers = true, ExpectedOutput = OutputType.Continuous)]
 public class QuantileLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

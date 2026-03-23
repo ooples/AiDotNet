@@ -39,7 +39,7 @@ namespace AiDotNet.LossFunctions;
 [LossCategory(LossCategory.Regularization)]
 [LossCategory(LossCategory.Regression)]
 [LossTask(LossTask.Regression)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Continuous)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ExpectedOutput = OutputType.Continuous)]
 public class ElasticNetLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

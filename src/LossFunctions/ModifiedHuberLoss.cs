@@ -33,7 +33,7 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 [LossCategory(LossCategory.Classification)]
 [LossTask(LossTask.BinaryClassification)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = false, IsRobustToOutliers = true, ExpectedOutput = OutputType.Logits)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, IsRobustToOutliers = true, TestInputFormat = LossTestInputFormat.SignedLabels, ExpectedOutput = OutputType.Logits)]
 public class ModifiedHuberLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

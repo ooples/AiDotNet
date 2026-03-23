@@ -38,7 +38,7 @@ namespace AiDotNet.LossFunctions;
 [LossTask(LossTask.BinaryClassification)]
 [LossTask(LossTask.MultiClass)]
 [LossTask(LossTask.ObjectDetection)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = true, RequiresProbabilityInputs = true, HandlesImbalancedData = true, ExpectedOutput = OutputType.Probabilities)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, RequiresProbabilityInputs = true, HandlesImbalancedData = true, TestInputFormat = LossTestInputFormat.ProbabilityDistribution, ExpectedOutput = OutputType.Probabilities)]
 public class FocalLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

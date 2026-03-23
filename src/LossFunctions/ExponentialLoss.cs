@@ -35,7 +35,7 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 [LossCategory(LossCategory.Classification)]
 [LossTask(LossTask.BinaryClassification)]
-[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ExpectedOutput = OutputType.Logits)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, TestInputFormat = LossTestInputFormat.SignedLabels, ExpectedOutput = OutputType.Logits)]
 public class ExponentialLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

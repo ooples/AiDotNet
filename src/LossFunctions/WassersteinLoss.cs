@@ -45,7 +45,7 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 [LossCategory(LossCategory.Adversarial)]
 [LossTask(LossTask.ImageGeneration)]
-[LossProperty(IsNonNegative = false, ZeroForIdentical = false, ExpectedOutput = OutputType.Logits)]
+[LossProperty(IsNonNegative = false, ZeroForIdentical = false, TestInputFormat = LossTestInputFormat.CriticScores, ExpectedOutput = OutputType.Logits)]
 public class WassersteinLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

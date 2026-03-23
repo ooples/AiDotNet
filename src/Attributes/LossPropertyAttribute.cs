@@ -38,6 +38,13 @@ public sealed class LossPropertyAttribute : Attribute
     /// Default: VectorVector (standard CalculateLoss(Vector, Vector) interface).
     /// </summary>
     public LossApiShape ApiShape { get; set; } = LossApiShape.VectorVector;
+
+    /// <summary>
+    /// The format of test data that this loss function expects.
+    /// The test base class uses this to generate appropriate test vectors.
+    /// Default: Continuous (standard [0,1] range values).
+    /// </summary>
+    public LossTestInputFormat TestInputFormat { get; set; } = LossTestInputFormat.Continuous;
 }
 
 /// <summary>
