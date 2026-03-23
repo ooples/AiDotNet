@@ -866,6 +866,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// <inheritdoc />
     public override void ClearGradients()
     {
+        base.ClearGradients();
         _timeMixRGrad = null;
         _timeMixKGrad = null;
         _timeMixVGrad = null;

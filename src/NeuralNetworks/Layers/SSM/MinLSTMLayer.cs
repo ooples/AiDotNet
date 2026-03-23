@@ -632,18 +632,28 @@ public class MinLSTMLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_forgetGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
             new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
             new Vector<T>(_forgetGateBiasGradient!.ToArray()),
+            new Vector<T>(_inputGateWeightsGradient!.ToArray()),
+            new Vector<T>(_inputGateBiasGradient!.ToArray()),
             new Vector<T>(_cellCandidateWeightsGradient!.ToArray()),
-            new Vector<T>(_cellCandidateBiasGradient!.ToArray()));
+            new Vector<T>(_cellCandidateBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null; _cellCandidateWeightsGradient = null; _cellCandidateBiasGradient = null;
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null;
+        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null;
+        _inputGateWeightsGradient = null; _inputGateBiasGradient = null;
+        _cellCandidateWeightsGradient = null; _cellCandidateBiasGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

@@ -790,13 +790,22 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
             new Vector<T>(_valueWeightsGradient!.ToArray()),
             new Vector<T>(_valueBiasGradient!.ToArray()),
             new Vector<T>(_levelMixWeightsGradient!.ToArray()),
-            new Vector<T>(_compressionWeightsGradient!.ToArray()));
+            new Vector<T>(_compressionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient!.ToArray()),
+            new Vector<T>(_outputGateBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null; _levelMixWeightsGradient = null; _compressionWeightsGradient = null;
+        _queryWeightsGradient = null; _queryBiasGradient = null;
+        _keyWeightsGradient = null; _keyBiasGradient = null;
+        _valueWeightsGradient = null; _valueBiasGradient = null;
+        _levelMixWeightsGradient = null; _compressionWeightsGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

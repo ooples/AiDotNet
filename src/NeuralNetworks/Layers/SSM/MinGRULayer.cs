@@ -536,18 +536,25 @@ public class MinGRULayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_gateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
             new Vector<T>(_gateWeightsGradient!.ToArray()),
             new Vector<T>(_gateBiasGradient!.ToArray()),
             new Vector<T>(_candidateWeightsGradient!.ToArray()),
-            new Vector<T>(_candidateBiasGradient!.ToArray()));
+            new Vector<T>(_candidateBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _gateWeightsGradient = null; _gateBiasGradient = null; _candidateWeightsGradient = null; _candidateBiasGradient = null;
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null;
+        _gateWeightsGradient = null; _gateBiasGradient = null;
+        _candidateWeightsGradient = null; _candidateBiasGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

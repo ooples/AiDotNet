@@ -1058,8 +1058,10 @@ public class Mamba2Block<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_convWeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
             new Vector<T>(_convWeightsGradient!.ToArray()),
             new Vector<T>(_convBiasGradient!.ToArray()),
             new Vector<T>(_bProjectionWeightsGradient!.ToArray()),
@@ -1068,6 +1070,8 @@ public class Mamba2Block<T> : LayerBase<T>
             new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
             new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
             new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()),
             new Vector<T>(_normGammaGradient!.ToArray()),
             new Vector<T>(_normBetaGradient!.ToArray()));
     }
@@ -1075,7 +1079,14 @@ public class Mamba2Block<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _convWeightsGradient = null; _convBiasGradient = null; _bProjectionWeightsGradient = null; _cProjectionWeightsGradient = null; _aLogGradient = null; _dtProjectionWeightsGradient = null; _dtProjectionBiasGradient = null; _dParamGradient = null; _normGammaGradient = null; _normBetaGradient = null;
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null;
+        _convWeightsGradient = null; _convBiasGradient = null;
+        _bProjectionWeightsGradient = null; _cProjectionWeightsGradient = null;
+        _aLogGradient = null;
+        _dtProjectionWeightsGradient = null; _dtProjectionBiasGradient = null;
+        _dParamGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
+        _normGammaGradient = null; _normBetaGradient = null;
     }
 
     /// <inheritdoc />
