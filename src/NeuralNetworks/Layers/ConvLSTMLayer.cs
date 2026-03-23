@@ -1848,37 +1848,68 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     {
         var (f, i, c, o, newC, newH) = ForwardStep(xt, prevH, prevC);
 
-        var do_ = dh.Multiply(ApplyActivation(newC));
-        var dNewC = dh.Multiply(o).Multiply(ApplyActivationDerivative(newC)).Add(dc);
-        var df = dNewC.Multiply(prevC);
-        var di = dNewC.Multiply(c);
-        var dc_ = dNewC.Multiply(i);
-        var dprevC = dNewC.Multiply(f);
+        var do_ = Engine.TensorMultiply(dh, ApplyActivation(newC));
+        var dNewC = Engine.TensorAdd(Engine.TensorMultiply(Engine.TensorMultiply(dh, o), ApplyActivationDerivative(newC)), dc);
+        var df = Engine.TensorMultiply(dNewC, prevC);
+        var di = Engine.TensorMultiply(dNewC, c);
+        var dc_ = Engine.TensorMultiply(dNewC, i);
+        var dprevC = Engine.TensorMultiply(dNewC, f);
 
-        var dWfi = Convolve(xt.Transpose([1, 2, 3, 0]), df);
-        var dWii = Convolve(xt.Transpose([1, 2, 3, 0]), di);
-        var dWci = Convolve(xt.Transpose([1, 2, 3, 0]), dc_);
-        var dWoi = Convolve(xt.Transpose([1, 2, 3, 0]), do_);
+        // Convert NHWC to NCHW for engine conv backward operations
+        var stride = new int[] { _strides, _strides };
+        var padding = new int[] { _padding, _padding };
+        var dilation = new int[] { 1, 1 };
 
-        var dWfh = Convolve(prevH.Transpose([1, 2, 3, 0]), df);
-        var dWih = Convolve(prevH.Transpose([1, 2, 3, 0]), di);
-        var dWch = Convolve(prevH.Transpose([1, 2, 3, 0]), dc_);
-        var dWoh = Convolve(prevH.Transpose([1, 2, 3, 0]), do_);
+        var xtNCHW = xt.Transpose([0, 3, 1, 2]);
+        var prevHNCHW = prevH.Transpose([0, 3, 1, 2]);
 
+        // Gate gradients NHWC → NCHW
+        var dfNCHW = df.Transpose([0, 3, 1, 2]);
+        var diNCHW = di.Transpose([0, 3, 1, 2]);
+        var dcNCHW = dc_.Transpose([0, 3, 1, 2]);
+        var doNCHW = do_.Transpose([0, 3, 1, 2]);
+
+        // Weight gradients: dW = Conv2DBackwardKernel(gradient, input, kernelShape, stride, padding, dilation)
+        var kernelShape = _weightsFi.Transpose([3, 2, 0, 1]).Shape; // NHWC kernel → NCHW kernel shape
+        var dWfi = Engine.Conv2DBackwardKernel(dfNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
+        var dWii = Engine.Conv2DBackwardKernel(diNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
+        var dWci = Engine.Conv2DBackwardKernel(dcNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
+        var dWoi = Engine.Conv2DBackwardKernel(doNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
+
+        var hKernelShape = _weightsFh.Transpose([3, 2, 0, 1]).Shape;
+        var dWfh = Engine.Conv2DBackwardKernel(dfNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
+        var dWih = Engine.Conv2DBackwardKernel(diNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
+        var dWch = Engine.Conv2DBackwardKernel(dcNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
+        var dWoh = Engine.Conv2DBackwardKernel(doNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
+
+        // Bias gradients: sum over batch, height, width (NHWC → sum dims 0,1,2)
         var dbf = df.Sum([0, 1, 2]).Reshape(_biasF.Shape);
         var dbi = di.Sum([0, 1, 2]).Reshape(_biasI.Shape);
         var dbc = dc_.Sum([0, 1, 2]).Reshape(_biasC.Shape);
         var dbo = do_.Sum([0, 1, 2]).Reshape(_biasO.Shape);
 
-        var dxt = Convolve(df, _weightsFi.Transpose([1, 0, 2, 3]))
-            .Add(Convolve(di, _weightsIi.Transpose([1, 0, 2, 3])))
-            .Add(Convolve(dc_, _weightsCi.Transpose([1, 0, 2, 3])))
-            .Add(Convolve(do_, _weightsOi.Transpose([1, 0, 2, 3])));
+        // Input gradient: dxt = Conv2DBackwardInput(gradient, kernel, inputShape, stride, padding, dilation)
+        var inputNCHWShape = xtNCHW.Shape;
+        var wFiNCHW = _weightsFi.Transpose([3, 2, 0, 1]);
+        var wIiNCHW = _weightsIi.Transpose([3, 2, 0, 1]);
+        var wCiNCHW = _weightsCi.Transpose([3, 2, 0, 1]);
+        var wOiNCHW = _weightsOi.Transpose([3, 2, 0, 1]);
+        var dxtNCHW = Engine.Conv2DBackwardInput(dfNCHW, wFiNCHW, inputNCHWShape, stride, padding, dilation)
+            .Add(Engine.Conv2DBackwardInput(diNCHW, wIiNCHW, inputNCHWShape, stride, padding, dilation))
+            .Add(Engine.Conv2DBackwardInput(dcNCHW, wCiNCHW, inputNCHWShape, stride, padding, dilation))
+            .Add(Engine.Conv2DBackwardInput(doNCHW, wOiNCHW, inputNCHWShape, stride, padding, dilation));
+        var dxt = dxtNCHW.Transpose([0, 2, 3, 1]); // NCHW → NHWC
 
-        var dprevH = Convolve(df, _weightsFh.Transpose([1, 0, 2, 3]))
-            .Add(Convolve(di, _weightsIh.Transpose([1, 0, 2, 3])))
-            .Add(Convolve(dc_, _weightsCh.Transpose([1, 0, 2, 3])))
-            .Add(Convolve(do_, _weightsOh.Transpose([1, 0, 2, 3])));
+        var prevHNCHWShape = prevHNCHW.Shape;
+        var wFhNCHW = _weightsFh.Transpose([3, 2, 0, 1]);
+        var wIhNCHW = _weightsIh.Transpose([3, 2, 0, 1]);
+        var wChNCHW = _weightsCh.Transpose([3, 2, 0, 1]);
+        var wOhNCHW = _weightsOh.Transpose([3, 2, 0, 1]);
+        var dprevHNCHW = Engine.Conv2DBackwardInput(dfNCHW, wFhNCHW, prevHNCHWShape, stride, padding, dilation)
+            .Add(Engine.Conv2DBackwardInput(diNCHW, wIhNCHW, prevHNCHWShape, stride, padding, dilation))
+            .Add(Engine.Conv2DBackwardInput(dcNCHW, wChNCHW, prevHNCHWShape, stride, padding, dilation))
+            .Add(Engine.Conv2DBackwardInput(doNCHW, wOhNCHW, prevHNCHWShape, stride, padding, dilation));
+        var dprevH = dprevHNCHW.Transpose([0, 2, 3, 1]); // NCHW → NHWC
 
         var cellGrads = new CellGradients(dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo);
 
@@ -1944,8 +1975,8 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var c = ApplyActivation(Engine.TensorBroadcastAdd(Convolve(xt, _weightsCi).Add(Convolve(prevH, _weightsCh)), _biasC));
         var o = Engine.Sigmoid(Engine.TensorBroadcastAdd(Convolve(xt, _weightsOi).Add(Convolve(prevH, _weightsOh)), _biasO));
 
-        var newC = f.Multiply(prevC).Add(i.Multiply(c));
-        var newH = o.Multiply(ApplyActivation(newC));
+        var newC = Engine.TensorAdd(Engine.TensorMultiply(f, prevC), Engine.TensorMultiply(i, c));
+        var newH = Engine.TensorMultiply(o, ApplyActivation(newC));
 
         return (f, i, c, o, newC, newH);
     }
@@ -2264,6 +2295,40 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     /// - Implementing advanced optimization techniques
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_gradients == null || _gradients.Count == 0)
+            return new Vector<T>(ParameterCount);
+
+        T[] GetGrad(string key, int length)
+        {
+            if (_gradients.TryGetValue(key, out var obj) && obj is Tensor<T> t)
+                return t.ToArray();
+            return new T[length];
+        }
+
+        var result = new List<T>();
+        result.AddRange(GetGrad("weightsFi", _weightsFi.Length));
+        result.AddRange(GetGrad("weightsIi", _weightsIi.Length));
+        result.AddRange(GetGrad("weightsCi", _weightsCi.Length));
+        result.AddRange(GetGrad("weightsOi", _weightsOi.Length));
+        result.AddRange(GetGrad("weightsFh", _weightsFh.Length));
+        result.AddRange(GetGrad("weightsIh", _weightsIh.Length));
+        result.AddRange(GetGrad("weightsCh", _weightsCh.Length));
+        result.AddRange(GetGrad("weightsOh", _weightsOh.Length));
+        result.AddRange(GetGrad("biasF", _biasF.Length));
+        result.AddRange(GetGrad("biasI", _biasI.Length));
+        result.AddRange(GetGrad("biasC", _biasC.Length));
+        result.AddRange(GetGrad("biasO", _biasO.Length));
+
+        return new Vector<T>(result.ToArray());
+    }
+
+    public override void ClearGradients()
+    {
+        _gradients?.Clear();
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int index = 0;
