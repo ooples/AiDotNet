@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -30,6 +32,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "new[] { 2, 4 }, 0")]
 public class LogVarianceLayer<T> : LayerBase<T>
 {
     /// <summary>

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -53,6 +55,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </list>
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.MixtureOfExperts)]
+[LayerTask(LayerTask.Routing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 4, 2")]
 public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>

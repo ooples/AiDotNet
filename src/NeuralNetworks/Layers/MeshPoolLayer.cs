@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -34,6 +36,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerCategory(LayerCategory.Pooling)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4, 3", TestConstructorArgs = "4, 3, 2")]
 public class MeshPoolLayer<T> : LayerBase<T>
 {
     #region Properties
