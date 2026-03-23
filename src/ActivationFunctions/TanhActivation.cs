@@ -1,6 +1,8 @@
 
 
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -31,7 +33,7 @@ namespace AiDotNet.ActivationFunctions;
 /// the function's slope becomes very small, which can slow down learning in deep networks.
 /// </para>
 /// </remarks>
-public class TanhActivation<T> : ActivationFunctionBase<T>
+public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
 {
     /// <summary>
     /// Indicates that this activation function supports operations on individual scalar values.
@@ -247,4 +249,14 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     }
 
     #endregion
+
+    /// <summary>
+    /// Computes tanh derivative given the post-activation output: 1 - y².
+    /// </summary>
+    public Tensor<T> DerivativeFromOutput(Tensor<T> output)
+    {
+        var ones = new Tensor<T>(output.Shape);
+        ones.Fill(NumOps.One);
+        return ones.Subtract(output.ElementwiseMultiply(output));
+    }
 }

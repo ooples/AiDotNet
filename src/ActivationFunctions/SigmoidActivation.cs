@@ -1,6 +1,8 @@
 
 
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -24,7 +26,7 @@ namespace AiDotNet.ActivationFunctions;
 /// gradient problem").
 /// </para>
 /// </remarks>
-public class SigmoidActivation<T> : ActivationFunctionBase<T>
+public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
 {
     /// <summary>
     /// Indicates whether this activation function supports scalar operations.
@@ -243,4 +245,14 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     }
 
     #endregion
+
+    /// <summary>
+    /// Computes sigmoid derivative given the post-activation output: y * (1 - y).
+    /// </summary>
+    public Tensor<T> DerivativeFromOutput(Tensor<T> output)
+    {
+        var ones = new Tensor<T>(output.Shape);
+        ones.Fill(NumOps.One);
+        return output.ElementwiseMultiply(ones.Subtract(output));
+    }
 }

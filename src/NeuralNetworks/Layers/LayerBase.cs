@@ -2084,7 +2084,13 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         else if (ScalarActivation != null)
         {
             // Element-wise application of scalar activation derivative
-            // Optimized to use Tensor operations
+            // Note: if 'input' is post-activation output, many activation functions
+            // (sigmoid, tanh) re-apply the activation in their Derivative method,
+            // giving wrong results. Use DerivativeFromOutput when available.
+            if (ScalarActivation is IOutputDerivative<T> outputDeriv)
+            {
+                return outputDeriv.DerivativeFromOutput(input).ElementwiseMultiply(outputGradient);
+            }
             return ScalarActivation.Derivative(input).ElementwiseMultiply(outputGradient);
         }
         else

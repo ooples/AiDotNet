@@ -132,6 +132,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// The gradients for the weights, computed during backpropagation.
@@ -405,6 +406,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
         {
+            _lastPreActivation = biasedOutput;
             _lastOutput = result;
         }
 
@@ -895,6 +897,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _lastPreActivation = null;
         _weightsGradient = null;
         _biasesGradient = null;
 
