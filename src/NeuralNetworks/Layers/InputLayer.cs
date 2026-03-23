@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -27,6 +29,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Input)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, SupportsBackpropagation = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
 public class InputLayer<T> : LayerBase<T>
 {
     /// <summary>

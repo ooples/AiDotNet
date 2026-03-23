@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -22,6 +24,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// 2. Reduce computation needs
 /// 3. Make the model more robust to small changes in input position
 /// </remarks>
+[LayerCategory(LayerCategory.Pooling)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, 2, 2")]
 public class MaxPoolingLayer<T> : LayerBase<T>
 {
     /// <summary>

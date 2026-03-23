@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -24,6 +26,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Average pooling is often used in the final layers of a network or when you want to
 /// preserve more spatial information compared to max pooling.
 /// </remarks>
+[LayerCategory(LayerCategory.Pooling)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, 2, 2")]
 public class AveragePoolingLayer<T> : LayerBase<T>
 {
     /// <summary>

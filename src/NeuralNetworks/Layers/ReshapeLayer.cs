@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -33,6 +35,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, new[] { 2, 2 }")]
 public class ReshapeLayer<T> : LayerBase<T>
 {
     /// <summary>
