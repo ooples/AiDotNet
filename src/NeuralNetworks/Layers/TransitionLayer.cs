@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -44,6 +45,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerCategory(LayerCategory.Pooling)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 2, 8, 8")]
 public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -38,6 +40,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for computations (e.g., float, double).</typeparam>
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, 3, 2")]
 public class ConvLSTMLayer<T> : LayerBase<T>
 {
     private readonly int _kernelSize;

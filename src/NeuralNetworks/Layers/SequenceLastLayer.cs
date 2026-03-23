@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -21,6 +22,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4")]
 public class SequenceLastLayer<T> : LayerBase<T>
 {
     private readonly int _featureSize;

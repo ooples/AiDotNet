@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -32,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for computations (e.g., float, double).</typeparam>
+[LayerCategory(LayerCategory.Regularization)]
+[LayerTask(LayerTask.Regularization)]
+[LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }")]
 public class GaussianNoiseLayer<T> : LayerBase<T>
 {
     /// <summary>

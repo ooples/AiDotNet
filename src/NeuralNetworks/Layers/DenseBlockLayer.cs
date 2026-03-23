@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -11,6 +12,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// A single layer within a DenseBlock: BN-ReLU-Conv1x1-BN-ReLU-Conv3x3.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 8, 8")]
 internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
