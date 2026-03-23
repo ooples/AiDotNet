@@ -472,8 +472,6 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         try
         {
             // Backpropagate through inner layer using normalized weights
-            // Note: For simplicity, we pass gradients directly through
-            // A more accurate implementation would compute the Jacobian of spectral normalization
             return _innerLayer.Backward(outputGradient);
         }
         finally
