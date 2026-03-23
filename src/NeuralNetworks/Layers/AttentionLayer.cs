@@ -1174,8 +1174,17 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             (vPerm[vRank - 2], vPerm[vRank - 1]) = (vPerm[vRank - 1], vPerm[vRank - 2]);
         }
 
-        // dAttentionWeights = dAttnOutput @ V^T -> [B, S, S]
-        var dAttentionWeights = Engine.BatchMatMul(dAttnOutput, V.Transpose(vPerm));
+        // dAttentionWeights = dAttnOutput @ V^T -> [B, S, S] (manual per-batch, Engine.BatchMatMul has issues)
+        var VT = V.Transpose(vPerm);
+        var dAttentionWeights = new Tensor<T>([batchSize, seqLen, seqLen]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var dAttnB = dAttnOutput.GetSliceAlongDimension(b, 0);
+            var vtB = VT.GetSliceAlongDimension(b, 0);
+            var resultB = Engine.TensorMatMul(dAttnB, vtB);
+            for (int i = 0; i < resultB.Length; i++)
+                dAttentionWeights.SetFlat(b * seqLen * seqLen + i, resultB.GetFlat(i));
+        }
 
         // Softmax backward: dL/dz_i = y_i * (dL/dy_i - sum_j(y_j * dL/dy_j))
         // where y is softmax output (attention weights), z is pre-softmax scores
@@ -1225,10 +1234,23 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var Q = qProjected.Reshape([batchSize, seqLen, _attentionSize]);
         var K = kProjected.Reshape([batchSize, seqLen, _attentionSize]);
 
-        // Correct attention backward formulas:
+        // Correct attention backward formulas (manual per-batch, Engine.BatchMatMul has issues):
         // scores = Q @ K^T, so: dQ = dScores @ K, dK = dScores^T @ Q
-        var dQ = Engine.BatchMatMul(dAttentionScores, K);
-        var dK = Engine.BatchMatMul(dAttentionScores.Transpose([0, 2, 1]), Q);
+        var dQ = new Tensor<T>(Q.Shape);
+        var dK = new Tensor<T>(K.Shape);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var dScoresB = dAttentionScores.GetSliceAlongDimension(b, 0);
+            var qB = Q.GetSliceAlongDimension(b, 0);
+            var kB = K.GetSliceAlongDimension(b, 0);
+            var dQB = Engine.TensorMatMul(dScoresB, kB);
+            var dKB = Engine.TensorMatMul(Engine.TensorTranspose(dScoresB), qB);
+            for (int i = 0; i < dQB.Length; i++)
+            {
+                dQ.SetFlat(b * dQB.Length + i, dQB.GetFlat(i));
+                dK.SetFlat(b * dKB.Length + i, dKB.GetFlat(i));
+            }
+        }
 
         // Flatten for weight gradient computation: [B*S, attentionSize]
         var dQFlat = dQ.Reshape([batchSize * seqLen, _attentionSize]);
