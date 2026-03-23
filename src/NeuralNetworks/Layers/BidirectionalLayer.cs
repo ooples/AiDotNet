@@ -148,6 +148,13 @@ public class BidirectionalLayer<T> : LayerBase<T>
         _forwardLayer = innerLayer;
         _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;
+
+        // Ensure backward layer has independent parameter tensors
+        // (MemberwiseClone shares tensor references — SetParameters creates new ones)
+        if (_backwardLayer.ParameterCount > 0)
+        {
+            _backwardLayer.SetParameters(_backwardLayer.GetParameters().Clone());
+        }
     }
 
     /// <summary>
@@ -184,6 +191,13 @@ public class BidirectionalLayer<T> : LayerBase<T>
         _forwardLayer = innerLayer;
         _backwardLayer = innerLayer.Clone();
         _mergeMode = mergeMode;
+
+        // Ensure backward layer has independent parameter tensors
+        // (MemberwiseClone shares tensor references — SetParameters creates new ones)
+        if (_backwardLayer.ParameterCount > 0)
+        {
+            _backwardLayer.SetParameters(_backwardLayer.GetParameters().Clone());
+        }
     }
 
     /// <summary>

@@ -1130,24 +1130,23 @@ public class RecurrentLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // Modify weights IN PLACE to preserve engine's persistent tensor references
+        // Create new tensors to ensure independence from cloned layers
         int idx = 0;
-        var iwSpan = _inputWeights.Data.Span;
+        _inputWeights = new Tensor<T>(_inputWeights.Shape);
         for (int i = 0; i < inputWeightsSize; i++)
-            iwSpan[i] = parameters[idx++];
+            _inputWeights[i] = parameters[idx++];
 
-        var hwSpan = _hiddenWeights.Data.Span;
+        _hiddenWeights = new Tensor<T>(_hiddenWeights.Shape);
         for (int i = 0; i < hiddenWeightsSize; i++)
-            hwSpan[i] = parameters[idx++];
+            _hiddenWeights[i] = parameters[idx++];
 
-        var bSpan = _biases.Data.Span;
+        _biases = new Tensor<T>(_biases.Shape);
         for (int i = 0; i < _biases.Length; i++)
-            bSpan[i] = parameters[idx++];
+            _biases[i] = parameters[idx++];
 
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_inputWeights);
-        Engine.InvalidatePersistentTensor(_hiddenWeights);
-        Engine.InvalidatePersistentTensor(_biases);
+        RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <inheritdoc/>
