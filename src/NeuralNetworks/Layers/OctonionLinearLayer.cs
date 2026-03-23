@@ -650,8 +650,8 @@ public class OctonionLinearLayer<T> : LayerBase<T>
                 var weightGrad = CreateZeroOctonion();
                 for (int b = 0; b < batchSize; b++)
                 {
-                    // Weight gradient uses conjugate of gradient times input
-                    weightGrad = weightGrad + (gradOctonions[b, o].Conjugate() * _lastInput[b, i]);
+                    // Weight gradient: dL/dW = dL/dy * conj(x) for y = W * x
+                    weightGrad = weightGrad + (gradOctonions[b, o] * _lastInput[b, i].Conjugate());
                 }
                 _weightsGradient[o, i] = weightGrad;
             }
