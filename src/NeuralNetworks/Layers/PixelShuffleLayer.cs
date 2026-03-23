@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -33,6 +35,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// This is commonly used in super-resolution models like Real-ESRGAN and ESPCN.
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Upsampling)]
+[LayerTask(LayerTask.UpSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 4, 4", TestConstructorArgs = "new[] { 4, 4, 4 }, 2")]
 public class PixelShuffleLayer<T> : LayerBase<T>
 {
     #region Fields

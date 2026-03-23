@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -23,6 +25,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// per thread or synchronize access to shared instances.
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2")]
 public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
