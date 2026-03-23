@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -31,6 +33,9 @@ namespace AiDotNet.LossFunctions;
 /// are treated as outliers and handled using the more robust linear function.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regression)]
+[LossTask(LossTask.Regression)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsSymmetric = true, IsRobustToOutliers = true, ExpectedOutput = OutputType.Continuous)]
 public class HuberLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

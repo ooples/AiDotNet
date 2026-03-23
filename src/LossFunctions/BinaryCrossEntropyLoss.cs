@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -24,6 +26,9 @@ namespace AiDotNet.LossFunctions;
 /// - It's the preferred loss function for binary classification problems
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.BinaryClassification)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, RequiresProbabilityInputs = true, ExpectedOutput = OutputType.Probabilities)]
 public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

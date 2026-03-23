@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -25,6 +27,9 @@ namespace AiDotNet.LossFunctions;
 /// - The prediction errors follow a normal distribution
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regression)]
+[LossTask(LossTask.Regression)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsSymmetric = true, ExpectedOutput = OutputType.Continuous)]
 public class MeanSquaredErrorLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

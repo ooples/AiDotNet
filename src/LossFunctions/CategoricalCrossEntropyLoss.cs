@@ -1,5 +1,7 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -31,6 +33,9 @@ namespace AiDotNet.LossFunctions;
 /// This loss function is ideal when your model needs to choose one option from multiple possibilities.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.MultiClass)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, RequiresProbabilityInputs = true, SupportsClassWeights = true, ExpectedOutput = OutputType.Probabilities)]
 public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

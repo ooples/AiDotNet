@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -25,6 +27,9 @@ namespace AiDotNet.LossFunctions;
 /// the margin between different classes, which often improves generalization to new data.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.BinaryClassification)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ExpectedOutput = OutputType.Logits)]
 public class HingeLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

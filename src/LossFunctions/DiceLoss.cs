@@ -1,5 +1,8 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -28,6 +31,10 @@ namespace AiDotNet.LossFunctions;
 /// relationship between predicted and actual masks, which often leads to better segmentation results.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Segmentation)]
+[LossTask(LossTask.SemanticSegmentation)]
+[LossTask(LossTask.InstanceSegmentation)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, HandlesImbalancedData = true, RequiresProbabilityInputs = true, ExpectedOutput = OutputType.Probabilities)]
 public class DiceLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
