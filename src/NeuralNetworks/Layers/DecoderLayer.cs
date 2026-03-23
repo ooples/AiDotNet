@@ -600,8 +600,9 @@ public class DecoderLayer<T> : LayerBase<T>
         var dSelfAttention = _selfAttention.Backward(dNorm1);
         var dInput = dSelfAttention.Add(dNorm1);
 
-        // Calculate gradient with respect to encoder output
-        var dEncoderOutput = _crossAttention.Backward(dNorm2);
+        // Encoder output gradient: use the cross-attention gradient (same as dCrossAttention)
+        // since cross-attention outputs depend on both query (from self-attention) and context (encoder)
+        var dEncoderOutput = dCrossAttention;
 
         // If input was originally 2D, reshape gradients back to 2D
         if (gradWas2D)
