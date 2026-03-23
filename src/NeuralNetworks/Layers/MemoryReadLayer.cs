@@ -579,14 +579,23 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var afterOutputGrad = Engine.TensorMatMul(activationGradient, outputWeightsT);
         var valueGradient = Engine.TensorMatMul(afterOutputGrad, valueWeightsT);
 
-        // Softmax derivative for attention
-        var softmaxActivation = new SoftmaxActivation<T>();
-        var softmaxDerivative = softmaxActivation.Derivative(_lastAttentionScores);
-
-        // Attention weights gradient through softmax
+        // Softmax backward: for attention scores a = softmax(s),
+        // dL/ds_i = a_i * (dL/da_i - sum_j(a_j * dL/da_j))
         var memoryT = Engine.TensorTranspose(_lastMemory);
-        var valueGradTimesMemoryT = Engine.TensorMatMul(valueGradient, memoryT);
-        var attentionWeightsGradient = Engine.TensorMultiply(softmaxDerivative, valueGradTimesMemoryT);
+        var dAttentionWeights = Engine.TensorMatMul(valueGradient, memoryT); // dL/da
+        // Element-wise: a * dL/da
+        var aDotGrad = Engine.TensorMultiply(_lastAttentionScores, dAttentionWeights);
+        // Sum over last axis
+        var sumADotGrad = Engine.ReduceSum(aDotGrad, [aDotGrad.Rank - 1], keepDims: true);
+        // Broadcast and subtract: dL/da - sum
+        var sumExpanded = sumADotGrad;
+        if (sumADotGrad.Shape.Length < dAttentionWeights.Shape.Length ||
+            sumADotGrad.Shape[sumADotGrad.Shape.Length - 1] != dAttentionWeights.Shape[dAttentionWeights.Shape.Length - 1])
+        {
+            sumExpanded = Engine.TensorRepeatElements(sumADotGrad, dAttentionWeights.Shape[dAttentionWeights.Shape.Length - 1], axis: dAttentionWeights.Rank - 1);
+        }
+        var attentionWeightsGradient = Engine.TensorMultiply(_lastAttentionScores,
+            Engine.TensorSubtract(dAttentionWeights, sumExpanded));
 
         // Key weights gradient: input^T × (attentionWeightsGradient × memory)
         var lastInputT = Engine.TensorTranspose(_lastInput);
