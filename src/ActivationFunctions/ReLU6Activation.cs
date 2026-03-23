@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -25,6 +27,9 @@ namespace AiDotNet.ActivationFunctions;
 /// - It helps the network learn more robust features by limiting extreme activations
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class ReLU6Activation<T> : ActivationFunctionBase<T>
 {
     private readonly T _six;
