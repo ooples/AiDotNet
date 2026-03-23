@@ -91,7 +91,7 @@ public class HeterogeneousGraphMetadata
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 2")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8")]
 public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly HeterogeneousGraphMetadata _metadata;
