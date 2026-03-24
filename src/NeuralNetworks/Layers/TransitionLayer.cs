@@ -155,8 +155,8 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         if (rank == 3)
         {
-            // Standard 3D: [C, H, W]
-            processInput = input;
+            // Standard 3D: [C, H, W] → add batch dim [1, C, H, W] for BN/Conv
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -208,6 +208,10 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             newShape[_originalInputShape.Length - 1] = outW;
             output = output.Reshape(newShape);
         }
+
+        // Remove batch dim if we added it for 3D input
+        if (rank == 3 && output.Shape.Length == 4 && output.Shape[0] == 1)
+            output = output.Reshape([output.Shape[1], output.Shape[2], output.Shape[3]]);
 
         return output;
     }
@@ -415,11 +419,17 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         if (_lastInput is null || _bnOut is null || _reluOut is null || _convOut is null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Add batch dim if original input was 3D
+        bool was3D = _lastInput is not null && _originalInputShape is not null && _originalInputShape.Length == 3;
+        var grad = outputGradient;
+        if (was3D && grad.Shape.Length == 3)
+            grad = grad.Reshape([1, grad.Shape[0], grad.Shape[1], grad.Shape[2]]);
+
         // Backward through pool - handle 4D inputs
         // 4D: manual backward, 3D: use pooling layer
-        Tensor<T> grad = outputGradient.Shape.Length == 4
-            ? AvgPool2DBackward(outputGradient, _convOut.Shape.ToArray())
-            : _pool.Backward(outputGradient);
+        grad = grad.Shape.Length == 4
+            ? AvgPool2DBackward(grad, _convOut.Shape.ToArray())
+            : _pool.Backward(grad);
 
         // Backward through conv
         grad = _conv.Backward(grad);
@@ -429,6 +439,10 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         // Backward through BN
         grad = _bn.Backward(grad);
+
+        // Remove batch dim if we added it
+        if (was3D && grad.Shape.Length == 4 && grad.Shape[0] == 1)
+            grad = grad.Reshape([grad.Shape[1], grad.Shape[2], grad.Shape[3]]);
 
         return grad;
     }
