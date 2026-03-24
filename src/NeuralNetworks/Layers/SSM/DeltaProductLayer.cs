@@ -803,13 +803,16 @@ public class DeltaProductLayer<T> : LayerBase<T>
             new Vector<T>(_valueWeightsGradient!.ToArray()),
             new Vector<T>(_betaWeightsGradient!.ToArray()),
             new Vector<T>(_betaBiasGradient!.ToArray()),
-            new Vector<T>(_householderWeightsGradient!.ToArray()));
+            new Vector<T>(_householderWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _betaWeightsGradient = null; _betaBiasGradient = null; _householderWeightsGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />
