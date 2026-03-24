@@ -942,6 +942,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
     public override void ClearGradients()
     {
+        base.ClearGradients();
         _convWeightsGradient = null;
         _convBiasGradient = null;
     }
