@@ -5,7 +5,7 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.15.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.15.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.15.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.15.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.15.0" />

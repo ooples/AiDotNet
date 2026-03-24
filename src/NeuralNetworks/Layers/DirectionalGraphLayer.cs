@@ -422,7 +422,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Step 2: Aggregate outgoing edges (nodes that this node points TO)
         // For outgoing: multiply A^T @ X @ W_out
-        var adjTransposed = Engine.TensorPermute(adjForBatch, [0, 2, 1]).Contiguous(); // Batched transpose
+        var adjTransposed = Engine.TensorPermute(adjForBatch, [0, 2, 1]); // Batched transpose
         var xwOut = BatchedMatMul3Dx2D(processInput, _outgoingWeights, batchSize, numNodes, inputFeatures, _outputFeatures);
         _lastOutgoing = Engine.BatchMatMul(adjTransposed, xwOut);
         var biasOut = BroadcastBias(_outgoingBias, batchSize, numNodes);
