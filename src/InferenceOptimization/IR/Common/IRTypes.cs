@@ -212,7 +212,7 @@ public class TensorType
     public TensorType Clone() => new()
     {
         DataType = DataType,
-        Shape = Shape._dims,
+        Shape = Shape,
         Layout = Layout,
         Device = Device,
         Quantization = Quantization,
