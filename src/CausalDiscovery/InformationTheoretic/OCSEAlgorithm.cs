@@ -105,9 +105,10 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
             }
             if (deltaVar / effectiveN < 1e-10)
             {
-                // Transitions are constant — no temporal variation to explain.
-                // Keep deltaY as-is (constant) rather than substituting raw levels,
-                // which would change the score semantics from transitions to levels.
+                // Transitions are near-constant — no temporal variation to explain.
+                // Skip this target: constant transitions carry zero mutual information,
+                // so no causal parents can be identified. Leave W[*,target] as zero.
+                continue;
             }
 
             // Greedy forward selection of causal parents

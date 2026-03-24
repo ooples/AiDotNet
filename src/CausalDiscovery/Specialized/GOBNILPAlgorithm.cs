@@ -110,35 +110,10 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
             }
         }
 
-        // Fallback: if ILP produced empty DAG, use single-parent BIC-optimal assignment.
-        // Only add edge p→j if it doesn't create a cycle (j→...→p path doesn't exist).
-        if (edgeCount == 0)
-        {
-            var added = new HashSet<(int, int)>();
-            for (int j = 0; j < d; j++)
-            {
-                double bestSingleScore = double.NegativeInfinity;
-                int bestParent = -1;
-                foreach (var (parents, score) in parentSets[j])
-                {
-                    if (parents.Length == 1 && score > bestSingleScore)
-                    {
-                        bestSingleScore = score;
-                        bestParent = parents[0];
-                    }
-                }
-                // Only add if no reverse edge exists (prevents 2-cycles)
-                if (bestParent >= 0 && !added.Contains((j, bestParent)))
-                {
-                    T varP = cov[bestParent, bestParent];
-                    if (NumOps.GreaterThan(varP, eps))
-                        result[bestParent, j] = NumOps.Divide(cov[bestParent, j], varP);
-                    else
-                        result[bestParent, j] = NumOps.One;
-                    added.Add((bestParent, j));
-                }
-            }
-        }
+        // An empty DAG (edgeCount == 0) can be the true ILP optimum when all nodes
+        // are independent (empty parent set scores best for every variable). Do NOT
+        // override this with a heuristic fallback — it would break the "globally
+        // optimal DAG under BIC" contract that GOBNILP guarantees.
 
         return result;
     }
