@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, 1, 2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "4, 4, 1, 2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class LocallyConnectedLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -569,10 +569,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // === GPU-Accelerated LocallyConnectedConv2D ===
         // The layer uses NHWC format but Engine expects NCHW, so we transpose
         // Input NHWC [batch, height, width, channels] -> NCHW [batch, channels, height, width]
-        var inputNCHW = processInput.Transpose([0, 3, 1, 2]);
+        var inputNCHW = processInput.Transpose([0, 3, 1, 2]).Contiguous();
 
         // Weights need to be permuted from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw]
-        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
+        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]).Contiguous();
 
         // Pass bias as 1D tensor [outChannels] to ensure consistent behavior across
         // CPU fallback, GPU, and JIT paths. The engine handles per-channel bias internally.
@@ -580,7 +580,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         var outputNCHW = Engine.LocallyConnectedConv2D(inputNCHW, weightsPermuted, _biases, strideArr);
 
         // Transpose output back from NCHW [batch, channels, height, width] to NHWC [batch, height, width, channels]
-        var preActivation = outputNCHW.Transpose([0, 2, 3, 1]);
+        var preActivation = outputNCHW.Transpose([0, 2, 3, 1]).Contiguous();
 
         // Apply activation function
         var result = ApplyActivation(preActivation);

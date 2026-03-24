@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 8, 8", TestConstructorArgs = "new[] { 1, 8, 8 }, new[] { 0 }, new[] { 0 }, new[] { 1 }, new[] { 1 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 8, 8", TestConstructorArgs = "new[] { 1, 8, 8 }, new[] { 0, 1, 1 }, new[] { 0, 1, 1 }, new[] { 0, 1, 1 }, new[] { 0, 1, 1 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class CroppingLayer<T> : LayerBase<T>
 {
 

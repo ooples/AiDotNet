@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, 3, 2, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 1, 4, 4, 1 }, 3, 2, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class ConvLSTMLayer<T> : LayerBase<T>
 {
     private readonly int _kernelSize;
@@ -1066,10 +1066,10 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private Tensor<T> Convolve(Tensor<T> input, Tensor<T> kernel)
     {
         // Transpose input from [B, H, W, C] to [B, C, H, W] for Engine
-        var inputNCHW = input.Transpose(new[] { 0, 3, 1, 2 });
+        var inputNCHW = input.Transpose(new[] { 0, 3, 1, 2 }).Contiguous();
 
         // Transpose kernel from [kH, kW, inC, outC] to [outC, inC, kH, kW] for Engine
-        var kernelNCHW = kernel.Transpose(new[] { 3, 2, 0, 1 });
+        var kernelNCHW = kernel.Transpose(new[] { 3, 2, 0, 1 }).Contiguous();
 
         var stride = new int[] { _strides, _strides };
         var padding = new int[] { _padding, _padding };
@@ -1079,7 +1079,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var outputNCHW = Engine.Conv2D(inputNCHW, kernelNCHW, stride, padding, dilation);
 
         // Transpose output back to [B, H, W, outC]
-        return outputNCHW.Transpose(new[] { 0, 2, 3, 1 });
+        return outputNCHW.Transpose(new[] { 0, 2, 3, 1 }).Contiguous();
     }
 
     /// <summary>
