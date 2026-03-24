@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.DownSampling)]
-[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = false, ChangesShape = true, TestInputShape = "4, 3", TestConstructorArgs = "4, 3, 2")]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 3, 2")]
 public class MeshPoolLayer<T> : LayerBase<T>
 {
     #region Properties

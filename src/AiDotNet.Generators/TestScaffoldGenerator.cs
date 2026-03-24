@@ -2060,22 +2060,56 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         for (int i = 0; i < 4; i++) { laplacian[i, i] = 2.0; if (i > 0) { laplacian[i, i-1] = -1.0; laplacian[i-1, i] = -1.0; } }
         ((AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<double>)layer).SetLaplacian(laplacian);";
         }
-        else if (shortName.Contains("MeshEdgeConv") || shortName.Contains("MeshPool"))
+        else if (shortName.Contains("MeshEdgeConv"))
         {
+            // MeshCNN (Hanocka et al., SIGGRAPH 2019): each edge has numNeighbors adjacent edges
+            // Constructor arg 3 is numNeighbors. Edge adjacency shape: [numEdges, numNeighbors]
             setupCode = @"
-        // Create synthetic edge adjacency (each node connects to next)
-        var edges = new int[4, 2]; // 4 edges for 4 nodes
-        for (int i = 0; i < 4; i++) { edges[i, 0] = i; edges[i, 1] = (i + 1) % 4; }
-        var method = layer.GetType().GetMethod(""SetEdgeAdjacency"");
-        method?.Invoke(layer, new object[] { edges });";
+        // MeshCNN edge adjacency: [numEdges, numNeighbors] — each edge connects to its neighbors
+        var numNeighbors = 3; // matches constructor numNeighbors parameter
+        var numEdges = 4; // matches input shape dim 0
+        var edges = new int[numEdges, numNeighbors];
+        for (int i = 0; i < numEdges; i++)
+            for (int j = 0; j < numNeighbors; j++)
+                edges[i, j] = (i + j + 1) % numEdges;
+        ((AiDotNet.NeuralNetworks.Layers.MeshEdgeConvLayer<double>)layer).SetEdgeAdjacency(edges);";
+        }
+        else if (shortName.Contains("MeshPool"))
+        {
+            // MeshCNN pooling: collapses edges based on learned priorities
+            // Input: [numEdges, inputChannels], adjacency: [numEdges, numNeighbors]
+            setupCode = @"
+        var numNeighbors = 2; // matches constructor numNeighbors parameter
+        var numEdges = 4; // matches input dim 0
+        var edges = new int[numEdges, numNeighbors];
+        for (int i = 0; i < numEdges; i++)
+            for (int j = 0; j < numNeighbors; j++)
+                edges[i, j] = (i + j + 1) % numEdges;
+        ((AiDotNet.NeuralNetworks.Layers.MeshPoolLayer<double>)layer).SetEdgeAdjacency(edges);";
         }
         else if (shortName.Contains("SpiralConv"))
         {
+            // Neural 3D Morphable Models (Bouritsas et al., ICCV 2019): spiral ordering of vertices
+            // Spiral indices: [numVertices, spiralLength]
             setupCode = @"
-        // Create synthetic spiral indices (3 neighbors per vertex for 4 vertices)
-        var spirals = new int[4, 3]; // 4 vertices, 3 spiral neighbors each
-        for (int i = 0; i < 4; i++) for (int j = 0; j < 3; j++) spirals[i, j] = (i + j) % 4;
+        var spirals = new int[4, 3]; // 4 vertices, spiralLength=3
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 3; j++)
+                spirals[i, j] = (i + j + 1) % 4; // each vertex sees its next 3 neighbors
         ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(spirals);";
+        }
+        else if (shortName.Contains("HeterogeneousGraph"))
+        {
+            // R-GCN (Schlichtkrull et al., ESWC 2018): heterogeneous graph with typed edges
+            // Needs adjacency matrices per edge type AND node type map
+            setupCode = @"
+        var typed = (AiDotNet.NeuralNetworks.Layers.HeterogeneousGraphLayer<double>)layer;
+        // Create adjacency matrix for edge type ""e"" (4x4 identity-like)
+        var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 });
+        for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; }
+        typed.SetAdjacencyMatrices(new System.Collections.Generic.Dictionary<string, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> { [""e""] = adj });
+        // Map all 4 nodes to type ""A""
+        typed.SetNodeTypeMap(new System.Collections.Generic.Dictionary<int, string> { [0] = ""A"", [1] = ""A"", [2] = ""A"", [3] = ""A"" });";
         }
         else
         {
