@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (float or double).</typeparam>
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 16", TestConstructorArgs = "16, 8")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 128", TestConstructorArgs = "16, 8")]
 public class OctonionLinearLayer<T> : LayerBase<T>
 {
     private readonly IAdvancedAlgebraEngine _engine;

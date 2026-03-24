@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 8", TestConstructorArgs = "new[] { 1, 8, 8 }, 2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "new[] { 1, 8, 8, 1 }, 2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class SeparableConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>

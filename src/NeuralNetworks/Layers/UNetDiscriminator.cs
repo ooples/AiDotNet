@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, ApiShape = LayerApiShape.DualTensor, Cost = ComputeCost.High, TestInputShape = "3, 8, 8", TestConstructorArgs = "3, 8")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 8, 3, 8, 2")]
 public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     #region Fields
