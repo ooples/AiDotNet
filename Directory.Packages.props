@@ -50,7 +50,7 @@
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
 
     <!-- Serialization and data -->
-    <PackageVersion Include="Google.Protobuf" Version="3.34.0" />
+    <PackageVersion Include="Google.Protobuf" Version="3.34.1" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageVersion Include="Parquet.Net" Version="5.5.0" />
     <PackageVersion Include="YamlDotNet" Version="16.3.0" />
