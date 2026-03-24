@@ -801,7 +801,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
             neighborFeatures = Engine.TensorMultiply(neighborFeatures, Engine.TensorTile(mask, [1, InputChannels]));
 
             // Set the gathered features into the result at the appropriate offset
-            Engine.TensorSetSlice(gathered, neighborFeatures, [0, featureOffset]);
+            gathered = Engine.TensorSetSlice(gathered, neighborFeatures, [0, featureOffset]);
         }
 
         return gathered;

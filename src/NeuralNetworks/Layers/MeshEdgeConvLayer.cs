@@ -370,8 +370,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         var result = TensorAllocator.Rent<T>([numEdges, aggregatedSize]);
 
         // Step 1: Copy self-features (first InputChannels columns)
-        // Use TensorSetSlice for consistent API usage
-        Engine.TensorSetSlice(result, input, [0, 0]);
+        result = Engine.TensorSetSlice(result, input, [0, 0]);
 
         // Step 2: Gather neighbor features for each neighbor position
         for (int n = 0; n < NumNeighbors; n++)
@@ -405,7 +404,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
             gathered = Engine.TensorMultiply(gathered, Engine.TensorTile(mask, [1, InputChannels]));
 
             // Set the gathered features into the result at the appropriate offset
-            Engine.TensorSetSlice(result, gathered, [0, featureOffset]);
+            result = Engine.TensorSetSlice(result, gathered, [0, featureOffset]);
         }
 
         return result;
