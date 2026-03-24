@@ -28,7 +28,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 8")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class DecoderLayer<T> : LayerBase<T>
 {
 

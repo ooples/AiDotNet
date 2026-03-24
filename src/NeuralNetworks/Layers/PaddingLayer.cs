@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, new[] { 1, 1 }")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, new[] { 1, 1 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class PaddingLayer<T> : LayerBase<T>
 {
     /// <summary>

@@ -222,4 +222,39 @@ public abstract class MultiInputLayerTestBase
                 $"Output[{i}] differs after serialization: original={originalOutput[i]:G17}, deserialized={output2[i]:G17}");
         }
     }
+
+    // =========================================================================
+    // INVARIANT 8: Output combines all inputs (not just first)
+    // For merge layers, the output must depend on ALL inputs, not just one.
+    // =========================================================================
+
+    [Fact]
+    public void Forward_OutputShouldDependOnAllInputs()
+    {
+        var layer = CreateLayer();
+        var inputs = CreateInputs(42);
+
+        var outputBoth = ForwardMulti(layer, inputs);
+        layer.ResetState();
+
+        // Create modified inputs where only the second input changes
+        var modifiedInputs = CreateInputs(42); // same first input
+        modifiedInputs[NumInputs - 1] = CreateRandomTensor(InputShape, seed: 999); // different last input
+
+        var outputModified = ForwardMulti(layer, modifiedInputs);
+
+        // Output should differ when any input changes
+        bool anyDifferent = false;
+        int minLen = Math.Min(outputBoth.Length, outputModified.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            if (Math.Abs(outputBoth[i] - outputModified[i]) > 1e-12)
+            {
+                anyDifferent = true;
+                break;
+            }
+        }
+        Assert.True(anyDifferent,
+            "Changing the last input should change the output — layer may be ignoring some inputs.");
+    }
 }

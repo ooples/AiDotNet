@@ -45,7 +45,7 @@ public enum SpatialTransformerDataFormat
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, 4, 4")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
