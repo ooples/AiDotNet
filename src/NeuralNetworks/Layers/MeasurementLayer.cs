@@ -139,7 +139,7 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int stateSize = input.Shape[^1];
         if (stateSize != InputShape[0])
         {
@@ -276,7 +276,7 @@ public class MeasurementLayer<T> : LayerBase<T>
         else
         {
             // Restore original shape
-            outputShape = (int[])input.Shape.Clone();
+            outputShape = (int[])input.Shape._dims.Clone();
             outputShape[input.Shape.Length - 1] = stateSize;
         }
 
@@ -347,7 +347,7 @@ public class MeasurementLayer<T> : LayerBase<T>
         {
             if (outputGradient.Length == _lastOutput.Length)
             {
-                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape);
+                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape._dims);
             }
             else
             {
@@ -440,7 +440,7 @@ public class MeasurementLayer<T> : LayerBase<T>
         {
             if (outputGradient.Length == _lastOutput.Length)
             {
-                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape);
+                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape._dims);
             }
             else
             {

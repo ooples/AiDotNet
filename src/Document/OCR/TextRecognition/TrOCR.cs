@@ -667,7 +667,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape._dims);
 
         // TrOCR normalization (same as DeiT/BEiT)
         double[] means = [0.5, 0.5, 0.5];

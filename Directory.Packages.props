@@ -5,13 +5,13 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.14.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.14.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.14.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.14.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.15.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.15.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.15.0" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.15.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.3" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.5" />
     <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.24.4" />
     <PackageVersion Include="Microsoft.Research.SEALNet" Version="4.1.1" />
@@ -33,7 +33,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.3" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
     <PackageVersion Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
     <PackageVersion Include="MySqlConnector" Version="2.5.0" />
     <!-- Azure -->

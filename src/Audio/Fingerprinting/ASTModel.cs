@@ -1051,7 +1051,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             {
                 residual1[i] = _ops.Add(input.Data.Span[i], attended.Data.Span[i]);
             }
-            var res1Tensor = new Tensor<T>(residual1, input.Shape);
+            var res1Tensor = new Tensor<T>(residual1, input.Shape._dims);
 
             // Pre-norm + MLP
             var normed2 = LayerNorm(res1Tensor, _norm2Gamma, _norm2Beta);
@@ -1064,7 +1064,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 output[i] = _ops.Add(res1Tensor.Data.Span[i], mlpOut.Data.Span[i]);
             }
 
-            return new Tensor<T>(output, input.Shape);
+            return new Tensor<T>(output, input.Shape._dims);
         }
 
         private Tensor<T> LayerNorm(Tensor<T> input, T[] gamma, T[] beta)
@@ -1079,7 +1079,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             // Simplified self-attention (identity for performance)
             var output = new T[input.Length];
             Array.Copy(input.Data.ToArray(), output, input.Length);
-            return new Tensor<T>(output, input.Shape);
+            return new Tensor<T>(output, input.Shape._dims);
         }
 
         private Tensor<T> MLP(Tensor<T> input)
@@ -1139,7 +1139,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 }
             }
 
-            return new Tensor<T>(output, input.Shape);
+            return new Tensor<T>(output, input.Shape._dims);
         }
     }
 

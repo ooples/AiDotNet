@@ -341,7 +341,7 @@ public abstract class NERNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> NormalizeEmbeddings(Tensor<T> embeddings)
     {
-        var normalized = new Tensor<T>(embeddings.Shape);
+        var normalized = new Tensor<T>(embeddings.Shape._dims);
 
         int seqLen, embDim;
         int batchSize;

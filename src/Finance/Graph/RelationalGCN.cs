@@ -592,7 +592,7 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape._dims));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -1020,7 +1020,7 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
             // Before final Dense layer, flatten if needed (GRU outputs 3D)
             if (i == Layers.Count - 1 && layer is DenseLayer<T> && current.Rank > 2)
             {
-                _preOutputShape = current.Shape;
+                _preOutputShape = current.Shape._dims;
                 current = current.Reshape(new[] { current.Length });
             }
 
@@ -1298,7 +1298,7 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape._dims)
         {
             totalSize *= dim;
         }
@@ -1469,7 +1469,7 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
                 newData[dstIdx] = prediction.Data.Span[i];
         }
 
-        return new Tensor<T>(input.Shape, new Vector<T>(newData));
+        return new Tensor<T>(input.Shape._dims, new Vector<T>(newData));
     }
 
     /// <summary>

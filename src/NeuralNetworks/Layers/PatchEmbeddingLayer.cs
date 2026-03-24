@@ -250,7 +250,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         // PatchEmbedding expects 4D input [B, C, H, W], normalize to 4D
@@ -531,7 +531,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         var gradTransposed = gradReshaped.Transpose(new[] { 0, 3, 1, 4, 2, 5 });
 
         // Reshape to [B, C, H, W]
-        var inputGradient = gradTransposed.Reshape(_lastInput.Shape);
+        var inputGradient = gradTransposed.Reshape(_lastInput.Shape._dims);
 
         // Restore gradient shape to match original input shape
         if (_originalInputShape != null && _originalInputShape.Length != 4)
@@ -705,7 +705,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape._dims;
 
         // PatchEmbedding expects 4D input [B, C, H, W]
         bool hasBatch = shape.Length == 4;
@@ -829,9 +829,9 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
 
         // Store GPU gradients for GPU-resident training
         _gpuWeightGradient?.Dispose();
-        _gpuWeightGradient = new GpuTensor<T>(backend, weightGradGpu.Buffer, weightGradGpu.Shape, GpuTensorRole.Gradient, ownsBuffer: false);
+        _gpuWeightGradient = new GpuTensor<T>(backend, weightGradGpu.Buffer, weightGradGpu.Shape._dims, GpuTensorRole.Gradient, ownsBuffer: false);
         _gpuBiasGradient?.Dispose();
-        _gpuBiasGradient = new GpuTensor<T>(backend, biasGradGpu.Buffer, biasGradGpu.Shape, GpuTensorRole.Gradient, ownsBuffer: false);
+        _gpuBiasGradient = new GpuTensor<T>(backend, biasGradGpu.Buffer, biasGradGpu.Shape._dims, GpuTensorRole.Gradient, ownsBuffer: false);
 
         // Input gradient: gradOutput @ weights^T -> [B*N, embedDim] @ [embedDim, patchDim] = [B*N, patchDim]
         var weightsGpu = gpuEngine.UploadToGpu<T>(_projectionWeights, GpuTensorRole.Weight);

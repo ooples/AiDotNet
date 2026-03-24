@@ -330,7 +330,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         int genOutputSize = newFakeImages.Length;
         int discInputTotalSize = discInputGradients.Length;
 
-        var combinedGradients = new Tensor<T>(newFakeImages.Shape);
+        var combinedGradients = new Tensor<T>(newFakeImages.Shape._dims);
 
         // Combine adversarial and L1 gradients
         for (int b = 0; b < batchSize; b++)
@@ -570,7 +570,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateL1Gradients(Tensor<T> predictions, Tensor<T> targets)
     {
-        var gradients = new Tensor<T>(predictions.Shape);
+        var gradients = new Tensor<T>(predictions.Shape._dims);
         int count = predictions.Shape.Aggregate(1, (a, b) => a * b);
         T scale = NumOps.FromDouble(_l1Lambda / count);
 

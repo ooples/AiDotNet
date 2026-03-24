@@ -174,7 +174,7 @@ public class LiteVAEModel<T> : VAEModelBase<T>
         // Split into mean and log-variance (last encoder layer outputs 2x channels)
         int halfLength = x.AsSpan().Length / 2;
         var meanShape = new int[x.Shape.Length];
-        Array.Copy(x.Shape, meanShape, x.Shape.Length);
+        Array.Copy(x.Shape._dims, meanShape, x.Shape.Length);
         if (meanShape.Length > 1)
             meanShape[meanShape.Length - 3] = _latentChannels;
 

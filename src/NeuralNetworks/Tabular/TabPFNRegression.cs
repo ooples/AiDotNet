@@ -212,7 +212,7 @@ public class TabPFNRegression<T> : TabPFNBase<T>
         int batchSize = _predictionsCache.Shape[0];
         int outputDim = _predictionsCache.Shape.Length > 1 ? _predictionsCache.Shape[1] : 1;
 
-        var predictionGrad = new Tensor<T>(_predictionsCache.Shape);
+        var predictionGrad = new Tensor<T>(_predictionsCache.Shape._dims);
         var scale = NumOps.FromDouble(2.0 / (batchSize * outputDim));
 
         for (int i = 0; i < _predictionsCache.Length; i++)

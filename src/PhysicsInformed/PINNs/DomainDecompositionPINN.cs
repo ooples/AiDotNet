@@ -444,7 +444,7 @@ public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
         loss = NumOps.Divide(loss, NumOps.FromDouble(batchSize));
 
         // Backpropagate
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape._dims);
         T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(batchSize));
         for (int i = 0; i < batchSize; i++)
         {
@@ -505,8 +505,8 @@ public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
                 NumOps.Multiply(NumOps.FromDouble(_interfaceWeight), continuityLoss));
 
             // Backpropagate interface loss to both networks
-            var gradient1 = new Tensor<T>(output1.Shape);
-            var gradient2 = new Tensor<T>(output2.Shape);
+            var gradient1 = new Tensor<T>(output1.Shape._dims);
+            var gradient2 = new Tensor<T>(output2.Shape._dims);
             T gradScale = NumOps.Multiply(
                 NumOps.FromDouble(2.0 * _interfaceWeight),
                 NumOps.Divide(NumOps.One, NumOps.FromDouble(numPoints)));

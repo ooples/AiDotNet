@@ -95,7 +95,7 @@ public class SplitConformalPredictor<T>
             var input = calibrationInputs.GetRow(i);
             var prediction = _model.Predict(new Tensor<T>([input.Length], input));
             if (prediction.Length != 1)
-                throw new InvalidOperationException($"Model must return scalar output for regression. Got length={prediction.Length} shape=[{string.Join(", ", prediction.Shape)}] (sample index {i}).");
+                throw new InvalidOperationException($"Model must return scalar output for regression. Got length={prediction.Length} shape=[{string.Join(", ", prediction.Shape._dims)}] (sample index {i}).");
             var predValue = prediction[0]; // Assuming scalar output
 
             var residual = _numOps.Abs(_numOps.Subtract(calibrationTargets[i], predValue));
@@ -144,7 +144,7 @@ public class SplitConformalPredictor<T>
         // Get point prediction
         var prediction = _model.Predict(input);
         if (prediction.Length != 1)
-            throw new InvalidOperationException($"Model must return scalar output for regression. Got length={prediction.Length} shape=[{string.Join(", ", prediction.Shape)}].");
+            throw new InvalidOperationException($"Model must return scalar output for regression. Got length={prediction.Length} shape=[{string.Join(", ", prediction.Shape._dims)}].");
         var predValue = prediction[0]; // Assuming scalar output
 
         // Compute quantile for interval width

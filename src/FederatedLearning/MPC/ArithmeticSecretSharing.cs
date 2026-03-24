@@ -96,7 +96,7 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
         // Generate n-1 random shares
         for (int p = 0; p < numberOfParties - 1; p++)
         {
-            shares[p] = new Tensor<T>(value.Shape);
+            shares[p] = new Tensor<T>(value.Shape._dims);
             for (int i = 0; i < totalElements; i++)
             {
                 shares[p][i] = NumOps.FromDouble(_random.NextDouble() * 2.0 - 1.0);
@@ -104,7 +104,7 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
         }
 
         // Last share = secret - sum of other shares
-        shares[numberOfParties - 1] = new Tensor<T>(value.Shape);
+        shares[numberOfParties - 1] = new Tensor<T>(value.Shape._dims);
         for (int i = 0; i < totalElements; i++)
         {
             double sum = 0.0;
@@ -245,7 +245,7 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
         var plainDiff = Reconstruct(diff);
 
         int totalElements = ComputeTotalElements(plainDiff);
-        var compResult = new Tensor<T>(plainDiff.Shape);
+        var compResult = new Tensor<T>(plainDiff.Shape._dims);
         for (int i = 0; i < totalElements; i++)
         {
             double d = NumOps.ToDouble(plainDiff[i]);

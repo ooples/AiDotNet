@@ -40,7 +40,7 @@ public class QRCodePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
-        var shape = data.Shape;
+        var shape = data.Shape._dims;
         int batch = shape[0];
         int height = shape[2];
         int width = shape[3];

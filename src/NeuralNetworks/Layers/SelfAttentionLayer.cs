@@ -483,7 +483,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: need at least 2D [seqLen, embedDim]
@@ -618,7 +618,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var input = inputs[0];
 
         // Get dimensions from input shape
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape._dims;
         int rank = inputShape.Length;
 
         int batchSize;
@@ -811,11 +811,11 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Tensor<T> lastOutput3D = _lastOutput;
         if (outputGradient.Shape.Length != 3)
         {
-            outputGrad3D = outputGradient.Reshape(_lastInput.Shape);
+            outputGrad3D = outputGradient.Reshape(_lastInput.Shape._dims);
         }
         if (_lastOutput.Shape.Length != 3)
         {
-            lastOutput3D = _lastOutput.Reshape(_lastInput.Shape);
+            lastOutput3D = _lastOutput.Reshape(_lastInput.Shape._dims);
         }
 
         var activationGradient = ApplyActivationDerivative(lastOutput3D, outputGrad3D);
@@ -1043,7 +1043,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Connect parent for gradient flow
             outputNode = Autodiff.TensorOperations<T>.Add(
                 biasedOutput,
-                Autodiff.TensorOperations<T>.Constant(new Tensor<T>(biasedOutput.Value.Shape), "zero"));
+                Autodiff.TensorOperations<T>.Constant(new Tensor<T>(biasedOutput.Value.Shape._dims), "zero"));
         }
         else
         {
@@ -1166,19 +1166,19 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             if (_queryWeightsVelocity == null)
             {
-                _queryWeightsVelocity = new Tensor<T>(_queryWeights.Shape);
+                _queryWeightsVelocity = new Tensor<T>(_queryWeights.Shape._dims);
                 _queryWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_queryWeightsVelocity, PersistentTensorRole.OptimizerState);
 
-                _keyWeightsVelocity = new Tensor<T>(_keyWeights.Shape);
+                _keyWeightsVelocity = new Tensor<T>(_keyWeights.Shape._dims);
                 _keyWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_keyWeightsVelocity, PersistentTensorRole.OptimizerState);
 
-                _valueWeightsVelocity = new Tensor<T>(_valueWeights.Shape);
+                _valueWeightsVelocity = new Tensor<T>(_valueWeights.Shape._dims);
                 _valueWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_valueWeightsVelocity, PersistentTensorRole.OptimizerState);
 
-                _outputBiasVelocity = new Tensor<T>(_outputBias.Shape);
+                _outputBiasVelocity = new Tensor<T>(_outputBias.Shape._dims);
                 _outputBiasVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_outputBiasVelocity, PersistentTensorRole.OptimizerState);
             }

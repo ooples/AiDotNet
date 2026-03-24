@@ -175,7 +175,7 @@ public class RPKNet<T> : OpticalFlowBase<T>
             throw new ArgumentException(
                 $"Expected output length {expectedOutput.Length} does not match model output length {output.Length}.",
                 nameof(expectedOutput));
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape._dims);
         for (int i = 0; i < output.Length; i++)
         {
             gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);

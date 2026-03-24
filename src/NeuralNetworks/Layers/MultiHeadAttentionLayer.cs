@@ -406,16 +406,16 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
 
         _queryWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_queryWeights.Shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
+            new Tensor<T>(_queryWeights.Shape._dims, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
             scale);
         _keyWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_keyWeights.Shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
+            new Tensor<T>(_keyWeights.Shape._dims, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
             scale);
         _valueWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_valueWeights.Shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
+            new Tensor<T>(_valueWeights.Shape._dims, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
             scale);
         _outputWeights = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_outputWeights.Shape, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
+            new Tensor<T>(_outputWeights.Shape._dims, Vector<T>.CreateRandom(rows * cols, -0.5, 0.5)),
             scale);
 
         // Initialize bias tensor to zeros
@@ -676,9 +676,9 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         //   4D [batch1, batch2, seq, dim] -> batch1*batch2, seq, dim
         //   5D [b1, b2, b3, seq, dim] -> b1*b2*b3, seq, dim
 
-        _originalQueryShape = query.Shape;
-        _originalKeyShape = key.Shape;
-        _originalValueShape = value.Shape;
+        _originalQueryShape = query.Shape._dims;
+        _originalKeyShape = key.Shape._dims;
+        _originalValueShape = value.Shape._dims;
 
         // Handle 1D input by reshaping to 2D [1, dim]
         bool was1D = query.Rank == 1;
@@ -734,7 +734,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             throw new ArgumentException(
                 $"Input embedding dimension ({embeddingDimension}) does not match weight dimension ({weightsEmbedDim}). " +
-                $"Query shape: [{string.Join(", ", query.Shape)}], Weights shape: [{string.Join(", ", _queryWeights.Shape)}]");
+                $"Query shape: [{string.Join(", ", query.Shape._dims)}], Weights shape: [{string.Join(", ", _queryWeights.Shape._dims)}]");
         }
 
         var q2D = query.Reshape(batchSize * seqLengthQ, embeddingDimension);
@@ -752,9 +752,9 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException(
                 $"Q_flat reshape mismatch: Q_flat has {Q_flat.Length} elements, " +
                 $"but target shape [{batchSize}, {seqLengthQ}, {_headCount}, {_headDimension}] needs {targetQElems}. " +
-                $"Q_flat shape: [{string.Join(", ", Q_flat.Shape)}], " +
-                $"q2D shape: [{string.Join(", ", q2D.Shape)}], " +
-                $"_queryWeights shape: [{string.Join(", ", _queryWeights.Shape)}]");
+                $"Q_flat shape: [{string.Join(", ", Q_flat.Shape._dims)}], " +
+                $"q2D shape: [{string.Join(", ", q2D.Shape._dims)}], " +
+                $"_queryWeights shape: [{string.Join(", ", _queryWeights.Shape._dims)}]");
         }
 
         var queries = Q_flat.Reshape(batchSize, seqLengthQ, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
@@ -865,7 +865,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var input = inputs[0];
 
         // Handle input shape - flatten to 3D [batch, seq, embedding]
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape._dims;
         int seqLength, embeddingDimension, batchSize;
 
         if (inputShape.Length == 2)
@@ -1359,23 +1359,23 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             if (_queryWeightsVelocity == null)
             {
-                _queryWeightsVelocity = new Tensor<T>(_queryWeights.Shape);
+                _queryWeightsVelocity = new Tensor<T>(_queryWeights.Shape._dims);
                 _queryWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_queryWeightsVelocity, PersistentTensorRole.OptimizerState);
 
-                _keyWeightsVelocity = new Tensor<T>(_keyWeights.Shape);
+                _keyWeightsVelocity = new Tensor<T>(_keyWeights.Shape._dims);
                 _keyWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_keyWeightsVelocity, PersistentTensorRole.OptimizerState);
 
-                _valueWeightsVelocity = new Tensor<T>(_valueWeights.Shape);
+                _valueWeightsVelocity = new Tensor<T>(_valueWeights.Shape._dims);
                 _valueWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_valueWeightsVelocity, PersistentTensorRole.OptimizerState);
 
-                _outputWeightsVelocity = new Tensor<T>(_outputWeights.Shape);
+                _outputWeightsVelocity = new Tensor<T>(_outputWeights.Shape._dims);
                 _outputWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_outputWeightsVelocity, PersistentTensorRole.OptimizerState);
 
-                _outputBiasVelocity = new Tensor<T>(_outputBias.Shape);
+                _outputBiasVelocity = new Tensor<T>(_outputBias.Shape._dims);
                 _outputBiasVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_outputBiasVelocity, PersistentTensorRole.OptimizerState);
             }

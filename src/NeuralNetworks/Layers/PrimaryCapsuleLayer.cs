@@ -346,7 +346,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         // PrimaryCapsule needs to handle both NCHW (from ConvolutionalLayer) and NHWC inputs
@@ -694,8 +694,8 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         var inputNCHW = _inputWasNCHW ? _lastInput : _lastInput.Transpose([0, 3, 1, 2]);
 
         // Gradients via Conv2D ops
-        var inputGradNCHW = Engine.Conv2DBackwardInput(gradNCHW, kernelNCHW, inputNCHW.Shape, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
-        var kernelGrad = Engine.Conv2DBackwardKernel(gradNCHW, inputNCHW, kernelNCHW.Shape, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
+        var inputGradNCHW = Engine.Conv2DBackwardInput(gradNCHW, kernelNCHW, inputNCHW.Shape._dims, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
+        var kernelGrad = Engine.Conv2DBackwardKernel(gradNCHW, inputNCHW, kernelNCHW.Shape._dims, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
 
         // Bias gradient: sum over batch/height/width
         _convBiasGradient = Engine.ReduceSum(gradNCHW, new[] { 0, 2, 3 }, keepDims: false);
@@ -958,7 +958,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         }
 
         // Use Tensor.FromVector for production-grade parameter setting
-        _convWeights = Tensor<T>.FromVector(parameters.Slice(0, weightSize), _convWeights.Shape);
+        _convWeights = Tensor<T>.FromVector(parameters.Slice(0, weightSize), _convWeights.Shape._dims);
         _convBias = Tensor<T>.FromVector(parameters.Slice(weightSize, biasSize), [biasSize]);
     }
 

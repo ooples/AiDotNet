@@ -380,7 +380,7 @@ public class MultiplyLayer<T> : LayerBase<T>
                 }
             }
 
-            inputGradients[i] = new GpuTensor<T>(backend, gradBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+            inputGradients[i] = new GpuTensor<T>(backend, gradBuffer, outputGradient.Shape._dims, GpuTensorRole.Gradient, ownsBuffer: true);
         }
 
         // Dispose uploaded input buffers

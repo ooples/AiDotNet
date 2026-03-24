@@ -242,7 +242,7 @@ public class TNetLayer<T> : LayerBase<T>
             }
         }
 
-        var transformGradTensor = new Tensor<T>(transformGrad, _lastTransformVector.Shape);
+        var transformGradTensor = new Tensor<T>(transformGrad, _lastTransformVector.Shape._dims);
         Tensor<T> layerGradient = transformGradTensor;
         for (int i = _fcLayers.Count - 1; i >= 0; i--)
         {

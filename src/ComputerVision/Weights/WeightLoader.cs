@@ -112,7 +112,7 @@ public class WeightLoader
 
                 if (tensorMetadata.TryGetValue(tensorKey, out var meta))
                 {
-                    var tensor = ParseTensorData(tensorBytes, meta.Shape, meta.DType);
+                    var tensor = ParseTensorData(tensorBytes, meta.Shape._dims, meta.DType);
                     if (tensor != null && !string.IsNullOrEmpty(meta.Name))
                     {
                         weights[meta.Name] = tensor;
@@ -203,7 +203,7 @@ public class WeightLoader
             int byteCount = (int)(info.DataEnd - info.DataStart);
             byte[] tensorBytes = reader.ReadBytes(byteCount);
 
-            var tensor = ParseTensorData(tensorBytes, info.Shape, info.DType);
+            var tensor = ParseTensorData(tensorBytes, info.Shape._dims, info.DType);
             if (tensor != null)
             {
                 weights[info.Name] = tensor;
@@ -714,7 +714,7 @@ public class WeightLoader
             return null;
         }
 
-        return ParseTensorData(data.Data.ToArray(), data.Shape, data.DType);
+        return ParseTensorData(data.Data.ToArray(), data.Shape._dims, data.DType);
     }
 
     private class SafeTensorInfo

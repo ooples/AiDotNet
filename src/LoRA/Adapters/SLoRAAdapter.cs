@@ -531,7 +531,7 @@ public class SLoRAAdapter<T> : LoRAAdapterBase<T>
             Tensor<T> loraOutput = entry.Layer.Forward(input);
 
             // Combine base and adapter outputs
-            Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+            Tensor<T> result = new Tensor<T>(baseOutput.Shape._dims);
             for (int i = 0; i < baseOutput.Length; i++)
             {
                 result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
@@ -664,7 +664,7 @@ public class SLoRAAdapter<T> : LoRAAdapterBase<T>
                     Tensor<T> loraOutput = entry.Layer.Forward(inputs[idx]);
 
                     // Combine base and adapter outputs
-                    Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+                    Tensor<T> result = new Tensor<T>(baseOutput.Shape._dims);
                     for (int i = 0; i < baseOutput.Length; i++)
                     {
                         result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);

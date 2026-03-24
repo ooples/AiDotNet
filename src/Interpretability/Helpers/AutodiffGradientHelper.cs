@@ -115,7 +115,7 @@ public class AutodiffGradientHelper<T>
             var outputNode = _modelFunction(inputNode);
 
             // Create one-hot gradient for target output
-            var outputGrad = new Tensor<T>(outputNode.Value.Shape);
+            var outputGrad = new Tensor<T>(outputNode.Value.Shape._dims);
             if (outputIndex < outputNode.Value.Length)
             {
                 outputGrad[outputIndex] = NumOps.One;
@@ -131,7 +131,7 @@ public class AutodiffGradientHelper<T>
                 return inputNode.Gradient;
             }
 
-            return new Tensor<T>(input.Shape);
+            return new Tensor<T>(input.Shape._dims);
         }
     }
 
@@ -257,7 +257,7 @@ public class AutodiffGradientHelper<T>
                 var outputNode = _modelFunction(inputNode);
 
                 // First gradient
-                var outputGrad = new Tensor<T>(outputNode.Value.Shape);
+                var outputGrad = new Tensor<T>(outputNode.Value.Shape._dims);
                 if (outputIndex < outputNode.Value.Length)
                 {
                     outputGrad[outputIndex] = NumOps.One;
@@ -269,7 +269,7 @@ public class AutodiffGradientHelper<T>
 
                 if (!firstGradients.TryGetValue(inputNode, out var firstGrad))
                 {
-                    return new Tensor<T>(input.Shape);
+                    return new Tensor<T>(input.Shape._dims);
                 }
 
                 // Compute dot product of first gradient and vector
@@ -279,7 +279,7 @@ public class AutodiffGradientHelper<T>
                     TensorOperations<T>.ElementwiseMultiply(gradNode, vectorNode));
 
                 // Second gradient (Hessian-vector product)
-                dotProduct.Gradient = new Tensor<T>(dotProduct.Value.Shape);
+                dotProduct.Gradient = new Tensor<T>(dotProduct.Value.Shape._dims);
                 dotProduct.Gradient[0] = NumOps.One;
                 var hvp = outerTape.Gradient(dotProduct, new[] { inputNode });
 
@@ -290,7 +290,7 @@ public class AutodiffGradientHelper<T>
             }
         }
 
-        return new Tensor<T>(input.Shape);
+        return new Tensor<T>(input.Shape._dims);
     }
 
     /// <summary>

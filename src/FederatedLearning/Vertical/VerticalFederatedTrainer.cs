@@ -460,7 +460,7 @@ public class VerticalFederatedTrainer<T> : FederatedLearningComponentBase<T>, IV
                     totalElements *= lossGradient.Shape[d];
                 }
 
-                var negatedGradient = new Tensor<T>(lossGradient.Shape);
+                var negatedGradient = new Tensor<T>(lossGradient.Shape._dims);
                 for (int i = 0; i < totalElements; i++)
                 {
                     negatedGradient[i] = NumOps.FromDouble(-NumOps.ToDouble(lossGradient[i]));

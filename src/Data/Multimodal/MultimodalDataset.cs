@@ -158,11 +158,11 @@ public class MultimodalDataset<T>
             }
 
             var modalitySample = sample[modalityKey];
-            if (!modalitySample.Shape.SequenceEqual(sampleShape))
+            if (!modalitySample.Shape._dims.SequenceEqual(sampleShape))
             {
                 throw new InvalidOperationException(
                     $"Modality '{modalityKey}' shape mismatch at index {startIndex + i}. " +
-                    $"Expected [{string.Join(", ", sampleShape)}] but got [{string.Join(", ", modalitySample.Shape)}].");
+                    $"Expected [{string.Join(", ", sampleShape)}] but got [{string.Join(", ", modalitySample.Shape._dims)}].");
             }
 
             var modalityData = modalitySample.Data;
@@ -201,7 +201,7 @@ public class MultimodalDataset<T>
         var firstSample = this[startIndex];
         if (firstSample.Label is null) return null;
 
-        int[] labelShape = firstSample.Label.Shape;
+        int[] labelShape = firstSample.Label.Shape._dims;
         int elementsPerLabel = 1;
         try
         {

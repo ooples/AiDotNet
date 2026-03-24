@@ -112,7 +112,7 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
     /// <returns>Normalized mel-spectrogram tensor.</returns>
     protected Tensor<T> NormalizeMel(Tensor<T> mel, double minLevel = -100.0, double refLevel = 20.0)
     {
-        var result = new Tensor<T>(mel.Shape);
+        var result = new Tensor<T>(mel.Shape._dims);
         double range = refLevel - minLevel;
         if (Math.Abs(range) < 1e-10) range = 1.0;
 
@@ -151,7 +151,7 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
             if (v > maxVal) maxVal = v;
         }
 
-        var result = new Tensor<T>(logits.Shape);
+        var result = new Tensor<T>(logits.Shape._dims);
         double sum = 0;
         for (int i = 0; i < logits.Length; i++)
         {
@@ -186,7 +186,7 @@ public abstract class TtsModelBase<T> : NeuralNetworkBase<T>
         norm = Math.Sqrt(norm);
         if (norm < 1e-8) return tensor;
 
-        var result = new Tensor<T>(tensor.Shape);
+        var result = new Tensor<T>(tensor.Shape._dims);
         for (int i = 0; i < tensor.Length; i++)
             result[i] = NumOps.FromDouble(NumOps.ToDouble(tensor[i]) / norm);
 

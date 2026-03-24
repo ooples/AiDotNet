@@ -242,7 +242,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape._dims;
 
         // Cache input for backward pass
         if (IsTrainingMode)
@@ -321,7 +321,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Scale the gradient for the RDB path
         var rdb3GradBuffer = backend.AllocateBuffer(size);
         backend.Scale(outputGradient.Buffer, rdb3GradBuffer, (float)_residualScale, size);
-        var rdb3Grad = new GpuTensor<T>(backend, rdb3GradBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+        var rdb3Grad = new GpuTensor<T>(backend, rdb3GradBuffer, outputGradient.Shape._dims, GpuTensorRole.Gradient, ownsBuffer: true);
 
         // Backward through RDB3, RDB2, RDB1
         IGpuTensor<T> grad = rdb3Grad;
@@ -347,7 +347,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var resultBuffer = backend.AllocateBuffer(size);
         backend.Add(grad.Buffer, outputGradient.Buffer, resultBuffer, size);
 
-        return new GpuTensor<T>(backend, resultBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+        return new GpuTensor<T>(backend, resultBuffer, outputGradient.Shape._dims, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     #endregion
@@ -484,7 +484,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var scaleValue = numOps.FromDouble(scale);
 
         // Create a constant tensor filled with the scale value matching the input shape
-        var scaleTensor = new Tensor<T>(node.Value.Shape);
+        var scaleTensor = new Tensor<T>(node.Value.Shape._dims);
         for (int i = 0; i < scaleTensor.Length; i++)
         {
             scaleTensor.Data.Span[i] = scaleValue;

@@ -97,7 +97,7 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         int height = frames.Shape[2];
         int width = frames.Shape[3];
 
-        var result = new Tensor<T>(frames.Shape);
+        var result = new Tensor<T>(frames.Shape._dims);
 
         // Copy original frames
         for (int i = 0; i < frames.Length; i++)

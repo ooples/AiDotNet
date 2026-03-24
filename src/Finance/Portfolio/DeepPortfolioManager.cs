@@ -219,7 +219,7 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
         var output = Predict(input);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
         
-        var currentGrad = Tensor<T>.FromVector(grad, output.Shape);
+        var currentGrad = Tensor<T>.FromVector(grad, output.Shape._dims);
         for (int i = Layers.Count - 1; i >= 0; i--)
             currentGrad = Layers[i].Backward(currentGrad);
 

@@ -525,7 +525,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                             throw new InvalidOperationException(
                                 $"Expected {outputDim} outputs from the network, got {outputs.Shape[1]}.");
                         }
-                        var outputGradients = new Tensor<T>(outputs.Shape);
+                        var outputGradients = new Tensor<T>(outputs.Shape._dims);
 
                         T invTwoStep = NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2.0), step));
                         T batchWeightSum = NumOps.Zero;
@@ -746,7 +746,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape);
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape._dims);
 
             Backpropagate(outputGradientTensor);
             _optimizer.UpdateParameters(Layers);

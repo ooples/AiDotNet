@@ -51,8 +51,8 @@ public static class TensorCopyHelper
             {
                 throw new ArgumentException(
                     $"Source and destination tensors must have matching shapes except for the first dimension. " +
-                    $"Source shape: [{string.Join(", ", source.Shape)}], " +
-                    $"Destination shape: [{string.Join(", ", dest.Shape)}].");
+                    $"Source shape: [{string.Join(", ", source.Shape._dims)}], " +
+                    $"Destination shape: [{string.Join(", ", dest.Shape._dims)}].");
             }
         }
 

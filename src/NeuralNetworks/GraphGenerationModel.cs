@@ -296,13 +296,13 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     private void InitializeVariationalWeights()
     {
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (HiddenDim + LatentDim)));
-        var randomTensor = Tensor<T>.CreateRandom(_meanWeights.Shape);
-        var halfTensor = new Tensor<T>(_meanWeights.Shape);
+        var randomTensor = Tensor<T>.CreateRandom(_meanWeights.Shape._dims);
+        var halfTensor = new Tensor<T>(_meanWeights.Shape._dims);
         Engine.TensorFill(halfTensor, NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         _meanWeights = Engine.TensorMultiplyScalar(shifted, scale);
 
-        randomTensor = Tensor<T>.CreateRandom(_logVarWeights.Shape);
+        randomTensor = Tensor<T>.CreateRandom(_logVarWeights.Shape._dims);
         shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         _logVarWeights = Engine.TensorMultiplyScalar(shifted, scale);
     }
@@ -353,7 +353,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     {
         // z = mean + std * epsilon, where epsilon ~ N(0, 1)
         // Clamp logVar to prevent exp() overflow (exp(20) ≈ 5e8, exp(40) ≈ 2e17)
-        var clampedLogVar = new Tensor<T>(logVar.Shape);
+        var clampedLogVar = new Tensor<T>(logVar.Shape._dims);
         for (int i = 0; i < logVar.Length; i++)
         {
             double v = NumOps.ToDouble(logVar.GetFlat(i));
@@ -363,7 +363,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var std = Engine.TensorSqrt(Engine.TensorExp(clampedLogVar));
 
         // Generate standard normal samples
-        var epsilon = new Tensor<T>(mean.Shape);
+        var epsilon = new Tensor<T>(mean.Shape._dims);
         for (int i = 0; i < epsilon.Length; i++)
         {
             epsilon.SetFlat(i, NumOps.FromDouble(_random.NextGaussian()));
@@ -501,7 +501,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 
         // Gradient through decoder (inner product)
         // d(z_i^T * z_j)/d(z) = sum_j(grad_ij * z_j) for each i
-        var latentGrad = new Tensor<T>(_lastLatent.Shape);
+        var latentGrad = new Tensor<T>(_lastLatent.Shape._dims);
         for (int i = 0; i < numNodes; i++)
         {
             for (int k = 0; k < LatentDim; k++)
@@ -597,11 +597,11 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         if (index + meanCount + logVarCount <= parameters.Length)
         {
             _meanWeights = Tensor<T>.FromVector(parameters.SubVector(index, meanCount))
-                .Reshape(_meanWeights.Shape);
+                .Reshape(_meanWeights.Shape._dims);
             index += meanCount;
 
             _logVarWeights = Tensor<T>.FromVector(parameters.SubVector(index, logVarCount))
-                .Reshape(_logVarWeights.Shape);
+                .Reshape(_logVarWeights.Shape._dims);
         }
     }
 
@@ -816,7 +816,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
             double alpha = (double)step / numSteps;
 
             // Linear interpolation in latent space
-            var interpolated = new Tensor<T>(latent1.Shape);
+            var interpolated = new Tensor<T>(latent1.Shape._dims);
             for (int i = 0; i < latent1.Length; i++)
             {
                 T val1 = latent1.GetFlat(i);
@@ -832,7 +832,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 
             // Threshold
             T threshold = NumOps.FromDouble(0.5);
-            var adjacency = new Tensor<T>(reconstructed.Shape);
+            var adjacency = new Tensor<T>(reconstructed.Shape._dims);
             for (int i = 0; i < reconstructed.Length; i++)
             {
                 adjacency.SetFlat(i, NumOps.GreaterThan(reconstructed.GetFlat(i), threshold)
@@ -1102,13 +1102,13 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var meanData = new T[meanCount];
         for (int i = 0; i < meanCount; i++)
             meanData[i] = NumOps.FromDouble(reader.ReadDouble());
-        _meanWeights = Tensor<T>.FromVector(new Vector<T>(meanData)).Reshape(_meanWeights.Shape);
+        _meanWeights = Tensor<T>.FromVector(new Vector<T>(meanData)).Reshape(_meanWeights.Shape._dims);
 
         int logVarCount = reader.ReadInt32();
         var logVarData = new T[logVarCount];
         for (int i = 0; i < logVarCount; i++)
             logVarData[i] = NumOps.FromDouble(reader.ReadDouble());
-        _logVarWeights = Tensor<T>.FromVector(new Vector<T>(logVarData)).Reshape(_logVarWeights.Shape);
+        _logVarWeights = Tensor<T>.FromVector(new Vector<T>(logVarData)).Reshape(_logVarWeights.Shape._dims);
     }
 
     /// <summary>

@@ -804,7 +804,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         int height = hasBatch ? feature.Shape[2] : feature.Shape[1];
         int width = hasBatch ? feature.Shape[3] : feature.Shape[2];
 
-        var warped = new Tensor<T>(feature.Shape);
+        var warped = new Tensor<T>(feature.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {
@@ -977,7 +977,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             inputData[i] = Convert.ToSingle(frames.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, frames.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, frames.Shape._dims);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1005,7 +1005,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
     private Tensor<T> ComputeLossGradient(Tensor<T> output, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape._dims);
 
         for (int i = 0; i < output.Length; i++)
         {
@@ -1265,8 +1265,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         int height = hasBatch ? outputGrad.Shape[2] : outputGrad.Shape[1];
         int width = hasBatch ? outputGrad.Shape[3] : outputGrad.Shape[2];
 
-        var featureGrad = new Tensor<T>(inputFeature.Shape);
-        var flowGrad = new Tensor<T>(flow.Shape);
+        var featureGrad = new Tensor<T>(inputFeature.Shape._dims);
+        var flowGrad = new Tensor<T>(flow.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {

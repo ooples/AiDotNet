@@ -340,7 +340,7 @@ public class SSMStateCache<T>
         // Store quantized values (still as T, but with reduced effective precision)
         long levels = (1L << _compressionBitWidth) - 1;
         T levelsT = NumOps.FromDouble(levels);
-        var compressed = new Tensor<T>(state.Shape);
+        var compressed = new Tensor<T>(state.Shape._dims);
 
         for (int i = 0; i < state.Length; i++)
         {
@@ -365,7 +365,7 @@ public class SSMStateCache<T>
 
     private static Tensor<T> CloneTensor(Tensor<T> source)
     {
-        var clone = new Tensor<T>(source.Shape);
+        var clone = new Tensor<T>(source.Shape._dims);
         for (int i = 0; i < source.Length; i++)
         {
             clone[i] = source[i];

@@ -144,7 +144,7 @@ public class HLIRToLLIRLowering<T> where T : struct
         var bufferId = _llirGraph.AllocateBufferId();
         _hlirToLlirBufferMap[node.Id] = bufferId;
         _llirGraph.InputIds.Add(bufferId);
-        _llirGraph.BufferShapes[bufferId] = node.OutputType.Shape;
+        _llirGraph.BufferShapes[bufferId] = node.OutputType.Shape._dims;
         _llirGraph.BufferTypes[bufferId] = ConvertDataType(node.OutputType.DataType);
     }
 
@@ -493,7 +493,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         if (node.Operation == OperationType.Reshape)
         {
-            op.NewShape = node.OutputType.Shape;
+            op.NewShape = node.OutputType.Shape._dims;
         }
 
         return op;

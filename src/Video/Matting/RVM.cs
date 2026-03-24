@@ -210,7 +210,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         int h = foreground.Rank == 4 ? foreground.Shape[2] : foreground.Shape[1];
         int w = foreground.Rank == 4 ? foreground.Shape[3] : foreground.Shape[2];
 
-        var composite = new Tensor<T>(foreground.Shape);
+        var composite = new Tensor<T>(foreground.Shape._dims);
 
         for (int y = 0; y < h; y++)
         {
@@ -283,7 +283,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         var result = input;
 
         // Use hidden state for temporal consistency if available
-        if (_hiddenState != null && _hiddenState.Shape.SequenceEqual(input.Shape))
+        if (_hiddenState != null && _hiddenState.Shape._dims.SequenceEqual(input.Shape._dims))
         {
             // Blend with previous state for temporal smoothing
             for (int i = 0; i < Math.Min(result.Length, _hiddenState.Length); i++)
@@ -297,7 +297,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers) result = layer.Forward(result);
 
         // Update hidden state for next frame
-        _hiddenState = new Tensor<T>(result.Shape);
+        _hiddenState = new Tensor<T>(result.Shape._dims);
         result.Data.Span.CopyTo(_hiddenState.Data.Span);
 
         return result;
@@ -310,7 +310,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
 
         using var results = _onnxSession.Run(inputs);
@@ -332,7 +332,7 @@ public class RVM<T> : NeuralNetworkBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = new Tensor<T>(prediction.Shape, gradient);
+        var gradTensor = new Tensor<T>(prediction.Shape._dims, gradient);
 
         for (int i = Layers.Count - 1; i >= 0; i--) gradTensor = Layers[i].Backward(gradTensor);
         _optimizer?.UpdateParameters(Layers);

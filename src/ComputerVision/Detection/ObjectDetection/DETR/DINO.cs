@@ -125,7 +125,7 @@ public class DINO<T> : ObjectDetectorBase<T>
         var projected = ProjectFeatures(flattenedFeatures);
 
         // Generate multi-scale positional encoding
-        var posEncoding = GenerateMultiScalePositionalEncoding(projected.Shape, spatialShapes, levelStarts);
+        var posEncoding = GenerateMultiScalePositionalEncoding(projected.Shape._dims, spatialShapes, levelStarts);
 
         // Encode with deformable attention
         var memory = _encoder.Forward(projected, posEncoding, spatialShapes, levelStarts);
@@ -282,7 +282,7 @@ public class DINO<T> : ObjectDetectorBase<T>
         int batch = features.Shape[0];
         int seqLen = features.Shape[1];
 
-        var result = new Tensor<T>(features.Shape);
+        var result = new Tensor<T>(features.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {
@@ -387,7 +387,7 @@ internal class DINOEncoder<T>
 
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> posEncoding, int[][] spatialShapes, int[] levelStarts)
     {
-        var output = new Tensor<T>(x.Shape);
+        var output = new Tensor<T>(x.Shape._dims);
         for (int i = 0; i < x.Length; i++)
         {
             output[i] = _numOps.Add(x[i], posEncoding[i]);
@@ -541,7 +541,7 @@ internal class DINOEncoderLayer<T>
         int seqLen = x.Shape[1];
         int ffnDim = _ffn1.OutputSize;
 
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {

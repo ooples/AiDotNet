@@ -468,7 +468,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         }
 
         // Create tensor from the normalized vector with the original shape
-        return Tensor<T>.FromVector(resultVector, melSpec.Shape);
+        return Tensor<T>.FromVector(resultVector, melSpec.Shape._dims);
     }
 
     /// <inheritdoc/>

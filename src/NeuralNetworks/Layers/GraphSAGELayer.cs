@@ -216,7 +216,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         // Graph layer expects 3D: [batchSize, numNodes, features]
@@ -284,7 +284,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _lastDegrees = Engine.ReduceSum(adjForBatch, [2], keepDims: false); // [batch, nodes]
 
         // Clamp degrees to minimum of 1 to avoid division by zero
-        var oneTensor = new Tensor<T>(_lastDegrees.Shape);
+        var oneTensor = new Tensor<T>(_lastDegrees.Shape._dims);
         oneTensor.Fill(NumOps.One);
         var safeDegrees = Engine.TensorMax(_lastDegrees, oneTensor);
 
@@ -409,10 +409,10 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var adjExpanded = adjForBatch.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with -inf
-        var negInf = new Tensor<T>(tiled.Shape);
+        var negInf = new Tensor<T>(tiled.Shape._dims);
         negInf.Fill(NumOps.MinValue);
 
-        var zeroTensor = new Tensor<T>(adjExpanded.Shape);
+        var zeroTensor = new Tensor<T>(adjExpanded.Shape._dims);
         zeroTensor.Fill(NumOps.Zero);
         var mask = Engine.TensorGreaterThan(adjExpanded, zeroTensor);
 
@@ -421,7 +421,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var masked = Engine.TensorWhere(maskBroadcast, tiled, negInf);
 
         // Store input shape for backward pass
-        _lastMaxInputShape = masked.Shape;
+        _lastMaxInputShape = masked.Shape._dims;
 
         // Reduce max over neighbors axis (axis 2) and store indices for backward
         var result = Engine.ReduceMax(masked, [2], keepDims: false, out int[] maxIndices);
@@ -452,7 +452,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var normSquared = Engine.ReduceSum(squared, [2], keepDims: true);
 
         // Add epsilon for numerical stability
-        var epsilon = new Tensor<T>(normSquared.Shape);
+        var epsilon = new Tensor<T>(normSquared.Shape._dims);
         epsilon.Fill(NumOps.FromDouble(1e-12));
         normSquared = Engine.TensorAdd(normSquared, epsilon);
 
@@ -491,7 +491,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
         {
             // Reshape gradient to 3D [batch, nodes, features] to match _lastOutput
-            gradForBackward = outputGradient.Reshape(_lastOutput.Shape);
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape._dims);
         }
 
         var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
@@ -513,8 +513,8 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _biasGradient = Engine.ReduceSum(preNormGradient, [0, 1], keepDims: false);
 
         // Self + Neighbor weights gradient: per-batch matmul (Engine.BatchMatMul has issues)
-        _selfWeightsGradient = new Tensor<T>(_selfWeights.Shape);
-        _neighborWeightsGradient = new Tensor<T>(_neighborWeights.Shape);
+        _selfWeightsGradient = new Tensor<T>(_selfWeights.Shape._dims);
+        _neighborWeightsGradient = new Tensor<T>(_neighborWeights.Shape._dims);
         for (int b = 0; b < batchSize; b++)
         {
             var inputB = _lastInput.GetSliceAlongDimension(b, 0);
@@ -560,7 +560,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Compute squared values and norms
         var squared = Engine.TensorMultiply(preNorm, preNorm);
         var normSquared = Engine.ReduceSum(squared, [2], keepDims: true);
-        var epsilon = new Tensor<T>(normSquared.Shape);
+        var epsilon = new Tensor<T>(normSquared.Shape._dims);
         epsilon.Fill(NumOps.FromDouble(1e-12));
         normSquared = Engine.TensorAdd(normSquared, epsilon);
         var norm = Engine.TensorSqrt(normSquared);
@@ -650,7 +650,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var gradForBackward = outputGradient;
         if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
         {
-            gradForBackward = outputGradient.Reshape(_lastOutput.Shape);
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape._dims);
         }
 
         var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
@@ -774,7 +774,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Extract input gradient
-        var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape);
+        var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape._dims);
 
         // Reshape back to original input shape if it was not 3D
         if (_originalInputShape != null && _originalInputShape.Length != 3)
@@ -878,11 +878,11 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int index = 0;
 
         _selfWeights = Tensor<T>.FromVector(parameters.SubVector(index, selfCount))
-            .Reshape(_selfWeights.Shape);
+            .Reshape(_selfWeights.Shape._dims);
         index += selfCount;
 
         _neighborWeights = Tensor<T>.FromVector(parameters.SubVector(index, neighborCount))
-            .Reshape(_neighborWeights.Shape);
+            .Reshape(_neighborWeights.Shape._dims);
         index += neighborCount;
 
         _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));

@@ -349,7 +349,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for backward pass restoration
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
 
         // Auto-reshape 1D input to [1, N] for batch normalization compatibility
         _inputWas1D = input.Shape.Length == 1;
@@ -389,8 +389,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
                     newVarData[i] = i < copyLen ? batchVariance.Data.Span[i] : varFillValue;
                 }
 
-                batchMean = new Tensor<T>(_runningMean.Shape, new Vector<T>(newMeanData));
-                batchVariance = new Tensor<T>(_runningVariance.Shape, new Vector<T>(newVarData));
+                batchMean = new Tensor<T>(_runningMean.Shape._dims, new Vector<T>(newMeanData));
+                batchVariance = new Tensor<T>(_runningVariance.Shape._dims, new Vector<T>(newVarData));
             }
 
             // Update running statistics using Exponential Moving Average (Vectorized)
@@ -419,7 +419,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             // output = gamma * (input - runningMean) / sqrt(runningVar + epsilon) + beta
 
             // Calculate scale and shift terms
-            var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape, _epsilon);
+            var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape._dims, _epsilon);
             var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
             var stdDev = Engine.TensorSqrt(variancePlusEps);
 
@@ -466,7 +466,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         var shiftData = shift.Data.Span;
 
         // Rent output tensor (fully overwritten) and write via Span
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape._dims);
         var outputData = output.Data.Span;
 
         for (int n = 0; n < batch; n++)
@@ -659,7 +659,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         }
 
         // Save original shape for restoring at the end
-        int[] originalInputShape = _lastInput.Shape;
+        int[] originalInputShape = _lastInput.Shape._dims;
 
         // Ensure shapes match for backward pass
         var adjustedGradient = outputGradient;
@@ -759,7 +759,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             {
                 meanData[i] = i < copyLen ? adjustedMean.Data.Span[i] : meanFillValue;
             }
-            adjustedMean = new Tensor<T>(_gamma.Shape, new Vector<T>(meanData));
+            adjustedMean = new Tensor<T>(_gamma.Shape._dims, new Vector<T>(meanData));
         }
 
         if (adjustedVariance.Length != numFeatures)
@@ -771,7 +771,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             {
                 varData[i] = i < copyLen ? adjustedVariance.Data.Span[i] : varFillValue;
             }
-            adjustedVariance = new Tensor<T>(_gamma.Shape, new Vector<T>(varData));
+            adjustedVariance = new Tensor<T>(_gamma.Shape._dims, new Vector<T>(varData));
         }
 
         // Use Engine for GPU/CPU accelerated Batch Normalization Backward
@@ -1073,13 +1073,13 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
 
             if (_gammaVelocity == null)
             {
-                _gammaVelocity = new Tensor<T>(_gamma.Shape);
+                _gammaVelocity = new Tensor<T>(_gamma.Shape._dims);
                 _gammaVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_gammaVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_betaVelocity == null)
             {
-                _betaVelocity = new Tensor<T>(_beta.Shape);
+                _betaVelocity = new Tensor<T>(_beta.Shape._dims);
                 _betaVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_betaVelocity, PersistentTensorRole.OptimizerState);
             }

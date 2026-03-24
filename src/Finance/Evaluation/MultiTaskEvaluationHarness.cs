@@ -260,7 +260,7 @@ public class MultiTaskEvaluationHarness<T>
                     nameof(masks));
 
             // Create masked input (zero out masked positions)
-            var maskedInput = new Tensor<T>(original.Shape);
+            var maskedInput = new Tensor<T>(original.Shape._dims);
             for (int i = 0; i < original.Length; i++)
             {
                 double m = NumOps.ToDouble(mask[i]);

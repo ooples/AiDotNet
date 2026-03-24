@@ -151,7 +151,7 @@ public class InferenceContext<T> : IDisposable
     {
         if (template == null)
             throw new ArgumentNullException(nameof(template));
-        return Rent(template.Shape);
+        return Rent(template.Shape._dims);
     }
 
     /// <summary>
@@ -298,7 +298,7 @@ public static class InferenceScope<T>
     {
         if (template == null)
             throw new ArgumentNullException(nameof(template));
-        return RentOrCreate(template.Shape);
+        return RentOrCreate(template.Shape._dims);
     }
 }
 

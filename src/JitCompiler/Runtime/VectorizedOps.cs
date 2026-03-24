@@ -108,7 +108,7 @@ public static class VectorizedOps
                 break;
         }
 
-        return new Tensor<T>(left.Shape, new Vector<T>(result));
+        return new Tensor<T>(left.Shape._dims, new Vector<T>(result));
     }
 
     /// <summary>
@@ -179,7 +179,7 @@ public static class VectorizedOps
                 break;
         }
 
-        return new Tensor<T>(input.Shape, new Vector<T>(result));
+        return new Tensor<T>(input.Shape._dims, new Vector<T>(result));
     }
 
     /// <summary>
@@ -513,7 +513,7 @@ public static class VectorizedOps
         bool keepDims,
         INumericOperations<T> numOps)
     {
-        var inputShape = input.Shape;
+        var inputShape = input.Shape._dims;
         var inputSpan = input.AsSpan();
 
         // Normalize negative axes

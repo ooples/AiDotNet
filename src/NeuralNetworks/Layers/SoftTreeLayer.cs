@@ -244,9 +244,9 @@ public class SoftTreeLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
 
         // Initialize gradients
-        _splitWeightsGrad = new Tensor<T>(_splitWeights.Shape);
-        _splitBiasesGrad = new Tensor<T>(_splitBiases.Shape);
-        _leafValuesGrad = new Tensor<T>(_leafValues.Shape);
+        _splitWeightsGrad = new Tensor<T>(_splitWeights.Shape._dims);
+        _splitBiasesGrad = new Tensor<T>(_splitBiases.Shape._dims);
+        _leafValuesGrad = new Tensor<T>(_leafValues.Shape._dims);
 
         // Gradient w.r.t. leaf values: pathProbs^T @ outputGradient
         // pathProbs: [batchSize, numLeaves], outputGradient: [batchSize, outputDim]
@@ -538,7 +538,7 @@ public class SoftTreeLayer<T> : LayerBase<T>
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape._dims)
         {
             writer.Write(dim);
         }

@@ -283,7 +283,7 @@ public abstract class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
         int height = hasBatch ? feature.Shape[2] : feature.Shape[1];
         int width = hasBatch ? feature.Shape[3] : feature.Shape[2];
 
-        var warped = new Tensor<T>(feature.Shape);
+        var warped = new Tensor<T>(feature.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {

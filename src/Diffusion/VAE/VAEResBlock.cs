@@ -249,7 +249,7 @@ public class VAEResBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplySiLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
         var inputSpan = input.AsSpan();
         var outputSpan = output.AsWritableSpan();
 
@@ -266,7 +266,7 @@ public class VAEResBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplySiLUDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
         var inputSpan = input.AsSpan();
         var gradSpan = gradient.AsSpan();
         var outputSpan = output.AsWritableSpan();

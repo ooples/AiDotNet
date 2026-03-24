@@ -484,7 +484,7 @@ internal class DecoderLayer<T>
         int hiddenDim = x.Shape[2];
         int ffnDim = _ffn1.OutputSize;
 
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {
@@ -570,7 +570,7 @@ internal class MultiHeadCrossAttention<T>
         var memoryWithPos = memory;
         if (posEncoding is not null)
         {
-            memoryWithPos = new Tensor<T>(memory.Shape);
+            memoryWithPos = new Tensor<T>(memory.Shape._dims);
             for (int i = 0; i < memory.Length; i++)
             {
                 memoryWithPos[i] = _numOps.Add(memory[i], posEncoding[i]);

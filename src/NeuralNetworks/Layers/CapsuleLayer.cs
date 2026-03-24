@@ -325,7 +325,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Clamp values to avoid log(0)
         T epsilon = NumOps.FromDouble(1e-10);
-        var epsilonTensor = new Tensor<T>(_lastCouplingCoefficients.Shape);
+        var epsilonTensor = new Tensor<T>(_lastCouplingCoefficients.Shape._dims);
         epsilonTensor.Fill(epsilon);
 
         // p_clamped = max(p, epsilon) - element-wise
@@ -460,7 +460,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: need at least 2D [capsules, dim]
@@ -713,7 +713,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (ScalarActivation != null)
         {
             // Apply scalar derivative element-by-element to avoid Jacobian shape mismatch
-            var deriv = new Tensor<T>(_lastOutput.Shape);
+            var deriv = new Tensor<T>(_lastOutput.Shape._dims);
             for (int i = 0; i < _lastOutput.Length; i++)
                 deriv[i] = ScalarActivation.Derivative(_lastOutput[i]);
             activationGradient = Engine.TensorMultiply(deriv, outputGradient);
@@ -921,7 +921,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 7. Store Gradients
         // _biasGradient is flattened - use default zero tensor if gradient is null
-        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape, NumOps.Zero);
+        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape._dims, NumOps.Zero);
 
         // _transformationMatrixGradient needs [I, D_in, O, D_out]
         // weightsPermuted.Gradient is [I, O, D_in, D_out]
@@ -933,7 +933,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else
         {
-            _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape, NumOps.Zero);
+            _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape._dims, NumOps.Zero);
         }
 
         var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
@@ -1095,7 +1095,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException($"Expected {matrixSize + biasSize} parameters, but got {parameters.Length}");
 
         // Set parameters without hot-path conversions
-        _transformationMatrix = new Tensor<T>(_transformationMatrix.Shape, parameters.Slice(0, matrixSize));
+        _transformationMatrix = new Tensor<T>(_transformationMatrix.Shape._dims, parameters.Slice(0, matrixSize));
         _bias = new Tensor<T>([biasSize], parameters.Slice(matrixSize, biasSize));
     }
 

@@ -157,7 +157,7 @@ public class ImageWatermarker<T> : IImageSafetyModule<T>
     /// </remarks>
     private T DetectWatermarkFrequencyDomain(Tensor<T> image)
     {
-        int[] shape = image.Shape;
+        int[] shape = image.Shape._dims;
         var span = image.Data.Span;
 
         // Determine image dimensions

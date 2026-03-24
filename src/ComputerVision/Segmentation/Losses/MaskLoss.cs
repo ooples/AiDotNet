@@ -55,7 +55,7 @@ public class MaskBCELoss<T>
     /// </summary>
     public Tensor<T> Backward(Tensor<T> predicted, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(predicted.Shape);
+        var gradient = new Tensor<T>(predicted.Shape._dims);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -143,7 +143,7 @@ public class MaskDiceLoss<T>
         double numerator = 2 * intersection + _smooth;
         double denominator = predSum + targetSum + _smooth;
 
-        var gradient = new Tensor<T>(predicted.Shape);
+        var gradient = new Tensor<T>(predicted.Shape._dims);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -216,7 +216,7 @@ public class MaskFocalLoss<T>
     /// </summary>
     public Tensor<T> Backward(Tensor<T> predicted, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(predicted.Shape);
+        var gradient = new Tensor<T>(predicted.Shape._dims);
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -292,7 +292,7 @@ public class CombinedMaskLoss<T>
         var bceGrad = _bceLoss.Backward(predicted, target);
         var diceGrad = _diceLoss.Backward(predicted, target);
 
-        var gradient = new Tensor<T>(predicted.Shape);
+        var gradient = new Tensor<T>(predicted.Shape._dims);
 
         for (int i = 0; i < predicted.Length; i++)
         {

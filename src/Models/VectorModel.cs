@@ -1597,7 +1597,7 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
         Tensor<T> input,
         int targetClass = -1)
     {
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape._dims;
         int[] featureMapShape = new[] { inputShape[0], 1, 1, 1 };
         return InterpretableModelHelper.GetGradCAMAsync(
             this, _enabledMethods, input, inputShape, featureMapShape, targetClass);

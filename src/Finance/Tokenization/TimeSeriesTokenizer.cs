@@ -190,7 +190,7 @@ public class TimeSeriesTokenizer<T>
 
         int len = series.Length;
         if (len == 0)
-            return (new Tensor<T>(series.Shape), NumOps.Zero, NumOps.One);
+            return (new Tensor<T>(series.Shape._dims), NumOps.Zero, NumOps.One);
 
         T mean = NumOps.Zero;
         for (int i = 0; i < len; i++)
@@ -206,7 +206,7 @@ public class TimeSeriesTokenizer<T>
         variance = NumOps.Divide(variance, NumOps.FromDouble(len));
         T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
 
-        var normalized = new Tensor<T>(series.Shape);
+        var normalized = new Tensor<T>(series.Shape._dims);
         for (int i = 0; i < len; i++)
             normalized.Data.Span[i] = NumOps.Divide(NumOps.Subtract(series[i], mean), std);
 
@@ -224,7 +224,7 @@ public class TimeSeriesTokenizer<T>
     {
         Guard.NotNull(prediction);
 
-        var result = new Tensor<T>(prediction.Shape);
+        var result = new Tensor<T>(prediction.Shape._dims);
         for (int i = 0; i < prediction.Length; i++)
             result.Data.Span[i] = NumOps.Add(NumOps.Multiply(prediction[i], std), mean);
 

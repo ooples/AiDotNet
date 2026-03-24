@@ -122,9 +122,9 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         // std = exp(0.5 * logVariance)
 
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-        var epsilon = SampleNoise(mean.Shape, rng);
+        var epsilon = SampleNoise(mean.Shape._dims, rng);
 
-        var result = new Tensor<T>(mean.Shape);
+        var result = new Tensor<T>(mean.Shape._dims);
         var meanSpan = mean.AsSpan();
         var logVarSpan = logVariance.AsSpan();
         var epsilonSpan = epsilon.AsSpan();

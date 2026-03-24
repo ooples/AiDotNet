@@ -418,7 +418,7 @@ public abstract class TabTransformerBase<T>
 
             if (_columnEmbeddings != null)
             {
-                _columnEmbeddingsGrad = new Tensor<T>(_columnEmbeddings.Shape);
+                _columnEmbeddingsGrad = new Tensor<T>(_columnEmbeddings.Shape._dims);
                 _columnEmbeddingsGrad.Fill(NumOps.Zero);
             }
 

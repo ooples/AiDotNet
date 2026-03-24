@@ -417,7 +417,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
         if (weights.Rank != 4)
             throw new ArgumentException("Filter pruning requires 4D tensor [filters, channels, height, width]");
 
-        var dims = weights.Shape;
+        var dims = weights.Shape._dims;
         int filters = dims[0];
         int channels = dims[1];
         int height = dims[2];
@@ -454,7 +454,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
         if (weights.Rank != 4)
             throw new ArgumentException("Channel pruning requires 4D tensor [filters, channels, height, width]");
 
-        var dims = weights.Shape;
+        var dims = weights.Shape._dims;
         int filters = dims[0];
         int channels = dims[1];
         int height = dims[2];

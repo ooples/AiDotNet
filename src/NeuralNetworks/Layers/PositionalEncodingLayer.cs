@@ -426,7 +426,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         }
 
         // Create a placeholder input tensor matching the working gradient shape
-        var inputTensor = new Tensor<T>(workingGradient.Shape);
+        var inputTensor = new Tensor<T>(workingGradient.Shape._dims);
 
         // Create computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
@@ -452,7 +452,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
             broadcastShape[rank - 2] = sequenceLength;
             broadcastShape[rank - 1] = embeddingSize;
 
-            encodingsForGraph = Tensor<T>.CreateDefault(outputGradient.Shape, NumOps.Zero).BroadcastAdd(
+            encodingsForGraph = Tensor<T>.CreateDefault(outputGradient.Shape._dims, NumOps.Zero).BroadcastAdd(
                 slicedEncodings.Reshape(broadcastShape));
         }
         var encodingsNode = Autodiff.TensorOperations<T>.Constant(encodingsForGraph, "positional_encodings");
@@ -641,7 +641,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var inputShape = input.Shape;
+        var inputShape = input.Shape._dims;
         int rank = inputShape.Length;
 
         // Handle 1D input by treating as [1, embed]
@@ -741,7 +741,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
                 totalBatchSize *= workingInput.Shape[d];
 
             var tiledEncodings = gpuEngine.TileBatchGpu(reshapedEncodings, totalBatchSize);
-            var finalEncodings = gpuEngine.ReshapeGpu(tiledEncodings, workingInput.Shape);
+            var finalEncodings = gpuEngine.ReshapeGpu(tiledEncodings, workingInput.Shape._dims);
 
             result = gpuEngine.AddGpu(workingInput, finalEncodings);
         }

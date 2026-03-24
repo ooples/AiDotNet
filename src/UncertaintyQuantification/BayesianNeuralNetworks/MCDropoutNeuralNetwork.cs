@@ -123,9 +123,9 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     {
         // MC Dropout primarily captures epistemic uncertainty
         // Return a small baseline aleatoric estimate
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape);
+        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape._dims);
 
-        var aleatoric = new Tensor<T>(totalUncertainty.Shape);
+        var aleatoric = new Tensor<T>(totalUncertainty.Shape._dims);
         var aleatoricFactor = NumOps.FromDouble(0.2); // Assume 20% of variance is aleatoric
 
         for (int i = 0; i < totalUncertainty.Length; i++)
@@ -147,9 +147,9 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// </remarks>
     public Tensor<T> EstimateEpistemicUncertainty(Tensor<T> input)
     {
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape);
+        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape._dims);
 
-        var epistemic = new Tensor<T>(totalUncertainty.Shape);
+        var epistemic = new Tensor<T>(totalUncertainty.Shape._dims);
         var epistemicFactor = NumOps.FromDouble(0.8); // Assume 80% of variance is epistemic
 
         for (int i = 0; i < totalUncertainty.Length; i++)
@@ -202,7 +202,7 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// </summary>
     private Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
     {
-        var variance = new Tensor<T>(mean.Shape);
+        var variance = new Tensor<T>(mean.Shape._dims);
 
         foreach (var pred in predictions)
         {

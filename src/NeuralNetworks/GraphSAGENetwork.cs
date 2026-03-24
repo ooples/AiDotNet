@@ -362,7 +362,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ComputeLossGradient(Tensor<T> predictions, Tensor<T> labels, bool[]? mask)
     {
-        var gradient = new Tensor<T>(predictions.Shape);
+        var gradient = new Tensor<T>(predictions.Shape._dims);
         int numNodes = predictions.Shape[0];
         int numClasses = predictions.Shape[1];
         int count = 0;
@@ -907,7 +907,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         // Reshape gradient back to tensor shape if needed
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape);
+            gradOutput = gradOutput.Reshape(predictions.Shape._dims);
         }
 
         // Backward pass through all layers

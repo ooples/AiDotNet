@@ -198,7 +198,7 @@ public class MixedPrecisionScope : IDisposable
             fp16Data[i] = (Half)fp32Tensor.GetFlatIndexValue(i);
         }
 
-        var fp16Tensor = new Tensor<Half>(fp32Tensor.Shape, new Vector<Half>(fp16Data));
+        var fp16Tensor = new Tensor<Half>(fp32Tensor.Shape._dims, new Vector<Half>(fp16Data));
         _fp16Tensors[name] = fp16Tensor;
 
         return fp16Tensor;
@@ -262,7 +262,7 @@ public class MixedPrecisionScope : IDisposable
             fp32Data[i] = (float)fp16Tensor.GetFlatIndexValue(i);
         }
 
-        return new Tensor<float>(fp16Tensor.Shape, new Vector<float>(fp32Data));
+        return new Tensor<float>(fp16Tensor.Shape._dims, new Vector<float>(fp32Data));
     }
 
     /// <summary>
@@ -283,7 +283,7 @@ public class MixedPrecisionScope : IDisposable
             fp16Data[i] = (Half)fp32Tensor.GetFlatIndexValue(i);
         }
 
-        return new Tensor<Half>(fp32Tensor.Shape, new Vector<Half>(fp16Data));
+        return new Tensor<Half>(fp32Tensor.Shape._dims, new Vector<Half>(fp16Data));
     }
 
     /// <summary>

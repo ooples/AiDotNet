@@ -260,7 +260,7 @@ public class ComputationNode<T>
         }
 
         // Initialize root gradient to ones (for final node)
-        Gradient = new Tensor<T>(Value.Shape);
+        Gradient = new Tensor<T>(Value.Shape._dims);
         var numOps = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < Gradient.Length; i++)
         {

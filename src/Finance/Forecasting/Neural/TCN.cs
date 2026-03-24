@@ -479,7 +479,7 @@ public class TCN<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape._dims));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -845,7 +845,7 @@ public class TCN<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -885,7 +885,7 @@ public class TCN<T> : ForecastingModelBase<T>
         if (a.Length != b.Length)
         {
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a.Shape);
+            var result = new Tensor<T>(a.Shape._dims);
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Add(a[i], b[i]);
             for (int i = minLen; i < a.Length; i++)
@@ -909,7 +909,7 @@ public class TCN<T> : ForecastingModelBase<T>
         int batchSize = input.Shape[0];
         int inputLen = input.Length / batchSize;
 
-        var shifted = new Tensor<T>(input.Shape);
+        var shifted = new Tensor<T>(input.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {

@@ -202,7 +202,7 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
         backend.ElasticNetBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size, l1Weight, l2Weight);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape._dims, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

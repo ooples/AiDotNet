@@ -354,7 +354,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Convert LoKr output to tensor and add to base output
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape._dims);
         for (int i = 0; i < batchSize; i++)
         {
             for (int j = 0; j < outputSize; j++)
@@ -433,7 +433,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> loraInputGrad = gradMatrix.Multiply(kronDelta).Multiply(_scaling);
 
         // Sum input gradients from both paths
-        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape);
+        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape._dims);
         for (int i = 0; i < batchSize; i++)
         {
             for (int j = 0; j < inputSize; j++)

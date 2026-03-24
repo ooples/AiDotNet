@@ -595,7 +595,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(prediction.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, prediction.Shape));
+        Backward(Tensor<T>.FromVector(gradient, prediction.Shape._dims));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -1143,7 +1143,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
         if (_forwardPowers.Count == 0 || _backwardPowers.Count == 0)
             return input;
 
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
         int n = _numNodes;
         int featuresPerNode = input.Data.Length / n;
 
@@ -1184,7 +1184,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyMatrixToTensor(double[,] matrix, Tensor<T> tensor, int n, int featuresPerNode)
     {
-        var result = new Tensor<T>(tensor.Shape);
+        var result = new Tensor<T>(tensor.Shape._dims);
 
         for (int i = 0; i < n; i++)
         {
@@ -1347,7 +1347,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> newData)
     {
-        var shifted = new Tensor<T>(input.Shape);
+        var shifted = new Tensor<T>(input.Shape._dims);
 
         // Guard against stepSize larger than input length
         int stepSize = Math.Min(_numNodes * _numFeatures, input.Data.Length);

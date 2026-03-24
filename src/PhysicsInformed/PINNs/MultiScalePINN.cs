@@ -684,7 +684,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
                 // Backpropagate through all active scale networks
                 var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                var outputGradient = new Tensor<T>(prediction.Shape, outputGradientVector);
+                var outputGradient = new Tensor<T>(prediction.Shape._dims, outputGradientVector);
 
                 // Distribute gradients to each scale network
                 for (int scale = 0; scale < _currentActiveScales; scale++)

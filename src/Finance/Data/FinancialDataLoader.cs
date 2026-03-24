@@ -231,7 +231,7 @@ public sealed class FinancialDataLoader<T> : InputOutputDataLoaderBase<T, Tensor
     /// </remarks>
     private static Tensor<T> ExtractTensorSubset(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source.Shape.Clone();
+        var newShape = (int[])source.Shape._dims.Clone();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

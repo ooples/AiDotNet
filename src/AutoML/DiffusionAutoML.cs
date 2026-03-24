@@ -849,7 +849,7 @@ namespace AiDotNet.AutoML
                 var newLatentVec = _scheduler.Step(noisePredVec, t, latentVec, eta);
 
                 // Convert back to tensor
-                var newLatent = new Tensor<T>(latent.Shape);
+                var newLatent = new Tensor<T>(latent.Shape._dims);
                 var newLatentSpan = newLatent.AsWritableSpan();
                 for (int j = 0; j < newLatentVec.Length && j < newLatentSpan.Length; j++)
                     newLatentSpan[j] = newLatentVec[j];
@@ -870,7 +870,7 @@ namespace AiDotNet.AutoML
             int t = _random.Next(1, maxT + 1);
 
             // Sample noise and add to latent
-            var noise = SampleNoise(latent.Shape);
+            var noise = SampleNoise(latent.Shape._dims);
             var noisyLatent = AddNoise(latent, noise, t);
 
             // Encode conditioning
@@ -1191,7 +1191,7 @@ namespace AiDotNet.AutoML
             double alpha = 1.0 - t;
             double sigma = t;
 
-            var result = new Tensor<T>(latent.Shape);
+            var result = new Tensor<T>(latent.Shape._dims);
             var resultSpan = result.AsWritableSpan();
             var latentSpan = latent.AsSpan();
             var noiseSpan = noise.AsSpan();

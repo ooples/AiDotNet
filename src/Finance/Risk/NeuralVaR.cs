@@ -185,7 +185,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
             for (int i = 0; i < action.Length; i++)
                 scaledData[i] = NumOps.Multiply(action.Data.Span[i], scale);
             
-            return new Tensor<T>(action.Shape, new Vector<T>(scaledData));
+            return new Tensor<T>(action.Shape._dims, new Vector<T>(scaledData));
         }
 
         return action;
@@ -226,7 +226,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
         var output = Predict(input);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
         
-        var currentGrad = Tensor<T>.FromVector(grad, output.Shape);
+        var currentGrad = Tensor<T>.FromVector(grad, output.Shape._dims);
         for (int i = Layers.Count - 1; i >= 0; i--)
             currentGrad = Layers[i].Backward(currentGrad);
 

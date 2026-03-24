@@ -194,7 +194,7 @@ public class TabNetRegression<T> : TabNetBase<T>
     /// </remarks>
     public Tensor<T> ComputeMSEGradient(Tensor<T> predictions, Tensor<T> targets)
     {
-        var gradient = new Tensor<T>(predictions.Shape);
+        var gradient = new Tensor<T>(predictions.Shape._dims);
         var scale = NumOps.FromDouble(2.0 / predictions.Length);
 
         for (int i = 0; i < predictions.Length; i++)

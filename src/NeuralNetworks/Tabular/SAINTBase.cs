@@ -374,7 +374,7 @@ public abstract class SAINTBase<T>
         // Column attention: attention over the feature dimension
         // Input shape: [batch, features, embedding_dim]
         // Each sample attends over its features independently
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -411,7 +411,7 @@ public abstract class SAINTBase<T>
         // Row attention: attention over the batch dimension for each feature
         // Input shape: [batch, features, embedding_dim]
         // Each feature attends across samples
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
 
         for (int f = 0; f < TotalEmbeddedFeatures; f++)
         {
@@ -445,7 +445,7 @@ public abstract class SAINTBase<T>
 
     private Tensor<T> ApplyFeedForward(FullyConnectedLayer<T> layer, Tensor<T> input, int batchSize)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -471,7 +471,7 @@ public abstract class SAINTBase<T>
 
     private Tensor<T> ApplyLayerNorm(LayerNormalizationLayer<T> norm, Tensor<T> input, int batchSize)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {

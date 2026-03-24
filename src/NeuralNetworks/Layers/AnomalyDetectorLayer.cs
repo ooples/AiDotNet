@@ -243,7 +243,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInputShape = input.Shape;
+        _lastInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
         int featureSize = input.Shape[^1];
         if (featureSize % 2 != 0)
@@ -251,12 +251,12 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
 
         int halfSize = featureSize / 2;
         int[] startActual = new int[rank];
-        int[] lengthActual = (int[])input.Shape.Clone();
+        int[] lengthActual = (int[])input.Shape._dims.Clone();
         lengthActual[rank - 1] = halfSize;
 
         int[] startPred = new int[rank];
         startPred[rank - 1] = halfSize;
-        int[] lengthPred = (int[])input.Shape.Clone();
+        int[] lengthPred = (int[])input.Shape._dims.Clone();
         lengthPred[rank - 1] = halfSize;
 
         var actual = Engine.TensorSlice(input, startActual, lengthActual);
@@ -300,7 +300,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape._dims;
         _lastInputShape = shape;
 
         int rank = shape.Length;
@@ -404,7 +404,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         var mismatchAndActive = Engine.TensorMultiply(notEqual, anyActive);
         var mismatchSum = Engine.ReduceSum(mismatchAndActive, axes, keepDims: true);
 
-        var scores = new Tensor<T>(totalActiveSum.Shape);
+        var scores = new Tensor<T>(totalActiveSum.Shape._dims);
         for (int i = 0; i < totalActiveSum.Length; i++)
         {
             double totalCount = NumOps.ToDouble(totalActiveSum.GetFlat(i));

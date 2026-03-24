@@ -75,7 +75,7 @@ public class ConsistencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
         var span = image.Data.Span;
         if (span.Length == 0) return findings;
 
-        var layout = DetermineLayout(image.Shape, span.Length);
+        var layout = DetermineLayout(image.Shape._dims, span.Length);
         if (layout.Height < 16 || layout.Width < 16) return findings;
 
         // 1. Noise inconsistency: different regions should have similar noise levels

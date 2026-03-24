@@ -611,7 +611,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> Reconstruct(Tensor<T> input)
     {
         // Remember original shape
-        var originalShape = input.Shape;
+        var originalShape = input.Shape._dims;
         var was1D = originalShape.Length == 1;
 
         var hidden = PropagateUp(input);

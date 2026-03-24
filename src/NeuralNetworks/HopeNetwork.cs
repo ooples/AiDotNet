@@ -274,7 +274,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             }
         }
 
-        return new Tensor<T>(input.Shape, modified);
+        return new Tensor<T>(input.Shape._dims, modified);
     }
 
     /// <summary>
@@ -323,7 +323,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             blended[i] = _numOps.Add(partA, partB);
         }
 
-        return new Tensor<T>(a.Shape, blended);
+        return new Tensor<T>(a.Shape._dims, blended);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -517,7 +517,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
         var gradTensor = Tensor<T>.FromVector(lossGrad);
         if (gradTensor.Rank < output.Rank)
-            gradTensor = gradTensor.Reshape(output.Shape);
+            gradTensor = gradTensor.Reshape(output.Shape._dims);
 
         Backpropagate(gradTensor);
 

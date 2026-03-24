@@ -45,6 +45,6 @@ public static class LossFunctionExtensions
         }
 
         var derivative = lossFunction.CalculateDerivative(predicted.ToVector(), actual.ToVector());
-        return new Tensor<T>(predicted.Shape, derivative);
+        return new Tensor<T>(predicted.Shape._dims, derivative);
     }
 }

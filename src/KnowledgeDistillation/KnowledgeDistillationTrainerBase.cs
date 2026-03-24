@@ -837,7 +837,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
             if (shouldCollect)
             {
                 // Convert tensor output to matrix: [batchSize, features]
-                var outputShape = current.Shape;
+                var outputShape = current.Shape._dims;
                 if (outputShape.Length == 0 || outputShape[0] <= 0 || current.Length == 0)
                     continue;
 

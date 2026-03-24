@@ -526,10 +526,10 @@ public class SpiralConvLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape, NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape._dims, NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape);
+        _biases = new Tensor<T>(_biases.Shape._dims);
         Engine.TensorFill(_biases, NumOps.Zero);
     }
 
@@ -992,9 +992,9 @@ public class SpiralConvLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
 
         int idx = 0;
-        _weights = new Tensor<T>(_weights.Shape, parameters.Slice(idx, _weights.Length));
+        _weights = new Tensor<T>(_weights.Shape._dims, parameters.Slice(idx, _weights.Length));
         idx += _weights.Length;
-        _biases = new Tensor<T>(_biases.Shape, parameters.Slice(idx, _biases.Length));
+        _biases = new Tensor<T>(_biases.Shape._dims, parameters.Slice(idx, _biases.Length));
     }
 
     /// <summary>
@@ -1134,7 +1134,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
         {
             weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _weights = new Tensor<T>(weightArray, _weights.Shape);
+        _weights = new Tensor<T>(weightArray, _weights.Shape._dims);
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[_biases.Length];
@@ -1142,7 +1142,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
         {
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _biases = new Tensor<T>(biasArray, _biases.Shape);
+        _biases = new Tensor<T>(biasArray, _biases.Shape._dims);
 
         // Deserialize spiral indices if present
         bool hasIndices = reader.ReadBoolean();

@@ -538,7 +538,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         // Support any rank >= 3: last 3 dims are interpreted as [C, H, W]
@@ -655,7 +655,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
                 $"DilatedConv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        var originalInputShape = input.Shape;
+        var originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
         bool addedBatchDimension = false;
 
@@ -817,10 +817,10 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         _biasGradients = Engine.ReduceSum(delta, new[] { 0, 2, 3 }, keepDims: false);
 
         // Calculate input gradient using Engine (NCHW format)
-        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape, strideArr, paddingArr, dilationArr);
+        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape._dims, strideArr, paddingArr, dilationArr);
 
         // Calculate kernel gradient using Engine
-        _kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape, strideArr, paddingArr, dilationArr);
+        _kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape._dims, strideArr, paddingArr, dilationArr);
 
         // Restore original input shape for higher-rank tensors
         if (_originalInputShape != null && _originalInputShape.Length > 4)

@@ -300,7 +300,7 @@ public class ReshapeLayer<T> : LayerBase<T>
 
         // Reshape gradient back to input shape
         // Input shape is [batchSize, ..._inputShape]
-        return Engine.Reshape(outputGradient, _lastInput.Shape);
+        return Engine.Reshape(outputGradient, _lastInput.Shape._dims);
     }
 
     /// <summary>
@@ -429,7 +429,7 @@ public class ReshapeLayer<T> : LayerBase<T>
         // Cache input shape for backward pass
         if (IsTrainingMode)
         {
-            _gpuCachedInputShape = (int[])input.Shape.Clone();
+            _gpuCachedInputShape = (int[])input.Shape._dims.Clone();
         }
 
         // Calculate full target shape including batch dimension

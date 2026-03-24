@@ -399,7 +399,7 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        return new Tensor<T>(_lastInput.Shape);
+        return new Tensor<T>(_lastInput.Shape._dims);
     }
 
     /// <inheritdoc />

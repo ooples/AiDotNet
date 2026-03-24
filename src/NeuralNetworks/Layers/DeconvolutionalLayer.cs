@@ -571,7 +571,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
                 $"ConvTranspose2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        var originalInputShape = input.Shape;
+        var originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
         bool addedBatchDimension = false;
 
@@ -627,7 +627,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
             _gpuOutput?.Dispose();
             _gpuInput = input4D;
             _gpuOutput = result;
-            _gpuInputShape4D = input4D.Shape;
+            _gpuInputShape4D = input4D.Shape._dims;
             _gpuAddedBatchDimension = addedBatchDimension;
         }
 
@@ -706,10 +706,10 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         var padding = new int[] { Padding, Padding };
 
         // Calculate input gradient
-        var inputGradient = Engine.ConvTranspose2DBackwardInput(activationGradient, _kernels, _lastInput.Shape, stride, padding);
+        var inputGradient = Engine.ConvTranspose2DBackwardInput(activationGradient, _kernels, _lastInput.Shape._dims, stride, padding);
 
         // Calculate kernel gradient
-        _kernelsGradient = Engine.ConvTranspose2DBackwardKernel(activationGradient, _lastInput, _kernels.Shape, stride, padding);
+        _kernelsGradient = Engine.ConvTranspose2DBackwardKernel(activationGradient, _lastInput, _kernels.Shape._dims, stride, padding);
 
         return inputGradient;
     }

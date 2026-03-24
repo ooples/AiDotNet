@@ -356,7 +356,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         LastLoss = loss;
 
         // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
-        var gradient = new Tensor<T>(prediction.Shape);
+        var gradient = new Tensor<T>(prediction.Shape._dims);
         T scale = NumOps.FromDouble(2.0 / expectedOutput.Length);
         for (int i = 0; i < expectedOutput.Length; i++)
         {
@@ -603,7 +603,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         if (neighbors.Count == 0)
             return currentFeatures;
 
-        var accumulated = ZeroTensor(currentFeatures.Shape);
+        var accumulated = ZeroTensor(currentFeatures.Shape._dims);
 
         foreach (var (neighborFrame, neighborMask, flow) in neighbors)
         {
@@ -633,7 +633,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         int height = frame.Shape[2];
         int width = frame.Shape[3];
 
-        var masked = new Tensor<T>(frame.Shape);
+        var masked = new Tensor<T>(frame.Shape._dims);
         for (int b = 0; b < batchSize; b++)
             for (int c = 0; c < channels; c++)
                 for (int h = 0; h < height; h++)
@@ -654,7 +654,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         int height = original.Shape[2];
         int width = original.Shape[3];
 
-        var blended = new Tensor<T>(original.Shape);
+        var blended = new Tensor<T>(original.Shape._dims);
         for (int b = 0; b < batchSize; b++)
             for (int c = 0; c < channels; c++)
                 for (int h = 0; h < height; h++)
@@ -679,7 +679,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         int flowH = flow.Shape[2];
         int flowW = flow.Shape[3];
 
-        var warped = new Tensor<T>(features.Shape);
+        var warped = new Tensor<T>(features.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
             for (int h = 0; h < height; h++)

@@ -466,7 +466,7 @@ public class TimesNet<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape._dims));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -889,7 +889,7 @@ public class TimesNet<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -932,7 +932,7 @@ public class TimesNet<T> : ForecastingModelBase<T>
         if (input.Length != processed.Length)
         {
             int minLen = Math.Min(input.Length, processed.Length);
-            var result = new Tensor<T>(input.Shape);
+            var result = new Tensor<T>(input.Shape._dims);
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Add(input[i], processed[i]);
             for (int i = minLen; i < input.Length; i++)
@@ -966,7 +966,7 @@ public class TimesNet<T> : ForecastingModelBase<T>
             _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
             _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-            var normalized = new Tensor<T>(input.Shape);
+            var normalized = new Tensor<T>(input.Shape._dims);
             T epsilon = NumOps.FromDouble(1e-5);
 
             for (int b = 0; b < batchSize; b++)
@@ -1004,7 +1004,7 @@ public class TimesNet<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input.Shape);
+            var denormalized = new Tensor<T>(input.Shape._dims);
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];

@@ -33,7 +33,7 @@ public static class OnnxTensorConverter
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var shape = tensor.Shape.Select(d => (long)d).ToArray();
-        var onnxTensor = new OnnxTensors.DenseTensor<float>(tensor.Shape);
+        var onnxTensor = new OnnxTensors.DenseTensor<float>(tensor.Shape._dims);
 
         var sourceData = tensor.ToArray();
         var buffer = onnxTensor.Buffer.Span;
@@ -55,7 +55,7 @@ public static class OnnxTensorConverter
     public static OnnxTensors.DenseTensor<double> ToOnnxDouble<T>(Tensor<T> tensor)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var onnxTensor = new OnnxTensors.DenseTensor<double>(tensor.Shape);
+        var onnxTensor = new OnnxTensors.DenseTensor<double>(tensor.Shape._dims);
 
         var sourceData = tensor.ToArray();
         var buffer = onnxTensor.Buffer.Span;
@@ -77,7 +77,7 @@ public static class OnnxTensorConverter
     public static OnnxTensors.DenseTensor<long> ToOnnxLong<T>(Tensor<T> tensor)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var onnxTensor = new OnnxTensors.DenseTensor<long>(tensor.Shape);
+        var onnxTensor = new OnnxTensors.DenseTensor<long>(tensor.Shape._dims);
 
         var sourceData = tensor.ToArray();
         var buffer = onnxTensor.Buffer.Span;
@@ -99,7 +99,7 @@ public static class OnnxTensorConverter
     public static OnnxTensors.DenseTensor<int> ToOnnxInt<T>(Tensor<T> tensor)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var onnxTensor = new OnnxTensors.DenseTensor<int>(tensor.Shape);
+        var onnxTensor = new OnnxTensors.DenseTensor<int>(tensor.Shape._dims);
 
         var sourceData = tensor.ToArray();
         var buffer = onnxTensor.Buffer.Span;

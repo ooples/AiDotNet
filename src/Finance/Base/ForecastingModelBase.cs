@@ -173,7 +173,7 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         int features = input.Shape.Length > 2 ? input.Shape[2] : NumFeatures;
 
         int stepsUsed = Math.Min(stepsToShift, seqLen);
-        var shifted = new Tensor<T>(input.Shape);
+        var shifted = new Tensor<T>(input.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {

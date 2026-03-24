@@ -205,7 +205,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -444,7 +444,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             var dPFromV = Engine.TensorMatMul(dV, _valueProjectionWeights.Transpose([1, 0]));
 
             // Gate gradients through sigmoid: d/dx sig(x) = sig(x)*(1-sig(x))
-            var ones = new Tensor<T>(r_t.Shape);
+            var ones = new Tensor<T>(r_t.Shape._dims);
             for (int idx = 0; idx < ones.Length; idx++) ones[idx] = NumOps.One;
 
             var rSigDeriv = Engine.TensorMultiply(r_t, Engine.TensorSubtract(ones, r_t));

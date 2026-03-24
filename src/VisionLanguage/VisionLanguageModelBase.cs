@@ -111,7 +111,7 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
         mean ??= [0.48145466, 0.4578275, 0.40821073]; // CLIP/OpenAI default
         std ??= [0.26862954, 0.26130258, 0.27577711];
 
-        var result = new Tensor<T>(image.Shape);
+        var result = new Tensor<T>(image.Shape._dims);
         int channels = ImageChannels;
         int spatialSize = image.Length / channels;
 
@@ -158,7 +158,7 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
             if (v > maxVal) maxVal = v;
         }
 
-        var result = new Tensor<T>(logits.Shape);
+        var result = new Tensor<T>(logits.Shape._dims);
         double sum = 0;
         for (int i = 0; i < logits.Length; i++)
         {
@@ -193,7 +193,7 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
         norm = Math.Sqrt(norm);
         if (norm < 1e-8) return embedding;
 
-        var result = new Tensor<T>(embedding.Shape);
+        var result = new Tensor<T>(embedding.Shape._dims);
         for (int i = 0; i < embedding.Length; i++)
             result[i] = NumOps.FromDouble(NumOps.ToDouble(embedding[i]) / norm);
 

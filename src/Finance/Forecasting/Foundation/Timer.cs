@@ -521,7 +521,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape._dims));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -847,7 +847,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -929,7 +929,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
             throw new InvalidOperationException(
                 $"Autoregressive generation currently supports a single univariate series with shape [context_length], " +
                 $"[1, context_length], [context_length, features], or [1, context_length, features]. " +
-                $"Got input shape [{string.Join(", ", input.Shape)}].");
+                $"Got input shape [{string.Join(", ", input.Shape._dims)}].");
         }
 
         // Validate that normalized input sequence length matches _contextLength
@@ -998,7 +998,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
             // Shift input and append generated value - currentInput is [1, seqLen, features]
             if (step < steps - 1)
             {
-                var shifted = new Tensor<T>(currentInput.Shape);
+                var shifted = new Tensor<T>(currentInput.Shape._dims);
                 int actualSeqLen = currentInput.Shape[1];
                 int actualFeatures = currentInput.Shape[2];
 
@@ -1086,7 +1086,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
             }
 
             // Apply temperature scaling
-            var scaled = new Tensor<T>(sample.Shape);
+            var scaled = new Tensor<T>(sample.Shape._dims);
             for (int i = 0; i < sample.Length; i++)
             {
                 double val = NumOps.ToDouble(sample.Data.Span[i]);
@@ -1160,7 +1160,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
         }
 
         // Apply mask to input
-        var maskedInput = new Tensor<T>(input.Shape);
+        var maskedInput = new Tensor<T>(input.Shape._dims);
         for (int i = 0; i < input.Length; i++)
         {
             var maskVal = i < mask.Length ? NumOps.ToDouble(mask.Data.Span[i]) : 1.0;
@@ -1183,7 +1183,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> GenerateRandomMask(Tensor<T> input)
     {
-        var mask = new Tensor<T>(input.Shape);
+        var mask = new Tensor<T>(input.Shape._dims);
         var rand = RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < input.Length; i++)
@@ -1215,7 +1215,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
         {
             throw new InvalidOperationException(
                 $"ShiftInputWithPredictions currently supports a single univariate series with shape [context_length]. " +
-                $"Got input shape [{string.Join(", ", input.Shape)}] with numFeatures={_numFeatures}.");
+                $"Got input shape [{string.Join(", ", input.Shape._dims)}] with numFeatures={_numFeatures}.");
         }
 
         // Validate input length matches expected _contextLength
@@ -1226,7 +1226,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
                 $"context length ({_contextLength}). Ensure input tensor has shape [_contextLength].");
         }
 
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
         int contextLen = _contextLength;
         int steps = Math.Min(stepsUsed, contextLen);
 

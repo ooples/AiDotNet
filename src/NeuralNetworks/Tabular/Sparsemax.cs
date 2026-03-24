@@ -70,7 +70,7 @@ public class Sparsemax<T>
         int dimSize = input.Shape[axis];
 
         // Create output tensor with same shape
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
 
         // Process each slice along the axis
         ProcessAlongAxis(input, output, axis, dimSize);
@@ -100,7 +100,7 @@ public class Sparsemax<T>
         }
 
         // Create gradient tensor
-        var gradInput = new Tensor<T>(gradOutput.Shape);
+        var gradInput = new Tensor<T>(gradOutput.Shape._dims);
 
         // Process each slice along the axis
         ProcessGradientAlongAxis(gradOutput, sparsemaxOutput, gradInput, axis);
@@ -376,7 +376,7 @@ public class Sparsemax<T>
     private void ProcessHigherDimensionalAxis(Tensor<T> input, Tensor<T> output, int axis)
     {
         // Calculate strides for iteration
-        int[] shape = input.Shape;
+        int[] shape = input.Shape._dims;
         int rank = shape.Length;
 
         // Calculate the total number of slices
@@ -434,7 +434,7 @@ public class Sparsemax<T>
     /// </summary>
     private void ProcessHigherDimensionalGradient(Tensor<T> gradOutput, Tensor<T> sparsemaxOutput, Tensor<T> gradInput, int axis)
     {
-        int[] shape = gradOutput.Shape;
+        int[] shape = gradOutput.Shape._dims;
         int rank = shape.Length;
 
         int numSlices = 1;

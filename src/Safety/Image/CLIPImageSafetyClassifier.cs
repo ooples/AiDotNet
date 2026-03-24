@@ -113,7 +113,7 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
             return findings;
         }
 
-        int[] shape = image.Shape;
+        int[] shape = image.Shape._dims;
         var layout = DetermineImageLayout(shape, span.Length);
 
         if (_detectNSFW)

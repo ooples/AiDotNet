@@ -232,7 +232,7 @@ public abstract class TabRBase<T>
     {
         int batchSize = embeddings.Shape[0];
         int dim = embeddings.Shape[1];
-        var normalized = new Tensor<T>(embeddings.Shape);
+        var normalized = new Tensor<T>(embeddings.Shape._dims);
         var epsilon = NumOps.FromDouble(1e-12);
 
         for (int b = 0; b < batchSize; b++)

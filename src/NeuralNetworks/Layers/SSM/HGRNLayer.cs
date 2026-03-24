@@ -217,7 +217,7 @@ public class HGRNLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -496,7 +496,7 @@ public class HGRNLayer<T> : LayerBase<T>
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var ones = new Tensor<T>(template.Shape);
+        var ones = new Tensor<T>(template.Shape._dims);
         ones.Fill(NumOps.One);
         return ones;
     }

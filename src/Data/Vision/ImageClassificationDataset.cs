@@ -317,7 +317,7 @@ public class ImageClassificationDataset<T> : InputOutputDataLoaderBase<T, Tensor
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source.Shape.Clone();
+        var newShape = (int[])source.Shape._dims.Clone();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

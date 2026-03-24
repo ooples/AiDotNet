@@ -414,7 +414,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
-        return new Tensor<T>([batch, classes], output).Reshape(values.Shape);
+        return new Tensor<T>([batch, classes], output).Reshape(values.Shape._dims);
     }
 
     /// <summary>
@@ -533,7 +533,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
-        return new Tensor<T>([batch, classes], scaled).Reshape(probabilities.Shape);
+        return new Tensor<T>([batch, classes], scaled).Reshape(probabilities.Shape._dims);
     }
 
     private static ProbabilityCalibrationMethod ResolveCalibrationMethod(UncertaintyQuantificationOptions options, int numClasses)
@@ -654,7 +654,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             output[i * 2] = numOps.Subtract(numOps.One, p1T);
         }
 
-        return new Tensor<T>([batch, 2], output).Reshape(probabilities.Shape);
+        return new Tensor<T>([batch, 2], output).Reshape(probabilities.Shape._dims);
     }
 
     private static (Vector<T> x, Vector<T> y) FitIsotonicCalibrationBinary(Tensor<T> probabilities, Vector<int> labels, int batch)
@@ -736,7 +736,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             output[i * 2] = numOps.Subtract(numOps.One, p1Cal);
         }
 
-        return new Tensor<T>([batch, 2], output).Reshape(probabilities.Shape);
+        return new Tensor<T>([batch, 2], output).Reshape(probabilities.Shape._dims);
     }
 
     private static T EvaluateIsotonic(T p, Vector<T> x, Vector<T> y, INumericOperations<T> numOps)

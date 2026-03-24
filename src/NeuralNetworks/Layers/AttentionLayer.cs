@@ -204,20 +204,20 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int idx = 0;
 
         // Create new mutable tensors to avoid immutable Engine tensor issue
-        _Wq = new Tensor<T>(_Wq.Shape);
+        _Wq = new Tensor<T>(_Wq.Shape._dims);
         var wqSpan = _Wq.Data.Span;
         for (int i = 0; i < wqLen; i++) wqSpan[i] = parameters[idx++];
 
-        _Wk = new Tensor<T>(_Wk.Shape);
+        _Wk = new Tensor<T>(_Wk.Shape._dims);
         var wkSpan = _Wk.Data.Span;
         for (int i = 0; i < wkLen; i++) wkSpan[i] = parameters[idx++];
 
-        _Wv = new Tensor<T>(_Wv.Shape);
+        _Wv = new Tensor<T>(_Wv.Shape._dims);
         var wvSpan = _Wv.Data.Span;
         for (int i = 0; i < wvLen; i++) wvSpan[i] = parameters[idx++];
 
         int woLen = _Wo.Length;
-        _Wo = new Tensor<T>(_Wo.Shape);
+        _Wo = new Tensor<T>(_Wo.Shape._dims);
         var woSpan = _Wo.Data.Span;
         for (int i = 0; i < woLen; i++) woSpan[i] = parameters[idx++];
 
@@ -427,7 +427,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int rank = input.Shape.Length;
         _inputWas2D = rank == 2;
         Tensor<T> input3D;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
 
         if (_inputWas2D)
         {
@@ -449,7 +449,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 throw new ArgumentException(
                     $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
-                    $"but got {input.Shape[2]} in shape [{string.Join(", ", input.Shape)}].",
+                    $"but got {input.Shape[2]} in shape [{string.Join(", ", input.Shape._dims)}].",
                     nameof(input));
             }
             input3D = input;
@@ -461,7 +461,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 throw new ArgumentException(
                     $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
-                    $"but got {input.Shape[rank - 1]} in shape [{string.Join(", ", input.Shape)}].",
+                    $"but got {input.Shape[rank - 1]} in shape [{string.Join(", ", input.Shape._dims)}].",
                     nameof(input));
             }
             int flatBatch = 1;
@@ -604,7 +604,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape._dims;
 
         // Handle 2D [Batch, InputSize] or 3D [Batch, Seq, InputSize] input
         int batchSize;
@@ -678,7 +678,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuInput = input3D;
             _gpuBatchSize = batchSize;
             _gpuSeqLen = seqLen;
-            _gpuInputShape = input.Shape;
+            _gpuInputShape = input.Shape._dims;
 
             // Reshape Q, K, V back to 3D [B, S, A] for backward
             _gpuQ = gpuEngine.ReshapeGpu(qFlat, [batchSize, seqLen, _attentionSize]);
@@ -819,7 +819,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             else
             {
                 throw new ArgumentException(
-                    $"Second input tensor has ambiguous shape {string.Join("x", secondInput.Shape)}. " +
+                    $"Second input tensor has ambiguous shape {string.Join("x", secondInput.Shape._dims)}. " +
                     $"Expected either a mask [batch, queryLen, keyLen] or cross-attention K/V [batch, seqLen, {_inputSize}].");
             }
         }
@@ -1166,7 +1166,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Compute dAttentionOutput: [N, inputSize] @ [inputSize, attentionSize] = [N, attentionSize]
         var dAttnOutputFlat = Engine.TensorMatMul(dOutputFlat, _Wo);
-        var dAttnOutput = dAttnOutputFlat.Reshape(_lastAttentionOutput.Shape);
+        var dAttnOutput = dAttnOutputFlat.Reshape(_lastAttentionOutput.Shape._dims);
 
         // Now backprop through the attention computation using dAttnOutput
         // Build permutation to transpose last two dimensions for any-rank tensors
@@ -1220,7 +1220,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             for (int i = 0; i < _lastAttentionWeights.Rank; i++)
                 broadcastShape[i] = i == sumAxis ? 1 : _lastAttentionWeights.Shape[i];
             var sumBroadcast = weightedSum.Reshape(broadcastShape);
-            var sumExpanded = new Tensor<T>(_lastAttentionWeights.Shape);
+            var sumExpanded = new Tensor<T>(_lastAttentionWeights.Shape._dims);
             var totalBatches = 1;
             for (int i = 0; i < sumAxis; i++) totalBatches *= _lastAttentionWeights.Shape[i];
             var lastDim = _lastAttentionWeights.Shape[sumAxis];
@@ -1254,8 +1254,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Correct attention backward formulas (manual per-batch, Engine.BatchMatMul has issues):
         // scores = Q @ K^T, so: dQ = dScores @ K, dK = dScores^T @ Q
-        var dQ = new Tensor<T>(Q.Shape);
-        var dK = new Tensor<T>(K.Shape);
+        var dQ = new Tensor<T>(Q.Shape._dims);
+        var dK = new Tensor<T>(K.Shape._dims);
         for (int b = 0; b < batchSize; b++)
         {
             var dScoresB = dAttentionScores.GetSliceAlongDimension(b, 0);
@@ -1285,7 +1285,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var dinputFromK = Engine.TensorMatMul(dKFlat, _Wk);
         var dinputFromV = Engine.TensorMatMul(dVFlat, _Wv);
         var dinputFlat = dinputFromQ.Add(dinputFromK).Add(dinputFromV);
-        var dinput = dinputFlat.Reshape(_lastInput.Shape);
+        var dinput = dinputFlat.Reshape(_lastInput.Shape._dims);
 
         return dinput;
     }
@@ -1449,17 +1449,17 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Update Wq - slice and copy
         var wqParams = parameters.Slice(startIndex, _Wq.Length);
-        _Wq = Tensor<T>.FromVector(wqParams).Reshape(_Wq.Shape);
+        _Wq = Tensor<T>.FromVector(wqParams).Reshape(_Wq.Shape._dims);
         startIndex += _Wq.Length;
 
         // Update Wk - slice and copy
         var wkParams = parameters.Slice(startIndex, _Wk.Length);
-        _Wk = Tensor<T>.FromVector(wkParams).Reshape(_Wk.Shape);
+        _Wk = Tensor<T>.FromVector(wkParams).Reshape(_Wk.Shape._dims);
         startIndex += _Wk.Length;
 
         // Update Wv - slice and copy
         var wvParams = parameters.Slice(startIndex, _Wv.Length);
-        _Wv = Tensor<T>.FromVector(wvParams).Reshape(_Wv.Shape);
+        _Wv = Tensor<T>.FromVector(wvParams).Reshape(_Wv.Shape._dims);
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_Wq);

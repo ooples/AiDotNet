@@ -194,7 +194,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <returns>A new tensor containing the derivatives of the Leaky ReLU function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape);
+        Tensor<T> output = new Tensor<T>(input.Shape._dims);
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = Derivative(input[i]);

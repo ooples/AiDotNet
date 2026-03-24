@@ -481,7 +481,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
 
             // Backward pass
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, output.Shape));
+            Backward(Tensor<T>.FromVector(gradient, output.Shape._dims));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -800,7 +800,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -917,7 +917,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
         int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
         int steps = Math.Min(stepsUsed, contextLen);
 
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
 
         int predSteps = predictions.Shape.Length > 1 ? predictions.Shape[1] : predictions.Length / Math.Max(1, batchSize);
         int predFeatures = predictions.Shape.Length > 2 ? predictions.Shape[2] : 1;

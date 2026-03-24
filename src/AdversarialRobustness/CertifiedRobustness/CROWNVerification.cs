@@ -610,7 +610,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
         Tensor<T> weights,
         Tensor<T>? biases)
     {
-        var shape = weights.Shape;
+        var shape = weights.Shape._dims;
         if (shape.Length < 2)
         {
             return (alphaLower, alphaUpper, betaLower, betaUpper);
@@ -804,7 +804,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
         Tensor<T> weights,
         Tensor<T>? biases)
     {
-        var shape = weights.Shape;
+        var shape = weights.Shape._dims;
         if (shape.Length < 2)
         {
             return (lower, upper);

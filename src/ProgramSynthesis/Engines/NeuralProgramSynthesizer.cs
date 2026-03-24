@@ -676,7 +676,7 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
         LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-        var gradient = new Tensor<T>(output.Shape, outputGradient);
+        var gradient = new Tensor<T>(output.Shape._dims, outputGradient);
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             gradient = Layers[i].Backward(gradient);

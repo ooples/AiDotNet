@@ -838,7 +838,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         // Reshape gradient back to tensor shape if needed
         if (gradOutput.Shape.Length == 1 && current.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(current.Shape);
+            gradOutput = gradOutput.Reshape(current.Shape._dims);
         }
 
         // Backward pass through all layers

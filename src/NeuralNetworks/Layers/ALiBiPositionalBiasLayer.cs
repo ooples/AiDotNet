@@ -213,7 +213,7 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         var bias = ComputeBias(queryLen, keyLen);
 
         // Add bias to scores
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
 
         if (rank == 4)
         {

@@ -242,8 +242,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var gradFlow = gradOutput;
 
         // Initialize gradient accumulators for input frames
-        var gradInput1 = new Tensor<T>(_lastInput1.Shape);
-        var gradInput2 = new Tensor<T>(_lastInput2.Shape);
+        var gradInput1 = new Tensor<T>(_lastInput1.Shape._dims);
+        var gradInput2 = new Tensor<T>(_lastInput2.Shape._dims);
 
         // Fine-to-coarse gradient propagation (reverse of forward)
         for (int level = 0; level < _numLevels; level++)
@@ -852,7 +852,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int height = hasBatch ? image.Shape[2] : image.Shape[1];
         int width = hasBatch ? image.Shape[3] : image.Shape[2];
 
-        var output = TensorAllocator.Rent<T>(image.Shape);
+        var output = TensorAllocator.Rent<T>(image.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {
@@ -999,7 +999,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int height = hasBatch ? flow.Shape[2] : flow.Shape[1];
         int width = hasBatch ? flow.Shape[3] : flow.Shape[2];
 
-        var output = TensorAllocator.Rent<T>(flow.Shape);
+        var output = TensorAllocator.Rent<T>(flow.Shape._dims);
         int pixelsPerChannel = height * width;
 
         for (int b = 0; b < batch; b++)
@@ -1366,7 +1366,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 flowNode = TensorOperations<T>.Upsample(flowNode, 2);
                 // Scale flow values by 2 for upsampling
                 var scaleNode = TensorOperations<T>.Constant(
-                    CreateScaleTensor(flowNode.Value.Shape, 2.0), $"{namePrefix}scale_{level}");
+                    CreateScaleTensor(flowNode.Value.Shape._dims, 2.0), $"{namePrefix}scale_{level}");
                 flowNode = TensorOperations<T>.ElementwiseMultiply(flowNode, scaleNode);
             }
 
@@ -1413,7 +1413,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     {
         // Create identity grid and add flow to get sampling positions
         // Grid should be [batch, height, width, 2] in normalized coordinates [-1, 1]
-        var flowShape = flowNode.Value.Shape;
+        var flowShape = flowNode.Value.Shape._dims;
         int batch = flowShape[0];
         int height = flowShape[2];
         int width = flowShape[3];

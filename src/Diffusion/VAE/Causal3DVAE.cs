@@ -137,7 +137,7 @@ public class Causal3DVAE<T> : VAEModelBase<T>
 
         // Split into mean and log variance
         int halfLen = x.Shape[^1] / 2;
-        var meanShape = GetReducedShape(x.Shape, halfLen);
+        var meanShape = GetReducedShape(x.Shape._dims, halfLen);
         var mean = new Tensor<T>(meanShape);
         var logVar = new Tensor<T>(meanShape);
         int elements = mean.Shape.Aggregate(1, (a, b) => a * b);

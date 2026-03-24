@@ -20,9 +20,9 @@ public static class TensorValidator
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
 
-        if (!tensor.Shape.SequenceEqual(expectedShape))
+        if (!tensor.Shape._dims.SequenceEqual(expectedShape))
         {
-            throw new TensorShapeMismatchException(expectedShape, tensor.Shape, resolvedComponent, resolvedOperation);
+            throw new TensorShapeMismatchException(expectedShape, tensor.Shape._dims, resolvedComponent, resolvedOperation);
         }
     }
 
@@ -76,9 +76,9 @@ public static class TensorValidator
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
 
-        if (!tensor1.Shape.SequenceEqual(tensor2.Shape))
+        if (!tensor1.Shape._dims.SequenceEqual(tensor2.Shape._dims))
         {
-            throw new TensorShapeMismatchException(tensor1.Shape, tensor2.Shape, resolvedComponent, resolvedOperation);
+            throw new TensorShapeMismatchException(tensor1.Shape._dims, tensor2.Shape._dims, resolvedComponent, resolvedOperation);
         }
     }
 

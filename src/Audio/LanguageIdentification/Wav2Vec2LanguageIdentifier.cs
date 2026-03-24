@@ -372,14 +372,14 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
             normalized[i] = _numOps.FromDouble((_numOps.ToDouble(rawAudio[i]) - mean) / std);
         }
 
-        return new Tensor<T>(normalized, rawAudio.Shape);
+        return new Tensor<T>(normalized, rawAudio.Shape._dims);
     }
 
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         var probs = Softmax(modelOutput.Data.ToArray());
-        return new Tensor<T>(probs, modelOutput.Shape);
+        return new Tensor<T>(probs, modelOutput.Shape._dims);
     }
 
     /// <inheritdoc/>
@@ -413,7 +413,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
 
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape);
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape._dims);
 
         BackwardNative(gradientTensor);
         _optimizer?.UpdateParameters(Layers);

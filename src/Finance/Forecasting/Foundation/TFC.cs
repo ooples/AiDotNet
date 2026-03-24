@@ -277,7 +277,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = NumOps.Add(forecastLoss, contrastiveLoss);
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape._dims));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -476,7 +476,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -602,7 +602,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
             current = _projectionHead.Backward(current);
 
         // Scale gradient for dual-encoder averaging
-        var scaledGrad = new Tensor<T>(current.Shape);
+        var scaledGrad = new Tensor<T>(current.Shape._dims);
         for (int i = 0; i < current.Length; i++)
             scaledGrad.Data.Span[i] = NumOps.Divide(current[i], NumOps.FromDouble(2.0));
 
@@ -623,7 +623,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
             timeGrad = _timeInputProjection.Backward(timeGrad);
 
         // Sum gradients from both paths
-        current = new Tensor<T>(timeGrad.Shape);
+        current = new Tensor<T>(timeGrad.Shape._dims);
         for (int i = 0; i < timeGrad.Length && i < freqGrad.Length; i++)
             current.Data.Span[i] = NumOps.Add(timeGrad[i], freqGrad[i]);
 
@@ -686,7 +686,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         int n = input.Rank > 1 ? input.Shape[^1] : input.Length;
         int numSamples = input.Rank > 1 ? input.Length / n : 1;
         int halfN = n / 2 + 1;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
         T invN = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
 
         for (int s = 0; s < numSamples; s++)

@@ -256,7 +256,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        int[] shape = input.Shape;
+        int[] shape = input.Shape._dims;
         int inputRank = shape.Length;
 
         // Validate Axis is within bounds
@@ -409,7 +409,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null || _meanValues == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int[] inputShape = _lastInput.Shape;
+        int[] inputShape = _lastInput.Shape._dims;
         int inputRank = inputShape.Length;
         int axisSize = inputShape[Axis];
         int totalSize = _lastInput.Length;
@@ -554,7 +554,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
         {
             varianceData[i] = NumOps.Exp(varianceData[i]);
         }
-        var variance = new Tensor<T>(_lastOutput.Shape, new Vector<T>(varianceData));
+        var variance = new Tensor<T>(_lastOutput.Shape._dims, new Vector<T>(varianceData));
 
         // Use Engine operation for backward pass
         return Engine.ReduceLogVarianceBackward(outputGradient, _lastInput, _meanValues, variance, [Axis]);

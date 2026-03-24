@@ -114,14 +114,14 @@ internal static class DETRHelpers
         {
             throw new ArgumentNullException(nameof(b));
         }
-        if (a.Shape.Length != b.Shape.Length || !a.Shape.SequenceEqual(b.Shape))
+        if (a.Shape.Length != b.Shape.Length || !a.Shape._dims.SequenceEqual(b.Shape._dims))
         {
             throw new ArgumentException(
-                $"Tensors must have the same shape. a.Shape=[{string.Join(",", a.Shape)}], b.Shape=[{string.Join(",", b.Shape)}].",
+                $"Tensors must have the same shape. a.Shape=[{string.Join(",", a.Shape._dims)}], b.Shape=[{string.Join(",", b.Shape._dims)}].",
                 nameof(b));
         }
 
-        var result = new Tensor<T>(a.Shape);
+        var result = new Tensor<T>(a.Shape._dims);
         for (int i = 0; i < a.Length; i++)
         {
             result[i] = numOps.Add(a[i], b[i]);

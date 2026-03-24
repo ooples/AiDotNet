@@ -456,7 +456,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape._dims));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -736,7 +736,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         T std = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)) + 1e-8);
 
         // Normalize
-        var normalized = new Tensor<T>(input.Shape);
+        var normalized = new Tensor<T>(input.Shape._dims);
         for (int i = 0; i < length; i++)
         {
             normalized.Data.Span[i] = NumOps.Divide(
@@ -915,7 +915,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape._dims)
         {
             totalSize *= dim;
         }
@@ -994,7 +994,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         int inputLength = input.Data.Length;
         int predLength = Math.Min(prediction.Data.Length, inputLength);
 
-        var shifted = new Tensor<T>(input.Shape);
+        var shifted = new Tensor<T>(input.Shape._dims);
 
         // Copy shifted values (skip first predLength values)
         for (int i = predLength; i < inputLength; i++)

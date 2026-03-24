@@ -355,7 +355,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         var effectiveNumFrames = numFrames ?? DefaultNumFrames;
         var effectiveMotionBucket = motionBucketId ?? MotionBucketId;
 
-        var imageShape = inputImage.Shape;
+        var imageShape = inputImage.Shape._dims;
         var height = imageShape[2];
         var width = imageShape[3];
 
@@ -425,7 +425,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         var effectiveNumFrames = numFrames ?? DefaultNumFrames;
         var useCFG = guidanceScale > 1.0;
 
-        var imageShape = image.Shape;
+        var imageShape = image.Shape._dims;
         var height = imageShape[2];
         var width = imageShape[3];
 
@@ -564,7 +564,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         int timestep,
         Tensor<T> textEmbedding)
     {
-        var videoShape = latents.Shape;
+        var videoShape = latents.Shape._dims;
         var numFrames = videoShape[1];
         var result = new Tensor<T>(videoShape);
 
@@ -604,7 +604,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> CombineImageAndMotion(Tensor<T> imageEmbedding, Tensor<T> motionEmbedding)
     {
-        var imageShape = imageEmbedding.Shape;
+        var imageShape = imageEmbedding.Shape._dims;
         var result = new Tensor<T>(imageShape);
         var resultSpan = result.AsWritableSpan();
         var imageSpan = imageEmbedding.AsSpan();

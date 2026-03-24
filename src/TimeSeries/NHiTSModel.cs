@@ -921,7 +921,7 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         foreach (var weight in _weights)
         {
             writer.Write(weight.Shape.Length);
-            foreach (var dim in weight.Shape)
+            foreach (var dim in weight.Shape._dims)
                 writer.Write(dim);
             for (int i = 0; i < weight.Length; i++)
                 writer.Write(Convert.ToDouble(weight[i]));
@@ -931,7 +931,7 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         foreach (var bias in _biases)
         {
             writer.Write(bias.Shape.Length);
-            foreach (var dim in bias.Shape)
+            foreach (var dim in bias.Shape._dims)
                 writer.Write(dim);
             for (int i = 0; i < bias.Length; i++)
                 writer.Write(Convert.ToDouble(bias[i]));

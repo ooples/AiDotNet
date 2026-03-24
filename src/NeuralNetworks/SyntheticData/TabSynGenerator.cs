@@ -625,7 +625,7 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
         // Default encoder: last layer outputs [mean | logVar] concatenated
         // Derive shape from encoder output rank: replace last dim with latentDim
-        int[] meanShape = DeriveShapeWithLastDim(encoderOutput.Shape, latentDim);
+        int[] meanShape = DeriveShapeWithLastDim(encoderOutput.Shape._dims, latentDim);
         var meanTensor = new Tensor<T>(meanShape);
         var logVarTensor = new Tensor<T>(meanShape);
 
@@ -655,8 +655,8 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </remarks>
     private Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
     {
-        var z = new Tensor<T>(mean.Shape);
-        _lastEpsilon = new Tensor<T>(mean.Shape);
+        var z = new Tensor<T>(mean.Shape._dims);
+        _lastEpsilon = new Tensor<T>(mean.Shape._dims);
         for (int i = 0; i < mean.Length; i++)
         {
             double m = NumOps.ToDouble(mean[i]);
@@ -857,8 +857,8 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </summary>
     private void BackwardEncoder(Tensor<T> zGrad, Tensor<T> mean, Tensor<T> logVar)
     {
-        var meanGrad = new Tensor<T>(mean.Shape);
-        var logVarGrad = new Tensor<T>(logVar.Shape);
+        var meanGrad = new Tensor<T>(mean.Shape._dims);
+        var logVarGrad = new Tensor<T>(logVar.Shape._dims);
 
         for (int i = 0; i < mean.Length; i++)
         {
@@ -881,7 +881,7 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             var gradFromMean = _meanLayer.Backward(meanGrad);
             var gradFromLogVar = _logVarLayer.Backward(logVarGrad);
 
-            encoderOutGrad = new Tensor<T>(gradFromMean.Shape);
+            encoderOutGrad = new Tensor<T>(gradFromMean.Shape._dims);
             for (int i = 0; i < encoderOutGrad.Length; i++)
             {
                 double gm = i < gradFromMean.Length ? NumOps.ToDouble(gradFromMean[i]) : 0;
@@ -894,8 +894,8 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             // Default encoder: gradient flows back to [mean | logvar] output
             int latentDim = _options.LatentDimension;
             int[] encGradShape = _lastEncoderOutput is not null
-                ? (int[])_lastEncoderOutput.Shape.Clone()
-                : DeriveShapeWithLastDim(mean.Shape, latentDim * 2);
+                ? (int[])_lastEncoderOutput.Shape._dims.Clone()
+                : DeriveShapeWithLastDim(mean.Shape._dims, latentDim * 2);
             encoderOutGrad = new Tensor<T>(encGradShape);
             for (int i = 0; i < latentDim; i++)
             {
@@ -956,7 +956,7 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </summary>
     private Tensor<T> ComputeVAEOutputGradient(Tensor<T> input, Tensor<T> activated)
     {
-        var grad = new Tensor<T>(activated.Shape);
+        var grad = new Tensor<T>(activated.Shape._dims);
         if (_transformer is null) return grad;
 
         int idx = 0;
@@ -1005,7 +1005,7 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     {
         if (_transformer is null) return output;
 
-        var result = new Tensor<T>(output.Shape);
+        var result = new Tensor<T>(output.Shape._dims);
         int idx = 0;
 
         for (int col = 0; col < Columns.Count && idx < output.Length; col++)
@@ -1081,7 +1081,7 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         if (norm <= maxNorm) return grad;
 
         double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(grad.Shape);
+        var clipped = new Tensor<T>(grad.Shape._dims);
         for (int i = 0; i < grad.Length; i++)
         {
             clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);

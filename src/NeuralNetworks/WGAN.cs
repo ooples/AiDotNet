@@ -467,7 +467,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         var derivativeVector = _lossFunction.CalculateDerivative(predictedScores, labels);
 
         // Convert gradient vector back to tensor for backpropagation
-        var gradients = new Tensor<T>(criticScores.Shape);
+        var gradients = new Tensor<T>(criticScores.Shape._dims);
         for (int i = 0; i < batchSize; i++)
         {
             gradients[i, 0] = derivativeVector[i];
@@ -520,7 +520,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         var derivativeVector = _lossFunction.CalculateDerivative(predictedScores, labels);
 
         // Convert gradient vector back to tensor for backpropagation
-        var gradients = new Tensor<T>(criticScores.Shape);
+        var gradients = new Tensor<T>(criticScores.Shape._dims);
         for (int i = 0; i < batchSize; i++)
         {
             gradients[i, 0] = derivativeVector[i];

@@ -597,7 +597,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape._dims));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -954,7 +954,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape._dims)
             totalSize *= dim;
 
         var flattened = new Tensor<T>(new[] { totalSize });
@@ -1038,7 +1038,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
             }
         }
 
-        return new Tensor<T>(nodeFeatures.Shape, new Vector<T>(result.Select(d => NumOps.FromDouble(d)).ToArray()));
+        return new Tensor<T>(nodeFeatures.Shape._dims, new Vector<T>(result.Select(d => NumOps.FromDouble(d)).ToArray()));
     }
 
     #endregion
@@ -1129,7 +1129,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
             double noise = (_random.NextDouble() - 0.5) * 0.01 * Math.Abs(val + 1e-6);
             perturbed[i] = NumOps.FromDouble(val + noise);
         }
-        return new Tensor<T>(input.Shape, new Vector<T>(perturbed));
+        return new Tensor<T>(input.Shape._dims, new Vector<T>(perturbed));
     }
 
     #endregion

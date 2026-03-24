@@ -513,7 +513,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse to 2D for processing
@@ -700,7 +700,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var activationGradient = ApplyActivationDerivative(_lastPreActivation, normalizedOutputGradient);
 
         // Step 2: Backpropagate through experts
-        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape);
+        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape._dims);
 
         for (int i = 0; i < _experts.Count; i++)
         {
@@ -750,7 +750,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var activationGradient = ApplyActivationDerivative(_lastPreActivation, normalizedOutputGradient);
 
         // Step 2: Backpropagate through experts (composite - each expert handles its own autodiff)
-        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape);
+        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape._dims);
 
         for (int i = 0; i < _experts.Count; i++)
         {
@@ -1467,7 +1467,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // VECTORIZED: Scatter normalized values back to full expert dimension
         // Create zero tensor for sparse weights
-        var sparseWeights = new Tensor<T>(weights.Shape);
+        var sparseWeights = new Tensor<T>(weights.Shape._dims);
         sparseWeights.Fill(NumOps.Zero);
 
         // Use TensorScatter to place normalized values at correct positions
@@ -1726,7 +1726,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             if (outputGradient.Length == _lastPreActivation.Length)
             {
-                return outputGradient.Reshape(_lastPreActivation.Shape);
+                return outputGradient.Reshape(_lastPreActivation.Shape._dims);
             }
 
             throw new ArgumentException("Output gradient shape does not match layer output.");
@@ -2113,7 +2113,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = aData.Shape[0];
         int features = aData.Shape[1];
 
-        var result = TensorAllocator.Rent<T>(aData.Shape);
+        var result = TensorAllocator.Rent<T>(aData.Shape._dims);
         for (int i = 0; i < batchSize; i++)
         {
             T divisor = bData[i, 0];

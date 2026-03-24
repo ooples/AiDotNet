@@ -1976,7 +1976,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     {
         if (activation == null)
         {
-            return Tensor<T>.CreateDefault(input.Shape, NumOps.One);
+            return Tensor<T>.CreateDefault(input.Shape._dims, NumOps.One);
         }
 
         return activation.Derivative(input);
@@ -2079,7 +2079,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
                 }
             }
 
-            return flatInputGrad.Reshape(input.Shape);
+            return flatInputGrad.Reshape(input.Shape._dims);
         }
         else if (ScalarActivation != null)
         {
@@ -3148,7 +3148,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         }
 
         // Validate shape
-        var actualShape = value.Shape;
+        var actualShape = value.Shape._dims;
         if (actualShape.Length != expectedShape.Length)
         {
             throw new ArgumentException(

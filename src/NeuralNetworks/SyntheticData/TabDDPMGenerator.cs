@@ -731,7 +731,7 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
         if (Layers.Count == 0 || _lastMLPOutput is null) return;
 
-        var mlpGrad = new Tensor<T>(_lastMLPOutput.Shape);
+        var mlpGrad = new Tensor<T>(_lastMLPOutput.Shape._dims);
         if (gradFromNumHead is not null)
         {
             for (int i = 0; i < mlpGrad.Length && i < gradFromNumHead.Length; i++)

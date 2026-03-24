@@ -1080,7 +1080,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         // Calculate gradients for binary cross-entropy: (prediction - target)
         int batchSize = predictions.Shape[0];
-        var gradients = new Tensor<T>(predictions.Shape);
+        var gradients = new Tensor<T>(predictions.Shape._dims);
 
         for (int i = 0; i < batchSize; i++)
         {
@@ -1846,7 +1846,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var realPart = Engine.TensorMultiply(epsilonBroadcast, realFlat);
         var fakePart = Engine.TensorMultiply(oneMinusEpsilon, fakeFlat);
         var interpolatedFlat = Engine.TensorAdd(realPart, fakePart);
-        var interpolated = interpolatedFlat.Reshape(realSamples.Shape);
+        var interpolated = interpolatedFlat.Reshape(realSamples.Shape._dims);
 
         // Compute gradients using symbolic differentiation (autodiff)
         var gradients = ComputeSymbolicGradient(interpolated);
@@ -1931,7 +1931,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // Create gradient signal: we want d(output)/d(input)
         // Start with gradient of 1.0 with respect to the output
-        var outputGradient = new Tensor<T>(output.Shape);
+        var outputGradient = new Tensor<T>(output.Shape._dims);
         outputGradient.Fill(NumOps.One);
 
         // Run backward pass through discriminator layers to compute input gradient
@@ -1979,7 +1979,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     private Tensor<T> ComputeNumericalGradient(Tensor<T> input)
     {
-        var gradients = new Tensor<T>(input.Shape);
+        var gradients = new Tensor<T>(input.Shape._dims);
         T epsilon = NumOps.FromDouble(1e-4); // Small perturbation for numerical gradient
 
         // Store original discriminator training mode
@@ -1987,7 +1987,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Discriminator.SetTrainingMode(false); // Use inference mode for gradient computation
 
         // Work on a copy to avoid modifying the input tensor
-        var inputCopy = new Tensor<T>(input.Shape);
+        var inputCopy = new Tensor<T>(input.Shape._dims);
         for (int idx = 0; idx < input.Length; idx++)
         {
             inputCopy[idx] = input[idx];

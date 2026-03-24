@@ -493,8 +493,8 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
             return textCondition;
 
         // Concatenate along feature dimension
-        var textShape = textCondition.Shape;
-        var imgShape = imageCondition.Shape;
+        var textShape = textCondition.Shape._dims;
+        var imgShape = imageCondition.Shape._dims;
 
         var batch = textShape[0];
         var textSeqLen = textShape[1];
@@ -551,7 +551,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// </summary>
     private new Tensor<T> NormalizePointCloud(Tensor<T> points)
     {
-        var result = new Tensor<T>(points.Shape);
+        var result = new Tensor<T>(points.Shape._dims);
         var resultSpan = result.AsWritableSpan();
         var pointsSpan = points.AsSpan();
 

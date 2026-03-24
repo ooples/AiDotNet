@@ -416,7 +416,7 @@ public abstract class ObjectDetectorBase<T>
     /// <returns>Normalized image.</returns>
     protected virtual Tensor<T> Normalize(Tensor<T> image)
     {
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape._dims);
         T scale = NumOps.FromDouble(1.0 / 255.0);
 
         for (int i = 0; i < image.Length; i++)

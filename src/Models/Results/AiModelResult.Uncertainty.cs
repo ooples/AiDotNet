@@ -783,7 +783,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             vec[i] = _uqNumOps.Add(vec[i], scalar);
         }
 
-        var updated = new Tensor<T>(tensor.Shape, vec);
+        var updated = new Tensor<T>(tensor.Shape._dims, vec);
         return ConvertFromTensor(updated);
     }
 
@@ -894,7 +894,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             outVec[i * 2] = numOps.Subtract(numOps.One, p1T);
         }
 
-        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor.Shape);
+        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor.Shape._dims);
         return ConvertFromTensor(calibrated);
     }
 
@@ -929,7 +929,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             outVec[i * 2] = numOps.Subtract(numOps.One, p1Cal);
         }
 
-        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor.Shape);
+        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor.Shape._dims);
         return ConvertFromTensor(calibrated);
     }
 
@@ -991,7 +991,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             }
         }
 
-        return new Tensor<T>([batch, classes], output).Reshape(tensor.Shape);
+        return new Tensor<T>([batch, classes], output).Reshape(tensor.Shape._dims);
     }
 
     /// <summary>
@@ -1042,7 +1042,7 @@ public partial class AiModelResult<T, TInput, TOutput>
     {
         if (output is Tensor<T> tensor)
         {
-            return (TOutput)(object)new Tensor<T>(tensor.Shape);
+            return (TOutput)(object)new Tensor<T>(tensor.Shape._dims);
         }
 
         if (output is Vector<T> vector)
@@ -1203,7 +1203,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             }
         }
 
-        return new Tensor<T>([batch, classes], scaled).Reshape(probabilities.Shape);
+        return new Tensor<T>([batch, classes], scaled).Reshape(probabilities.Shape._dims);
     }
 
     private static (bool treatAsProbabilities, int batch, int classes) InferProbabilityDistributionLayout(Tensor<T> tensor, Vector<T> flat)

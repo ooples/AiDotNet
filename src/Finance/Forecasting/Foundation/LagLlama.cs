@@ -580,7 +580,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
                 // sigma (idx+1) and nu (idx+2) remain zero - no direct loss gradient
             }
 
-            Backward(Tensor<T>.FromVector(fullGradient, predictions.Shape));
+            Backward(Tensor<T>.FromVector(fullGradient, predictions.Shape._dims));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -968,7 +968,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1217,7 +1217,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         // For Lag-Llama, update lag features after shifting.
-        var newInput = new Tensor<T>(input.Shape);
+        var newInput = new Tensor<T>(input.Shape._dims);
 
         int featureSize = 1 + _lagIndices.Length; // value + lags
         int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;

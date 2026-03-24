@@ -146,7 +146,7 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
         if (gradients == null)
             throw new ArgumentException("GradientPruningStrategy requires gradients");
 
-        if (!weights.Shape.SequenceEqual(gradients.Shape))
+        if (!weights.Shape._dims.SequenceEqual(gradients.Shape._dims))
             throw new ArgumentException("Weights and gradients must have same shape");
 
         var weightsFlat = weights.ToVector();
@@ -159,7 +159,7 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
             scores[i] = _numOps.Abs(product);
         }
 
-        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights.Shape.Clone());
+        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights.Shape._dims.Clone());
     }
 
     /// <summary>
@@ -396,7 +396,7 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
 
         // For simplicity, treat tensors as flattened 1D for COO format
         // or as 2D (first dimension × product of remaining dimensions)
-        var dims = (int[])weights.Shape.Clone();
+        var dims = (int[])weights.Shape._dims.Clone();
         int rows = dims.Length > 0 ? dims[0] : 1;
         int cols = dims.Length > 1 ? dims.Skip(1).Aggregate(1, (a, b) => a * b) : flatWeights.Length / rows;
 

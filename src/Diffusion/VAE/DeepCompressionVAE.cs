@@ -171,7 +171,7 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
             x = layer.Forward(x);
 
         // DC-AE is deterministic (not variational) — logVar is zeros
-        var logVar = new Tensor<T>(x.Shape);
+        var logVar = new Tensor<T>(x.Shape._dims);
         return (x, logVar);
     }
 

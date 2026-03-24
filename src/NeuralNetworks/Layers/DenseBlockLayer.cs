@@ -265,7 +265,7 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 ? grad.Data.Span[i]
                 : NumOps.Zero;
         }
-        return new Tensor<T>(grad.Shape, new Vector<T>(result));
+        return new Tensor<T>(grad.Shape._dims, new Vector<T>(result));
     }
 
     public override void UpdateParameters(T learningRate)

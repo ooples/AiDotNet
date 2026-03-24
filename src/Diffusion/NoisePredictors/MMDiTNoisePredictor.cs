@@ -387,7 +387,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> Forward(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {
-        var shape = x.Shape;
+        var shape = x.Shape._dims;
         var batch = shape[0];
         var height = shape[2];
         var width = shape[3];
@@ -436,7 +436,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> PatchifyAndEmbed(Tensor<T> x)
     {
-        var shape = x.Shape;
+        var shape = x.Shape._dims;
         var batch = shape[0];
         var channels = shape[1];
         var height = shape[2];
@@ -534,7 +534,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         Tensor<T> timeEmbed,
         MMDiTBlock block)
     {
-        var shape = imageTokens.Shape;
+        var shape = imageTokens.Shape._dims;
         var batch = shape[0];
         var numImageTokens = shape[1];
         var numTextTokens = textTokens.Shape[1];
@@ -613,7 +613,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ForwardSingleBlock(Tensor<T> combined, Tensor<T> timeEmbed, MMDiTSingleBlock block)
     {
-        var shape = combined.Shape;
+        var shape = combined.Shape._dims;
         var batch = shape[0];
         var seqLen = shape[1];
         var headDim = _hiddenSize / _numHeads;
@@ -658,7 +658,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         var normed = _finalNorm.Forward(imageTokens);
         normed = ApplyAdaLN(normed, scaleArr, shift);
 
-        var shape = normed.Shape;
+        var shape = normed.Shape._dims;
         var batch = shape[0];
         var numPatches = shape[1];
         var patchDim = _inputChannels * _patchSize * _patchSize;
@@ -692,7 +692,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> Unpatchify(Tensor<T> patches, int height, int width)
     {
-        var shape = patches.Shape;
+        var shape = patches.Shape._dims;
         var batch = shape[0];
         var patchDim = shape[2];
         var numPatchesH = height / _patchSize;
@@ -794,7 +794,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> ExtractImageTokens(Tensor<T> combined, int textLen, int imageLen)
     {
-        var shape = combined.Shape;
+        var shape = combined.Shape._dims;
         var batch = shape[0];
         var hidden = shape[2];
 

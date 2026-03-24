@@ -188,7 +188,7 @@ public class PruningMask<T> : IPruningMask<T>
                 var flatWeights = weights.ToVector();
                 var flatMask = _mask.GetRow(0);
                 var flatResult = flatWeights.PointwiseMultiply(flatMask);
-                return Tensor<T>.FromVector(flatResult, (int[])weights.Shape.Clone());
+                return Tensor<T>.FromVector(flatResult, (int[])weights.Shape._dims.Clone());
             }
 
             var matrix = TensorToMatrix(weights);
@@ -260,7 +260,7 @@ public class PruningMask<T> : IPruningMask<T>
                 var flatMaskVector = new Vector<T>(flatMask);
                 var flatResult = flatWeights.PointwiseMultiply(flatMaskVector);
 
-                return Tensor<T>.FromVector(flatResult, (int[])weights.Shape.Clone());
+                return Tensor<T>.FromVector(flatResult, (int[])weights.Shape._dims.Clone());
             }
         }
 

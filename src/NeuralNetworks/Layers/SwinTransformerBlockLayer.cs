@@ -312,7 +312,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int w = x.Shape[2];
         int c = x.Shape[3];
 
-        var shifted = new Tensor<T>(x.Shape);
+        var shifted = new Tensor<T>(x.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {
@@ -582,7 +582,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = x.Shape[0];
         int seqLen = x.Shape[1];
 
-        var result = TensorAllocator.Rent<T>(x.Shape);
+        var result = TensorAllocator.Rent<T>(x.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {
@@ -642,7 +642,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        var result = TensorAllocator.Rent<T>(gradient.Shape);
+        var result = TensorAllocator.Rent<T>(gradient.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {
@@ -674,7 +674,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        var result = TensorAllocator.Rent<T>(gradient.Shape);
+        var result = TensorAllocator.Rent<T>(gradient.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {

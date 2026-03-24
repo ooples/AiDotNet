@@ -279,7 +279,7 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         int batchSize = _probabilitiesCache.Shape[0];
 
         // Gradient of cross-entropy + softmax: probabilities - one_hot(targets)
-        var logitsGrad = new Tensor<T>(_logitsCache.Shape);
+        var logitsGrad = new Tensor<T>(_logitsCache.Shape._dims);
         for (int b = 0; b < batchSize; b++)
         {
             for (int c = 0; c < _numClasses; c++)

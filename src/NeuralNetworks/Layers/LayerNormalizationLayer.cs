@@ -523,13 +523,13 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
 
             if (_gammaVelocity == null)
             {
-                _gammaVelocity = new Tensor<T>(_gamma.Shape);
+                _gammaVelocity = new Tensor<T>(_gamma.Shape._dims);
                 _gammaVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_gammaVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_betaVelocity == null)
             {
-                _betaVelocity = new Tensor<T>(_beta.Shape);
+                _betaVelocity = new Tensor<T>(_beta.Shape._dims);
                 _betaVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_betaVelocity, PersistentTensorRole.OptimizerState);
             }

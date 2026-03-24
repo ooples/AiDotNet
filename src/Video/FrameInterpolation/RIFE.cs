@@ -416,7 +416,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
         // 2. Backward through flow blocks with gradient accumulation for flow
         var cachedFlow = _cachedFlow ?? throw new InvalidOperationException("Cached flow has not been initialized.");
-        var flowGradAccumulator = new Tensor<T>(cachedFlow.Shape);
+        var flowGradAccumulator = new Tensor<T>(cachedFlow.Shape._dims);
         var fusedGradient = gradient;
 
         for (int i = _flowBlocks.Count - 1; i >= 0; i--)
@@ -531,8 +531,8 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = outputGrad.Shape[2];
         int width = outputGrad.Shape[3];
 
-        var frameGrad = new Tensor<T>(inputFrame.Shape);
-        var flowGrad = new Tensor<T>(flow.Shape);
+        var frameGrad = new Tensor<T>(inputFrame.Shape._dims);
+        var flowGrad = new Tensor<T>(flow.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -698,7 +698,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = encoderGrad.Shape[2];
         int width = encoderGrad.Shape[3];
 
-        var result = new Tensor<T>(encoderGrad.Shape);
+        var result = new Tensor<T>(encoderGrad.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -858,7 +858,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape);
+        var result = new Tensor<T>(image.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {

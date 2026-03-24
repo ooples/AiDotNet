@@ -320,7 +320,7 @@ public class CRAFT<T> : TextDetectorBase<T>
 
     private Tensor<T> ApplyReLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape._dims);
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);
@@ -331,7 +331,7 @@ public class CRAFT<T> : TextDetectorBase<T>
 
     private Tensor<T> ApplySigmoid(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape._dims);
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);

@@ -257,7 +257,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
 
         int inputSize = input.Shape[^1];
         if (inputSize != InputShape[0])
@@ -332,7 +332,7 @@ public class ReadoutLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
 
         int inputSize = input.Shape[^1];
         if (inputSize != InputShape[0])
@@ -585,7 +585,7 @@ public class ReadoutLayer<T> : LayerBase<T>
         {
             if (outputGradient.Length == _lastPreActivation.Length)
             {
-                normalizedOutputGradient = outputGradient.Reshape(_lastPreActivation.Shape);
+                normalizedOutputGradient = outputGradient.Reshape(_lastPreActivation.Shape._dims);
             }
             else
             {
@@ -691,7 +691,7 @@ public class ReadoutLayer<T> : LayerBase<T>
         {
             if (outputGradient.Length == _lastPreActivation.Length)
             {
-                normalizedOutputGradient = outputGradient.Reshape(_lastPreActivation.Shape);
+                normalizedOutputGradient = outputGradient.Reshape(_lastPreActivation.Shape._dims);
             }
             else
             {
@@ -911,8 +911,8 @@ public class ReadoutLayer<T> : LayerBase<T>
 
     public override void ClearGradients()
     {
-        _weightGradients = new Tensor<T>(_weights.Shape);
-        _biasGradients = new Tensor<T>(_bias.Shape);
+        _weightGradients = new Tensor<T>(_weights.Shape._dims);
+        _biasGradients = new Tensor<T>(_bias.Shape._dims);
     }
 
     public override void SetParameters(Vector<T> parameters)

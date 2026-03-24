@@ -437,7 +437,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
             // Step 3: Backward pass - compute gradients
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+            var outputGradientTensor = new Tensor<T>(prediction.Shape._dims, outputGradient);
             Backward(outputGradientTensor);
 
             // Step 4: Update parameters

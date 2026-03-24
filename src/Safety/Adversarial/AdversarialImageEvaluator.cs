@@ -78,7 +78,7 @@ public class AdversarialImageEvaluator<T> : IImageSafetyModule<T>
         if (span.Length < 64) return findings;
 
         // 1. High-frequency energy ratio (adversarial perturbations have unusual HF content)
-        double hfScore = ComputeHighFrequencyAnomalyScore(span, image.Shape);
+        double hfScore = ComputeHighFrequencyAnomalyScore(span, image.Shape._dims);
 
         // 2. Pixel distribution analysis (adversarial images have non-natural histogram shapes)
         double histScore = ComputeHistogramAnomalyScore(span);

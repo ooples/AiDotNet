@@ -336,7 +336,7 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
         SetTrainingMode(true);
         var output = PredictNative(input);
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var gradTensor = Tensor<T>.FromVector(gradient, output.Shape);
+        var gradTensor = Tensor<T>.FromVector(gradient, output.Shape._dims);
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
@@ -654,7 +654,7 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         string inputName = OnnxSession.InputMetadata.Keys.First();
 
         using var results = OnnxSession.Run(new[]

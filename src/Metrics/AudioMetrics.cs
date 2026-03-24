@@ -635,8 +635,8 @@ public class ScaleInvariantSignalToDistortionRatio<T> where T : struct
         T estMean = ComputeMean(estimated);
         T tarMean = ComputeMean(target);
 
-        var estCentered = new Tensor<T>(estimated.Shape);
-        var tarCentered = new Tensor<T>(target.Shape);
+        var estCentered = new Tensor<T>(estimated.Shape._dims);
+        var tarCentered = new Tensor<T>(target.Shape._dims);
 
         for (int i = 0; i < estimated.Length; i++)
         {

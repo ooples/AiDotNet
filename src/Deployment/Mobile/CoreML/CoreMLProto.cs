@@ -115,7 +115,7 @@ internal static class CoreMLProto
 
         // Field 5: multiArrayType (for tensors)
         writer.WriteTag(5, WireFormat.WireType.LengthDelimited);
-        writer.WriteBytes(ByteString.CopyFrom(CreateMultiArrayType(feature.Shape, feature.DataType)));
+        writer.WriteBytes(ByteString.CopyFrom(CreateMultiArrayType(feature.Shape._dims, feature.DataType)));
 
         writer.Flush();
         return stream.ToArray();

@@ -230,7 +230,7 @@ public class FPN<T> : NeckBase<T>
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Rank);
-        foreach (int dim in tensor.Shape)
+        foreach (int dim in tensor.Shape._dims)
         {
             writer.Write(dim);
         }
@@ -294,7 +294,7 @@ public class FPN<T> : NeckBase<T>
 
     private Tensor<T> ApplyReLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape._dims);
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);

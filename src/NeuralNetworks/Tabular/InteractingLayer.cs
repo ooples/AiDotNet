@@ -318,7 +318,7 @@ public class InteractingLayer<T> : LayerBase<T>
         }
 
         // ReLU backward
-        var gradPreActivation = new Tensor<T>(gradient.Shape);
+        var gradPreActivation = new Tensor<T>(gradient.Shape._dims);
         for (int i = 0; i < gradient.Length; i++)
         {
             gradPreActivation[i] = NumOps.Compare(_preActivationCache[i], NumOps.Zero) > 0

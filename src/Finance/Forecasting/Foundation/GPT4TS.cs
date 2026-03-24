@@ -260,7 +260,7 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            var gradTensor = Tensor<T>.FromVector(gradient, output.Shape);
+            var gradTensor = Tensor<T>.FromVector(gradient, output.Shape._dims);
 
             // Only backprop through task head and patch embedding (backbone is frozen)
             if (_taskHead is not null)
@@ -442,7 +442,7 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {

@@ -86,7 +86,7 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         var span = image.Data.Span;
         if (span.Length == 0) return findings;
 
-        var layout = DetermineLayout(image.Shape, span.Length);
+        var layout = DetermineLayout(image.Shape._dims, span.Length);
         if (layout.Height < _patchSize || layout.Width < _patchSize) return findings;
 
         // Extract patch features

@@ -311,7 +311,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -597,7 +597,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape._dims);
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -783,7 +783,7 @@ public class RWKV7Block<T> : LayerBase<T>
             var dRGate = Engine.TensorMultiply(vProj_t, dOut_t);
 
             // sigmoid derivative: sigmoid(x) * (1 - sigmoid(x)) = rGate * (1 - rGate)
-            var sigmoidDeriv = new Tensor<T>(rGate_t.Shape);
+            var sigmoidDeriv = new Tensor<T>(rGate_t.Shape._dims);
             for (int bi = 0; bi < batchSize; bi++)
                 for (int d = 0; d < _modelDimension; d++)
                 {

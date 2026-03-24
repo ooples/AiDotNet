@@ -201,7 +201,7 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     }
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => _melSpectrogram?.Forward(rawAudio) ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) { var r = new Tensor<T>(o.Shape); for (int i = 0; i < o.Length; i++) { double l = NumOps.ToDouble(o[i]); r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-l))); } return r; }
+    protected override Tensor<T> PostprocessOutput(Tensor<T> o) { var r = new Tensor<T>(o.Shape._dims); for (int i = 0; i < o.Length; i++) { double l = NumOps.ToDouble(o[i]); r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-l))); } return r; }
 
     public override ModelMetadata<T> GetModelMetadata()
     {

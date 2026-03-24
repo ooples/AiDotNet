@@ -262,7 +262,7 @@ public class FlattenLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        return Engine.Reshape(outputGradient, _lastInput.Shape);
+        return Engine.Reshape(outputGradient, _lastInput.Shape._dims);
     }
 
     /// <summary>

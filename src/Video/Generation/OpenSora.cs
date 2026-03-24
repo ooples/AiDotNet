@@ -373,7 +373,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         double sqrtOneMinusAlphaCumprod = Math.Sqrt(1 - alphaCumprod);
 
         // Sample noise
-        var noise = InitializeLatents(input.Shape, random);
+        var noise = InitializeLatents(input.Shape._dims, random);
 
         // Create noisy input: x_t = sqrt(alpha_cumprod) * x_0 + sqrt(1 - alpha_cumprod) * noise
         var scaledInput = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(sqrtAlphaCumprod));
@@ -395,7 +395,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
-        var gradient = new Tensor<T>(predictedNoise.Shape);
+        var gradient = new Tensor<T>(predictedNoise.Shape._dims);
         T scale = NumOps.FromDouble(2.0 / noise.Length);
         for (int i = 0; i < noise.Length; i++)
         {
@@ -478,7 +478,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     private Tensor<T> InitializeLatentsFromImage(Tensor<T> imageLatent, Random random)
     {
-        var noise = InitializeLatents(imageLatent.Shape, random);
+        var noise = InitializeLatents(imageLatent.Shape._dims, random);
 
         // Mix image latent with noise (50/50 blend)
         var scaledImg = Engine.TensorMultiplyScalar(imageLatent, NumOps.FromDouble(0.5));
@@ -529,7 +529,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
             // Multi-head self-attention
             var qkv = _ditQKV[i].Forward(normed);
-            var attended = DiTMultiHeadAttention(qkv, features.Shape);
+            var attended = DiTMultiHeadAttention(qkv, features.Shape._dims);
             attended = _ditAttnProj[i].Forward(attended);
 
             // First residual connection
@@ -552,7 +552,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         var noise = _finalLayer.Forward(features);
 
         // Unpatchify
-        return UnpatchifyNoise(noise, latents.Shape);
+        return UnpatchifyNoise(noise, latents.Shape._dims);
     }
 
     /// <summary>
@@ -906,7 +906,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
         const double eps = 1e-5;
 
         for (int b = 0; b < batchSize; b++)

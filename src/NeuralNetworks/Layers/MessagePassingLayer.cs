@@ -368,10 +368,10 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape._dims);
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape);
+        var halfTensor = new Tensor<T>(tensor.Shape._dims);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -462,7 +462,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         if (edgeFeatures.Shape.Length != 3)
         {
             throw new ArgumentException(
-                $"Edge features must be a 3D tensor [batch, numEdgeSlots, edgeFeatureDim], but got shape [{string.Join(", ", edgeFeatures.Shape)}].");
+                $"Edge features must be a 3D tensor [batch, numEdgeSlots, edgeFeatureDim], but got shape [{string.Join(", ", edgeFeatures.Shape._dims)}].");
         }
         _edgeFeatures = edgeFeatures;
     }
@@ -491,7 +491,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: need at least 2D for [nodes, features] or 3D for [batch, nodes, features]
@@ -747,15 +747,15 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int numNodes = _lastInput.Shape[1];
 
         // Initialize gradients
-        _messageWeights1Gradient = new Tensor<T>(_messageWeights1.Shape);
-        _messageWeights2Gradient = new Tensor<T>(_messageWeights2.Shape);
+        _messageWeights1Gradient = new Tensor<T>(_messageWeights1.Shape._dims);
+        _messageWeights2Gradient = new Tensor<T>(_messageWeights2.Shape._dims);
         _messageBias1Gradient = new Tensor<T>([_messageFeatures]);
         _messageBias2Gradient = new Tensor<T>([_messageFeatures]);
-        _updateWeightsGradient = new Tensor<T>(_updateWeights.Shape);
-        _updateMessageWeightsGradient = new Tensor<T>(_updateMessageWeights.Shape);
+        _updateWeightsGradient = new Tensor<T>(_updateWeights.Shape._dims);
+        _updateMessageWeightsGradient = new Tensor<T>(_updateMessageWeights.Shape._dims);
         _updateBiasGradient = new Tensor<T>([_outputFeatures]);
-        _resetWeightsGradient = new Tensor<T>(_resetWeights.Shape);
-        _resetMessageWeightsGradient = new Tensor<T>(_resetMessageWeights.Shape);
+        _resetWeightsGradient = new Tensor<T>(_resetWeights.Shape._dims);
+        _resetMessageWeightsGradient = new Tensor<T>(_resetMessageWeights.Shape._dims);
         _resetBiasGradient = new Tensor<T>([_outputFeatures]);
 
         _messageWeights1Gradient.Fill(NumOps.Zero);
@@ -769,7 +769,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _resetMessageWeightsGradient.Fill(NumOps.Zero);
         _resetBiasGradient.Fill(NumOps.Zero);
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape._dims);
         inputGradient.Fill(NumOps.Zero);
 
         // Gradient through aggregated messages
@@ -1149,7 +1149,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 array[i] = parameters[index++];
             }
 
-            var newTensor = new Tensor<T>(tensor.Shape);
+            var newTensor = new Tensor<T>(tensor.Shape._dims);
             for (int i = 0; i < array.Length; i++)
             {
                 newTensor[i] = array[i];
@@ -2135,7 +2135,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Output: h' = (1 - z) * h + z * candidate
         // Create ones tensor for (1 - z) computation
         var onesConst = TensorOperations<T>.Constant(
-            Tensor<T>.CreateOnes(updateGate.Value.Shape), "ones");
+            Tensor<T>.CreateOnes(updateGate.Value.Shape._dims), "ones");
         var oneMinusZ = TensorOperations<T>.Subtract(onesConst, updateGate);
 
         var output = TensorOperations<T>.Add(

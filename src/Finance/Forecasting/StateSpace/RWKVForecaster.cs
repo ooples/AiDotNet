@@ -503,7 +503,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         string inputName = OnnxSession.InputMetadata.Keys.First();
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
 
@@ -546,7 +546,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
         for (int i = 0; i < _contextLength - stepsUsed; i++)
             result.Data.Span[i] = input.Data.Span[i + stepsUsed];
         for (int i = 0; i < stepsUsed && i < predictions.Length; i++)

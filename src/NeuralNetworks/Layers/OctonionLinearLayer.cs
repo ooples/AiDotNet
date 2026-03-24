@@ -210,7 +210,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// <returns>Output tensor with shape [outputFeatures * 8] or [batch, outputFeatures * 8].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
 
         int batchSize;
         int inputLen;
@@ -1034,9 +1034,9 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         var derivative = DerivativeTensor(ScalarActivation, preActivationTensor);
 
         // Multiply output gradient element-wise by derivative
-        var result = TensorAllocator.Rent<T>(outputGradient.Shape);
+        var result = TensorAllocator.Rent<T>(outputGradient.Shape._dims);
         int totalElements = 1;
-        foreach (var dim in outputGradient.Shape)
+        foreach (var dim in outputGradient.Shape._dims)
             totalElements *= dim;
 
         for (int i = 0; i < totalElements; i++)

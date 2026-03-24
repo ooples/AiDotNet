@@ -968,6 +968,6 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             output[i] = NumOps.GreaterThan(val, NumOps.Zero) ? val : NumOps.Zero;
         }
 
-        return new Tensor<T>(output, input.Shape);
+        return new Tensor<T>(output, input.Shape._dims);
     }
 }

@@ -352,7 +352,7 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
             for (int j = 0; j < heatmapWidth; j++)
             {
                 // Create occluded version
-                var occluded = new Tensor<T>(input.Shape);
+                var occluded = new Tensor<T>(input.Shape._dims);
                 var occSpan = occluded.Data.Span;
                 inputSpan.CopyTo(occSpan);
 

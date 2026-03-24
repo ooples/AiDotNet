@@ -106,7 +106,7 @@ public class TextToImageTool<T> : ToolBase
 
     private static string FormatImageResult(Tensor<T> image, string prompt, int steps, double guidance, int? seed)
     {
-        var shape = string.Join("x", image.Shape);
+        var shape = string.Join("x", image.Shape._dims);
         return $"Generated image successfully.\n" +
                $"Shape: {shape}\n" +
                $"Prompt: \"{prompt}\"\n" +

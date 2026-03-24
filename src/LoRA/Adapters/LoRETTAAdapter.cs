@@ -332,7 +332,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> ttOutput = ComputeTensorTrainForward(input);
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape._dims);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], ttOutput[i]);
@@ -552,7 +552,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> ttInputGrad = ComputeTensorTrainBackward(outputGradient);
 
         // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape);
+        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape._dims);
         for (int i = 0; i < baseInputGrad.Length; i++)
         {
             inputGrad[i] = NumOps.Add(baseInputGrad[i], ttInputGrad[i]);

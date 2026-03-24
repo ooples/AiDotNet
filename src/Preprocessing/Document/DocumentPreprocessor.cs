@@ -268,7 +268,7 @@ public class DocumentPreprocessor<T> : IDisposable
             result[i] = _numOps.FromDouble((val - min) / range);
         }
 
-        return new Tensor<T>(image.Shape, new Vector<T>(result));
+        return new Tensor<T>(image.Shape._dims, new Vector<T>(result));
     }
 
     private T SampleNearest(Tensor<T> image, int channel, double x, double y)

@@ -146,7 +146,7 @@ public class MemFlow<T> : OpticalFlowBase<T>
             throw new ArgumentException($"frame1 must be at least rank 3 [C,H,W], got rank {frame1.Rank}.", nameof(frame1));
         if (frame0.Shape[0] != frame1.Shape[0] || frame0.Shape[1] != frame1.Shape[1] || frame0.Shape[2] != frame1.Shape[2])
             throw new ArgumentException(
-                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape)}], frame1: [{string.Join(",", frame1.Shape)}].",
+                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape._dims)}], frame1: [{string.Join(",", frame1.Shape._dims)}].",
                 nameof(frame1));
         int height = frame0.Shape[1];
         int width = frame0.Shape[2];
@@ -187,10 +187,10 @@ public class MemFlow<T> : OpticalFlowBase<T>
         {
             if (output.Shape[d] != expectedOutput.Shape[d])
                 throw new ArgumentException(
-                    $"Shape mismatch at dimension {d}: model output [{string.Join(",", output.Shape)}] vs expected [{string.Join(",", expectedOutput.Shape)}].",
+                    $"Shape mismatch at dimension {d}: model output [{string.Join(",", output.Shape._dims)}] vs expected [{string.Join(",", expectedOutput.Shape._dims)}].",
                     nameof(expectedOutput));
         }
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape._dims);
         for (int i = 0; i < output.Length; i++)
         {
             gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);

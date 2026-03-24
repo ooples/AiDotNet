@@ -257,7 +257,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     {
         SetTrainingMode(true);
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var currentGrad = Tensor<T>.FromVector(outputGradient, output.Shape);
+        var currentGrad = Tensor<T>.FromVector(outputGradient, output.Shape._dims);
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {

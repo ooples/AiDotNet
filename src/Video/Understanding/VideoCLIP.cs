@@ -1026,7 +1026,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int batchSize = input.Shape[0];
         int channels = input.Shape[1];
         int seqLen = input.Shape[3];
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
         double eps = 1e-5;
 
         for (int b = 0; b < batchSize; b++)

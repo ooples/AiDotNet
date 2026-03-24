@@ -683,7 +683,7 @@ public class ImageEncoder<T>
 
     private Tensor<T> ApplyGelu(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape._dims);
         var span = x.AsSpan();
         var resultSpan = result.AsWritableSpan();
 

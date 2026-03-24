@@ -380,7 +380,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             return latentCodes;
         }
 
-        var truncated = new Tensor<T>(latentCodes.Shape);
+        var truncated = new Tensor<T>(latentCodes.Shape._dims);
         var threshold = NumOps.FromDouble(TruncationThreshold);
 
         for (int i = 0; i < latentCodes.Length; i++)
@@ -710,7 +710,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateHingeLossGradients(Tensor<T> output, bool isReal, int batchSize)
     {
-        var gradients = new Tensor<T>(output.Shape);
+        var gradients = new Tensor<T>(output.Shape._dims);
 
         for (int i = 0; i < output.Length; i++)
         {
@@ -1003,7 +1003,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
             var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
 
-            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape);
+            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape._dims);
             Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;

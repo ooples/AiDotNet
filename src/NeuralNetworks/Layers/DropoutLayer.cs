@@ -269,7 +269,7 @@ public class DropoutLayer<T> : LayerBase<T>
 
         // === Vectorized: Use TensorDropoutMask for optimized dropout mask generation (Phase C: New IEngine methods) ===
         // TensorDropoutMask generates the mask with proper scaling in a single GPU/SIMD-accelerated call
-        _dropoutMask = Engine.TensorDropoutMask<T>(input.Shape, _dropoutRate, _scale);
+        _dropoutMask = Engine.TensorDropoutMask<T>(input.Shape._dims, _dropoutRate, _scale);
 
         // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
         return Engine.TensorMultiply(input, _dropoutMask);
@@ -593,7 +593,7 @@ public class DropoutLayer<T> : LayerBase<T>
         {
             _gpuDropoutMask?.Dispose();
             _gpuDropoutMask = null;
-            return input.CreateView(0, input.Shape);
+            return input.CreateView(0, input.Shape._dims);
         }
 
         float rate = (float)NumOps.ToDouble(_dropoutRate);
@@ -601,7 +601,7 @@ public class DropoutLayer<T> : LayerBase<T>
         ulong seed = _seedCounter++ ^ (uint)Environment.TickCount;
 
         // Generate uniform random mask [0, 1) on GPU
-        var randoms = gpuEngine.RandomUniformGpu<T>(input.Shape, 0f, 1f, seed);
+        var randoms = gpuEngine.RandomUniformGpu<T>(input.Shape._dims, 0f, 1f, seed);
 
         // Keep neurons where random > rate
         var mask = gpuEngine.GreaterThanScalarGpu<T>(randoms, rate);

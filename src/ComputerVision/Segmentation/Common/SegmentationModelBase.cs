@@ -271,7 +271,7 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.FirstOrDefault() ?? "pixel_values";
         var inputs = new List<NamedOnnxValue>

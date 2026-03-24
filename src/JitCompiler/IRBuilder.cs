@@ -81,7 +81,7 @@ public class IRBuilder
             var tensorId = _nextTensorId++;
             _nodeToTensorId[input] = tensorId;
             graph.InputIds.Add(tensorId);
-            graph.TensorShapes[tensorId] = input.Value.Shape;
+            graph.TensorShapes[tensorId] = input.Value.Shape._dims;
         }
 
         // Perform topological sort to process nodes in order
@@ -167,7 +167,7 @@ public class IRBuilder
         var irType = InferIRType(typeof(T));
 
         // Get output shape
-        var outputShape = node.Value.Shape;
+        var outputShape = node.Value.Shape._dims;
 
         // Create IR operation based on operation type
         IROp op = node.OperationType.Value switch
@@ -587,7 +587,7 @@ public class IRBuilder
         // Output gradient is input to backward pass (initialized to 1s typically)
         var outputGradId = _nextTensorId++;
         graph.InputIds.Add(outputGradId);
-        graph.TensorShapes[outputGradId] = outputNode.Value.Shape;
+        graph.TensorShapes[outputGradId] = outputNode.Value.Shape._dims;
         gradientMap[outputNode] = outputGradId;
 
         // Traverse in reverse topological order for backpropagation

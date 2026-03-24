@@ -125,7 +125,7 @@ public class DETR<T> : ObjectDetectorBase<T>
         var flattened = FlattenForTransformer(projected);
 
         // Generate positional encoding
-        var posEncoding = GeneratePositionalEncoding(flattened.Shape);
+        var posEncoding = GeneratePositionalEncoding(flattened.Shape._dims);
 
         // Encode features
         var memory = _encoder.Forward(flattened, posEncoding);
@@ -373,7 +373,7 @@ internal class DETREncoder<T>
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> posEncoding)
     {
         // Create a copy of input to avoid mutating the original tensor
-        var output = new Tensor<T>(x.Shape);
+        var output = new Tensor<T>(x.Shape._dims);
         for (int i = 0; i < x.Length; i++)
         {
             output[i] = x[i];
@@ -536,7 +536,7 @@ internal class EncoderLayer<T>
         int seqLen = x.Shape[1];
         int ffnDim = _ffn1.OutputSize;
 
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {
@@ -626,7 +626,7 @@ internal class LayerNorm<T>
         int seqLen = x.Shape[1];
         int hiddenDim = x.Shape[2];
 
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape._dims);
 
         for (int b = 0; b < batch; b++)
         {

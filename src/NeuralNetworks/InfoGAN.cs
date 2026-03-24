@@ -451,15 +451,15 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         var qInputGradients = QNetwork.BackwardWithInputGradient(miGradients);
 
         // Combine gradients - verify shapes match
-        if (!discInputGradients.Shape.SequenceEqual(qInputGradients.Shape))
+        if (!discInputGradients.Shape._dims.SequenceEqual(qInputGradients.Shape._dims))
         {
             throw new InvalidOperationException(
                 $"Gradient shape mismatch: discriminator input gradients have shape " +
-                $"[{string.Join(", ", discInputGradients.Shape)}] but Q network input gradients have shape " +
-                $"[{string.Join(", ", qInputGradients.Shape)}]. Both must match for gradient combining.");
+                $"[{string.Join(", ", discInputGradients.Shape._dims)}] but Q network input gradients have shape " +
+                $"[{string.Join(", ", qInputGradients.Shape._dims)}]. Both must match for gradient combining.");
         }
 
-        var combinedGradients = new Tensor<T>(discInputGradients.Shape);
+        var combinedGradients = new Tensor<T>(discInputGradients.Shape._dims);
         int gradLength = discInputGradients.Shape.Aggregate(1, (a, b) => a * b);
         for (int i = 0; i < gradLength; i++)
         {
@@ -512,7 +512,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateMutualInfoGradients(Tensor<T> predictedCodes, Tensor<T> trueCodes, int batchSize)
     {
-        var gradients = new Tensor<T>(predictedCodes.Shape);
+        var gradients = new Tensor<T>(predictedCodes.Shape._dims);
         T scale = NumOps.FromDouble(2.0 / ((double)batchSize * _latentCodeSize));
 
         for (int b = 0; b < batchSize; b++)
@@ -559,7 +559,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape);
+        var gradients = new Tensor<T>(predictions.Shape._dims);
 
         for (int i = 0; i < batchSize; i++)
         {

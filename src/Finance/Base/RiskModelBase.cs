@@ -199,7 +199,7 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     /// Useful for finding the "bad apples" to remove if you need to lower risk.
     /// </para>
     /// </remarks>
-    public virtual Tensor<T> DecomposeRisk(Tensor<T> portfolioReturns, Tensor<T> weights) => new Tensor<T>(weights.Shape);
+    public virtual Tensor<T> DecomposeRisk(Tensor<T> portfolioReturns, Tensor<T> weights) => new Tensor<T>(weights.Shape._dims);
 
     /// <summary>
     /// Estimates the probability of losses exceeding a threshold.
@@ -349,7 +349,7 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
         try
         {
             var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            var gradTensor = Tensor<T>.FromVector(grad, output.Shape);
+            var gradTensor = Tensor<T>.FromVector(grad, output.Shape._dims);
 
             Backpropagate(gradTensor);
 

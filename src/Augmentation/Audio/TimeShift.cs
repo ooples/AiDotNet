@@ -87,7 +87,7 @@ public class TimeShift<T> : AudioAugmenterBase<T>
             return waveform.Clone();
         }
 
-        var result = new Tensor<T>(waveform.Shape);
+        var result = new Tensor<T>(waveform.Shape._dims);
         T zero = NumOps.Zero;
 
         for (int i = 0; i < samples; i++)

@@ -557,7 +557,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
         var gradTensor = Tensor<T>.FromVector(lossGrad);
         if (gradTensor.Rank < output.Rank)
-            gradTensor = gradTensor.Reshape(output.Shape);
+            gradTensor = gradTensor.Reshape(output.Shape._dims);
 
         Backpropagate(gradTensor);
 

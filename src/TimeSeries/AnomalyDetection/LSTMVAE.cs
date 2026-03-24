@@ -109,7 +109,7 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
                     var (mean, logVar, hidden) = _encoder.EncodeWithCache(input);
 
                     // Reparameterization trick: z = mean + std * epsilon
-                    var z = new Tensor<T>(mean.Shape);
+                    var z = new Tensor<T>(mean.Shape._dims);
                     var random = RandomHelper.CreateSeededRandom(42 + epoch * 10000 + i);
                     for (int j = 0; j < mean.Length; j++)
                     {
@@ -187,8 +187,8 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         // Where std = exp(0.5 * logVar) and z = mean + std * epsilon
         // We can recover epsilon = (z - mean) / std
         T klWeight = _numOps.FromDouble(_options.KLWeight);
-        var dMean = new Tensor<T>(mean.Shape);
-        var dLogVar = new Tensor<T>(logVar.Shape);
+        var dMean = new Tensor<T>(mean.Shape._dims);
+        var dLogVar = new Tensor<T>(logVar.Shape._dims);
 
         for (int i = 0; i < mean.Length; i++)
         {
@@ -696,18 +696,18 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _logVarBias = ReadTensor(reader);
 
         // Reinitialize gradient accumulators
-        _weightsGrad = new Tensor<T>(_weights.Shape);
-        _biasGrad = new Tensor<T>(_bias.Shape);
-        _meanWeightsGrad = new Tensor<T>(_meanWeights.Shape);
-        _meanBiasGrad = new Tensor<T>(_meanBias.Shape);
-        _logVarWeightsGrad = new Tensor<T>(_logVarWeights.Shape);
-        _logVarBiasGrad = new Tensor<T>(_logVarBias.Shape);
+        _weightsGrad = new Tensor<T>(_weights.Shape._dims);
+        _biasGrad = new Tensor<T>(_bias.Shape._dims);
+        _meanWeightsGrad = new Tensor<T>(_meanWeights.Shape._dims);
+        _meanBiasGrad = new Tensor<T>(_meanBias.Shape._dims);
+        _logVarWeightsGrad = new Tensor<T>(_logVarWeights.Shape._dims);
+        _logVarBiasGrad = new Tensor<T>(_logVarBias.Shape._dims);
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (int dim in tensor.Shape)
+        foreach (int dim in tensor.Shape._dims)
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)
@@ -979,16 +979,16 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _outputBias = ReadTensor(reader);
 
         // Reinitialize gradient accumulators
-        _weightsGrad = new Tensor<T>(_weights.Shape);
-        _biasGrad = new Tensor<T>(_bias.Shape);
-        _outputWeightsGrad = new Tensor<T>(_outputWeights.Shape);
-        _outputBiasGrad = new Tensor<T>(_outputBias.Shape);
+        _weightsGrad = new Tensor<T>(_weights.Shape._dims);
+        _biasGrad = new Tensor<T>(_bias.Shape._dims);
+        _outputWeightsGrad = new Tensor<T>(_outputWeights.Shape._dims);
+        _outputBiasGrad = new Tensor<T>(_outputBias.Shape._dims);
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (int dim in tensor.Shape)
+        foreach (int dim in tensor.Shape._dims)
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)

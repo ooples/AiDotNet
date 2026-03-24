@@ -259,7 +259,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Forward through all experts and store their outputs
         _lastExpertOutputs = new Tensor<T>[_experts.Length];
-        Tensor<T> combinedExpertOutput = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> combinedExpertOutput = new Tensor<T>(baseOutput.Shape._dims);
 
         // Initialize combined output to zero
         for (int i = 0; i < combinedExpertOutput.Length; i++)
@@ -293,7 +293,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Sum base output and combined expert output
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape._dims);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], combinedExpertOutput[i]);
@@ -364,7 +364,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
         {
             // Weight the output gradient by this expert's gating weight for each sample
-            Tensor<T> weightedOutputGrad = new Tensor<T>(outputGradient.Shape);
+            Tensor<T> weightedOutputGrad = new Tensor<T>(outputGradient.Shape._dims);
 
             for (int batchIdx = 0; batchIdx < batchSize; batchIdx++)
             {
@@ -402,7 +402,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> gatingInputGrad = _gatingNetwork.Backward(gatingGradient);
 
         // Sum all input gradients (base + experts + gating)
-        Tensor<T> totalInputGrad = new Tensor<T>(baseInputGrad.Shape);
+        Tensor<T> totalInputGrad = new Tensor<T>(baseInputGrad.Shape._dims);
         for (int i = 0; i < baseInputGrad.Length; i++)
         {
             T sum = NumOps.Add(baseInputGrad[i], expertInputGradSum[i]);

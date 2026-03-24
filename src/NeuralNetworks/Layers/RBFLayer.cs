@@ -271,7 +271,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ComputeEpsilonsFromWidths()
     {
-        var epsilons = new Tensor<T>(_widths.Shape);
+        var epsilons = new Tensor<T>(_widths.Shape._dims);
         var two = NumOps.FromDouble(2.0);
         for (int i = 0; i < _numCenters; i++)
         {
@@ -352,7 +352,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ConvertEpsilonGradientsToWidthGradients(Tensor<T> gradEpsilons)
     {
-        var gradWidths = new Tensor<T>(_widths.Shape);
+        var gradWidths = new Tensor<T>(_widths.Shape._dims);
         for (int i = 0; i < _numCenters; i++)
         {
             // depsilon/dwidth = -1/width³

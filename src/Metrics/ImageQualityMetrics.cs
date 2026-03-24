@@ -59,9 +59,9 @@ public class PeakSignalToNoiseRatio<T> where T : struct
         if (predicted == null) throw new ArgumentNullException(nameof(predicted));
         if (groundTruth == null) throw new ArgumentNullException(nameof(groundTruth));
 
-        if (!ShapesMatch(predicted.Shape, groundTruth.Shape))
+        if (!ShapesMatch(predicted.Shape._dims, groundTruth.Shape._dims))
         {
-            throw new ArgumentException($"Shape mismatch: predicted {string.Join(",", predicted.Shape)} vs ground truth {string.Join(",", groundTruth.Shape)}");
+            throw new ArgumentException($"Shape mismatch: predicted {string.Join(",", predicted.Shape._dims)} vs ground truth {string.Join(",", groundTruth.Shape._dims)}");
         }
 
         // Compute Mean Squared Error
@@ -106,7 +106,7 @@ public class PeakSignalToNoiseRatio<T> where T : struct
             predicted.Shape[3] != groundTruth.Shape[3])
         {
             throw new ArgumentException(
-                $"Shape mismatch: predicted [{string.Join(",", predicted.Shape)}] vs ground truth [{string.Join(",", groundTruth.Shape)}]");
+                $"Shape mismatch: predicted [{string.Join(",", predicted.Shape._dims)}] vs ground truth [{string.Join(",", groundTruth.Shape._dims)}]");
         }
 
         int batchSize = predicted.Shape[0];

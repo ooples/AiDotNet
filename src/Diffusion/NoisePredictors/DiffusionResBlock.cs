@@ -142,7 +142,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         _lastInput = input;
 
         // First block: GroupNorm → SiLU → Conv3x3
@@ -171,7 +171,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// <returns>Output tensor [B, outChannels, H, W].</returns>
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> timeEmbed)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         _lastInput = input;
 
         // First block: GroupNorm → SiLU → Conv3x3

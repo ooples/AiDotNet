@@ -304,7 +304,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         var output = Predict(input);
 
         // Simple MSE gradient
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape._dims);
         for (int i = 0; i < output.Length && i < expectedOutput.Length; i++)
         {
             gradient[i] = NumOps.FromDouble(
@@ -667,7 +667,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     {
         if (_adjacency is null) return features;
 
-        var result = new Tensor<T>(features.Shape);
+        var result = new Tensor<T>(features.Shape._dims);
         for (int j = 0; j < _dataWidth && j < features.Length; j++)
         {
             double val = NumOps.ToDouble(features[j]);
@@ -966,7 +966,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
         for (int i = 0; i < input.Length; i++)
         {
             result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
@@ -977,7 +977,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     private Tensor<T> ApplyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
     {
         int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput.Shape);
+        var result = new Tensor<T>(gradOutput.Shape._dims);
         for (int i = 0; i < len; i++)
         {
             result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
@@ -987,7 +987,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
         T slope = NumOps.FromDouble(0.2);
         for (int i = 0; i < input.Length; i++)
         {
@@ -1000,7 +1000,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
     {
         int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput.Shape);
+        var result = new Tensor<T>(gradOutput.Shape._dims);
         T slope = NumOps.FromDouble(0.2);
         for (int i = 0; i < len; i++)
         {
@@ -1023,7 +1023,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     {
         if (_transformer is null) return output;
 
-        var result = new Tensor<T>(output.Shape);
+        var result = new Tensor<T>(output.Shape._dims);
         int idx = 0;
 
         for (int col = 0; col < _columns.Count && idx < output.Length; col++)
@@ -1094,7 +1094,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         if (norm <= maxNorm) return grad;
 
         double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(grad.Shape);
+        var clipped = new Tensor<T>(grad.Shape._dims);
         for (int i = 0; i < grad.Length; i++)
         {
             clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
@@ -1325,7 +1325,7 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
     private static Tensor<T> CloneTensor(Tensor<T> source)
     {
-        var clone = new Tensor<T>(source.Shape);
+        var clone = new Tensor<T>(source.Shape._dims);
         for (int i = 0; i < source.Length; i++)
         {
             clone[i] = source[i];

@@ -120,7 +120,7 @@ public static class InputHelper<T, TInput>
                 (tensor.Shape.Length > 1 && column >= tensor.Shape[1]))
             {
                 throw new ArgumentOutOfRangeException(
-                    $"Indices ({row}, {column}) are out of range for tensor with shape {string.Join("x", tensor.Shape)}.");
+                    $"Indices ({row}, {column}) are out of range for tensor with shape {string.Join("x", tensor.Shape._dims)}.");
             }
 
             return tensor[row, column];

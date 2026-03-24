@@ -264,7 +264,7 @@ public abstract class ModelCompressionBase<T> : IModelCompressionStrategy<T>
         var (compressedVector, vectorMetadata) = Compress(flatWeights);
 
         // Create tensor metadata including original shape (clone to avoid external modification)
-        var originalShape = (int[])weights.Shape.Clone();
+        var originalShape = (int[])weights.Shape._dims.Clone();
         var tensorMetadata = new TensorCompressionMetadata<T>(
             originalShape: originalShape,
             innerMetadata: vectorMetadata);

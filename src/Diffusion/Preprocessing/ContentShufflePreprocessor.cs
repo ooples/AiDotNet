@@ -46,7 +46,7 @@ public class ContentShufflePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
-        var shape = data.Shape;
+        var shape = data.Shape._dims;
         int batch = shape[0];
         int channels = Math.Min(shape[1], 3);
         int height = shape[2];

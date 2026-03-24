@@ -318,7 +318,7 @@ public static class AudioHelper<T>
     public static void SaveWav(Tensor<T> audio, string filePath, int sampleRate,
         int bitsPerSample = 16, bool denormalize = true)
     {
-        var shape = audio.Shape;
+        var shape = audio.Shape._dims;
         int channels, numSamples;
 
         if (shape.Length == 3)
@@ -405,7 +405,7 @@ public static class AudioHelper<T>
             return audio;
         }
 
-        var shape = audio.Shape;
+        var shape = audio.Shape._dims;
         int channels = shape.Length == 3 ? shape[1] : shape[0];
         int srcSamples = shape[^1];
         int dstSamples = (int)((long)srcSamples * targetSampleRate / sourceSampleRate);
@@ -453,7 +453,7 @@ public static class AudioHelper<T>
     /// <returns>Mono audio tensor [1, 1, samples].</returns>
     public static Tensor<T> ToMono(Tensor<T> audio)
     {
-        var shape = audio.Shape;
+        var shape = audio.Shape._dims;
         int channels = shape.Length == 3 ? shape[1] : shape[0];
 
         if (channels == 1)

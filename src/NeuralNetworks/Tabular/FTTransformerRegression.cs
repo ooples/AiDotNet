@@ -243,7 +243,7 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
         int outputDim = _predictionsCache.Shape.Length > 1 ? _predictionsCache.Shape[1] : 1;
 
         // Gradient of MSE: 2 * (predictions - targets) / n
-        var predictionGrad = new Tensor<T>(_predictionsCache.Shape);
+        var predictionGrad = new Tensor<T>(_predictionsCache.Shape._dims);
         var scale = NumOps.FromDouble(2.0 / (batchSize * outputDim));
 
         for (int i = 0; i < _predictionsCache.Length; i++)

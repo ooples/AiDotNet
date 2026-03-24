@@ -345,7 +345,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         T criticLoss = NumOps.Add(NumOps.Negate(wassersteinDistance), gpTerm);
 
         // Create gradients for real images (maximize score) using vectorized fill
-        var realGradients = new Tensor<T>(realScores.Shape);
+        var realGradients = new Tensor<T>(realScores.Shape._dims);
         Engine.TensorFill(realGradients, NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize)));
 
         // IMPORTANT: Re-run forward pass on real images before backprop
@@ -355,7 +355,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var realParameterGradients = Critic.GetParameterGradients().Clone();
 
         // Create gradients for fake images (minimize score) using vectorized fill
-        var fakeGradients = new Tensor<T>(fakeScores.Shape);
+        var fakeGradients = new Tensor<T>(fakeScores.Shape._dims);
         Engine.TensorFill(fakeGradients, NumOps.Divide(NumOps.Negate(NumOps.One), NumOps.FromDouble(batchSize)));
 
         // IMPORTANT: Re-run forward pass on fake images before backprop
@@ -403,7 +403,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var epsilon = Engine.TensorTile(epsilonBase, tileFactors);
 
         // Compute (1 - epsilon)
-        var onesTensor = new Tensor<T>(epsilon.Shape);
+        var onesTensor = new Tensor<T>(epsilon.Shape._dims);
         Engine.TensorFill(onesTensor, NumOps.One);
         var oneMinusEpsilon = Engine.TensorSubtract(onesTensor, epsilon);
 
@@ -416,7 +416,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var interpolatedScores = Critic.Predict(interpolatedImages);
 
         // Create gradients of all ones using vectorized fill
-        var ones = new Tensor<T>(interpolatedScores.Shape);
+        var ones = new Tensor<T>(interpolatedScores.Shape._dims);
         Engine.TensorFill(ones, NumOps.One);
 
         // Backpropagate to get gradients with respect to input
@@ -437,7 +437,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var gradNorm = Engine.TensorSqrt(gradNormSquared);
 
         // deviation = gradNorm - 1
-        var onesForDeviation = new Tensor<T>(gradNorm.Shape);
+        var onesForDeviation = new Tensor<T>(gradNorm.Shape._dims);
         Engine.TensorFill(onesForDeviation, NumOps.One);
         var deviation = Engine.TensorSubtract(gradNorm, onesForDeviation);
 
@@ -493,7 +493,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         T loss = NumOps.Negate(avgScore);
 
         // Create gradients using vectorized fill
-        var gradients = new Tensor<T>(criticScores.Shape);
+        var gradients = new Tensor<T>(criticScores.Shape._dims);
         Engine.TensorFill(gradients, NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize)));
 
         // Backpropagate through critic to get gradients for generator

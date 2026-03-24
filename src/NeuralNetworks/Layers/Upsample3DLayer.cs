@@ -246,7 +246,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Rank;
 
         Tensor<T> batchedInput;
@@ -316,7 +316,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
 
         IGpuTensor<T> input5D;
         bool addedBatch = false;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         if (rank == 4)
@@ -337,7 +337,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
             input5D = input.CreateView(0, new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _gpuInputShape = input5D.Shape;
+        _gpuInputShape = input5D.Shape._dims;
         _addedBatchDimension = addedBatch;
 
         // Store _lastInput for backward pass
@@ -473,7 +473,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
         var inputGrad = Engine.Upsample3DBackward(batchedGradient, inputShape, ScaleDepth, ScaleHeight, ScaleWidth);
 
         // Restore to original input shape
-        return inputGrad.Reshape(_lastInput.Shape);
+        return inputGrad.Reshape(_lastInput.Shape._dims);
     }
 
     #endregion

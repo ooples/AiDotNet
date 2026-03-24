@@ -533,7 +533,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
 
         // Backward pass
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, output.Shape));
+        Backward(Tensor<T>.FromVector(outputGradient, output.Shape._dims));
 
         // Update parameters
         _optimizer.UpdateParameters(Layers);
@@ -1065,7 +1065,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1403,7 +1403,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
         T epsilon = NumOps.FromDouble(1e-5);
 
         if (normalize)
@@ -1544,7 +1544,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
         Array.Copy(input.Data.ToArray(), shiftAmount, newData, 0, input.Length - shiftAmount);
         Array.Copy(predictions.Data.ToArray(), 0, newData, input.Length - shiftAmount, shiftAmount);
 
-        return new Tensor<T>(input.Shape, new Vector<T>(newData));
+        return new Tensor<T>(input.Shape._dims, new Vector<T>(newData));
     }
 
     /// <summary>

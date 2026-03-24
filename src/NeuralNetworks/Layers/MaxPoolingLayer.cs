@@ -156,7 +156,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
 
         IGpuTensor<T> input4D;
         bool addedBatch = false;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         if (rank == 3)
@@ -177,7 +177,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             input4D = input.CreateView(0, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _gpuInputShape = input4D.Shape;
+        _gpuInputShape = input4D.Shape._dims;
         _addedBatchDimension = addedBatch;
 
         var poolSizeArr = new[] { PoolSize, PoolSize };
@@ -327,7 +327,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
             throw new ArgumentException($"MaxPooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         Tensor<T> input4D;
@@ -455,7 +455,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         var inputGradient4D = Engine.MaxPool2DBackward(gradient4D, _maxIndices, inputShape4D, poolSizeArr, strideArr);
 
         // Restore to original input shape
-        return inputGradient4D.Reshape(_lastInput.Shape);
+        return inputGradient4D.Reshape(_lastInput.Shape._dims);
     }
 
     /// <summary>
@@ -548,7 +548,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
 
         // Extract input gradient and reshape back to original dimensions
         var inputGrad4D = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return _addedBatchDimension ? inputGrad4D.Reshape(_lastInput.Shape) : inputGrad4D;
+        return _addedBatchDimension ? inputGrad4D.Reshape(_lastInput.Shape._dims) : inputGrad4D;
     }
 
     /// <summary>

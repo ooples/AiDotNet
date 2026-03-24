@@ -342,7 +342,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         scaleFactor = Math.Max(2, Math.Min(4, scaleFactor));
 
         // Get current dimensions
-        var shape = image.Shape;
+        var shape = image.Shape._dims;
         if (shape.Length < 3)
         {
             throw new ArgumentException("Image must have at least 3 dimensions [C, H, W]");
@@ -389,7 +389,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
                 "Extension pixels must be a positive value.");
         }
 
-        var shape = image.Shape;
+        var shape = image.Shape._dims;
         var channels = shape[^3];
         var height = shape[^2];
         var width = shape[^1];
@@ -639,7 +639,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 
     private Tensor<T> BilinearUpscale(Tensor<T> image, int newHeight, int newWidth)
     {
-        var shape = image.Shape;
+        var shape = image.Shape._dims;
         var channels = shape[^3];
         var oldHeight = shape[^2];
         var oldWidth = shape[^1];
@@ -690,7 +690,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 
     private Tensor<T> CreateExpandedCanvas(Tensor<T> image, int newWidth, int newHeight, int offsetX, int offsetY)
     {
-        var shape = image.Shape;
+        var shape = image.Shape._dims;
         var channels = shape[^3];
         var height = shape[^2];
         var width = shape[^1];

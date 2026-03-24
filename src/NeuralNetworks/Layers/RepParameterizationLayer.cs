@@ -186,7 +186,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse to 2D for processing
@@ -286,7 +286,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        int[] shape = input.Shape;
+        int[] shape = input.Shape._dims;
 
         // Store original shape for any-rank tensor support
         _originalInputShape = shape;

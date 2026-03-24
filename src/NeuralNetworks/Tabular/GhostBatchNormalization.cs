@@ -139,14 +139,14 @@ public class GhostBatchNormalization<T>
             throw new ArgumentException($"Expected {_numFeatures} features, got {features}", nameof(input));
         }
 
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
 
         // Determine number of virtual batches
         _numVirtualBatches = Math.Max(1, (batchSize + _virtualBatchSize - 1) / _virtualBatchSize);
         int actualVirtualSize = (batchSize + _numVirtualBatches - 1) / _numVirtualBatches;
 
         _inputCache = input;
-        _normalizedCache = new Tensor<T>(input.Shape);
+        _normalizedCache = new Tensor<T>(input.Shape._dims);
         _batchMeans = new Vector<T>[_numVirtualBatches];
         _batchVars = new Vector<T>[_numVirtualBatches];
 
@@ -231,7 +231,7 @@ public class GhostBatchNormalization<T>
     {
         int batchSize = input.Shape[0];
         int features = input.Shape[1];
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -264,7 +264,7 @@ public class GhostBatchNormalization<T>
 
         int batchSize = gradOutput.Shape[0];
         int features = gradOutput.Shape[1];
-        var gradInput = new Tensor<T>(gradOutput.Shape);
+        var gradInput = new Tensor<T>(gradOutput.Shape._dims);
 
         // Initialize gradients
         _gammaGrad = new Vector<T>(_numFeatures);

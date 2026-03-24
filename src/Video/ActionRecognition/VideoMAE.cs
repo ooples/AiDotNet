@@ -365,7 +365,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
 
         // Compute loss gradient using the configured loss function
         var gradientVector = LossFunction.CalculateDerivative(predicted.ToVector(), expectedOutput.ToVector());
-        var lossGradient = new Tensor<T>(predicted.Shape, gradientVector);
+        var lossGradient = new Tensor<T>(predicted.Shape._dims, gradientVector);
 
         BackwardPass(lossGradient);
 
@@ -470,7 +470,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
 
         using var results = _onnxSession.Run(inputs);

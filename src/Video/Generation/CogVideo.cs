@@ -490,7 +490,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
     private Tensor<T> CombineWithCondition(Tensor<T> input, Tensor<T> textEmbedding, Tensor<T> timestepEmbed)
     {
         // Scale the input by the timestep embedding and modulate by text
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
 
         // Get timestep scale factor (average of timestep embedding)
         double timestepScale = 0.0;
@@ -648,7 +648,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
             }
         }
 
-        return new Tensor<T>(noisyLatent.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(noisyLatent.Shape._dims, new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -678,7 +678,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -724,7 +724,7 @@ public class CogVideo<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape._dims, outputGradient);
 
         var currentGradient = outputGradientTensor;
         for (int i = Layers.Count - 1; i >= 0; i--)

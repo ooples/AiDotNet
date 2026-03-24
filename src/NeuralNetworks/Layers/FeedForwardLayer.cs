@@ -427,7 +427,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
             // Cache GPU tensors for GPU-resident backward pass
             _gpuInput = input;
             _gpuOutput = output;
-            _gpuInputShape = input.Shape;
+            _gpuInputShape = input.Shape._dims;
 
             // Also cache CPU tensors for fallback backward pass
             Input = input.ToTensor();
@@ -620,7 +620,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
 
             var weightsT = Engine.TensorTranspose(Weights);
             var inputGradient2D = Engine.TensorMatMul(grad2D, weightsT);
-            var inputGradient = inputGradient2D.Reshape(Input.Shape);
+            var inputGradient = inputGradient2D.Reshape(Input.Shape._dims);
 
             var inputT = Engine.TensorTranspose(input2D);
             WeightsGradient = Engine.TensorMatMul(inputT, grad2D);

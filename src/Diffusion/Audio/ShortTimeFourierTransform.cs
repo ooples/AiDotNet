@@ -491,7 +491,7 @@ public class ShortTimeFourierTransform<T>
     public Tensor<T> Power(Tensor<T> signal)
     {
         var magnitude = Magnitude(signal);
-        var power = new Tensor<T>(magnitude.Shape);
+        var power = new Tensor<T>(magnitude.Shape._dims);
 
         for (int i = 0; i < magnitude.Data.Length; i++)
         {
@@ -540,7 +540,7 @@ public class ShortTimeFourierTransform<T>
     /// </summary>
     private static Tensor<T> ComputeMagnitude(Tensor<Complex<T>> complex)
     {
-        var magnitude = new Tensor<T>(complex.Shape);
+        var magnitude = new Tensor<T>(complex.Shape._dims);
 
         for (int i = 0; i < complex.Data.Length; i++)
         {
@@ -557,7 +557,7 @@ public class ShortTimeFourierTransform<T>
     /// <returns>Phase tensor in radians.</returns>
     public static Tensor<T> ExtractPhase(Tensor<Complex<T>> complex)
     {
-        var phase = new Tensor<T>(complex.Shape);
+        var phase = new Tensor<T>(complex.Shape._dims);
 
         for (int i = 0; i < complex.Data.Length; i++)
         {
@@ -575,10 +575,10 @@ public class ShortTimeFourierTransform<T>
     /// <returns>Complex spectrogram.</returns>
     public static Tensor<Complex<T>> PolarToComplex(Tensor<T> magnitude, Tensor<T> phase)
     {
-        if (!magnitude.Shape.SequenceEqual(phase.Shape))
+        if (!magnitude.Shape._dims.SequenceEqual(phase.Shape._dims))
             throw new ArgumentException("Magnitude and phase must have the same shape.");
 
-        var complex = new Tensor<Complex<T>>(magnitude.Shape);
+        var complex = new Tensor<Complex<T>>(magnitude.Shape._dims);
 
         for (int i = 0; i < magnitude.Data.Length; i++)
         {

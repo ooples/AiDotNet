@@ -520,7 +520,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(logits.ToVector(), targetTokens.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(logits.ToVector(), targetTokens.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, logits.Shape));
+            Backward(Tensor<T>.FromVector(gradient, logits.Shape._dims));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -936,7 +936,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1195,7 +1195,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var newInput = new Tensor<T>(input.Shape);
+        var newInput = new Tensor<T>(input.Shape._dims);
 
         // Clamp stepsUsed to prevent negative indices
         int clampedSteps = Math.Min(stepsUsed, _contextLength);

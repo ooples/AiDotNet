@@ -458,7 +458,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         if (_poolingType == PoolingType.Average)
         {
             // Use GPU-accelerated ReduceMeanBackward
-            return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape, axes);
+            return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape._dims, axes);
         }
         else // Max pooling
         {
@@ -466,7 +466,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
                 throw new InvalidOperationException("Max indices not available for backward pass.");
 
             // Use GPU-accelerated ReduceMaxBackward
-            return Engine.ReduceMaxBackward(outputGradient, _maxIndices, _lastInput.Shape);
+            return Engine.ReduceMaxBackward(outputGradient, _maxIndices, _lastInput.Shape._dims);
         }
     }
 

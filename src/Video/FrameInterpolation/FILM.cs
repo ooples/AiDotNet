@@ -508,7 +508,7 @@ public class FILM<T> : FrameInterpolationBase<T>
         int height = features.Shape[2];
         int width = features.Shape[3];
 
-        var warped = new Tensor<T>(features.Shape);
+        var warped = new Tensor<T>(features.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -915,10 +915,10 @@ public class FILM<T> : FrameInterpolationBase<T>
         ComputeFusionGradients(Tensor<T> gradOutput, Tensor<T> warped1, Tensor<T> warped2,
             Tensor<T> occ1, Tensor<T> occ2, double timestep)
     {
-        var gradWarped1 = new Tensor<T>(warped1.Shape);
-        var gradWarped2 = new Tensor<T>(warped2.Shape);
-        var gradOcc1 = new Tensor<T>(occ1.Shape);
-        var gradOcc2 = new Tensor<T>(occ2.Shape);
+        var gradWarped1 = new Tensor<T>(warped1.Shape._dims);
+        var gradWarped2 = new Tensor<T>(warped2.Shape._dims);
+        var gradOcc1 = new Tensor<T>(occ1.Shape._dims);
+        var gradOcc2 = new Tensor<T>(occ2.Shape._dims);
 
         int batchSize = warped1.Shape[0];
         int channels = warped1.Shape[1];
@@ -972,8 +972,8 @@ public class FILM<T> : FrameInterpolationBase<T>
     private (Tensor<T> gradFeatures, Tensor<T> gradFlow) WarpFeaturesBackward(
         Tensor<T> gradOutput, Tensor<T> features, Tensor<T> flow)
     {
-        var gradFeatures = new Tensor<T>(features.Shape);
-        var gradFlow = new Tensor<T>(flow.Shape);
+        var gradFeatures = new Tensor<T>(features.Shape._dims);
+        var gradFlow = new Tensor<T>(flow.Shape._dims);
 
         int batchSize = features.Shape[0];
         int channels = features.Shape[1];
@@ -1083,7 +1083,7 @@ public class FILM<T> : FrameInterpolationBase<T>
         int height = gradOutput.Shape[2];
         int width = gradOutput.Shape[3];
 
-        var result = new Tensor<T>(gradOutput.Shape);
+        var result = new Tensor<T>(gradOutput.Shape._dims);
         for (int b = 0; b < batchSize; b++)
         {
             for (int h = 0; h < height; h++)

@@ -520,7 +520,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape._dims));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -1016,7 +1016,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 
         // Convert input to ONNX tensor format
         var inputData = ConvertToFloatArray(input);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
 
         // Get input name from model
         var inputMeta = OnnxSession.InputMetadata;
@@ -1052,7 +1052,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRandomMasking(Tensor<T> input)
     {
-        var masked = new Tensor<T>(input.Shape);
+        var masked = new Tensor<T>(input.Shape._dims);
         var rand = RandomHelper.CreateSecureRandom();
 
         // Copy input data
@@ -1252,7 +1252,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape._dims);
         int contextLen = _contextLength;
 
         // Shift old values left

@@ -227,7 +227,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape._dims;
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -580,7 +580,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
             var dIGateRaw = Engine.TensorMultiply(dIGate, iGate);
 
             // Sigmoid derivative: sig(x) * (1 - sig(x))
-            var ones = new Tensor<T>(fGate.Shape);
+            var ones = new Tensor<T>(fGate.Shape._dims);
             for (int idx = 0; idx < ones.Length; idx++) ones[idx] = NumOps.One;
             var fSigDeriv = Engine.TensorMultiply(fGate, Engine.TensorSubtract(ones, fGate));
             var dFGateRaw = Engine.TensorMultiply(dFGate, fSigDeriv);
