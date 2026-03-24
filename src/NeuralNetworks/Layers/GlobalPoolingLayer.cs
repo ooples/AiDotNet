@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, AiDotNet.Engines.PoolingType.Max")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, AiDotNet.Enums.PoolingType.Max")]
 public class GlobalPoolingLayer<T> : LayerBase<T>
 {
     /// <summary>

@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.AttentionComputation)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "16, 4, 2, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "16, 4, 2, 8, true, 0.0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;

@@ -58,7 +58,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.MixtureOfExperts)]
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 4, 2")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4")]
 public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>

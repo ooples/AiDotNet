@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Upsampling)]
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, 2, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, 2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class DeconvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>

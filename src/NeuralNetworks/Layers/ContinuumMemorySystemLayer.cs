@@ -16,7 +16,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type</typeparam>
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 2")]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 4 }, 4, 2")]
 public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 {
     private readonly DenseLayer<T>[] _mlpBlocks;

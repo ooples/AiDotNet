@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
+[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.RecurrentLayer<double>(4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null), true, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class BidirectionalLayer<T> : LayerBase<T>
 {
     private readonly LayerBase<T> _forwardLayer;

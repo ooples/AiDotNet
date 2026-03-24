@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, ApiShape = LayerApiShape.DualTensor, TestInputShape = "4, 8", TestConstructorArgs = "8")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, ApiShape = LayerApiShape.DualTensor, TestInputShape = "4, 8", TestConstructorArgs = "8, 2, 16, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>

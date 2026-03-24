@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "1, 2, 3, 4, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "1, 2, 3, 4, 4, 4, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class Conv3DLayer<T> : LayerBase<T>
 {
     #region Properties
