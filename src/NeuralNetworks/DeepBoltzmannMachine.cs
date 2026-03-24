@@ -679,13 +679,8 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         var visible = hidden;
         for (int layer = _layerSizes.Count - 2; layer >= 0; layer--)
         {
-            // Transpose weights manually for the down pass
-            int rows = _layerWeights[layer].Shape[0];
-            int cols = _layerWeights[layer].Shape[1];
-            var transposed = new Tensor<T>([cols, rows]);
-            for (int r = 0; r < rows; r++)
-                for (int c = 0; c < cols; c++)
-                    transposed[c, r] = _layerWeights[layer][r, c];
+            // O(1) view-based transpose — no data copy unless MatMul needs contiguous
+            var transposed = _layerWeights[layer].Transpose([1, 0]).Contiguous();
             var product = MatMul2D(visible, transposed);
             var biasDown = _layerBiases[layer];
             var bias = biasDown.Rank < product.Rank
