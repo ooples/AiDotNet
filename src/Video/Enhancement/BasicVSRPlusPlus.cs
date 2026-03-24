@@ -1040,7 +1040,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         var featureGradients = new List<Tensor<T>>();
         for (int i = 0; i < numFrames; i++)
         {
-            featureGradients.Add(new Tensor<T>(_cachedInitialFeatures[0].Shape));
+            featureGradients.Add(new Tensor<T>(_cachedInitialFeatures[0].Shape._dims));
         }
 
         // Process each frame's gradient through output conv, upsampling, and residual blocks
@@ -1101,7 +1101,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             var backwardPhaseGradients = new List<Tensor<T>>();
             for (int i = 0; i < numFrames; i++)
             {
-                backwardPhaseGradients.Add(new Tensor<T>(currentGradients[0].Shape));
+                backwardPhaseGradients.Add(new Tensor<T>(currentGradients[0].Shape._dims));
             }
 
             // --- Backward through FORWARD propagation phase ---
@@ -1147,7 +1147,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             var inputGradients = new List<Tensor<T>>();
             for (int i = 0; i < numFrames; i++)
             {
-                inputGradients.Add(new Tensor<T>(currentGradients[0].Shape));
+                inputGradients.Add(new Tensor<T>(currentGradients[0].Shape._dims));
             }
 
             // Backward propagation went from last to first (i = numFrames-2 to 0)

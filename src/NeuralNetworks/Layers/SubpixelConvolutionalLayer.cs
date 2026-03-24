@@ -530,7 +530,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         // Vectorized random init in [-0.5, 0.5], scaled by Xavier factor
         var randVec = Vector<T>.CreateRandom(_kernels.Length, -0.5, 0.5);
-        var randTensor = new Tensor<T>(_kernels.Shape._dims, randVec);
+        var randTensor = new Tensor<T>(_kernels.Shape._dims._dims, randVec);
         _kernels = Engine.TensorMultiplyScalar(randTensor, scale);
 
         _biases.Fill(NumOps.Zero);
@@ -811,7 +811,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         var kernelGradGpuTemp = gpuEngine.Conv2DBackwardKernelGpu<T>(
             convOutputGrad,
             _gpuInput,
-            _kernels.Shape,
+            _kernels.Shape._dims,
             new[] { 1, 1 },  // stride
             new[] { padSize, padSize },  // padding
             new[] { 1, 1 }); // dilation
@@ -929,7 +929,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _biasGradients = Engine.ReduceSum(convOutputGradientNCHW, new[] { 0, 2, 3 }, keepDims: false);
 
         // Calculate kernel gradient using Engine
-        _kernelGradients = Engine.Conv2DBackwardKernel(convOutputGradientNCHW, _lastInput, _kernels.Shape._dims, strideArr, paddingArr, dilationArr);
+        _kernelGradients = Engine.Conv2DBackwardKernel(convOutputGradientNCHW, _lastInput, _kernels.Shape._dims._dims, strideArr, paddingArr, dilationArr);
 
         // Calculate input gradient using Engine (NCHW format)
         var inputGradient = Engine.Conv2DBackwardInput(convOutputGradientNCHW, _kernels, _lastInput.Shape._dims, strideArr, paddingArr, dilationArr);
@@ -1164,7 +1164,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         // Initialize momentum if not already done
         int numOutChannels = _outputDepth * _upscaleFactor * _upscaleFactor;
-        _kernelMomentum ??= new Tensor<T>(_kernels.Shape._dims);
+        _kernelMomentum ??= new Tensor<T>(_kernels.Shape._dims._dims);
         _biasMomentum ??= new Tensor<T>([numOutChannels]);
 
         T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentumFactor);

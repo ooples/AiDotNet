@@ -179,7 +179,7 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
         if (predictions.Count == 0)
             throw new ArgumentException("Cannot compute mean of empty prediction list");
 
-        var sum = new Tensor<T>(predictions[0].Shape);
+        var sum = new Tensor<T>(predictions[0].Shape._dims);
         foreach (var pred in predictions)
         {
             for (int i = 0; i < pred.Length; i++)

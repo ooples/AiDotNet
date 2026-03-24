@@ -1524,7 +1524,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Initialize combined output with zeros
-        var combined = new Tensor<T>(expertOutputs[0].Shape);
+        var combined = new Tensor<T>(expertOutputs[0].Shape._dims);
         combined.Fill(NumOps.Zero);
 
         // Vectorized: For each expert, multiply its output by routing weights and accumulate
@@ -2022,7 +2022,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // topKIndicesFlat: [batchSize * k] - pre-downloaded expert indices
 
         // Get first expert output to determine output shape
-        int[] outputShape = expertOutputsGpu[0].Shape;
+        int[] outputShape = expertOutputsGpu[0].Shape._dims;
 
         // Initialize combined output to zeros
         var combinedGpu = gpuEngine.ZerosGpu<T>(outputShape);
@@ -2076,7 +2076,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // expertOutputsGpu[i]: [batchSize, outputDim...]
 
         int numExperts = expertOutputsGpu.Count;
-        int[] outputShape = expertOutputsGpu[0].Shape;
+        int[] outputShape = expertOutputsGpu[0].Shape._dims;
 
         // Initialize combined output to zeros
         var combinedGpu = gpuEngine.ZerosGpu<T>(outputShape);

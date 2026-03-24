@@ -353,7 +353,7 @@ internal static class OnnxToCoreMLConverter
             description.Inputs.Add(new CoreMLFeature
             {
                 Name = input.Name,
-                Shape = input.Shape._dims,
+                Shape = input.Shape,
                 DataType = config.QuantizationBits == 16
                     ? CoreMLProto.ArrayDataType.Float16
                     : CoreMLProto.ArrayDataType.Float32
@@ -366,7 +366,7 @@ internal static class OnnxToCoreMLConverter
             description.Outputs.Add(new CoreMLFeature
             {
                 Name = output.Name,
-                Shape = output.Shape._dims,
+                Shape = output.Shape,
                 DataType = CoreMLProto.ArrayDataType.Float32
             });
         }

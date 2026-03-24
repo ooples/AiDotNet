@@ -1155,7 +1155,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             varianceVec[i] = numOps.Multiply(varianceVec[i], varianceInv);
         }
 
-        var shape = samples[0].Shape;
+        var shape = samples[0].Shape._dims;
         return (new Tensor<T>(shape, meanVec), new Tensor<T>(shape, varianceVec));
     }
 

@@ -1456,7 +1456,7 @@ public class MultiViewAttention<T>
 
         for (int v = 0; v < views.Length; v++)
         {
-            var viewShape = views[v].Shape;
+            var viewShape = views[v].Shape._dims;
             result[v] = new Tensor<T>(viewShape);
             var resultSpan = result[v].AsWritableSpan();
             var viewSpan = views[v].AsSpan();

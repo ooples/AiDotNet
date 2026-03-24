@@ -284,7 +284,7 @@ internal static class OnnxProto
         if (node.Shape != null && node.Shape.Length > 0)
         {
             writer.WriteTag(2, WireFormat.WireType.LengthDelimited);
-            var shapeBytes = CreateTensorShapeProto(node.Shape._dims);
+            var shapeBytes = CreateTensorShapeProto(node.Shape);
             writer.WriteBytes(ByteString.CopyFrom(shapeBytes));
         }
 

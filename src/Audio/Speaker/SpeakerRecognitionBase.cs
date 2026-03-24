@@ -171,7 +171,7 @@ public abstract class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase<T>
             return NormalizeEmbedding(embeddings[0]);
         }
 
-        var firstShape = embeddings[0].Shape;
+        var firstShape = embeddings[0].Shape._dims;
         int totalSize = embeddings[0].Length;
 
         // Validate all embeddings have the same shape

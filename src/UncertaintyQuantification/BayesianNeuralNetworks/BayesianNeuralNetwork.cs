@@ -268,7 +268,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
         if (predictions.Count == 0)
             throw new ArgumentException("Cannot compute mean of empty prediction list");
 
-        var shape = predictions[0].Shape;
+        var shape = predictions[0].Shape._dims;
         var sum = Vector<T>.CreateDefault(predictions[0].Length, NumOps.Zero);
         foreach (var pred in predictions)
         {

@@ -233,7 +233,7 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
             int groupEnd = Math.Min(i + _temporalDownsample, latents.Count);
             int groupSize = groupEnd - i;
 
-            var avg = new Tensor<T>(latents[i].Shape);
+            var avg = new Tensor<T>(latents[i].Shape._dims);
             var avgSpan = avg.AsWritableSpan();
             var scale = NumOps.FromDouble(1.0 / groupSize);
 

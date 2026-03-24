@@ -148,8 +148,8 @@ public class ParameterRegistry<T>
         }
 
         // Validate shape
-        var expectedShape = accessor.Shape._dims;
-        var actualShape = value.Shape._dims.ToArray();
+        var expectedShape = accessor.Shape;
+        var actualShape = value.Shape.ToArray();
         if (!ShapesMatch(expectedShape, actualShape))
         {
             throw new ArgumentException(

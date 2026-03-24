@@ -112,7 +112,7 @@ public class WeightLoader
 
                 if (tensorMetadata.TryGetValue(tensorKey, out var meta))
                 {
-                    var tensor = ParseTensorData(tensorBytes, meta.Shape._dims, meta.DType);
+                    var tensor = ParseTensorData(tensorBytes, meta.Shape, meta.DType);
                     if (tensor != null && !string.IsNullOrEmpty(meta.Name))
                     {
                         weights[meta.Name] = tensor;
@@ -203,7 +203,7 @@ public class WeightLoader
             int byteCount = (int)(info.DataEnd - info.DataStart);
             byte[] tensorBytes = reader.ReadBytes(byteCount);
 
-            var tensor = ParseTensorData(tensorBytes, info.Shape._dims, info.DType);
+            var tensor = ParseTensorData(tensorBytes, info.Shape, info.DType);
             if (tensor != null)
             {
                 weights[info.Name] = tensor;
@@ -696,7 +696,7 @@ public class WeightLoader
                     metadata[index.ToString()] = new TensorMetadata
                     {
                         Name = kvp.Key,
-                        Shape = tensorData.Shape._dims,
+                        Shape = tensorData.Shape,
                         DType = tensorData.DType
                     };
                     index++;
@@ -709,12 +709,12 @@ public class WeightLoader
 
     private Tensor<float>? CreateTensorFromData(TensorData data)
     {
-        if (data.Data == null || data.Shape._dims == null)
+        if (data.Data == null || data.Shape == null)
         {
             return null;
         }
 
-        return ParseTensorData(data.Data.ToArray(), data.Shape._dims, data.DType);
+        return ParseTensorData(data.Data.ToArray(), data.Shape, data.DType);
     }
 
     private class SafeTensorInfo

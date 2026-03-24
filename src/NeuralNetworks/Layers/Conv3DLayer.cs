@@ -429,7 +429,7 @@ public class Conv3DLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize kernels in [-scale, scale] range
-        _kernels = Engine.TensorRandomUniformRange<T>(_kernels.Shape._dims, NumOps.Negate(scale), scale);
+        _kernels = Engine.TensorRandomUniformRange<T>(_kernels.Shape._dims._dims, NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
         _biases = new Tensor<T>(_biases.Shape._dims);
@@ -729,7 +729,7 @@ public class Conv3DLayer<T> : LayerBase<T>
         _kernelsGradient = Engine.Conv3DBackwardKernel(
             batchedDelta,
             batchedInput,
-            _kernels.Shape,
+            _kernels.Shape._dims,
             [Stride, Stride, Stride],
             [Padding, Padding, Padding],
             [1, 1, 1]);
@@ -835,7 +835,7 @@ public class Conv3DLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
 
         int index = 0;
-        _kernels = new Tensor<T>(_kernels.Shape._dims, parameters.Slice(index, _kernels.Length));
+        _kernels = new Tensor<T>(_kernels.Shape._dims._dims, parameters.Slice(index, _kernels.Length));
         index += _kernels.Length;
         _biases = new Tensor<T>(_biases.Shape._dims, parameters.Slice(index, _biases.Length));
 
@@ -997,7 +997,7 @@ public class Conv3DLayer<T> : LayerBase<T>
         {
             kernelArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _kernels = new Tensor<T>(kernelArray, _kernels.Shape._dims);
+        _kernels = new Tensor<T>(kernelArray, _kernels.Shape._dims._dims);
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[_biases.Length];

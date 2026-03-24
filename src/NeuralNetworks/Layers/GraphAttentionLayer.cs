@@ -2227,7 +2227,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         gradAfterActivationBuffer?.Dispose();
 
         // Return input gradient
-        int[] gradInputShape = _gpuLastInput.Shape._dims.Length == 2
+        int[] gradInputShape = _gpuLastInput.Shape.Length == 2
             ? [numNodes, _inputFeatures]
             : [batchSize, numNodes, _inputFeatures];
 

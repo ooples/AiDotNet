@@ -144,7 +144,7 @@ public class HLIRToLLIRLowering<T> where T : struct
         var bufferId = _llirGraph.AllocateBufferId();
         _hlirToLlirBufferMap[node.Id] = bufferId;
         _llirGraph.InputIds.Add(bufferId);
-        _llirGraph.BufferShapes[bufferId] = node.OutputType.Shape._dims;
+        _llirGraph.BufferShapes[bufferId] = node.OutputType.Shape;
         _llirGraph.BufferTypes[bufferId] = ConvertDataType(node.OutputType.DataType);
     }
 
@@ -221,7 +221,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = inputIds,
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             M = m,
@@ -250,7 +250,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             ElementwiseType = opType,
@@ -318,7 +318,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = inputIds,
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             BatchSize = inputShape[0],
@@ -361,7 +361,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             ElementwiseType = opType,
@@ -383,7 +383,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             FusionPattern = node.Operation == OperationType.BatchNormalization
@@ -441,7 +441,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             FusionPattern = pattern,
@@ -478,7 +478,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             MemoryOpType = memOpType,
@@ -493,7 +493,7 @@ public class HLIRToLLIRLowering<T> where T : struct
 
         if (node.Operation == OperationType.Reshape)
         {
-            op.NewShape = node.OutputType.Shape._dims;
+            op.NewShape = node.OutputType.Shape;
         }
 
         return op;
@@ -508,7 +508,7 @@ public class HLIRToLLIRLowering<T> where T : struct
         {
             OutputId = bufferId,
             Name = node.Name,
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             IsParameter = node.Parameters.Count > 0,
@@ -551,7 +551,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             ReduceType = reduceType,
@@ -576,7 +576,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             MemoryOpType = MemoryOpType.Gather,
@@ -592,7 +592,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             FusionPattern = "Attention",
@@ -642,7 +642,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             FusionPattern = pattern,
@@ -658,7 +658,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             ElementwiseType = ElementwiseOpType.Identity,
@@ -684,7 +684,7 @@ public class HLIRToLLIRLowering<T> where T : struct
             OutputId = bufferId,
             Name = node.Name,
             InputIds = GetLLIRInputIds(node),
-            OutputShape = node.OutputType.Shape._dims,
+            OutputShape = node.OutputType.Shape,
             OutputDataType = ConvertDataType(node.OutputType.DataType),
             Device = GetDeviceForNode(node),
             FusionPattern = pattern,

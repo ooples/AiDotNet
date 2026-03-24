@@ -1701,7 +1701,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
 
         // Create the output shape
         int[] outputShape = new int[inputs[0].Rank];
-        Array.Copy(inputs[0].Shape, outputShape, inputs[0].Rank);
+        Array.Copy(inputs[0].Shape._dims, outputShape, inputs[0].Rank);
         outputShape[channelDimension] = totalChannels;
 
         // Create the output tensor

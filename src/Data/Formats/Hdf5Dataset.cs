@@ -73,7 +73,7 @@ public class Hdf5Dataset<T> : IDisposable
     {
         if (!_datasets.TryGetValue(datasetName, out var info))
             throw new KeyNotFoundException($"Dataset '{datasetName}' not found in file.");
-        return (int[])info.Shape._dims.Clone();
+        return (int[])info.Shape.Clone();
     }
 
     /// <summary>
@@ -99,7 +99,7 @@ public class Hdf5Dataset<T> : IDisposable
             data[i] = NumOps.FromDouble(value);
         }
 
-        return new Tensor<T>(data, info.Shape._dims);
+        return new Tensor<T>(data, info.Shape);
     }
 
     /// <summary>
@@ -175,7 +175,7 @@ public class Hdf5Dataset<T> : IDisposable
             writer.Write(nameBytes.Length);
             writer.Write(nameBytes);
             writer.Write(kvp.Value.Shape.Length);
-            foreach (int dim in kvp.Value.Shape._dims)
+            foreach (int dim in kvp.Value.Shape)
                 writer.Write(dim);
             writer.Write(0L); // placeholder data offset
             writer.Write(0L); // placeholder data length

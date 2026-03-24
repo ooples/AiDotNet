@@ -411,7 +411,7 @@ public abstract class TabTransformerBase<T>
             // Update embedding gradients
             for (int c = 0; c < NumCategoricalFeatures; c++)
             {
-                var catEmbGrad = new Tensor<T>(_categoricalEmbeddings[c].Shape);
+                var catEmbGrad = new Tensor<T>(_categoricalEmbeddings[c].Shape._dims);
                 catEmbGrad.Fill(NumOps.Zero);
                 _categoricalEmbeddingsGrad[c] = catEmbGrad;
             }

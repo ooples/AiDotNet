@@ -470,7 +470,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         int totalChannels = channels1 + channels2;
 
         // Create output tensor with concatenated channels
-        int[] outputShape = images1.Shape._dims.Length == 4
+        int[] outputShape = images1.Shape.Length == 4
             ? new int[] { batchSize, height, width, totalChannels }
             : new int[] { batchSize, height * width, totalChannels };
         var result = TensorAllocator.Rent<T>(outputShape);

@@ -2054,13 +2054,13 @@ public static class GradientOps
             var gradData = gradHiddenOut.ToArray();
             var resultShape = inputIndex switch
             {
-                0 => savedTensors[0].Shape, // input
-                1 => savedTensors[1].Shape, // h_prev
-                2 => savedTensors[2].Shape, // c_prev
+                0 => savedTensors[0].Shape._dims, // input
+                1 => savedTensors[1].Shape._dims, // h_prev
+                2 => savedTensors[2].Shape._dims, // c_prev
                 3 => new int[] { 4 * hiddenSize, savedTensors[0].Shape[^1] }, // W_ih
                 4 => new int[] { 4 * hiddenSize, hiddenSize }, // W_hh
                 5 => new int[] { 4 * hiddenSize }, // bias
-                _ => savedTensors[0].Shape
+                _ => savedTensors[0].Shape._dims
             };
 
             var result = new T[resultShape.Aggregate(1, (a, b) => a * b)];
@@ -2201,8 +2201,8 @@ public static class GradientOps
             var gradData = gradHiddenOut.ToArray();
             var resultShape = inputIndex switch
             {
-                0 => savedTensors[0].Shape,
-                1 => savedTensors.Length > 1 ? savedTensors[1].Shape : new int[] { hiddenSize },
+                0 => savedTensors[0].Shape._dims,
+                1 => savedTensors.Length > 1 ? savedTensors[1].Shape._dims : new int[] { hiddenSize },
                 2 => new int[] { 3 * hiddenSize, savedTensors[0].Shape[^1] },
                 3 => new int[] { 3 * hiddenSize, hiddenSize },
                 _ => new int[] { 3 * hiddenSize }

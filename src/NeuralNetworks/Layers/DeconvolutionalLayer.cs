@@ -709,7 +709,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         var inputGradient = Engine.ConvTranspose2DBackwardInput(activationGradient, _kernels, _lastInput.Shape._dims, stride, padding);
 
         // Calculate kernel gradient
-        _kernelsGradient = Engine.ConvTranspose2DBackwardKernel(activationGradient, _lastInput, _kernels.Shape._dims, stride, padding);
+        _kernelsGradient = Engine.ConvTranspose2DBackwardKernel(activationGradient, _lastInput, _kernels.Shape._dims._dims, stride, padding);
 
         return inputGradient;
     }
@@ -887,7 +887,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         var gradKernel = gpuEngine.ConvTranspose2DBackwardKernelGpu(
             activationGradient,
             _gpuInput,
-            _kernels.Shape,
+            _kernels.Shape._dims,
             stride,
             padding,
             outputPadding);

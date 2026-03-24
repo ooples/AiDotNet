@@ -184,7 +184,7 @@ public class ImageClassificationDataset<T> : InputOutputDataLoaderBase<T, Tensor
         }
 
         // Infer dimensions from first tensor (assume all same shape)
-        var firstShape = imageTensors[0].Shape;
+        var firstShape = imageTensors[0].Shape._dims;
         if (firstShape.Length < 2)
         {
             throw new ArgumentException("Image tensors must have at least 2 dimensions.", nameof(imageTensors));

@@ -402,11 +402,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 
             // Copy the trained weights and biases to our DBM
             _layerWeights[layer] = new Tensor<T>(
-                _layerWeights[layer].Shape,
+                _layerWeights[layer].Shape._dims,
                 tmpRBM.GetParameters().GetSubVector(0, _layerSizes[layer] * _layerSizes[layer + 1]));
 
             _layerBiases[layer] = new Tensor<T>(
-                _layerBiases[layer].Shape,
+                _layerBiases[layer].Shape._dims,
                 tmpRBM.GetParameters().GetSubVector(
                     _layerSizes[layer] * _layerSizes[layer + 1],
                     _layerSizes[layer]));
@@ -956,12 +956,12 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         {
             int weightCount = _layerWeights[i].Length;
             var weightVector = parameters.GetSubVector(index, weightCount);
-            _layerWeights[i] = new Tensor<T>(_layerWeights[i].Shape, weightVector);
+            _layerWeights[i] = new Tensor<T>(_layerWeights[i].Shape._dims, weightVector);
             index += weightCount;
 
             int biasCount = _layerBiases[i].Length;
             var biasVector = parameters.GetSubVector(index, biasCount);
-            _layerBiases[i] = new Tensor<T>(_layerBiases[i].Shape, biasVector);
+            _layerBiases[i] = new Tensor<T>(_layerBiases[i].Shape._dims, biasVector);
             index += biasCount;
         }
     }

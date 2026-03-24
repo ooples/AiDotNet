@@ -921,7 +921,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 7. Store Gradients
         // _biasGradient is flattened - use default zero tensor if gradient is null
-        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape._dims, NumOps.Zero);
+        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape._dims._dims, NumOps.Zero);
 
         // _transformationMatrixGradient needs [I, D_in, O, D_out]
         // weightsPermuted.Gradient is [I, O, D_in, D_out]

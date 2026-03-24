@@ -2048,7 +2048,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Return input gradient
-        int[] gradInputShape = _gpuLastInput.Shape._dims.Length == 2
+        int[] gradInputShape = _gpuLastInput.Shape.Length == 2
             ? [numNodes, _inputFeatures]
             : [batchSize, numNodes, _inputFeatures];
 

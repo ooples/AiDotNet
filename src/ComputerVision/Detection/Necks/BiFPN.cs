@@ -298,7 +298,7 @@ public class BiFPN<T> : NeckBase<T>
         }
 
         // Weighted sum
-        var result = new Tensor<T>(inputs[0].Shape);
+        var result = new Tensor<T>(inputs[0].Shape._dims);
         for (int i = 0; i < result.Length; i++)
         {
             double sum = 0;

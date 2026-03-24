@@ -330,7 +330,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
 
             // Create zero padding for language embedding
             var padSize = AUDIOLDM2_CONTEXT_DIM - clapDim;
-            var paddedShape = clapEmbedding.Shape._dims.Length > 2
+            var paddedShape = clapEmbedding.Shape.Length > 2
                 ? new[] { batchSize, seqLen, AUDIOLDM2_CONTEXT_DIM }
                 : new[] { batchSize, AUDIOLDM2_CONTEXT_DIM };
 
@@ -376,7 +376,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         var langDim = language.Shape.Length > 2 ? language.Shape[2] : language.Shape[1];
         var totalDim = clapDim + langDim;
 
-        var resultShape = clap.Shape._dims.Length > 2
+        var resultShape = clap.Shape.Length > 2
             ? new[] { batchSize, outputSeqLen, totalDim }
             : new[] { batchSize, totalDim };
 
@@ -1013,7 +1013,7 @@ internal class ProjectionLayer<T>
         var seqLen = input.Shape.Length > 2 ? input.Shape[1] : 1;
         var inputDim = input.Shape.Length > 2 ? input.Shape[2] : input.Shape[1];
 
-        var outputShape = input.Shape._dims.Length > 2
+        var outputShape = input.Shape.Length > 2
             ? new[] { batchSize, seqLen, _outputDim }
             : new[] { batchSize, _outputDim };
 

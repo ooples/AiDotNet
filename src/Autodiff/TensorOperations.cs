@@ -2655,7 +2655,7 @@ public static class TensorOperations<T>
             throw new ArgumentException("Cannot concatenate empty list of nodes");
 
         var engine = AiDotNetEngine.Current;
-        var firstShape = nodes[0].Value.Shape;
+        var firstShape = nodes[0].Value.Shape._dims;
 
         // Normalize axis
         int normalizedAxis = axis < 0 ? firstShape.Length + axis : axis;
@@ -2666,7 +2666,7 @@ public static class TensorOperations<T>
 
         // Store sizes and shapes for gradient splitting
         var sizes = nodes.Select(n => n.Value.Shape[normalizedAxis]).ToList();
-        var shapes = nodes.Select(n => n.Value.Shape).ToList();
+        var shapes = nodes.Select(n => n.Value.Shape._dims).ToList();
         int capturedAxis = normalizedAxis;
 
         void BackwardFunction(Tensor<T> gradient)

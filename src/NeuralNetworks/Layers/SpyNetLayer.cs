@@ -259,7 +259,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             // moduleInput was: [img1, warped2, flow]
             // Split gradient back to these components
             var (gradImg1Contrib, gradWarped2, gradFlowFromConcat) =
-                SplitConcatenationGradient(moduleGrad, _cachedPyramid1[level].Shape, hasBatch);
+                SplitConcatenationGradient(moduleGrad, _cachedPyramid1[level].Shape._dims, hasBatch);
 
             // 4. Backprop through GridSample warping using IEngine
             if (_cachedGrids.Count > level && _cachedPyramid2.Count > level)
@@ -268,7 +268,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 var gradImg2FromWarp = _engine.GridSampleBackwardInput(
                     gradWarped2,
                     _cachedGrids[level],
-                    _cachedPyramid2[level].Shape);
+                    _cachedPyramid2[level].Shape._dims);
 
                 // Get gradient w.r.t. grid (which depends on flow)
                 var gradGrid = _engine.GridSampleBackwardGrid(

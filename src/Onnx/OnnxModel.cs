@@ -174,7 +174,7 @@ public class OnnxModel<T> : IOnnxModel<T>
 
         foreach (var inputInfo in Metadata.Inputs)
         {
-            var shape = inputInfo.Shape._dims.Select(d => d < 0 ? 1 : d).ToArray();
+            var shape = inputInfo.Shape.Select(d => d < 0 ? 1 : d).ToArray();
             inputs[inputInfo.Name] = new Tensor<T>(shape);
         }
 

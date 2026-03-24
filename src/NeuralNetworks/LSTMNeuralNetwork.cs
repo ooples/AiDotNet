@@ -825,7 +825,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Get shape information from the first tensor
-        int[] shape = tensors[0].Shape;
+        int[] shape = tensors[0].Shape._dims;
 
         // Create result shape with time dimension inserted at position 1
         int[] resultShape = new int[shape.Length + 1];

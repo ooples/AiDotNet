@@ -860,7 +860,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             // Combine outputs back into batched tensor
             var outputShape = new int[batchDims + outputs[0].Rank];
             Array.Copy(input.Shape._dims, 0, outputShape, 0, batchDims);
-            Array.Copy(outputs[0].Shape, 0, outputShape, batchDims, outputs[0].Rank);
+            Array.Copy(outputs[0].Shape._dims, 0, outputShape, batchDims, outputs[0].Rank);
 
             var combinedData = new T[batchSize * outputs[0].Length];
             for (int b = 0; b < batchSize; b++)
@@ -953,7 +953,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
             var outputShape = new int[batchDims + outputs[0].Rank];
             Array.Copy(input.Shape._dims, 0, outputShape, 0, batchDims);
-            Array.Copy(outputs[0].Shape, 0, outputShape, batchDims, outputs[0].Rank);
+            Array.Copy(outputs[0].Shape._dims, 0, outputShape, batchDims, outputs[0].Rank);
 
             var combinedData = new T[batchSize * outputs[0].Length];
             for (int b = 0; b < batchSize; b++)
