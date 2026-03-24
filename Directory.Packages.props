@@ -56,7 +56,7 @@
     <PackageVersion Include="YamlDotNet" Version="16.3.0" />
 
     <!-- Infrastructure -->
-    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.3.2" />
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.3.3" />
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.12.4" />
     <PackageVersion Include="Stripe.net" Version="50.4.1" />
