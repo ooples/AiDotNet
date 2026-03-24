@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
-[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 3", TestConstructorArgs = "3, 6, 3, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
 public class SpiralConvLayer<T> : LayerBase<T>
 {
     #region Properties

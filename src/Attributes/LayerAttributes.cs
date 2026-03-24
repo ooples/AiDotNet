@@ -49,6 +49,16 @@ public sealed class LayerPropertyAttribute : Attribute
     public string TestInputShape { get; set; } = "";
 
     /// <summary>
+    /// C# code to call on the layer after construction to set up graph data, adjacency
+    /// matrices, or other domain-specific initialization required before Forward.
+    /// The code is emitted inside a SetupLayer(ILayer&lt;double&gt; layer) override.
+    /// The variable 'layer' is the ILayer&lt;double&gt; to configure.
+    /// Example: "((DiffusionConvLayer&lt;double&gt;)layer).SetLaplacian(laplacian);"
+    /// When empty (default), no setup is emitted (standard layers).
+    /// </summary>
+    public string TestSetupCode { get; set; } = "";
+
+    /// <summary>
     /// Constructor arguments as a comma-separated string for auto-generated tests.
     /// Examples: "4,8" for DenseLayer(inputSize=4, outputSize=8), "3,8,8" for Conv2D(channels=3, h=8, w=8).
     /// When empty (default), the generator assumes a parameterless or all-default-args constructor.

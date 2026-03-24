@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 4, 128, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 4, 128, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var lap = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { lap[i, i] = 2.0; if (i > 0) { lap[i, i-1] = -1.0; lap[i-1, i] = -1.0; } } ((AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<double>)layer).SetLaplacian(lap);")]
 public class DiffusionConvLayer<T> : LayerBase<T>
 {
     #region Properties

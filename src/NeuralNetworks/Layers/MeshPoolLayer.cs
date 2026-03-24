@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.DownSampling)]
-[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 3, 2")]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 3, 2", TestSetupCode = "var e = new int[4, 2]; for (int i = 0; i < 4; i++) for (int j = 0; j < 2; j++) e[i, j] = (i + j + 1) % 4; ((AiDotNet.NeuralNetworks.Layers.MeshPoolLayer<double>)layer).SetEdgeAdjacency(e);")]
 public class MeshPoolLayer<T> : LayerBase<T>
 {
     #region Properties

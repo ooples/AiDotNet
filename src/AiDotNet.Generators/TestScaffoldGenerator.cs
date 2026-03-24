@@ -1803,6 +1803,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         int apiShape = LayerApiShapeSingleTensor;
         string testInputShape = "";
         string testConstructorArgs = "";
+        string testSetupCode = "";
 
         foreach (var attr in symbol.GetAttributes())
         {
@@ -1838,6 +1839,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     case "TestConstructorArgs":
                         testConstructorArgs = (string)(named.Value.Value ?? "");
                         break;
+                    case "TestSetupCode":
+                        testSetupCode = (string)(named.Value.Value ?? "");
+                        break;
                 }
             }
         }
@@ -1857,7 +1861,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             IsStateful = isStateful,
             ApiShape = apiShape,
             TestInputShape = testInputShape,
-            TestConstructorArgs = testConstructorArgs
+            TestConstructorArgs = testConstructorArgs,
+            TestSetupCode = testSetupCode
         };
     }
 
@@ -2046,76 +2051,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         string testClassName)
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName);
-        var shortName = GeneratorHelpers.StripGenericSuffix(layer.ClassName);
         string constructorArgs = string.IsNullOrEmpty(layer.TestConstructorArgs) ? "" : layer.TestConstructorArgs;
         string constructorExpr = $"new {typeName}<double>({constructorArgs})";
 
-        // Determine which setup method to call based on the layer type name
-        string setupCode;
-        if (shortName.Contains("DiffusionConv"))
-        {
-            setupCode = @"
-        // Create synthetic Laplacian (identity-like sparse matrix for 4 nodes)
-        var laplacian = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 });
-        for (int i = 0; i < 4; i++) { laplacian[i, i] = 2.0; if (i > 0) { laplacian[i, i-1] = -1.0; laplacian[i-1, i] = -1.0; } }
-        ((AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<double>)layer).SetLaplacian(laplacian);";
-        }
-        else if (shortName.Contains("MeshEdgeConv"))
-        {
-            // MeshCNN (Hanocka et al., SIGGRAPH 2019): each edge has numNeighbors adjacent edges
-            // Constructor arg 3 is numNeighbors. Edge adjacency shape: [numEdges, numNeighbors]
-            setupCode = @"
-        // MeshCNN edge adjacency: [numEdges, numNeighbors] — each edge connects to its neighbors
-        var numNeighbors = 3; // matches constructor numNeighbors parameter
-        var numEdges = 4; // matches input shape dim 0
-        var edges = new int[numEdges, numNeighbors];
-        for (int i = 0; i < numEdges; i++)
-            for (int j = 0; j < numNeighbors; j++)
-                edges[i, j] = (i + j + 1) % numEdges;
-        ((AiDotNet.NeuralNetworks.Layers.MeshEdgeConvLayer<double>)layer).SetEdgeAdjacency(edges);";
-        }
-        else if (shortName.Contains("MeshPool"))
-        {
-            // MeshCNN pooling: collapses edges based on learned priorities
-            // Input: [numEdges, inputChannels], adjacency: [numEdges, numNeighbors]
-            setupCode = @"
-        var numNeighbors = 2; // matches constructor numNeighbors parameter
-        var numEdges = 4; // matches input dim 0
-        var edges = new int[numEdges, numNeighbors];
-        for (int i = 0; i < numEdges; i++)
-            for (int j = 0; j < numNeighbors; j++)
-                edges[i, j] = (i + j + 1) % numEdges;
-        ((AiDotNet.NeuralNetworks.Layers.MeshPoolLayer<double>)layer).SetEdgeAdjacency(edges);";
-        }
-        else if (shortName.Contains("SpiralConv"))
-        {
-            // Neural 3D Morphable Models (Bouritsas et al., ICCV 2019): spiral ordering of vertices
-            // Spiral indices: [numVertices, spiralLength]
-            setupCode = @"
-        var spirals = new int[4, 3]; // 4 vertices, spiralLength=3
-        for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 3; j++)
-                spirals[i, j] = (i + j + 1) % 4; // each vertex sees its next 3 neighbors
-        ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(spirals);";
-        }
-        else if (shortName.Contains("HeterogeneousGraph"))
-        {
-            // R-GCN (Schlichtkrull et al., ESWC 2018): heterogeneous graph with typed edges
-            // Needs adjacency matrices per edge type AND node type map
-            setupCode = @"
-        var typed = (AiDotNet.NeuralNetworks.Layers.HeterogeneousGraphLayer<double>)layer;
-        // Create adjacency matrix for edge type ""e"" (4x4 identity-like)
-        var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 });
-        for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; }
-        typed.SetAdjacencyMatrices(new System.Collections.Generic.Dictionary<string, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> { [""e""] = adj });
-        // Map all 4 nodes to type ""A""
-        typed.SetNodeTypeMap(new System.Collections.Generic.Dictionary<int, string> { [0] = ""A"", [1] = ""A"", [2] = ""A"", [3] = ""A"" });";
-        }
-        else
-        {
-            // Generic fallback: no setup needed or unknown layer
-            setupCode = "        // No specific graph setup required for this layer";
-        }
+        // Setup code comes directly from the layer's [LayerProperty(TestSetupCode = "...")]
+        // attribute — no string matching on class names.
+        string setupCode = string.IsNullOrEmpty(layer.TestSetupCode)
+            ? "        // No setup required"
+            : $"        {layer.TestSetupCode}";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -2164,6 +2107,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public int ApiShape { get; set; }
         public string TestInputShape { get; set; } = "";
         public string TestConstructorArgs { get; set; } = "";
+        public string TestSetupCode { get; set; } = "";
     }
 
     /// <summary>

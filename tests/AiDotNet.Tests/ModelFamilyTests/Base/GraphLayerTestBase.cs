@@ -31,7 +31,7 @@ public abstract class GraphLayerTestBase
         var rng = new Random(seed);
         var tensor = new Tensor<double>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = rng.NextDouble() * 2.0 - 1.0;
+            tensor[i] = rng.NextDouble() * 4.0 + 1.0; // [1.0, 5.0] — large positive to survive ReLU after matmul
         return tensor;
     }
 
