@@ -91,7 +91,7 @@ public class HeterogeneousGraphMetadata
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.HeterogeneousGraphMetadata { NodeTypes = new[] { \"A\" }, EdgeTypes = new[] { \"e\" }, NodeTypeFeatures = new System.Collections.Generic.Dictionary<string, int> { [\"A\"] = 8 }, EdgeTypeSchema = new System.Collections.Generic.Dictionary<string, (string, string)> { [\"e\"] = (\"A\", \"A\") } }, 4")]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.HeterogeneousGraphMetadata { NodeTypes = new[] { \"A\" }, EdgeTypes = new[] { \"e\" }, NodeTypeFeatures = new System.Collections.Generic.Dictionary<string, int> { [\"A\"] = 8 }, EdgeTypeSchema = new System.Collections.Generic.Dictionary<string, (string, string)> { [\"e\"] = (\"A\", \"A\") } }, 4")]
 public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly HeterogeneousGraphMetadata _metadata;
@@ -457,24 +457,18 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
 
         var result = ApplyActivation(output);
 
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
-
         // Restore output shape to match input rank
         if (_originalInputShape != null && _originalInputShape.Length != 3)
         {
             if (_originalInputShape.Length == 2)
             {
                 // 2D input [numNodes, features] -> 2D output [numNodes, outputFeatures]
-                return result.Reshape([processNumNodes, _outputFeatures]);
+                result = result.Reshape([processNumNodes, _outputFeatures]);
             }
             else if (_originalInputShape.Length == 1)
             {
                 // 1D input -> 1D output
-                return result.Reshape([_outputFeatures]);
+                result = result.Reshape([_outputFeatures]);
             }
             else
             {
@@ -484,8 +478,14 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
                     outShape[d] = _originalInputShape[d];
                 outShape[_originalInputShape.Length - 2] = processNumNodes;
                 outShape[_originalInputShape.Length - 1] = _outputFeatures;
-                return result.Reshape(outShape);
+                result = result.Reshape(outShape);
             }
+        }
+
+        // Store output AFTER shape restoration so Backward gets matching rank
+        if (IsTrainingMode)
+        {
+            _lastOutput = result;
         }
 
         return result;
@@ -991,16 +991,21 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
 
         var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-        int inputFeatures = _lastInput.Shape[2];
+        // Handle 2D input [numNodes, features] by adding batch dimension
+        bool was2D = _lastInput.Rank == 2;
+        var input3D = was2D ? _lastInput.Reshape(new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1] }) : _lastInput;
+        var grad3D = was2D ? activationGradient.Reshape(new[] { 1, activationGradient.Shape[0], activationGradient.Shape[1] }) : activationGradient;
+
+        int batchSize = input3D.Shape[0];
+        int numNodes = input3D.Shape[1];
+        int inputFeatures = input3D.Shape[2];
 
         // Initialize gradient accumulators
         _edgeTypeWeightsGradients = new Dictionary<string, Tensor<T>>();
         _selfLoopWeightsGradients = new Dictionary<string, Tensor<T>>();
         _biasesGradients = new Dictionary<string, Tensor<T>>();
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape._dims);
+        var inputGradient = new Tensor<T>(input3D.Shape._dims);
         inputGradient.Fill(NumOps.Zero);
 
         // Compute gradients for edge type weights
@@ -1038,8 +1043,8 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             var normalizedAdj = NormalizeAdjacency(adjacency, batchSize, numNodes);
 
             // Extract input features for source type
-            var inputSlice = _lastInput.Shape[2] == inFeatures ? _lastInput :
-                ExtractInputFeatures(_lastInput, batchSize, numNodes, inFeatures);
+            var inputSlice = input3D.Shape[2] == inFeatures ? input3D :
+                ExtractInputFeatures(input3D, batchSize, numNodes, inFeatures);
 
             // Compute weight gradient: dL/dW = sum_batch(input^T @ adj^T @ grad)
             var weightGradient = new Tensor<T>([inFeatures, _outputFeatures]);
@@ -1051,7 +1056,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             {
                 // Extract batch slices
                 var adjBatch = ExtractBatchSlice(normalizedAdj, b, numNodes, numNodes);
-                var gradBatch = ExtractBatchSlice(activationGradient, b, numNodes, _outputFeatures);
+                var gradBatch = ExtractBatchSlice(grad3D, b, numNodes, _outputFeatures);
                 var inputBatch = ExtractBatchSlice(inputSlice, b, numNodes, inFeatures);
 
                 // adj^T @ grad: transpose adjacency and multiply
@@ -1072,7 +1077,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             for (int b = 0; b < batchSize; b++)
             {
                 var adjBatch = ExtractBatchSlice(normalizedAdj, b, numNodes, numNodes);
-                var gradBatch = ExtractBatchSlice(activationGradient, b, numNodes, _outputFeatures);
+                var gradBatch = ExtractBatchSlice(grad3D, b, numNodes, _outputFeatures);
 
                 // adj^T @ grad
                 var adjT = Engine.TensorTranspose(adjBatch);
@@ -1121,7 +1126,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
                     // Accumulate bias gradient
                     for (int f = 0; f < _outputFeatures; f++)
                     {
-                        biasGradient[f] = NumOps.Add(biasGradient[f], activationGradient[b, i, f]);
+                        biasGradient[f] = NumOps.Add(biasGradient[f], grad3D[b, i, f]);
                     }
 
                     // Accumulate self-weight gradient: input^T @ grad for this node
@@ -1129,7 +1134,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
                     {
                         for (int outF = 0; outF < _outputFeatures; outF++)
                         {
-                            T contribution = NumOps.Multiply(_lastInput[b, i, inF], activationGradient[b, i, outF]);
+                            T contribution = NumOps.Multiply(input3D[b, i, inF], grad3D[b, i, outF]);
                             selfWeightGradient[inF, outF] = NumOps.Add(selfWeightGradient[inF, outF], contribution);
                         }
                     }
@@ -1140,7 +1145,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
                         T gradSum = NumOps.Zero;
                         for (int outF = 0; outF < _outputFeatures; outF++)
                         {
-                            gradSum = NumOps.Add(gradSum, NumOps.Multiply(activationGradient[b, i, outF], selfWeights[inF, outF]));
+                            gradSum = NumOps.Add(gradSum, NumOps.Multiply(grad3D[b, i, outF], selfWeights[inF, outF]));
                         }
                         inputGradient[b, i, inF] = NumOps.Add(inputGradient[b, i, inF], gradSum);
                     }
@@ -1152,6 +1157,10 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         }
 
         // Restore gradient shape to match original input shape
+        if (was2D)
+        {
+            return inputGradient.Reshape(new[] { numNodes, inputFeatures });
+        }
         if (_originalInputShape != null && _originalInputShape.Length != 3)
         {
             return inputGradient.Reshape(_originalInputShape);
@@ -1165,6 +1174,15 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// </summary>
     private Tensor<T> ExtractBatchSlice(Tensor<T> tensor, int batchIndex, int rows, int cols)
     {
+        // If tensor is 2D (no batch dim), return it directly when batch=0
+        if (tensor.Rank == 2)
+        {
+            if (batchIndex == 0 && tensor.Shape[0] == rows && tensor.Shape[1] == cols)
+                return tensor;
+            // Slice isn't possible from 2D — return as-is
+            return tensor;
+        }
+
         var result = TensorAllocator.Rent<T>([rows, cols]);
         for (int i = 0; i < rows; i++)
         {
