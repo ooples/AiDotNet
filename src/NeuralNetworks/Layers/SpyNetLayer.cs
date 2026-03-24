@@ -299,8 +299,13 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 // Accumulate flow gradient
                 gradFlow = AddTensors(gradFlowFromConcat, gradFlowFromWarp);
 
+                // Convert gradImg2FromWarp from NHWC [1,H,W,C] back to NCHW [C,H,W] or [B,C,H,W]
+                var gradImg2NCHW = gradImg2FromWarp.Transpose(new[] { 0, 3, 1, 2 }).Contiguous();
+                if (!hasBatch)
+                    gradImg2NCHW = gradImg2NCHW.Reshape(new[] { gradImg2NCHW.Shape[1], gradImg2NCHW.Shape[2], gradImg2NCHW.Shape[3] });
+
                 // Accumulate image gradients (upsampled to full resolution later)
-                AccumulatePyramidGradient(gradInput2, gradImg2FromWarp, level, hasBatch);
+                AccumulatePyramidGradient(gradInput2, gradImg2NCHW, level, hasBatch);
             }
 
             // Accumulate img1 gradients
@@ -387,12 +392,12 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     private Tensor<T> ConvertGridGradientToFlowGradient(Tensor<T> gradGrid, bool hasBatch)
     {
-        // Grid is in [-1, 1] normalized coordinates
-        // Flow is in pixel coordinates
+        // Grid gradient is always 4D [batch, height, width, 2] from GridSampleBackwardGrid
+        // Flow is NCHW: [batch, 2, height, width] or [2, height, width]
         // gradFlow = gradGrid * (dim - 1) / 2
-        int batch = hasBatch ? gradGrid.Shape[0] : 1;
-        int height = hasBatch ? gradGrid.Shape[1] : gradGrid.Shape[0];
-        int width = hasBatch ? gradGrid.Shape[2] : gradGrid.Shape[1];
+        int batch = gradGrid.Shape[0];
+        int height = gradGrid.Shape[1];
+        int width = gradGrid.Shape[2];
 
         var flowShape = hasBatch ? new[] { batch, 2, height, width } : new[] { 2, height, width };
         var gradFlow = new Tensor<T>(flowShape);
@@ -406,12 +411,11 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             {
                 for (int w = 0; w < width; w++)
                 {
-                    // Grid is [batch, height, width, 2] where last dim is (x, y)
-                    int gridIdxX = hasBatch
-                        ? b * height * width * 2 + h * width * 2 + w * 2
-                        : h * width * 2 + w * 2;
+                    // Grid is always 4D [batch, height, width, 2] where last dim is (x, y)
+                    int gridIdxX = b * height * width * 2 + h * width * 2 + w * 2;
                     int gridIdxY = gridIdxX + 1;
 
+                    // Flow output is NCHW or CHW
                     int flowIdxX = hasBatch
                         ? b * 2 * height * width + 0 * height * width + h * width + w
                         : 0 * height * width + h * width + w;
@@ -1545,6 +1549,14 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         {
             module.UpdateParameters(learningRate);
         }
+    }
+
+    /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        foreach (var module in _basicModules)
+            module.ClearGradients();
     }
 
     /// <inheritdoc/>
