@@ -93,13 +93,14 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         for (int i = 0; i < numLevels; i++)
         {
-            // Simple 5-layer CNN for each pyramid level
-            // ConvolutionalLayer(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
+            // Per SPyNet paper (Ranjan & Black, CVPR 2017): each pyramid level uses
+            // a single Conv(7x7) that maps [2*C + 2] input channels → 2 output channels (flow residual dx, dy).
+            // The paper's 5-layer architecture is simplified here to a single conv for efficiency.
             var conv = new ConvolutionalLayer<T>(
                 moduleInputChannels,
                 inputHeight >> i,
                 inputWidth >> i,
-                32, // outputDepth (filters)
+                2,  // outputDepth: 2 channels for (dx, dy) flow residual per the paper
                 7,  // kernelSize
                 1,  // stride
                 3); // padding
@@ -265,15 +266,31 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             if (_cachedGrids.Count > level && _cachedPyramid2.Count > level)
             {
                 // Get gradient w.r.t. input image (img2) through GridSample
+                // GridSampleBackwardInput expects NHWC format: [batch, height, width, channels]
+                var img2Shape = _cachedPyramid2[level].Shape;
+                int img2C = hasBatch ? img2Shape[1] : img2Shape[0];
+                int img2H = hasBatch ? img2Shape[2] : img2Shape[1];
+                int img2W = hasBatch ? img2Shape[3] : img2Shape[2];
+                var inputShape4D = new[] { batch, img2H, img2W, img2C }; // NHWC
+
+                // Convert gradWarped2 from NCHW to NHWC for GridSampleBackwardInput
+                var gradWarped4D = hasBatch ? gradWarped2 : gradWarped2.Reshape(new[] { 1, gradWarped2.Shape[0], gradWarped2.Shape[1], gradWarped2.Shape[2] });
+                var gradWarped4DNHWC = gradWarped4D.Transpose(new[] { 0, 2, 3, 1 }).Contiguous(); // NCHW → NHWC
+
                 var gradImg2FromWarp = _engine.GridSampleBackwardInput(
-                    gradWarped2,
+                    gradWarped4DNHWC,
                     _cachedGrids[level],
-                    _cachedPyramid2[level].Shape._dims);
+                    inputShape4D);
 
                 // Get gradient w.r.t. grid (which depends on flow)
+                // GridSampleBackwardGrid also expects NHWC format
+                var img2_4DNHWC = hasBatch
+                    ? _cachedPyramid2[level].Transpose(new[] { 0, 2, 3, 1 }).Contiguous()
+                    : _cachedPyramid2[level].Reshape(new[] { 1, _cachedPyramid2[level].Shape[0], _cachedPyramid2[level].Shape[1], _cachedPyramid2[level].Shape[2] })
+                        .Transpose(new[] { 0, 2, 3, 1 }).Contiguous();
                 var gradGrid = _engine.GridSampleBackwardGrid(
-                    gradWarped2,
-                    _cachedPyramid2[level],
+                    gradWarped4DNHWC,
+                    img2_4DNHWC,
                     _cachedGrids[level]);
 
                 // Convert grid gradient back to flow gradient
@@ -830,7 +847,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var image4D = image;
         if (!hasBatch)
         {
-            image4D = new Tensor<T>(new[] { 1, channels, height, width }, Vector<T>.FromMemory(image.Data));
+            image4D = image.Reshape(new[] { 1, channels, height, width });
         }
 
         // Use IEngine.GridSample for hardware-accelerated bilinear sampling
@@ -839,7 +856,9 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Remove batch dimension if input didn't have it
         if (!hasBatch && warped.Rank == 4)
         {
-            warped = new Tensor<T>(new[] { channels, height, width }, Vector<T>.FromMemory(warped.Data));
+            // Use actual warped dimensions, not original image dimensions
+            // (GridSample output may differ from input at different pyramid levels)
+            warped = warped.Reshape(new[] { warped.Shape[1], warped.Shape[2], warped.Shape[3] });
         }
 
         return (warped, grid);
@@ -1483,6 +1502,9 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     #endregion
 
     #region Parameter Management
+
+    /// <inheritdoc/>
+    public override int ParameterCount => _basicModules.Sum(m => m.ParameterCount);
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
