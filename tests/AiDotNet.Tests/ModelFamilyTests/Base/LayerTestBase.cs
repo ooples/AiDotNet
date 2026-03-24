@@ -201,7 +201,7 @@ public abstract class LayerTestBase
         var output = layer.Forward(input);
 
         // Create gradient matching output shape
-        var outputGrad = CreateRandomTensor(output.Shape, seed: 99);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
 
         var inputGrad = layer.Backward(outputGrad);
 
@@ -281,7 +281,7 @@ public abstract class LayerTestBase
 
         var input = CreateRandomTensor(InputShape);
         var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape, seed: 99);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
 
         layer.Backward(outputGrad);
 
@@ -388,7 +388,7 @@ public abstract class LayerTestBase
         // Accumulate some gradients
         var input = CreateRandomTensor(InputShape);
         var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape, seed: 99);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
         layer.Backward(outputGrad);
 
         // Clear
@@ -424,7 +424,7 @@ public abstract class LayerTestBase
         var output = layer.Forward(input);
         // Use simple MSE-like loss: L = sum(output^2) / 2
         // dL/dOutput = output
-        var outputGrad = new Tensor<double>(output.Shape);
+        var outputGrad = new Tensor<double>(output.Shape.ToArray());
         for (int i = 0; i < output.Length; i++)
             outputGrad[i] = output[i];
         layer.Backward(outputGrad);

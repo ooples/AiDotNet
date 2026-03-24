@@ -58,7 +58,7 @@ public class NeuralNetworkBaseIntegrationTests
         var input = CreateRandomTensor(new[] { 2, 4 });
         var (output, features) = baseNetwork.ForwardWithFeatures(input, new[] { -1, 0 });
 
-        Assert.Equal(new[] { 2, 2 }, output.Shape);
+        Assert.Equal(new[] { 2, 2 }, output.Shape.ToArray());
         Assert.Equal(2, features.Count);
         Assert.True(features.ContainsKey(0));
         Assert.True(features.ContainsKey(1));
@@ -74,10 +74,10 @@ public class NeuralNetworkBaseIntegrationTests
 
         var input = CreateRandomTensor(new[] { 2, 4 });
         var output = network.ForwardWithMemory(input);
-        var outputGradient = CreateRandomTensor(output.Shape, seed: 7);
+        var outputGradient = CreateRandomTensor(output.Shape.ToArray(), seed: 7);
         var inputGradient = network.Backpropagate(outputGradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -86,11 +86,11 @@ public class NeuralNetworkBaseIntegrationTests
         TestNeuralNetwork network = BuildNetwork();
         var input = CreateRandomTensor(new[] { 2, 4 });
         var output = network.Predict(input);
-        var outputGradient = CreateRandomTensor(output.Shape, seed: 11);
+        var outputGradient = CreateRandomTensor(output.Shape.ToArray(), seed: 11);
 
         var inputGradient = network.ComputeInputGradient(input, outputGradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]

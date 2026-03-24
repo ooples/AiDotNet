@@ -240,7 +240,7 @@ public class GraphLayersIntegrationTests
         var output = layer.Forward(nodeFeatures);
 
         // Create gradient for backward pass
-        var gradient = new Tensor<float>(output.Shape);
+        var gradient = new Tensor<float>(output.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             gradient[i] = 1.0f;
@@ -251,7 +251,7 @@ public class GraphLayersIntegrationTests
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(nodeFeatures.Shape, inputGradient.Shape);
+        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -423,7 +423,7 @@ public class GraphLayersIntegrationTests
         var output = layer.Forward(nodeFeatures);
 
         // Create gradient
-        var gradient = new Tensor<float>(output.Shape);
+        var gradient = new Tensor<float>(output.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             gradient[i] = 1.0f;
@@ -434,7 +434,7 @@ public class GraphLayersIntegrationTests
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(nodeFeatures.Shape, inputGradient.Shape);
+        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -586,7 +586,7 @@ public class GraphLayersIntegrationTests
         var output = layer.Forward(nodeFeatures);
 
         // Create gradient
-        var gradient = new Tensor<float>(output.Shape);
+        var gradient = new Tensor<float>(output.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             gradient[i] = 1.0f;
@@ -597,7 +597,7 @@ public class GraphLayersIntegrationTests
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(nodeFeatures.Shape, inputGradient.Shape);
+        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     #endregion
@@ -801,7 +801,7 @@ public class GraphLayersIntegrationTests
         var output = layer.Forward(nodeFeatures);
 
         // Create gradient
-        var gradient = new Tensor<float>(output.Shape);
+        var gradient = new Tensor<float>(output.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             gradient[i] = 1.0f;
@@ -812,7 +812,7 @@ public class GraphLayersIntegrationTests
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(nodeFeatures.Shape, inputGradient.Shape);
+        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     #endregion
@@ -916,7 +916,7 @@ public class GraphLayersIntegrationTests
         var output = layer.Forward(nodeFeatures);
 
         // Create gradient
-        var gradient = new Tensor<float>(output.Shape);
+        var gradient = new Tensor<float>(output.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             gradient[i] = 1.0f;
@@ -927,7 +927,7 @@ public class GraphLayersIntegrationTests
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(nodeFeatures.Shape, inputGradient.Shape);
+        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     #endregion

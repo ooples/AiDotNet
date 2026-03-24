@@ -19,7 +19,7 @@ public class ScanPatternsTests
 
         var result = ScanPatterns<float>.BidirectionalScan(patches);
 
-        Assert.Equal(new[] { batchSize, numPatches, dim * 2 }, result.Shape);
+        Assert.Equal(new[] { batchSize, numPatches, dim * 2 }, result.Shape.ToArray());
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class ScanPatternsTests
 
         foreach (var result in results)
         {
-            Assert.Equal(new[] { batchSize, numPatches, dim }, result.Shape);
+            Assert.Equal(new[] { batchSize, numPatches, dim }, result.Shape.ToArray());
         }
     }
 
@@ -142,7 +142,7 @@ public class ScanPatternsTests
 
         var result = ScanPatterns<float>.ContinuousScan(patches, height, width);
 
-        Assert.Equal(new[] { batchSize, numPatches, dim }, result.Shape);
+        Assert.Equal(new[] { batchSize, numPatches, dim }, result.Shape.ToArray());
     }
 
     [Fact]
@@ -240,7 +240,7 @@ public class ScanPatternsTests
 
         var merged = ScanPatterns<float>.MergeScanOutputs(new List<Tensor<float>> { output1, output2 });
 
-        Assert.Equal(new[] { batchSize, numPatches, dim }, merged.Shape);
+        Assert.Equal(new[] { batchSize, numPatches, dim }, merged.Shape.ToArray());
         // Average of 2 and 4 should be 3
         for (int i = 0; i < merged.Length; i++)
         {
@@ -278,7 +278,7 @@ public class ScanPatternsTests
         var scans = ScanPatterns<float>.CrossScan(patches, height, width);
         var merged = ScanPatterns<float>.MergeScanOutputs(scans);
 
-        Assert.Equal(new[] { batchSize, numPatches, dim }, merged.Shape);
+        Assert.Equal(new[] { batchSize, numPatches, dim }, merged.Shape.ToArray());
     }
 
     [Fact]
@@ -291,7 +291,7 @@ public class ScanPatternsTests
 
         var result = ScanPatterns<double>.BidirectionalScan(patches);
 
-        Assert.Equal(new[] { batchSize, numPatches, dim * 2 }, result.Shape);
+        Assert.Equal(new[] { batchSize, numPatches, dim * 2 }, result.Shape.ToArray());
     }
 
     #region Helpers

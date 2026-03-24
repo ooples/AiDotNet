@@ -288,7 +288,7 @@ public class NeuralRadianceFieldsIntegrationTests
             data[i] = Clamp01(1.0 - value);
         }
 
-        return new Tensor<double>(data, image.Shape);
+        return new Tensor<double>(data, image.Shape.ToArray());
     }
 
     private static double SumAbsoluteDifference(Tensor<double> a, Tensor<double> b)

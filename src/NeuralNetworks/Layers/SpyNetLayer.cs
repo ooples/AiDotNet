@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "2, 8, 8", TestConstructorArgs = "2, 8, 8")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "2, 16, 16", TestConstructorArgs = "2, 16, 16")]
 public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     #region Fields

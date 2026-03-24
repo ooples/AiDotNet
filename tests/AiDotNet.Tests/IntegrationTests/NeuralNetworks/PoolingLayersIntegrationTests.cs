@@ -68,11 +68,11 @@ public class PoolingLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -155,11 +155,11 @@ public class PoolingLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -228,11 +228,11 @@ public class PoolingLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -291,7 +291,7 @@ public class PoolingLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
@@ -371,11 +371,11 @@ public class PoolingLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -529,7 +529,7 @@ public class PoolingLayersIntegrationTests
     private static void AssertTensorsEqual<T>(Tensor<T> expected, Tensor<T> actual, float tolerance = 1e-5f)
         where T : struct, IComparable<T>
     {
-        Assert.Equal(expected.Shape, actual.Shape);
+        Assert.Equal(expected.Shape.ToArray(), actual.Shape.ToArray());
         for (int i = 0; i < expected.Length; i++)
         {
             var exp = Convert.ToDouble(expected[i]);

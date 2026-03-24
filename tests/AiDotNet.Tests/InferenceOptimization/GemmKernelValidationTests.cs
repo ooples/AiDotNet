@@ -19,7 +19,7 @@ public class GemmKernelValidationTests
         var actual = kernel.Execute(a, b);
         var expected = NaiveGemm(a, b);
 
-        Assert.Equal(expected.Shape, actual.Shape);
+        Assert.Equal(expected.Shape.ToArray(), actual.Shape.ToArray());
         Assert.Equal(expected.ToArray(), actual.ToArray());
     }
 
@@ -36,7 +36,7 @@ public class GemmKernelValidationTests
         var actual = kernel.GemmTransposeB(a, b);
         var expected = NaiveGemmTransposeB(a, b);
 
-        Assert.Equal(expected.Shape, actual.Shape);
+        Assert.Equal(expected.Shape.ToArray(), actual.Shape.ToArray());
         Assert.Equal(expected.ToArray(), actual.ToArray());
     }
 

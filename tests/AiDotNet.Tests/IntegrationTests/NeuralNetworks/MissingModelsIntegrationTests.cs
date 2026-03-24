@@ -105,7 +105,7 @@ public class MissingModelsIntegrationTests
         var model = new DDPMModel<float>();
         var output = model.Generate(new[] { 1, 2 }, numInferenceSteps: 2);
 
-        Assert.Equal(new[] { 1, 2 }, output.Shape);
+        Assert.Equal(new[] { 1, 2 }, output.Shape.ToArray());
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class MissingModelsIntegrationTests
 
         var output = model.PredictNoise(input, timestep: 1);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class MissingModelsIntegrationTests
 
         var output = model.Predict(nodeFeatures);
 
-        Assert.Equal(new[] { 1, 6 }, output.Shape);
+        Assert.Equal(new[] { 1, 6 }, output.Shape.ToArray());
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public class MissingModelsIntegrationTests
 
         var output = model.Predict(nodeFeatures);
 
-        Assert.Equal(new[] { numNodes, embeddingDim }, output.Shape);
+        Assert.Equal(new[] { numNodes, embeddingDim }, output.Shape.ToArray());
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public class MissingModelsIntegrationTests
 
         var output = model.Predict(nodeFeatures);
 
-        Assert.Equal(new[] { numNodes, numClasses }, output.Shape);
+        Assert.Equal(new[] { numNodes, numClasses }, output.Shape.ToArray());
     }
 
     [Fact]
@@ -242,11 +242,11 @@ public class MissingModelsIntegrationTests
 
         var output = network.Predict(input);
 
-        Assert.Equal(new[] { 2 }, output.Shape);
+        Assert.Equal(new[] { 2 }, output.Shape.ToArray());
 
         network.Train(input, target);
         var trainedOutput = network.Predict(input);
 
-        Assert.Equal(new[] { 2 }, trainedOutput.Shape);
+        Assert.Equal(new[] { 2 }, trainedOutput.Shape.ToArray());
     }
 }

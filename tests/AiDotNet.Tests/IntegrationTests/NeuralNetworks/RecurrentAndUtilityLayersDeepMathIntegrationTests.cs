@@ -61,7 +61,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         var input = new Tensor<double>(new[] { 4, 3 }); // 4 timesteps, 3 features
         var output = gru.Forward(input);
 
-        Assert.Single(output.Shape); // 1D
+        Assert.Single(output.Shape.ToArray()); // 1D
         Assert.Equal(5, output.Shape[0]);
     }
 

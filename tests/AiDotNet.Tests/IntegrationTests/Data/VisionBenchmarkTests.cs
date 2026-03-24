@@ -55,8 +55,8 @@ public class VisionBenchmarkTests
             Assert.Equal("EuroSAT", loader.Name);
 
             // Check tensor shapes
-            Assert.Equal(new[] { 10, 64, 64, 3 }, loader.Features.Shape);
-            Assert.Equal(new[] { 10, 10 }, loader.Labels.Shape);
+            Assert.Equal(new[] { 10, 64, 64, 3 }, loader.Features.Shape.ToArray());
+            Assert.Equal(new[] { 10, 10 }, loader.Labels.Shape.ToArray());
 
             // Verify pixel values are normalized to [0, 1]
             for (int i = 0; i < 10; i++)
@@ -115,7 +115,7 @@ public class VisionBenchmarkTests
             Assert.Equal("ChestX-ray14", loader.Name);
 
             // Check labels shape
-            Assert.Equal(new[] { 3, 14 }, loader.Labels.Shape);
+            Assert.Equal(new[] { 3, 14 }, loader.Labels.Shape.ToArray());
 
             // First sample: Atelectasis (0) + Effusion (2)
             Assert.Equal(1.0, loader.Labels[0, 0], 6); // Atelectasis
@@ -204,7 +204,7 @@ public class VisionBenchmarkTests
             Assert.Contains("Pascal-VOC", loader.Name);
 
             // Check labels shape: [N, MaxDetections, 5]
-            Assert.Equal(new[] { 2, 10, 5 }, loader.Labels.Shape);
+            Assert.Equal(new[] { 2, 10, 5 }, loader.Labels.Shape.ToArray());
 
             // First image: cat (index 7) at normalized bbox
             double catClass = loader.Labels[0, 0, 0]; // class index

@@ -26,7 +26,7 @@ public class SpecializedBlocksIntegrationTests
         var output = block.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -64,11 +64,11 @@ public class SpecializedBlocksIntegrationTests
 
         // Act
         var output = block.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = block.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -89,7 +89,7 @@ public class SpecializedBlocksIntegrationTests
 
         // Assert
         Assert.NotSame(original, cloned);
-        Assert.Equal(originalOutput.Shape, clonedOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class SpecializedBlocksIntegrationTests
 
         // Assert - output should be affected by both convolutions and skip
         Assert.False(ContainsNaN(output));
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     #endregion
@@ -171,11 +171,11 @@ public class SpecializedBlocksIntegrationTests
 
         // Act
         var output = block.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = block.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -197,7 +197,7 @@ public class SpecializedBlocksIntegrationTests
 
         // Assert
         Assert.NotSame(original, cloned);
-        Assert.Equal(originalOutput.Shape, clonedOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -279,11 +279,11 @@ public class SpecializedBlocksIntegrationTests
 
         // Act
         var output = block.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = block.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -305,7 +305,7 @@ public class SpecializedBlocksIntegrationTests
 
         // Assert
         Assert.NotSame(original, cloned);
-        Assert.Equal(originalOutput.Shape, clonedOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -343,7 +343,7 @@ public class SpecializedBlocksIntegrationTests
         var output = block.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -406,11 +406,11 @@ public class SpecializedBlocksIntegrationTests
 
         // Act
         var output = block.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = block.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -433,7 +433,7 @@ public class SpecializedBlocksIntegrationTests
 
         // Assert
         Assert.NotSame(original, cloned);
-        Assert.Equal(originalOutput.Shape, clonedOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -475,7 +475,7 @@ public class SpecializedBlocksIntegrationTests
         var output2 = block.Forward(input);
 
         // Assert - should produce same output after reset
-        Assert.Equal(output1.Shape, output2.Shape);
+        Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
         Assert.False(ContainsNaN(output2));
     }
 
@@ -531,7 +531,7 @@ public class SpecializedBlocksIntegrationTests
         var output = block.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 

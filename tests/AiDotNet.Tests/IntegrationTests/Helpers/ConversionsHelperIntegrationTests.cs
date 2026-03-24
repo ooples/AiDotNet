@@ -203,7 +203,7 @@ public class ConversionsHelperIntegrationTests
     {
         var matrix = new Matrix<double>(2, 3);
         var result = ConversionsHelper.MatrixToTensor<double>(matrix, new[] { 2, 3 });
-        Assert.Equal(new[] { 2, 3 }, result.Shape);
+        Assert.Equal(new[] { 2, 3 }, result.Shape.ToArray());
     }
 
     [Fact]
@@ -223,7 +223,7 @@ public class ConversionsHelperIntegrationTests
     {
         var vector = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 });
         var result = ConversionsHelper.VectorToTensor<double>(vector, new[] { 2, 3 });
-        Assert.Equal(new[] { 2, 3 }, result.Shape);
+        Assert.Equal(new[] { 2, 3 }, result.Shape.ToArray());
         Assert.Equal(6, result.Length);
     }
 
@@ -244,7 +244,7 @@ public class ConversionsHelperIntegrationTests
     {
         var tensor = new Tensor<double>(new[] { 2, 3 });
         var result = ConversionsHelper.ConvertToTensor<double>(tensor);
-        Assert.Equal(new[] { 2, 3 }, result.Shape);
+        Assert.Equal(new[] { 2, 3 }, result.Shape.ToArray());
     }
 
     [Fact]
@@ -287,7 +287,7 @@ public class ConversionsHelperIntegrationTests
     {
         var vector = new Vector<double>(new double[] { 1, 2, 3 });
         var result = ConversionsHelper.ConvertVectorToInputWithoutReference<double, Tensor<double>>(vector);
-        Assert.Equal(new[] { 1, 3 }, result.Shape);
+        Assert.Equal(new[] { 1, 3 }, result.Shape.ToArray());
     }
 
     [Fact]

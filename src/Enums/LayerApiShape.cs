@@ -17,5 +17,18 @@ public enum LayerApiShape
     /// Used by layers requiring a secondary input (CrossAttention, TransformerDecoder,
     /// MemoryRead/Write, UNetDiscriminator with skip connections).
     /// </summary>
-    DualTensor
+    DualTensor,
+
+    /// <summary>
+    /// Multi-input Forward(params Tensor[]) → Tensor interface.
+    /// Used by merge layers that combine multiple inputs (AddLayer, ConcatenateLayer, MultiplyLayer).
+    /// </summary>
+    MultiInput,
+
+    /// <summary>
+    /// Standard Forward(Tensor) but requires graph setup before use (adjacency matrix,
+    /// Laplacian, eigenbasis, etc.). The test base provides synthetic graph data.
+    /// Used by DiffusionConvLayer, MeshEdgeConvLayer, MeshPoolLayer, SpiralConvLayer.
+    /// </summary>
+    GraphWithSetup
 }

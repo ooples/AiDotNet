@@ -360,7 +360,7 @@ public class AdvancedAlgebraLayerTests
 
         // Assert
         Assert.NotNull(inputGrad);
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -384,7 +384,7 @@ public class AdvancedAlgebraLayerTests
 
         // Assert
         Assert.NotNull(inputGrad);
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -408,7 +408,7 @@ public class AdvancedAlgebraLayerTests
 
         // Assert
         Assert.NotNull(inputGrad);
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     #endregion
@@ -580,7 +580,7 @@ public class AdvancedAlgebraLayerTests
 
         // Assert
         Assert.NotNull(inputGrad);
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]

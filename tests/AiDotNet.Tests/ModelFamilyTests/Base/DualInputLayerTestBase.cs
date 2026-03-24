@@ -165,7 +165,7 @@ public abstract class DualInputLayerTestBase
         var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
 
         var output = ForwardDual(layer, primary, secondary);
-        var outputGrad = CreateRandomTensor(output.Shape, seed: 99);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
 
         var inputGrad = layer.Backward(outputGrad);
 
@@ -236,7 +236,7 @@ public abstract class DualInputLayerTestBase
         var primary = CreateRandomTensor(PrimaryInputShape);
         var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
         var output = ForwardDual(layer, primary, secondary);
-        var outputGrad = CreateRandomTensor(output.Shape, seed: 99);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
 
         layer.Backward(outputGrad);
         var gradients = layer.GetParameterGradients();

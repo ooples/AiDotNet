@@ -27,6 +27,6 @@ public class FourierNeuralOperatorTests
         var input = new Tensor<double>(new[] { 1, 2, 4, 4 });
         var output = model.Forward(input);
 
-        Assert.Equal(new[] { 1, 3, 4, 4 }, output.Shape);
+        Assert.Equal(new[] { 1, 3, 4, 4 }, output.Shape.ToArray());
     }
 }
