@@ -1173,7 +1173,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int[] dilation = [1, 1];
 
         // Step 1: Compute kernel gradient
-        int[] kernelShape = _kernels.Shape.ToArray();
+        int[] kernelShape = _kernels.Shape._dims.ToArray();
         var kernelsGradGpu = gpuEngine.Conv2DBackwardKernelGpu<T>(activationGradient, _lastInputGpu, kernelShape, stride, padding, dilation);
         _kernelsGradient = kernelsGradGpu.ToTensor();
 

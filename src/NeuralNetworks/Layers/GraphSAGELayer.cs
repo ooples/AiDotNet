@@ -928,7 +928,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
-        if (input.Shape == null || input.Shape.Length < 2)
+        if (input.Shape._dims == null || input.Shape.Length < 2)
             throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
 
         if (_adjacencyMatrix == null)

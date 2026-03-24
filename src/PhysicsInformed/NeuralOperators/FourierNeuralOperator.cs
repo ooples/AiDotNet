@@ -451,7 +451,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         private Tensor<T> ApplyPointwiseDense(Tensor<T> input, NeuralNetworks.Layers.DenseLayer<T> layer)
         {
             int batchSize = input.Shape[0];
-            int[] spatialShape = input.Shape.Skip(2).ToArray();
+            int[] spatialShape = input.Shape._dims.Skip(2).ToArray();
             var flattened = FlattenPointwiseInput(input, spatialShape);
             var projected = layer.Forward(flattened);
             return UnflattenPointwiseOutput(projected, batchSize, spatialShape);
@@ -522,7 +522,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             int batchSize = input.Shape[0];
             int channels = input.Shape[1];
             int spatialRank = input.Rank - 2;
-            int[] spatialShape = input.Shape.Skip(2).ToArray();
+            int[] spatialShape = input.Shape._dims.Skip(2).ToArray();
             int spatialSize = spatialShape.Aggregate(1, (a, b) => a * b);
             int[] spatialStrides = ComputeStrides(spatialShape);
 
@@ -665,7 +665,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             int batchSize = outputGradients.Shape[0];
-            int[] spatialShape = outputGradients.Shape.Skip(2).ToArray();
+            int[] spatialShape = outputGradients.Shape._dims.Skip(2).ToArray();
 
             var flatOutputGradients = FlattenPointwiseInput(outputGradients, spatialShape);
             var projectionGradients = projectLayer.Backward(flatOutputGradients);
@@ -1063,7 +1063,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             int batchSize = input.Shape[0];
             int spatialRank = input.Rank - 2;
-            int[] spatialShape = input.Shape.Skip(2).ToArray();
+            int[] spatialShape = input.Shape._dims.Skip(2).ToArray();
             int spatialSize = spatialShape.Aggregate(1, (a, b) => a * b);
             int[] spatialStrides = ComputeStrides(spatialShape);
 
@@ -1130,7 +1130,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             int batchSize = input.Shape[0];
             int spatialRank = _spatialDimensions.Length;
-            int[] spatialShape = input.Shape.Skip(2).ToArray();
+            int[] spatialShape = input.Shape._dims.Skip(2).ToArray();
             int[][] modeIndices = BuildModeIndices(spatialShape);
 
             int[] freqIndices = new int[spatialRank];
@@ -1401,7 +1401,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             int batchSize = input.Shape[0];
             int spatialRank = _spatialDimensions.Length;
-            int[] spatialShape = input.Shape.Skip(2).ToArray();
+            int[] spatialShape = input.Shape._dims.Skip(2).ToArray();
             int[][] modeIndices = BuildModeIndices(spatialShape);
 
             int[] freqIndices = new int[spatialRank];
@@ -1463,7 +1463,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             int batchSize = input.Shape[0];
             int spatialRank = input.Rank - 2;
-            int[] spatialShape = input.Shape.Skip(2).ToArray();
+            int[] spatialShape = input.Shape._dims.Skip(2).ToArray();
             int spatialSize = spatialShape.Aggregate(1, (a, b) => a * b);
             int[] spatialStrides = ComputeStrides(spatialShape);
 

@@ -576,7 +576,7 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
                     Values = nonZeroValues.ToArray(),
                     RowIndices = rowIndices.ToArray(),
                     ColumnIndices = colIndices.ToArray(),
-                    OriginalShape = weights.Shape.ToArray()
+                    OriginalShape = weights.Shape._dims.ToArray()
                 };
 
             case SparseFormat.CSR:
@@ -603,7 +603,7 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
                     Values = nonZeroValues.ToArray(),
                     RowPointers = rowPointers.ToArray(),
                     ColumnIndices = colIndices.ToArray(),
-                    OriginalShape = weights.Shape.ToArray()
+                    OriginalShape = weights.Shape._dims.ToArray()
                 };
 
             case SparseFormat.CSC:
@@ -630,7 +630,7 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
                     Values = nonZeroValues.ToArray(),
                     ColumnPointers = colPointers.ToArray(),
                     RowIndices = rowIndices.ToArray(),
-                    OriginalShape = weights.Shape.ToArray()
+                    OriginalShape = weights.Shape._dims.ToArray()
                 };
 
             default:
@@ -684,7 +684,7 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
             SparsityMask = mask.ToArray(),
             SparsityN = n,
             SparsityM = m,
-            OriginalShape = weights.Shape.ToArray()
+            OriginalShape = weights.Shape._dims.ToArray()
         };
     }
 

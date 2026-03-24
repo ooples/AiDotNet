@@ -976,7 +976,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             // Store GPU-resident tensors for BackwardGpu (no CPU roundtrip)
             _lastInputGpu = input2D;
-            _gpuOriginalInputShape = input.Shape.ToArray();
+            _gpuOriginalInputShape = input.Shape._dims.ToArray();
 
             // For fused activations, we need pre-activation for gradient computation
             if (fusedActivation != FusedActivationType.None)

@@ -469,7 +469,7 @@ public class FlattenLayer<T> : LayerBase<T>
         // Cache input shape for BackwardGpu
         if (IsTrainingMode)
         {
-            _lastInputGpuShape = input.Shape.ToArray();
+            _lastInputGpuShape = input.Shape._dims.ToArray();
         }
 
         // Handle unbatched input (3D: [C, H, W] or 2D: [H, W] or 1D)

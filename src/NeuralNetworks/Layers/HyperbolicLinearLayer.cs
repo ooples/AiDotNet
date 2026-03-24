@@ -378,7 +378,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _gpuInput = input;
-            _gpuInputShape = input.Shape.ToArray();
+            _gpuInputShape = input.Shape._dims.ToArray();
         }
 
         // Cache weights to GPU: flatten [OutputFeatures, InputFeatures] for the kernel

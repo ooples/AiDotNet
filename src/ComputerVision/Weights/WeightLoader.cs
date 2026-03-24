@@ -696,7 +696,7 @@ public class WeightLoader
                     metadata[index.ToString()] = new TensorMetadata
                     {
                         Name = kvp.Key,
-                        Shape = tensorData.Shape,
+                        Shape = tensorData.Shape._dims,
                         DType = tensorData.DType
                     };
                     index++;
@@ -709,7 +709,7 @@ public class WeightLoader
 
     private Tensor<float>? CreateTensorFromData(TensorData data)
     {
-        if (data.Data == null || data.Shape == null)
+        if (data.Data == null || data.Shape._dims == null)
         {
             return null;
         }

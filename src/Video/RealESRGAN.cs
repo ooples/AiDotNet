@@ -833,7 +833,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             }
 
             // Validate spatial dimensions match
-            var spatialShape = input.Shape.Skip(batchDims).ToArray();
+            var spatialShape = input.Shape._dims.Skip(batchDims).ToArray();
             if (!ShapesMatch(spatialShape, expectedShape))
             {
                 throw new TensorShapeMismatchException(
@@ -931,7 +931,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
                 batchSize *= input.Shape[i];
             }
 
-            var spatialShape = input.Shape.Skip(batchDims).ToArray();
+            var spatialShape = input.Shape._dims.Skip(batchDims).ToArray();
             if (!ShapesMatch(spatialShape, expectedShape))
             {
                 throw new TensorShapeMismatchException(

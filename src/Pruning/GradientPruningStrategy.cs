@@ -571,7 +571,7 @@ public class GradientPruningStrategy<T> : IPruningStrategy<T>
             SparsityMask = mask.ToArray(),
             SparsityN = n,
             SparsityM = m,
-            OriginalShape = weights.Shape.ToArray()
+            OriginalShape = weights.Shape._dims.ToArray()
         };
     }
 }

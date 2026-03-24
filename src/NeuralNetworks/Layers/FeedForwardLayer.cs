@@ -647,7 +647,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (Input == null || Input.Shape == null || Input.Shape.Length == 0)
+        if (Input == null || Input.Shape._dims == null || Input.Shape.Length == 0)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = Input.Shape[0];

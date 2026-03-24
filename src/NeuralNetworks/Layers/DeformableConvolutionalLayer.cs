@@ -369,7 +369,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         if (IsTrainingMode)
         {
             _gpuInput = input4D;
-            _gpuInputShape = input4D.Shape.ToArray();
+            _gpuInputShape = input4D.Shape._dims.ToArray();
             _gpuOffsets = offsetsGpu;
             _gpuMask = maskGpu;
         }

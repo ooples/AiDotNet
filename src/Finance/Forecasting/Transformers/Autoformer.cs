@@ -762,7 +762,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputName = OnnxSession.InputMetadata.Keys.First();
-        var inputShape = input.Shape.Select(d => (long)d).ToArray();
+        var inputShape = input.Shape._dims.Select(d => (long)d).ToArray();
         var onnxInput = new OnnxTensors.DenseTensor<float>(
             input.ToArray().Select(x => Convert.ToSingle(x)).ToArray(),
             inputShape.Select(d => (int)d).ToArray());

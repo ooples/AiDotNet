@@ -787,7 +787,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                     Values = nonZeroValues.ToArray(),
                     RowIndices = rowIndices.ToArray(),
                     ColumnIndices = columnIndices.ToArray(),
-                    OriginalShape = weights.Shape.ToArray()
+                    OriginalShape = weights.Shape._dims.ToArray()
                 };
 
             case SparseFormat.CSR:
@@ -801,7 +801,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                 {
                     Format = SparseFormat.Structured2to4,
                     Values = nonZeroValues.ToArray(),
-                    OriginalShape = weights.Shape.ToArray(),
+                    OriginalShape = weights.Shape._dims.ToArray(),
                     SparsityN = 2,
                     SparsityM = 4
                 };
@@ -867,7 +867,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
             SparsityMask = mask.ToArray(),
             SparsityN = n,
             SparsityM = m,
-            OriginalShape = weights.Shape.ToArray()
+            OriginalShape = weights.Shape._dims.ToArray()
         };
     }
 

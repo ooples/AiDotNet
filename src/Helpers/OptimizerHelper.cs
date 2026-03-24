@@ -238,7 +238,7 @@ public static class OptimizerHelper<T, TInput, TOutput>
         }
 
         // Create a new shape with the updated feature dimension
-        var newShape = X.Shape.ToArray();
+        var newShape = X.Shape._dims.ToArray();
         newShape[1] = selectedFeatures.Count;
 
         var selectedX = new Tensor<T>(newShape);

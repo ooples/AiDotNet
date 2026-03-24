@@ -651,7 +651,7 @@ public class IRBuilder
                         OutputId = _nextTensorId++,
                         InputIds = new[] { existingGradId, parentGradId },
                         OutputType = InferIRType(typeof(T)),
-                        OutputShape = parent.Value.Shape
+                        OutputShape = parent.Value.Shape._dims
                     };
                     graph.Operations.Add(accumOp);
                     graph.TensorShapes[accumOp.OutputId] = accumOp.OutputShape;

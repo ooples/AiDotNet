@@ -32,7 +32,7 @@ public static class OnnxTensorConverter
     public static OnnxTensors.DenseTensor<float> ToOnnxFloat<T>(Tensor<T> tensor)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = tensor.Shape.Select(d => (long)d).ToArray();
+        var shape = tensor.Shape._dims.Select(d => (long)d).ToArray();
         var onnxTensor = new OnnxTensors.DenseTensor<float>(tensor.Shape._dims);
 
         var sourceData = tensor.ToArray();

@@ -339,7 +339,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _gpuInput = input;
-            _gpuInputShape = input.Shape.ToArray();
+            _gpuInputShape = input.Shape._dims.ToArray();
         }
 
         // Flatten weights to GPU buffer: [outputFeatures * inputFeatures * 8]
