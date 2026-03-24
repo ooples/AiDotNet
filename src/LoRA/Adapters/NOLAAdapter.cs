@@ -409,7 +409,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> nolaOutputTensor = new Tensor<T>(new[] { batchSize, outputSize }, nolaOutputData);
 
         // Sum base and NOLA outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape._dims);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], nolaOutputTensor[i]);
@@ -543,7 +543,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> nolaInputGradTensor = new Tensor<T>(new[] { batchSize, inputSize }, nolaInputGradData);
 
         // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape._dims);
+        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape.ToArray());
         for (int i = 0; i < baseInputGrad.Length; i++)
         {
             inputGrad[i] = NumOps.Add(baseInputGrad[i], nolaInputGradTensor[i]);

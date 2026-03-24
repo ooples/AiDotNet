@@ -239,7 +239,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
         // Cache input shape for backward pass during training
         if (IsTrainingMode)
         {
-            _gpuCachedInputShape = (int[])input.Shape._dims.Clone();
+            _gpuCachedInputShape = (int[])input.Shape.ToArray().Clone();
         }
 
         return gpuEngine.UpsampleGpu(input, _scaleFactor);
@@ -309,7 +309,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        return Engine.UpsampleBackward(outputGradient, _lastInput.Shape._dims, _scaleFactor, _scaleFactor);
+        return Engine.UpsampleBackward(outputGradient, _lastInput.Shape.ToArray(), _scaleFactor, _scaleFactor);
     }
 
     /// <summary>

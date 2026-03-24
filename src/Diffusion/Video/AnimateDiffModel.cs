@@ -455,7 +455,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         int timestep,
         Tensor<T> textEmbedding)
     {
-        var videoShape = latents.Shape._dims;
+        var videoShape = latents.Shape.ToArray();
         var numFrames = videoShape[1];
 
         // AnimateDiff processes frames through the U-Net with motion modules
@@ -546,7 +546,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         if (numFrames <= 2 || _motionConfig.TemporalSmoothing <= 0)
             return;
 
-        var shape = noise.Shape._dims;
+        var shape = noise.Shape.ToArray();
         var batchSize = shape[0];
         var channels = shape[2];
         var height = shape[3];
@@ -598,7 +598,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> ExtractFrameWindow(Tensor<T> latents, int startFrame, int windowSize)
     {
-        var shape = latents.Shape._dims;
+        var shape = latents.Shape.ToArray();
         var batchSize = shape[0];
         var channels = shape[2];
         var height = shape[3];
@@ -641,7 +641,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         int startFrame,
         int windowSize)
     {
-        var shape = accumulated.Shape._dims;
+        var shape = accumulated.Shape.ToArray();
         var batchSize = shape[0];
         var totalFrames = shape[1];
         var channels = shape[2];
@@ -687,7 +687,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> NormalizeAccumulatedNoise(Tensor<T> accumulated, Tensor<T> weights)
     {
-        var result = new Tensor<T>(accumulated.Shape._dims);
+        var result = new Tensor<T>(accumulated.Shape.ToArray());
         var resultSpan = result.AsWritableSpan();
         var accSpan = accumulated.AsSpan();
         var weightSpan = weights.AsSpan();
@@ -735,7 +735,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         var effectiveNumFrames = numFrames ?? DefaultNumFrames;
 
         // Get image dimensions
-        var imageShape = inputImage.Shape._dims;
+        var imageShape = inputImage.Shape.ToArray();
         var height = imageShape[2];
         var width = imageShape[3];
 
@@ -758,7 +758,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         // Copy first frame from image latent (with noise aug)
         if (noiseAugStrength > 0)
         {
-            var noise = DiffusionNoiseHelper<T>.SampleGaussian(imageLatent.Shape._dims, rng);
+            var noise = DiffusionNoiseHelper<T>.SampleGaussian(imageLatent.Shape.ToArray(), rng);
             var scaledNoise = DiffusionNoiseHelper<T>.ScaleNoise(noise, noiseAugStrength);
             var augLatent = AddTensors(imageLatent, scaledNoise);
             InsertFrameLatent(latents, augLatent, 0);
@@ -799,7 +799,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     protected override Tensor<T> DecodeVideoLatents(Tensor<T> latents)
     {
         // AnimateDiff uses per-frame VAE decoding
-        var latentShape = latents.Shape._dims;
+        var latentShape = latents.Shape.ToArray();
         var numFrames = latentShape[1];
 
         var frames = new Tensor<T>[numFrames];

@@ -319,7 +319,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = NumOps.Add(reconstructionLoss, _lastCommitmentLoss);
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape._dims));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -500,7 +500,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape._dims);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -612,7 +612,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         if (_codebooks is null) InitializeCodebooks();
 
         int totalLen = encoderOutput.Length;
-        var quantized = new Tensor<T>(encoderOutput.Shape._dims);
+        var quantized = new Tensor<T>(encoderOutput.Shape.ToArray());
         T commitmentLoss = NumOps.Zero;
 
         // Product quantization: split encoded vector across codebooks

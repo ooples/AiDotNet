@@ -446,6 +446,8 @@ public class AdversarialRobustnessIntegrationTests
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

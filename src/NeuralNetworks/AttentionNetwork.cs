@@ -356,7 +356,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         var flattenedGradient = _lossFunction.CalculateDerivative(flattenedOutput, flattenedExpectedOutput);
 
         // Unflatten the gradient to match the output shape
-        var gradient = new Tensor<T>(output.Shape._dims).Unflatten(flattenedGradient);
+        var gradient = new Tensor<T>(output.Shape.ToArray()).Unflatten(flattenedGradient);
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {

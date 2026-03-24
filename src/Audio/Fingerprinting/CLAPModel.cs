@@ -663,7 +663,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             }
         }
 
-        return new Tensor<T>(normalized, embeddings.Shape._dims);
+        return new Tensor<T>(normalized, embeddings.Shape.ToArray());
     }
 
     /// <summary>
@@ -1078,7 +1078,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 }
             }
 
-            return new Tensor<T>(normed, input.Shape._dims);
+            return new Tensor<T>(normed, input.Shape.ToArray());
         }
     }
 

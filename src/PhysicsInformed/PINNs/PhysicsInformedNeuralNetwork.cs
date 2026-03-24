@@ -429,7 +429,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                                 $"Expected {outputDim} outputs from the network, got {outputs.Shape[1]}.");
                         }
 
-                        var outputGradients = new Tensor<T>(outputs.Shape._dims);
+                        var outputGradients = new Tensor<T>(outputs.Shape.ToArray());
                         var point = new T[inputDim];
                         var output = new T[outputDim];
                         var targetBuffer = new T[outputDim];
@@ -875,7 +875,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape._dims);
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape.ToArray());
 
             Backpropagate(outputGradientTensor);
             _optimizer.UpdateParameters(Layers);

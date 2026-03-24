@@ -217,7 +217,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Rank;
 
         Tensor<T> batchedInput;
@@ -291,7 +291,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
 
         IGpuTensor<T> input5D;
         bool addedBatch = false;
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         if (rank == 4)
@@ -312,7 +312,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
             input5D = input.CreateView(0, new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _gpuInputShape = input5D.Shape._dims;
+        _gpuInputShape = input5D.Shape.ToArray();
         _addedBatchDimension = addedBatch;
 
         var poolSizeArr = new[] { PoolSize, PoolSize, PoolSize };
@@ -429,7 +429,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         {
             batchedGradient = outputGradient;
             inputShape = _lastInput.Shape.Length == 5
-                ? _lastInput.Shape._dims
+                ? _lastInput.Shape.ToArray()
                 : new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3] };
         }
         else if (rank == 4)
@@ -459,7 +459,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
             [Stride, Stride, Stride]);
 
         // Restore to original input shape
-        return inputGrad.Reshape(_lastInput.Shape._dims);
+        return inputGrad.Reshape(_lastInput.Shape.ToArray());
     }
 
     #endregion

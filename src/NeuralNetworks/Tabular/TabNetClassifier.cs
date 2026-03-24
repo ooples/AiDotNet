@@ -325,7 +325,7 @@ public class TabNetClassifier<T> : TabNetBase<T>
     public Tensor<T> ComputeCrossEntropyGradient(Tensor<T> probabilities, Tensor<T> targets)
     {
         int batchSize = probabilities.Shape[0];
-        var gradient = new Tensor<T>(probabilities.Shape._dims);
+        var gradient = new Tensor<T>(probabilities.Shape.ToArray());
         var scale = NumOps.FromDouble(1.0 / batchSize);
 
         for (int b = 0; b < batchSize; b++)
@@ -352,7 +352,7 @@ public class TabNetClassifier<T> : TabNetBase<T>
     public Tensor<T> ComputeCrossEntropyGradientOneHot(Tensor<T> probabilities, Tensor<T> oneHotTargets)
     {
         int batchSize = probabilities.Shape[0];
-        var gradient = new Tensor<T>(probabilities.Shape._dims);
+        var gradient = new Tensor<T>(probabilities.Shape.ToArray());
         var scale = NumOps.FromDouble(1.0 / batchSize);
 
         for (int i = 0; i < probabilities.Length; i++)

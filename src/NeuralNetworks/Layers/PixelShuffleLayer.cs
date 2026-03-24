@@ -238,8 +238,8 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape._dims;
-        var shape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
+        var shape = input.Shape.ToArray();
 
         // For 4D tensors (batch, channels, height, width), use Engine directly
         if (shape.Length == 4)
@@ -313,7 +313,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape._dims;
+        var shape = input.Shape.ToArray();
         int r = _upscaleFactor;
         int r2 = r * r;
 
@@ -415,7 +415,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
         if (_gpuCachedInputShape == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var gradShape = outputGradient.Shape._dims;
+        var gradShape = outputGradient.Shape.ToArray();
         int r = _upscaleFactor;
         int r2 = r * r;
 
@@ -482,7 +482,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        var inShape = _lastInput.Shape._dims;
+        var inShape = _lastInput.Shape.ToArray();
 
         // For 4D tensors, use Engine directly
         if (_originalInputShape.Length == 4)

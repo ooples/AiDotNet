@@ -42,7 +42,7 @@ internal static class VideoLoaderHelper
 
     internal static Tensor<T> ExtractTensorBatch<T>(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source.Shape._dims.Clone();
+        var newShape = (int[])source.Shape.ToArray().Clone();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
         for (int i = 0; i < indices.Length; i++)

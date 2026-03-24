@@ -455,7 +455,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
         Tensor<T>? biases)
     {
         // Get weight matrix dimensions
-        var shape = weights.Shape._dims;
+        var shape = weights.Shape.ToArray();
         if (shape.Length < 2)
         {
             return (lower, upper);

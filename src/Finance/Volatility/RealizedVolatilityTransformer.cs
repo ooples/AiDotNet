@@ -253,7 +253,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     {
         SetTrainingMode(true);
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var currentGrad = Tensor<T>.FromVector(outputGradient, output.Shape._dims);
+        var currentGrad = Tensor<T>.FromVector(outputGradient, output.Shape.ToArray());
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {

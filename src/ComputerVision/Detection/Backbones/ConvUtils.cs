@@ -275,7 +275,7 @@ internal class Dense<T>
     public Tensor<T> Forward(Tensor<T> input)
     {
         // input: [batch, ..., inFeatures] - operates on last dimension
-        int[] inputShape = input.Shape._dims;
+        int[] inputShape = input.Shape.ToArray();
         int lastDim = inputShape[^1];
 
         if (lastDim != _inFeatures)

@@ -331,7 +331,7 @@ internal class MambaBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -675,7 +675,7 @@ internal class MambaBlock<T> : LayerBase<T>
     /// </summary>
     private static Tensor<T> SliceTensor(Tensor<T> input, int axis, int start, int length)
     {
-        var shape = (int[])input.Shape._dims.Clone();
+        var shape = (int[])input.Shape.ToArray().Clone();
         shape[axis] = length;
         var output = new Tensor<T>(shape);
 

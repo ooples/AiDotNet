@@ -563,7 +563,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         // SDXL uses micro-conditioning (original_size, crop_coords, target_size) to improve
         // generation quality at different resolutions. The 6 values are projected through
         // a learned embedding and added to influence the diffusion process.
-        var shape = embedding.Shape._dims;
+        var shape = embedding.Shape.ToArray();
         var batch = shape[0];
         var seqLen = shape[1];
         var embedDim = shape[2];
@@ -866,7 +866,7 @@ public class SDXLRefiner<T>
 
         // Add noise at the starting point
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : _random;
-        var noise = SampleNoise(latent.Shape._dims, rng);
+        var noise = SampleNoise(latent.Shape.ToArray(), rng);
 
         var startTimestep = _scheduler.Timesteps.Skip(startStep).FirstOrDefault();
         latent = AddNoiseAtTimestep(latent, noise, startTimestep);
@@ -893,7 +893,7 @@ public class SDXLRefiner<T>
             var latentVector = latent.ToVector();
             var noiseVector = noisePrediction.ToVector();
             latentVector = _scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-            latent = new Tensor<T>(latent.Shape._dims, latentVector);
+            latent = new Tensor<T>(latent.Shape.ToArray(), latentVector);
         }
 
         // Decode back to image

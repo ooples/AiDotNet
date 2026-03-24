@@ -582,7 +582,7 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         // Apply energy/volume
         if (Math.Abs(_energy - 1.0) > 0.01)
         {
-            var result = new Tensor<T>(audio.Shape._dims);
+            var result = new Tensor<T>(audio.Shape.ToArray());
             for (int i = 0; i < audio.Length; i++)
             {
                 result[i] = NumOps.Multiply(audio[i], NumOps.FromDouble(_energy));

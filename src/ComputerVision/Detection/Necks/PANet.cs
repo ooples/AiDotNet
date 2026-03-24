@@ -315,7 +315,7 @@ public class PANet<T> : NeckBase<T>
     {
         // Write shape
         writer.Write(tensor.Rank);
-        foreach (int dim in tensor.Shape._dims)
+        foreach (int dim in tensor.Shape.ToArray())
         {
             writer.Write(dim);
         }
@@ -384,7 +384,7 @@ public class PANet<T> : NeckBase<T>
 
     private Tensor<T> ApplyReLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);

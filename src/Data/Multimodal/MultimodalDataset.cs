@@ -201,7 +201,7 @@ public class MultimodalDataset<T>
         var firstSample = this[startIndex];
         if (firstSample.Label is null) return null;
 
-        int[] labelShape = firstSample.Label.Shape._dims;
+        int[] labelShape = firstSample.Label.Shape.ToArray();
         int elementsPerLabel = 1;
         try
         {

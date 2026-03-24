@@ -388,10 +388,10 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape._dims);
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape._dims);
+        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -552,16 +552,16 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         // Ensure gradient matches stored output shape for activation derivative
-        if (!outputGradient.Shape._dims.SequenceEqual(_lastOutput.Shape._dims))
+        if (!outputGradient.Shape.ToArray().SequenceEqual(_lastOutput.Shape.ToArray()))
         {
             if (outputGradient.Length == _lastOutput.Length)
             {
-                outputGradient = outputGradient.Reshape(_lastOutput.Shape._dims);
+                outputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
             }
             else
             {
                 // Sizes differ — truncate or pad to match
-                var resized = new Tensor<T>(_lastOutput.Shape._dims);
+                var resized = new Tensor<T>(_lastOutput.Shape.ToArray());
                 int minLen = Math.Min(outputGradient.Length, resized.Length);
                 for (int i = 0; i < minLen; i++)
                     resized.SetFlat(i, outputGradient.GetFlatIndexValue(i));
@@ -741,8 +741,8 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _outputBiasGradient = outputBias.Gradient;
 
         // Combine input and memory gradients
-        var inputGrad = input.Gradient ?? new Tensor<T>(_lastInput.Shape._dims);
-        var memoryGrad = memory.Gradient ?? new Tensor<T>(_lastMemory.Shape._dims);
+        var inputGrad = input.Gradient ?? new Tensor<T>(_lastInput.Shape.ToArray());
+        var memoryGrad = memory.Gradient ?? new Tensor<T>(_lastMemory.Shape.ToArray());
         return CombineGradients(inputGrad, memoryGrad);
     }
 
@@ -892,7 +892,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        int[] inputShape = input.Shape._dims;
+        int[] inputShape = input.Shape.ToArray();
         int batchSize = inputShape.Length >= 2 ? inputShape[0] : 1;
         int inputDim = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];
 
@@ -1084,17 +1084,17 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Set key weights using Tensor.FromVector
         var keyParams = parameters.SubVector(index, keySize);
-        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights.Shape._dims);
+        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights.Shape.ToArray());
         index += keySize;
 
         // Set value weights
         var valueParams = parameters.SubVector(index, valueSize);
-        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights.Shape._dims);
+        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights.Shape.ToArray());
         index += valueSize;
 
         // Set output weights
         var outputParams = parameters.SubVector(index, outputSize);
-        _outputWeights = Tensor<T>.FromVector(outputParams).Reshape(_outputWeights.Shape._dims);
+        _outputWeights = Tensor<T>.FromVector(outputParams).Reshape(_outputWeights.Shape.ToArray());
         index += outputSize;
 
         // Set output bias

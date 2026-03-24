@@ -117,10 +117,10 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// </summary>
     public T ComputeMSELoss(Tensor<T> predictions, Tensor<T> targets)
     {
-        if (!predictions.Shape._dims.SequenceEqual(targets.Shape._dims))
+        if (!predictions.Shape.ToArray().SequenceEqual(targets.Shape.ToArray()))
         {
             throw new ArgumentException(
-                $"Predictions shape [{string.Join(", ", predictions.Shape._dims)}] must match targets shape [{string.Join(", ", targets.Shape._dims)}].");
+                $"Predictions shape [{string.Join(", ", predictions.Shape.ToArray())}] must match targets shape [{string.Join(", ", targets.Shape.ToArray())}].");
         }
 
         var totalLoss = NumOps.Zero;
@@ -139,10 +139,10 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// </summary>
     public T ComputeMAELoss(Tensor<T> predictions, Tensor<T> targets)
     {
-        if (!predictions.Shape._dims.SequenceEqual(targets.Shape._dims))
+        if (!predictions.Shape.ToArray().SequenceEqual(targets.Shape.ToArray()))
         {
             throw new ArgumentException(
-                $"Predictions shape [{string.Join(", ", predictions.Shape._dims)}] must match targets shape [{string.Join(", ", targets.Shape._dims)}].");
+                $"Predictions shape [{string.Join(", ", predictions.Shape.ToArray())}] must match targets shape [{string.Join(", ", targets.Shape.ToArray())}].");
         }
 
         var totalLoss = NumOps.Zero;
@@ -173,14 +173,14 @@ public class AutoIntRegression<T> : AutoIntBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        if (!targets.Shape._dims.SequenceEqual(_predictionsCache.Shape._dims))
+        if (!targets.Shape.ToArray().SequenceEqual(_predictionsCache.Shape.ToArray()))
         {
             throw new ArgumentException(
-                $"Targets shape [{string.Join(", ", targets.Shape._dims)}] must match predictions shape [{string.Join(", ", _predictionsCache.Shape._dims)}].");
+                $"Targets shape [{string.Join(", ", targets.Shape.ToArray())}] must match predictions shape [{string.Join(", ", _predictionsCache.Shape.ToArray())}].");
         }
 
 
-        var predictionGrad = new Tensor<T>(_predictionsCache.Shape._dims);
+        var predictionGrad = new Tensor<T>(_predictionsCache.Shape.ToArray());
         var scale = NumOps.FromDouble(2.0 / _predictionsCache.Length);
 
         for (int i = 0; i < _predictionsCache.Length; i++)
@@ -217,10 +217,10 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// </remarks>
     public T ComputeR2Score(Tensor<T> predictions, Tensor<T> targets)
     {
-        if (!predictions.Shape._dims.SequenceEqual(targets.Shape._dims))
+        if (!predictions.Shape.ToArray().SequenceEqual(targets.Shape.ToArray()))
         {
             throw new ArgumentException(
-                $"Predictions shape [{string.Join(", ", predictions.Shape._dims)}] must match targets shape [{string.Join(", ", targets.Shape._dims)}].");
+                $"Predictions shape [{string.Join(", ", predictions.Shape.ToArray())}] must match targets shape [{string.Join(", ", targets.Shape.ToArray())}].");
         }
 
         var targetMean = NumOps.Zero;

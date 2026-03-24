@@ -283,7 +283,7 @@ public class RodimusLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -724,7 +724,7 @@ public class RodimusLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape._dims);
+        var ones = new Tensor<T>(x.Shape.ToArray());
         ones.Fill(NumOps.One);
         var oneMinusSig = Engine.TensorSubtract(ones, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
@@ -734,7 +734,7 @@ public class RodimusLayer<T> : LayerBase<T>
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var ones = new Tensor<T>(template.Shape._dims);
+        var ones = new Tensor<T>(template.Shape.ToArray());
         ones.Fill(NumOps.One);
         return ones;
     }

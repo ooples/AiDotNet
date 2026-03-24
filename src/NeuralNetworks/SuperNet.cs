@@ -140,7 +140,7 @@ namespace AiDotNet.NeuralNetworks
         {
             // Handle 1D input by reshaping to 2D [1, features]
             bool was1D = input.Shape.Length == 1;
-            int[] originalShape = input.Shape._dims;
+            int[] originalShape = input.Shape.ToArray();
             if (was1D)
             {
                 input = input.Reshape([1, input.Shape[0]]);
@@ -164,7 +164,7 @@ namespace AiDotNet.NeuralNetworks
             // Process each node
             for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
             {
-                var nodeOutput = new Tensor<T>(input.Shape._dims);
+                var nodeOutput = new Tensor<T>(input.Shape.ToArray());
                 var alpha = _architectureParams[nodeIdx];
 
                 // Apply softmax to architecture parameters for this node
@@ -608,7 +608,7 @@ namespace AiDotNet.NeuralNetworks
         {
             // Handle 1D input by reshaping to 2D [1, features]
             bool was1D = input.Shape.Length == 1;
-            int[] originalShape = input.Shape._dims;
+            int[] originalShape = input.Shape.ToArray();
             if (was1D)
             {
                 input = input.Reshape([1, input.Shape[0]]);
@@ -636,7 +636,7 @@ namespace AiDotNet.NeuralNetworks
                 }
             }
 
-            var output = TensorAllocator.Rent<T>(input.Shape._dims);
+            var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
             var weight = _weights[weightKey];
 
             // Apply operation (simplified) using proper 2D tensor indexing

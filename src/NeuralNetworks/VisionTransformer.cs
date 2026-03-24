@@ -335,7 +335,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         if (input4D.Shape[1] != _channels || input4D.Shape[2] != _imageHeight || input4D.Shape[3] != _imageWidth)
         {
             throw new ArgumentException(
-                $"Input shape {string.Join("x", input4D.Shape._dims)} does not match expected " +
+                $"Input shape {string.Join("x", input4D.Shape.ToArray())} does not match expected " +
                 $"[batch, {_channels}, {_imageHeight}, {_imageWidth}].",
                 nameof(input));
         }

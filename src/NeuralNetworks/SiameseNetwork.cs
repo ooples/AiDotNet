@@ -448,7 +448,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             if (input.Shape.Length < 2 || input.Shape[1] != 2)
             {
                 throw new ArgumentException(
-                    $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input.Shape._dims)}");
+                    $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input.Shape.ToArray())}");
             }
 
             int batchSize = input.Shape[0];
@@ -507,13 +507,13 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         if (input.Shape.Length < 2 || input.Shape[1] != 2)
         {
             throw new ArgumentException(
-                $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese training. Got shape: {string.Join(",", input.Shape._dims)}");
+                $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese training. Got shape: {string.Join(",", input.Shape.ToArray())}");
         }
 
         if (expectedOutput.Shape.Length != 2 || expectedOutput.Shape[0] != input.Shape[0] || expectedOutput.Shape[1] != 1)
         {
             throw new ArgumentException(
-                $"Expected output tensor must have shape [batchSize, 1]. Got shape: {string.Join(",", expectedOutput.Shape._dims)}");
+                $"Expected output tensor must have shape [batchSize, 1]. Got shape: {string.Join(",", expectedOutput.Shape.ToArray())}");
         }
 
         int batchSize = input.Shape[0];
@@ -533,7 +533,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         LastLoss = LossFunction.CalculateLoss(predictedVector, expectedVector);
 
         // Calculate error gradients
-        var outputGradients = new Tensor<T>(predictions.Shape._dims);
+        var outputGradients = new Tensor<T>(predictions.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
         {
             // Error = expected - predicted
@@ -580,8 +580,8 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             }
 
             // Backpropagate through the subnetwork for each input
-            _subnetwork.Backpropagate(Tensor<T>.FromVector(embedding1Gradients).Reshape(input1.Shape._dims));
-            _subnetwork.Backpropagate(Tensor<T>.FromVector(embedding2Gradients).Reshape(input2.Shape._dims));
+            _subnetwork.Backpropagate(Tensor<T>.FromVector(embedding1Gradients).Reshape(input1.Shape.ToArray()));
+            _subnetwork.Backpropagate(Tensor<T>.FromVector(embedding2Gradients).Reshape(input2.Shape.ToArray()));
         }
 
         // Get the learning rate from the architecture or use default

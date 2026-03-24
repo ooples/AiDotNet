@@ -144,27 +144,27 @@ public static class DataSplitter
         }
 
         // Create output tensors
-        int[] xTrainShape = (int[])X.Shape._dims.Clone();
+        int[] xTrainShape = (int[])X.Shape.ToArray().Clone();
         xTrainShape[0] = trainSize;
         var XTrain = new Tensor<T>(xTrainShape);
 
-        int[] xValShape = (int[])X.Shape._dims.Clone();
+        int[] xValShape = (int[])X.Shape.ToArray().Clone();
         xValShape[0] = validationSize;
         var XVal = new Tensor<T>(xValShape);
 
-        int[] xTestShape = (int[])X.Shape._dims.Clone();
+        int[] xTestShape = (int[])X.Shape.ToArray().Clone();
         xTestShape[0] = testSize;
         var XTest = new Tensor<T>(xTestShape);
 
-        int[] yTrainShape = (int[])y.Shape._dims.Clone();
+        int[] yTrainShape = (int[])y.Shape.ToArray().Clone();
         yTrainShape[0] = trainSize;
         var yTrain = new Tensor<T>(yTrainShape);
 
-        int[] yValShape = (int[])y.Shape._dims.Clone();
+        int[] yValShape = (int[])y.Shape.ToArray().Clone();
         yValShape[0] = validationSize;
         var yVal = new Tensor<T>(yValShape);
 
-        int[] yTestShape = (int[])y.Shape._dims.Clone();
+        int[] yTestShape = (int[])y.Shape.ToArray().Clone();
         yTestShape[0] = testSize;
         var yTest = new Tensor<T>(yTestShape);
 

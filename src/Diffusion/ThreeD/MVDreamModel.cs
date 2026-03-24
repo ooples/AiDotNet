@@ -570,9 +570,9 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         }
 
         // Add noise at specified timestep
-        var noise = SampleNoiseTensor(latents.Shape._dims, RandomGenerator);
+        var noise = SampleNoiseTensor(latents.Shape.ToArray(), RandomGenerator);
         var noisyLatents = Scheduler.AddNoise(latents.ToVector(), noise.ToVector(), timestep);
-        var noisyLatentsTensor = new Tensor<T>(latents.Shape._dims, noisyLatents);
+        var noisyLatentsTensor = new Tensor<T>(latents.Shape.ToArray(), noisyLatents);
 
         // Generate camera embeddings for the views
         var cameraPositions = GenerateCameraPositions(numViews, 30.0);
@@ -1326,7 +1326,7 @@ public class MultiViewUNet<T>
         var attended = _mvAttention.Apply(viewPredictions);
 
         // Combine back into multi-view tensor
-        return CombineViews(attended, multiViewInput.Shape._dims);
+        return CombineViews(attended, multiViewInput.Shape.ToArray());
     }
 
     private Tensor<T> ExtractView(Tensor<T> multiView, int viewIndex)
@@ -1456,7 +1456,7 @@ public class MultiViewAttention<T>
 
         for (int v = 0; v < views.Length; v++)
         {
-            var viewShape = views[v].Shape._dims;
+            var viewShape = views[v].Shape.ToArray();
             result[v] = new Tensor<T>(viewShape);
             var resultSpan = result[v].AsWritableSpan();
             var viewSpan = views[v].AsSpan();

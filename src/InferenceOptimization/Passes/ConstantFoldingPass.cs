@@ -168,7 +168,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         try
         {
             // Use elementwise addition - tensors must have compatible shapes
-            if (!left.Shape._dims.SequenceEqual(right.Shape._dims))
+            if (!left.Shape.ToArray().SequenceEqual(right.Shape.ToArray()))
             {
                 // Shape mismatch - cannot fold without broadcasting support
                 return null;
@@ -213,7 +213,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         // Perform vectorized tensor subtraction using Engine operations
         try
         {
-            if (!left.Shape._dims.SequenceEqual(right.Shape._dims))
+            if (!left.Shape.ToArray().SequenceEqual(right.Shape.ToArray()))
             {
                 // Shape mismatch - cannot fold without broadcasting support
                 return null;
@@ -260,7 +260,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         // Perform vectorized tensor multiplication (elementwise) using Engine operations
         try
         {
-            if (!left.Shape._dims.SequenceEqual(right.Shape._dims))
+            if (!left.Shape.ToArray().SequenceEqual(right.Shape.ToArray()))
             {
                 // Shape mismatch - cannot fold without broadcasting support
                 return null;
@@ -305,7 +305,7 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
         // Perform vectorized tensor division using Engine operations
         try
         {
-            if (!left.Shape._dims.SequenceEqual(right.Shape._dims))
+            if (!left.Shape.ToArray().SequenceEqual(right.Shape.ToArray()))
             {
                 // Shape mismatch - cannot fold without broadcasting support
                 return null;
@@ -371,13 +371,13 @@ public class ConstantFoldingPass<T> : OptimizationPassBase<T> where T : struct
 
                 if (baseValue == null || exponentValue == null) return null;
 
-                if (!baseValue.Shape._dims.SequenceEqual(exponentValue.Shape._dims))
+                if (!baseValue.Shape.ToArray().SequenceEqual(exponentValue.Shape.ToArray()))
                 {
                     return null;
                 }
 
                 // Elementwise power using scalar operations
-                var result = new Tensor<T>(baseValue.Shape._dims);
+                var result = new Tensor<T>(baseValue.Shape.ToArray());
                 for (int i = 0; i < baseValue.Length; i++)
                 {
                     var b = numOps.ToDouble(baseValue[i]);

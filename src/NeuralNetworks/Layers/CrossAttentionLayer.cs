@@ -198,9 +198,9 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     private Tensor<T> ForwardCrossAttention(Tensor<T> query, Tensor<T> context)
     {
         // Store original shape for any-rank tensor support
-        _originalQueryShape = query.Shape._dims;
-        var queryShape = query.Shape._dims;
-        var contextShape = context.Shape._dims;
+        _originalQueryShape = query.Shape.ToArray();
+        var queryShape = query.Shape.ToArray();
+        var contextShape = context.Shape.ToArray();
         int queryRank = queryShape.Length;
 
         // Handle any-rank query input
@@ -384,7 +384,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     {
         // [B, C, H, W] -> [B, L, C] where L = H*W
         // Use IEngine for GPU-accelerated permute and reshape
-        var shape = input.Shape._dims;
+        var shape = input.Shape.ToArray();
         int batch = shape[0];
         int channels = shape[1];
         int height = shape[2];
@@ -427,7 +427,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         // weights: [inputDim, outputDim]
         // output: [B, seqLen, outputDim]
         // Use IEngine for GPU-accelerated batched matrix multiplication
-        var inputShape = input.Shape._dims;
+        var inputShape = input.Shape.ToArray();
         int batch = inputShape[0];
         int seqLen = inputShape[1];
         int inputDim = inputShape[2];
@@ -516,7 +516,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         }
 
         // Compute weight gradients
-        var queryShape = _lastQuery.Shape._dims;
+        var queryShape = _lastQuery.Shape.ToArray();
         int batch = queryShape[0];
         int seqLen = queryShape[1];
 
@@ -526,8 +526,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
         // dL/d(Wo) = sum_b(attended_b^T @ grad_b)
         // dL/d(bo) = sum(grad, dims=[0,1])
-        _outputWeightsGradient = new Tensor<T>(_outputWeights.Shape._dims);
-        _outputBiasGradient = new Tensor<T>(_outputBias.Shape._dims);
+        _outputWeightsGradient = new Tensor<T>(_outputWeights.Shape.ToArray());
+        _outputBiasGradient = new Tensor<T>(_outputBias.Shape.ToArray());
         for (int b = 0; b < batch; b++)
         {
             var attendedB = _lastOutput != null
@@ -542,9 +542,9 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
         // Q/K/V weight gradients: approximate via chain rule through projection
         // dL/d(Wq) ≈ query^T @ dL/d(Q), where dL/d(Q) ≈ dAttended (simplified)
-        _queryWeightsGradient = new Tensor<T>(_queryWeights.Shape._dims);
-        _keyWeightsGradient = new Tensor<T>(_keyWeights.Shape._dims);
-        _valueWeightsGradient = new Tensor<T>(_valueWeights.Shape._dims);
+        _queryWeightsGradient = new Tensor<T>(_queryWeights.Shape.ToArray());
+        _keyWeightsGradient = new Tensor<T>(_keyWeights.Shape.ToArray());
+        _valueWeightsGradient = new Tensor<T>(_valueWeights.Shape.ToArray());
         for (int b = 0; b < batch; b++)
         {
             var queryB = _lastQuery.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
@@ -801,8 +801,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         IGpuTensor<T> query = inputs[0];
         IGpuTensor<T> context = inputs.Length >= 2 ? inputs[1] : inputs[0];
 
-        int[] queryShape = query.Shape._dims;
-        int[] contextShape = context.Shape._dims;
+        int[] queryShape = query.Shape.ToArray();
+        int[] contextShape = context.Shape.ToArray();
         int queryRank = queryShape.Length;
 
         // Store original shape for output
@@ -979,7 +979,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
     private static IGpuTensor<T> ReshapeNCHWToNLCGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> input)
     {
-        int[] shape = input.Shape._dims;
+        int[] shape = input.Shape.ToArray();
         int batch = shape[0];
         int channels = shape[1];
         int height = shape[2];

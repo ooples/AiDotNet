@@ -617,7 +617,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
     /// </summary>
     private Tensor<T> ExtractLastTimestep(Tensor<T> sequenceOutput)
     {
-        var shape = sequenceOutput.Shape._dims;
+        var shape = sequenceOutput.Shape.ToArray();
         if (shape.Length < 2) return sequenceOutput;
 
         // Assuming shape [batch, seq, hidden] or [batch, hidden]

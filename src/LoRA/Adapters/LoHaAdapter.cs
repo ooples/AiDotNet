@@ -214,7 +214,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> lohaDelta = ComputeLoHaDelta(input);
 
         // Sum the outputs: base + loha_delta
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape._dims);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], lohaDelta[i]);
@@ -357,7 +357,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> lohaInputGrad = ComputeLoHaGradients(outputGradient);
 
         // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(lohaInputGrad.Shape._dims);
+        Tensor<T> inputGrad = new Tensor<T>(lohaInputGrad.Shape.ToArray());
         for (int i = 0; i < lohaInputGrad.Length; i++)
         {
             inputGrad[i] = NumOps.Add(lohaInputGrad[i], baseInputGrad[i]);

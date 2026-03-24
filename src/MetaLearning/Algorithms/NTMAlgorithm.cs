@@ -1413,7 +1413,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
     private int GetTensorLength(Tensor<T> tensor)
     {
         int length = 1;
-        foreach (int dim in tensor.Shape._dims)
+        foreach (int dim in tensor.Shape.ToArray())
         {
             length *= dim;
         }
@@ -1813,7 +1813,7 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
     private int GetTensorLength(Tensor<T> tensor)
     {
         int length = 1;
-        foreach (int dim in tensor.Shape._dims)
+        foreach (int dim in tensor.Shape.ToArray())
         {
             length *= dim;
         }

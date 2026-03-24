@@ -294,7 +294,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraOutput = MaskOutputToRank(fullLoraOutput, activeRank);
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape._dims);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
@@ -444,7 +444,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraInputGrad = BackwardWithRank(outputGradient, _cachedInput, _cachedActiveRank);
 
         // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape._dims);
+        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape.ToArray());
         for (int i = 0; i < baseInputGrad.Length; i++)
         {
             inputGrad[i] = NumOps.Add(baseInputGrad[i], loraInputGrad[i]);
@@ -729,7 +729,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
                     totalLoss = NumOps.Add(totalLoss, loss);
 
                     // Compute output gradient (simplified - assumes MSE loss)
-                    Tensor<T> outputGrad = new Tensor<T>(output.Shape._dims);
+                    Tensor<T> outputGrad = new Tensor<T>(output.Shape.ToArray());
                     for (int j = 0; j < output.Length; j++)
                     {
                         outputGrad[j] = NumOps.Subtract(output[j], targets[i][j]);

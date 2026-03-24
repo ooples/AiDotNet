@@ -203,7 +203,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
 
         int batchSize;
         int inputLen;
@@ -378,7 +378,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _gpuInput = input;
-            _gpuInputShape = input.Shape._dims.ToArray();
+            _gpuInputShape = input.Shape.ToArray().ToArray();
         }
 
         // Cache weights to GPU: flatten [OutputFeatures, InputFeatures] for the kernel
@@ -437,7 +437,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             else
             {
                 var newShape = new int[input.Shape.Length];
-                Array.Copy(input.Shape._dims, newShape, input.Shape.Length - 1);
+                Array.Copy(input.Shape.ToArray(), newShape, input.Shape.Length - 1);
                 newShape[^1] = OutputFeatures;
                 outputShape = newShape;
             }
@@ -651,7 +651,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         // Initialize gradients
         _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);
         _biasesGradient = new Matrix<T>(OutputFeatures, InputFeatures);
-        var inputGradient = new Tensor<T>(_lastInput.Shape._dims);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         // Compute gradients using proper Riemannian gradient descent for Poincaré ball geometry.
         // For the Poincaré ball with curvature c, the conformal factor is:

@@ -525,7 +525,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
                 inputGradData[i] = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);
             }
 
-            return new Tensor<T>(loraInputGrad.Shape._dims, inputGradData);
+            return new Tensor<T>(loraInputGrad.Shape.ToArray(), inputGradData);
         }
         else
         {

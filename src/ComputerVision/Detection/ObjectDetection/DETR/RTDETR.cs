@@ -472,7 +472,7 @@ internal class RTDETREncoderLayer<T>
         int seqLen = x.Shape[1];
         int ffnDim = _ffn1.OutputSize;
 
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -585,7 +585,7 @@ internal class CrossScaleModule<T>
         }
 
         // Fuse and add back to each level
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             result[i] = x[i];

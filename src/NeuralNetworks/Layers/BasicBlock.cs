@@ -287,7 +287,7 @@ public class BasicBlock<T> : LayerBase<T>
 
         // Backward through identity branch
         int elementCount = gradConv1.ElementCount;
-        int[] resultShape = (int[])gradConv1.Shape._dims.Clone();
+        int[] resultShape = (int[])gradConv1.Shape.ToArray().Clone();
         IGpuTensor<T> gradInput;
 
         if (_hasDownsample && _downsampleBn is not null && _downsampleConv is not null)
@@ -329,7 +329,7 @@ public class BasicBlock<T> : LayerBase<T>
         {
             // CPU fallback
             var gradData = backend.DownloadBuffer(gradient.Buffer);
-            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), gradient.Shape._dims);
+            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), gradient.Shape.ToArray());
             var cpuResult = layer.Backward(cpuGrad);
             return gpuEngine.UploadToGpu(cpuResult, GpuTensorRole.Gradient);
         }

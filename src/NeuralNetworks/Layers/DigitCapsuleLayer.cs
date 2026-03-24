@@ -327,7 +327,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
         // Copy to weights tensor - reshape maintains the same underlying data
-        _weights = scaled.Reshape(_weights.Shape._dims);
+        _weights = scaled.Reshape(_weights.Shape.ToArray());
     }
 
     /// <summary>
@@ -359,7 +359,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse to 3D [B, I, D_in] for capsule processing
@@ -421,7 +421,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
                 else
                 {
                     throw new ArgumentException(
-                        $"Input shape {string.Join(",", input.Shape._dims)} cannot be reshaped to [B, {_inputCapsules}, {_inputCapsuleDimension}]");
+                        $"Input shape {string.Join(",", input.Shape.ToArray())} cannot be reshaped to [B, {_inputCapsules}, {_inputCapsuleDimension}]");
                 }
             }
         }
@@ -525,7 +525,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var inputShape = input.Shape._dims;
+        var inputShape = input.Shape.ToArray();
         int rank = inputShape.Length;
 
         // Determine batch size and reshape to [B, I, D_in] for capsule processing
@@ -685,7 +685,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         // J_lk = d(squash_l)/d(s_k) = a * (δ_lk/||s|| - s_l*s_k/||s||^3) + da/d(||s||^2) * 2*s_k * s_l/||s||
         // where da/d(||s||^2) = 1/(1+||s||^2)^2
         // dL/d(s_k) = sum_l dL/d(squash_l) * J_lk
-        var activationGradient = new Tensor<T>(outputGradient3D.Shape._dims);
+        var activationGradient = new Tensor<T>(outputGradient3D.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
         {
             for (int j = 0; j < _numClasses; j++)
@@ -702,8 +702,8 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
             }
         }
 
-        _weightsGradient = new Tensor<T>(_weights.Shape._dims);
-        var inputGradient = new Tensor<T>(_lastInput.Shape._dims);
+        _weightsGradient = new Tensor<T>(_weights.Shape.ToArray());
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         var softmaxActivation = new SoftmaxActivation<T>();
         var routingWeights = softmaxActivation.Activate(_lastCouplings);
@@ -1012,7 +1012,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         }
 
         // Write parameters directly into a new mutable tensor
-        _weights = new Tensor<T>(_weights.Shape._dims);
+        _weights = new Tensor<T>(_weights.Shape.ToArray());
         for (int i = 0; i < parameters.Length; i++)
             _weights[i] = parameters[i];
     }

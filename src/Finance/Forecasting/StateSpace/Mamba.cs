@@ -944,7 +944,7 @@ public class Mamba<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1034,7 +1034,7 @@ public class Mamba<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var result = new Tensor<T>(input.Shape._dims);
+        var result = new Tensor<T>(input.Shape.ToArray());
         int contextLen = _contextLength;
 
         for (int i = 0; i < contextLen - stepsUsed; i++)

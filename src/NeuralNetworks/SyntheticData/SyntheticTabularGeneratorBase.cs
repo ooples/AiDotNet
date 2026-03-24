@@ -253,7 +253,7 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
         if (norm <= maxNorm) return grad;
 
         double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(grad.Shape._dims);
+        var clipped = new Tensor<T>(grad.Shape.ToArray());
         for (int i = 0; i < grad.Length; i++)
         {
             clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);

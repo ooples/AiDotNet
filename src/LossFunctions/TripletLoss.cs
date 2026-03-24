@@ -245,9 +245,9 @@ public class TripletLoss<T> : LossFunctionBase<T>
             batchSize, embeddingSize, margin);
 
         // Create gradient tensors
-        var anchorGradTensor = new GpuTensor<T>(backend, anchorGradBuffer, anchor.Shape._dims, GpuTensorRole.Gradient);
-        var positiveGradTensor = new GpuTensor<T>(backend, positiveGradBuffer, positive.Shape._dims, GpuTensorRole.Gradient);
-        var negativeGradTensor = new GpuTensor<T>(backend, negativeGradBuffer, negative.Shape._dims, GpuTensorRole.Gradient);
+        var anchorGradTensor = new GpuTensor<T>(backend, anchorGradBuffer, anchor.Shape.ToArray(), GpuTensorRole.Gradient);
+        var positiveGradTensor = new GpuTensor<T>(backend, positiveGradBuffer, positive.Shape.ToArray(), GpuTensorRole.Gradient);
+        var negativeGradTensor = new GpuTensor<T>(backend, negativeGradBuffer, negative.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), anchorGradTensor, positiveGradTensor, negativeGradTensor);
     }

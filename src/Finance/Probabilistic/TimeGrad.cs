@@ -509,7 +509,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), noise.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape._dims));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -903,7 +903,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     private (Tensor<T> noisyData, Tensor<T> noise) AddNoise(Tensor<T> data, int t)
     {
         var noise = GenerateNoise(data.Data.Length);
-        var noisyData = new Tensor<T>(data.Shape._dims);
+        var noisyData = new Tensor<T>(data.Shape.ToArray());
 
         double sqrtAlphaBar = _sqrtAlphasCumprod[t];
         double sqrtOneMinusAlphaBar = _sqrtOneMinusAlphasCumprod[t];
@@ -932,7 +932,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> DenoisingStep(Tensor<T> noisySample, Tensor<T> predictedNoise, int t)
     {
-        var result = new Tensor<T>(noisySample.Shape._dims);
+        var result = new Tensor<T>(noisySample.Shape.ToArray());
 
         double alpha = _alphas[t];
         double alphaBar = _alphasCumprod[t];
@@ -1056,7 +1056,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape._dims)
+        foreach (var dim in input.Shape.ToArray())
         {
             totalSize *= dim;
         }
@@ -1152,7 +1152,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
         int inputLength = input.Data.Length;
         int predLength = Math.Min(prediction.Data.Length, inputLength);
 
-        var shifted = new Tensor<T>(input.Shape._dims);
+        var shifted = new Tensor<T>(input.Shape.ToArray());
 
         for (int i = predLength; i < inputLength; i++)
         {

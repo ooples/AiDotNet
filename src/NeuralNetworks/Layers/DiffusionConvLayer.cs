@@ -430,10 +430,10 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape._dims, NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape.ToArray(), NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape._dims);
+        _biases = new Tensor<T>(_biases.Shape.ToArray());
         Engine.TensorFill(_biases, NumOps.Zero);
     }
 
@@ -855,7 +855,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        int[] shape = input.Shape._dims;
+        int[] shape = input.Shape.ToArray();
 
         // Handle batched vs non-batched input
         int batchSize;
@@ -1419,18 +1419,18 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             var weightGradData = backend.DownloadBuffer(weightGradBuffer);
             _weightsGradient = new Tensor<T>(
                 DirectGpuEngine.FromFloatArray<T>(weightGradData),
-                _weights.Shape._dims);
+                _weights.Shape.ToArray());
 
             var biasGradData = backend.DownloadBuffer(biasGradBuffer);
             _biasesGradient = new Tensor<T>(
                 DirectGpuEngine.FromFloatArray<T>(biasGradData),
-                _biases.Shape._dims);
+                _biases.Shape.ToArray());
 
             _gpuWeightsGradient?.Dispose();
             _gpuWeightsGradient = new GpuTensor<T>(
                 backend,
                 weightGradBuffer,
-                _weights.Shape._dims,
+                _weights.Shape.ToArray(),
                 GpuTensorRole.Gradient,
                 ownsBuffer: true);
             weightGradBuffer = null;
@@ -1439,7 +1439,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             _gpuBiasesGradient = new GpuTensor<T>(
                 backend,
                 biasGradBuffer,
-                _biases.Shape._dims,
+                _biases.Shape.ToArray(),
                 GpuTensorRole.Gradient,
                 ownsBuffer: true);
             biasGradBuffer = null;
@@ -2061,9 +2061,9 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
 
         int idx = 0;
-        _weights = new Tensor<T>(_weights.Shape._dims, parameters.Slice(idx, _weights.Length));
+        _weights = new Tensor<T>(_weights.Shape.ToArray(), parameters.Slice(idx, _weights.Length));
         idx += _weights.Length;
-        _biases = new Tensor<T>(_biases.Shape._dims, parameters.Slice(idx, _biases.Length));
+        _biases = new Tensor<T>(_biases.Shape.ToArray(), parameters.Slice(idx, _biases.Length));
         idx += _biases.Length;
 
         for (int i = 0; i < DiffusionTimes.Length; i++)
@@ -2270,7 +2270,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         {
             weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _weights = new Tensor<T>(weightArray, _weights.Shape._dims);
+        _weights = new Tensor<T>(weightArray, _weights.Shape.ToArray());
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[_biases.Length];
@@ -2278,7 +2278,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         {
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _biases = new Tensor<T>(biasArray, _biases.Shape._dims);
+        _biases = new Tensor<T>(biasArray, _biases.Shape.ToArray());
 
         DiffusionTimes = new T[NumTimeScales];
         for (int i = 0; i < NumTimeScales; i++)

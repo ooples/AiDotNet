@@ -355,7 +355,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         var effectiveNumFrames = numFrames ?? DefaultNumFrames;
         var effectiveMotionBucket = motionBucketId ?? MotionBucketId;
 
-        var imageShape = inputImage.Shape._dims;
+        var imageShape = inputImage.Shape.ToArray();
         var height = imageShape[2];
         var width = imageShape[3];
 
@@ -425,7 +425,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         var effectiveNumFrames = numFrames ?? DefaultNumFrames;
         var useCFG = guidanceScale > 1.0;
 
-        var imageShape = image.Shape._dims;
+        var imageShape = image.Shape.ToArray();
         var height = imageShape[2];
         var width = imageShape[3];
 
@@ -537,7 +537,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         // This ensures we don't lose information from either embedding
         int imageSize = imageSpan.Length;
         int textSize = textSpan.Length;
-        var combinedShape = imageSize >= textSize ? imageEmbedding.Shape._dims : textEmbedding.Shape._dims;
+        var combinedShape = imageSize >= textSize ? imageEmbedding.Shape.ToArray() : textEmbedding.Shape.ToArray();
 
         var combined = new Tensor<T>(combinedShape);
         var combinedSpan = combined.AsWritableSpan();
@@ -564,7 +564,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         int timestep,
         Tensor<T> textEmbedding)
     {
-        var videoShape = latents.Shape._dims;
+        var videoShape = latents.Shape.ToArray();
         var numFrames = videoShape[1];
         var result = new Tensor<T>(videoShape);
 
@@ -604,7 +604,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> CombineImageAndMotion(Tensor<T> imageEmbedding, Tensor<T> motionEmbedding)
     {
-        var imageShape = imageEmbedding.Shape._dims;
+        var imageShape = imageEmbedding.Shape.ToArray();
         var result = new Tensor<T>(imageShape);
         var resultSpan = result.AsWritableSpan();
         var imageSpan = imageEmbedding.AsSpan();

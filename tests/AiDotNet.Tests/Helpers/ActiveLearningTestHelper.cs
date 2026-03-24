@@ -250,4 +250,6 @@ public class MockFullModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     }
 
     public bool SupportsJitCompilation => false;
+
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 }

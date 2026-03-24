@@ -74,7 +74,7 @@ public class SceneGraphSafetyClassifier<T> : ImageSafetyModuleBase<T>
         var span = image.Data.Span;
         if (span.Length == 0) return findings;
 
-        var layout = DetermineLayout(image.Shape._dims, span.Length);
+        var layout = DetermineLayout(image.Shape.ToArray(), span.Length);
         if (layout.Height < _gridSize || layout.Width < _gridSize) return findings;
 
         // Build scene graph: characterize each grid cell

@@ -529,7 +529,7 @@ public class GOGGLEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         if (_transformer is null) return decoded;
 
         var output = VectorToTensor(decoded);
-        var result = new Tensor<T>(output.Shape._dims);
+        var result = new Tensor<T>(output.Shape.ToArray());
         int idx = 0;
 
         for (int col = 0; col < Columns.Count && idx < output.Length; col++)

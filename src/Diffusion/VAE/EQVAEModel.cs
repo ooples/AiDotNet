@@ -178,7 +178,7 @@ public class EQVAEModel<T> : VAEModelBase<T>
     public override (Tensor<T> Mean, Tensor<T> LogVariance) EncodeWithDistribution(Tensor<T> image)
     {
         var mean = Encode(image, sampleMode: false);
-        var logVar = new Tensor<T>(mean.Shape._dims);
+        var logVar = new Tensor<T>(mean.Shape.ToArray());
         return (mean, logVar);
     }
 
@@ -203,7 +203,7 @@ public class EQVAEModel<T> : VAEModelBase<T>
         var latentTrans = Encode(transformed);
 
         // L2 distance between latent representations should be preserved
-        var diff = new Tensor<T>(latentOrig.Shape._dims);
+        var diff = new Tensor<T>(latentOrig.Shape.ToArray());
         var origSpan = latentOrig.AsSpan();
         var transSpan = latentTrans.AsSpan();
         var diffSpan = diff.AsWritableSpan();

@@ -200,7 +200,7 @@ public class TransformedDataLoader<T> :
                     "Transform must preserve sample element count.");
             }
 
-            return new Tensor<T>(transformed, tensor.Shape._dims);
+            return new Tensor<T>(transformed, tensor.Shape.ToArray());
         }
 
         int sampleCount = tensor.Shape[0];
@@ -249,6 +249,6 @@ public class TransformedDataLoader<T> :
             pool.Return(sampleBuffer);
         }
 
-        return new Tensor<T>(resultData, tensor.Shape._dims);
+        return new Tensor<T>(resultData, tensor.Shape.ToArray());
     }
 }

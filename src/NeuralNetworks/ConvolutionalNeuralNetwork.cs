@@ -300,7 +300,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         var outputGradient = CalculateOutputGradient(prediction, expectedOutput);
 
         // Convert output gradient back to a tensor
-        var outputGradientTensor = new Tensor<T>(prediction.Shape._dims, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         // Backpropagation
         var gradients = new List<Tensor<T>>();

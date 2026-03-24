@@ -3519,7 +3519,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         int targetClass = -1)
     {
         // Get input shape from the tensor
-        int[] inputShape = input.Shape._dims;
+        int[] inputShape = input.Shape.ToArray();
 
         // For GradCAM we need feature map shape, which depends on the network architecture
         // Default to a reasonable size; users can override with the helper method directly
@@ -3986,7 +3986,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         var prediction = Predict(input);
         var lossDerivative = loss.CalculateDerivative(prediction.ToVector(), target.ToVector());
-        var outputGradients = new Tensor<T>(prediction.Shape._dims, lossDerivative);
+        var outputGradients = new Tensor<T>(prediction.Shape.ToArray(), lossDerivative);
 
         Backpropagate(outputGradients);
 

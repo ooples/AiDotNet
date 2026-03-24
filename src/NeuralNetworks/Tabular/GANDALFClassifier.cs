@@ -188,7 +188,7 @@ public class GANDALFClassifier<T> : GANDALFBase<T>
         int batchSize = _probabilitiesCache.Shape[0];
 
         // Gradient of cross-entropy + softmax
-        var logitsGrad = new Tensor<T>(_logitsCache.Shape._dims);
+        var logitsGrad = new Tensor<T>(_logitsCache.Shape.ToArray());
         var scale = NumOps.FromDouble(1.0 / batchSize);
 
         for (int b = 0; b < batchSize; b++)

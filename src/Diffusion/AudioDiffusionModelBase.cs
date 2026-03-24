@@ -305,7 +305,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
 
         // Encode to latent space
         var latents = EncodeToLatent(inputMel, sampleMode: false);
-        var latentShape = latents.Shape._dims;
+        var latentShape = latents.Shape.ToArray();
 
         // Encode text prompts
         var promptTokens = Conditioner.Tokenize(prompt);
@@ -378,7 +378,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
 
         // Encode to latent
         var inputLatents = EncodeToLatent(inputMel, sampleMode: false);
-        var inputShape = inputLatents.Shape._dims;
+        var inputShape = inputLatents.Shape.ToArray();
 
         // Calculate extension latent dimensions
         var extensionSamples = (int)(extensionSeconds * SampleRate);
@@ -434,7 +434,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         // Ensure the mel spectrogram processor is initialized
         EnsureMelSpectrogramProcessorInitialized();
 
-        var waveformShape = waveform.Shape._dims;
+        var waveformShape = waveform.Shape.ToArray();
         var batchSize = waveformShape[0];
         var numSamples = waveformShape[^1];
 
@@ -517,7 +517,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         EnsureMelSpectrogramProcessorInitialized();
         EnsureGriffinLimProcessorInitialized();
 
-        var melShape = melSpectrogram.Shape._dims;
+        var melShape = melSpectrogram.Shape.ToArray();
         var batchSize = melShape[0];
         var numFrames = melShape[^1];
         var numSamples = (numFrames - 1) * HopLength;
@@ -601,7 +601,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         EnsureMelSpectrogramProcessorInitialized();
 
         // Extract mel spectrogram features from the reference audio
-        var audioShape = referenceAudio.Shape._dims;
+        var audioShape = referenceAudio.Shape.ToArray();
         var numSamples = audioShape[^1];
 
         // Get single channel waveform for processing
@@ -727,7 +727,7 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual Tensor<T> ExtractLatentContext(Tensor<T> latents)
     {
-        var shape = latents.Shape._dims;
+        var shape = latents.Shape.ToArray();
         var contextFrames = Math.Min(shape[^1], 16); // Use last 16 frames as context
 
         var contextShape = new int[shape.Length];

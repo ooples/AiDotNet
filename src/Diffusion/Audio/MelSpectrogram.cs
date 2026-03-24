@@ -311,7 +311,7 @@ public class MelSpectrogram<T>
     /// <returns>dB spectrogram.</returns>
     private Tensor<T> PowerToDb(Tensor<T> power)
     {
-        var db = new Tensor<T>(power.Shape._dims);
+        var db = new Tensor<T>(power.Shape.ToArray());
         T refValue = NumOps.FromDouble(_refDb);
         T minDbT = NumOps.FromDouble(_minDb);
         T epsilon = NumOps.FromDouble(1e-10);
@@ -343,7 +343,7 @@ public class MelSpectrogram<T>
     /// <returns>Power spectrogram.</returns>
     public Tensor<T> DbToPower(Tensor<T> db)
     {
-        var power = new Tensor<T>(db.Shape._dims);
+        var power = new Tensor<T>(db.Shape.ToArray());
         T refValue = NumOps.FromDouble(_refDb);
         T divisor = NumOps.FromDouble(10.0);
 
@@ -536,7 +536,7 @@ public class MelSpectrogram<T>
     /// <returns>Filterbank matrix [nMels, numFreqs].</returns>
     public Tensor<T> GetFilterbank()
     {
-        var copy = new Tensor<T>(_melFilterbank.Shape._dims);
+        var copy = new Tensor<T>(_melFilterbank.Shape.ToArray());
         _melFilterbank.Data.Span.CopyTo(copy.Data.Span);
         return copy;
     }

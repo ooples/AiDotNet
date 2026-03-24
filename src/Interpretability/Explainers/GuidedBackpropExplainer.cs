@@ -149,10 +149,10 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
         var explanation = Explain(vector, targetClass);
 
         // Reshape gradients back to tensor shape
-        var gradTensor = new Tensor<T>(input.Shape._dims);
+        var gradTensor = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < Math.Min(vector.Length, explanation.GuidedGradients.Length); i++)
         {
-            gradTensor[GetMultiIndex(i, input.Shape._dims)] = explanation.GuidedGradients[i];
+            gradTensor[GetMultiIndex(i, input.Shape.ToArray())] = explanation.GuidedGradients[i];
         }
 
         return new GuidedBackpropExplanation<T>(
@@ -160,7 +160,7 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
             guidedGradients: explanation.GuidedGradients,
             targetClass: explanation.TargetClass,
             prediction: explanation.Prediction,
-            inputShape: input.Shape._dims,
+            inputShape: input.Shape.ToArray(),
             gradientTensor: gradTensor);
     }
 
@@ -287,7 +287,7 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
             var tensor = new Tensor<T>(_inputShape ?? new[] { input.Length });
             for (int i = 0; i < input.Length; i++)
             {
-                tensor[GetMultiIndex(i, tensor.Shape._dims)] = input[i];
+                tensor[GetMultiIndex(i, tensor.Shape.ToArray())] = input[i];
             }
             return _tensorPredictFunction(tensor).ToVector();
         }

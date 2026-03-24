@@ -513,7 +513,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse to 2D for processing
@@ -700,7 +700,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var activationGradient = ApplyActivationDerivative(_lastPreActivation, normalizedOutputGradient);
 
         // Step 2: Backpropagate through experts
-        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape._dims);
+        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape.ToArray());
 
         for (int i = 0; i < _experts.Count; i++)
         {
@@ -750,7 +750,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var activationGradient = ApplyActivationDerivative(_lastPreActivation, normalizedOutputGradient);
 
         // Step 2: Backpropagate through experts (composite - each expert handles its own autodiff)
-        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape._dims);
+        var inputGradientFromExperts = new Tensor<T>(_lastInput.Shape.ToArray());
 
         for (int i = 0; i < _experts.Count; i++)
         {
@@ -1467,7 +1467,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // VECTORIZED: Scatter normalized values back to full expert dimension
         // Create zero tensor for sparse weights
-        var sparseWeights = new Tensor<T>(weights.Shape._dims);
+        var sparseWeights = new Tensor<T>(weights.Shape.ToArray());
         sparseWeights.Fill(NumOps.Zero);
 
         // Use TensorScatter to place normalized values at correct positions
@@ -1524,7 +1524,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Initialize combined output with zeros
-        var combined = new Tensor<T>(expertOutputs[0].Shape._dims);
+        var combined = new Tensor<T>(expertOutputs[0].Shape.ToArray());
         combined.Fill(NumOps.Zero);
 
         // Vectorized: For each expert, multiply its output by routing weights and accumulate
@@ -1726,7 +1726,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             if (outputGradient.Length == _lastPreActivation.Length)
             {
-                return outputGradient.Reshape(_lastPreActivation.Shape._dims);
+                return outputGradient.Reshape(_lastPreActivation.Shape.ToArray());
             }
 
             throw new ArgumentException("Output gradient shape does not match layer output.");
@@ -2022,7 +2022,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // topKIndicesFlat: [batchSize * k] - pre-downloaded expert indices
 
         // Get first expert output to determine output shape
-        int[] outputShape = expertOutputsGpu[0].Shape._dims;
+        int[] outputShape = expertOutputsGpu[0].Shape.ToArray();
 
         // Initialize combined output to zeros
         var combinedGpu = gpuEngine.ZerosGpu<T>(outputShape);
@@ -2076,7 +2076,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // expertOutputsGpu[i]: [batchSize, outputDim...]
 
         int numExperts = expertOutputsGpu.Count;
-        int[] outputShape = expertOutputsGpu[0].Shape._dims;
+        int[] outputShape = expertOutputsGpu[0].Shape.ToArray();
 
         // Initialize combined output to zeros
         var combinedGpu = gpuEngine.ZerosGpu<T>(outputShape);
@@ -2113,7 +2113,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = aData.Shape[0];
         int features = aData.Shape[1];
 
-        var result = TensorAllocator.Rent<T>(aData.Shape._dims);
+        var result = TensorAllocator.Rent<T>(aData.Shape.ToArray());
         for (int i = 0; i < batchSize; i++)
         {
             T divisor = bData[i, 0];

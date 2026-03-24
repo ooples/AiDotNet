@@ -323,7 +323,7 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(predSlice.ToVector(), targetSlice.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(predSlice.ToVector(), targetSlice.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, predicted.Shape._dims));
+            BackwardNative(Tensor<T>.FromVector(gradient, predicted.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -477,7 +477,7 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape._dims);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -700,12 +700,12 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
         int t = rand.Next(_numDiffusionSteps);
 
         // Generate noise
-        var noise = new Tensor<T>(target.Shape._dims);
+        var noise = new Tensor<T>(target.Shape.ToArray());
         for (int i = 0; i < noise.Length; i++)
             noise.Data.Span[i] = NumOps.FromDouble(SampleStandardNormal(rand));
 
         // Create noisy target: x_t = sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * eps
-        var noisyTarget = new Tensor<T>(target.Shape._dims);
+        var noisyTarget = new Tensor<T>(target.Shape.ToArray());
         for (int i = 0; i < target.Length; i++)
         {
             double x0 = NumOps.ToDouble(target[i]);

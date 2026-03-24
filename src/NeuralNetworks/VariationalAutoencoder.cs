@@ -620,7 +620,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         var reconstructed = Decode(latentSample);
 
         // Reshape the output to match the input shape
-        return new Tensor<T>(input.Shape._dims, reconstructed);
+        return new Tensor<T>(input.Shape.ToArray(), reconstructed);
     }
 
     /// <summary>

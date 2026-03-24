@@ -312,7 +312,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with shape [1, channels, height, width].</returns>
     private static Tensor<T> AddBatchDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape._dims;
+        int[] inputShape = input.Shape.ToArray();
         int[] resultShape = new int[inputShape.Length + 1];
 
         // Add batch dimension of size 1
@@ -420,7 +420,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
 
         // Calculate output gradient
         var outputGradient = CalculateOutputGradient(prediction, expectedOutput);
-        var outputGradientTensor = new Tensor<T>(prediction.Shape._dims, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         // Backpropagation: propagate gradients through all layers
         // Each layer stores its parameter gradients internally during Backward()

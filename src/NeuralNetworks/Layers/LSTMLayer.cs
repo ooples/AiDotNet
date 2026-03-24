@@ -986,7 +986,7 @@ public class LSTMLayer<T> : LayerBase<T>
         var randomTensor = Tensor<T>.CreateRandom(weight.Shape[0], weight.Shape[1]);
 
         // Shift to [-0.5, 0.5] range: random - 0.5
-        var halfTensor = new Tensor<T>(weight.Shape._dims);
+        var halfTensor = new Tensor<T>(weight.Shape.ToArray());
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -1051,7 +1051,7 @@ public class LSTMLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims into batch for rank > 3
@@ -1225,7 +1225,7 @@ public class LSTMLayer<T> : LayerBase<T>
             batchSize = 1;
             timeSteps = input.Shape[0];
             reshaped2D = true;
-            originalShape = input.Shape._dims;
+            originalShape = input.Shape.ToArray();
         }
         else if (rank == 3)
         {
@@ -1236,7 +1236,7 @@ public class LSTMLayer<T> : LayerBase<T>
         else
         {
             // Higher-rank tensor: collapse leading dims into batch
-            originalShape = input.Shape._dims;
+            originalShape = input.Shape.ToArray();
             reshapedHigherRank = true;
             timeSteps = input.Shape[rank - 2];
             batchSize = 1;
@@ -1985,19 +1985,19 @@ public class LSTMLayer<T> : LayerBase<T>
 
         int batchSize = _lastInput.Shape[0];
         int timeSteps = _lastInput.Shape[1];
-        var inputGradient = new Tensor<T>(_lastInput.Shape._dims);
-        var dWeightsFi = new Tensor<T>(_weightsFi.Shape._dims);
-        var dWeightsIi = new Tensor<T>(_weightsIi.Shape._dims);
-        var dWeightsCi = new Tensor<T>(_weightsCi.Shape._dims);
-        var dWeightsOi = new Tensor<T>(_weightsOi.Shape._dims);
-        var dWeightsFh = new Tensor<T>(_weightsFh.Shape._dims);
-        var dWeightsIh = new Tensor<T>(_weightsIh.Shape._dims);
-        var dWeightsCh = new Tensor<T>(_weightsCh.Shape._dims);
-        var dWeightsOh = new Tensor<T>(_weightsOh.Shape._dims);
-        var dBiasF = new Tensor<T>(_biasF.Shape._dims);
-        var dBiasI = new Tensor<T>(_biasI.Shape._dims);
-        var dBiasC = new Tensor<T>(_biasC.Shape._dims);
-        var dBiasO = new Tensor<T>(_biasO.Shape._dims);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
+        var dWeightsFi = new Tensor<T>(_weightsFi.Shape.ToArray());
+        var dWeightsIi = new Tensor<T>(_weightsIi.Shape.ToArray());
+        var dWeightsCi = new Tensor<T>(_weightsCi.Shape.ToArray());
+        var dWeightsOi = new Tensor<T>(_weightsOi.Shape.ToArray());
+        var dWeightsFh = new Tensor<T>(_weightsFh.Shape.ToArray());
+        var dWeightsIh = new Tensor<T>(_weightsIh.Shape.ToArray());
+        var dWeightsCh = new Tensor<T>(_weightsCh.Shape.ToArray());
+        var dWeightsOh = new Tensor<T>(_weightsOh.Shape.ToArray());
+        var dBiasF = new Tensor<T>(_biasF.Shape.ToArray());
+        var dBiasI = new Tensor<T>(_biasI.Shape.ToArray());
+        var dBiasC = new Tensor<T>(_biasC.Shape.ToArray());
+        var dBiasO = new Tensor<T>(_biasO.Shape.ToArray());
 
         var dNextH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
         var dNextC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
@@ -2097,20 +2097,20 @@ public class LSTMLayer<T> : LayerBase<T>
         int timeSteps = _lastInput.Shape[1];
 
         // Initialize gradient accumulators for all parameters
-        var dWeightsFi = new Tensor<T>(_weightsFi.Shape._dims);
-        var dWeightsIi = new Tensor<T>(_weightsIi.Shape._dims);
-        var dWeightsCi = new Tensor<T>(_weightsCi.Shape._dims);
-        var dWeightsOi = new Tensor<T>(_weightsOi.Shape._dims);
-        var dWeightsFh = new Tensor<T>(_weightsFh.Shape._dims);
-        var dWeightsIh = new Tensor<T>(_weightsIh.Shape._dims);
-        var dWeightsCh = new Tensor<T>(_weightsCh.Shape._dims);
-        var dWeightsOh = new Tensor<T>(_weightsOh.Shape._dims);
-        var dBiasF = new Tensor<T>(_biasF.Shape._dims);
-        var dBiasI = new Tensor<T>(_biasI.Shape._dims);
-        var dBiasC = new Tensor<T>(_biasC.Shape._dims);
-        var dBiasO = new Tensor<T>(_biasO.Shape._dims);
+        var dWeightsFi = new Tensor<T>(_weightsFi.Shape.ToArray());
+        var dWeightsIi = new Tensor<T>(_weightsIi.Shape.ToArray());
+        var dWeightsCi = new Tensor<T>(_weightsCi.Shape.ToArray());
+        var dWeightsOi = new Tensor<T>(_weightsOi.Shape.ToArray());
+        var dWeightsFh = new Tensor<T>(_weightsFh.Shape.ToArray());
+        var dWeightsIh = new Tensor<T>(_weightsIh.Shape.ToArray());
+        var dWeightsCh = new Tensor<T>(_weightsCh.Shape.ToArray());
+        var dWeightsOh = new Tensor<T>(_weightsOh.Shape.ToArray());
+        var dBiasF = new Tensor<T>(_biasF.Shape.ToArray());
+        var dBiasI = new Tensor<T>(_biasI.Shape.ToArray());
+        var dBiasC = new Tensor<T>(_biasC.Shape.ToArray());
+        var dBiasO = new Tensor<T>(_biasO.Shape.ToArray());
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape._dims);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         // Process each time step using autodiff
         for (int t = timeSteps - 1; t >= 0; t--)
@@ -2459,7 +2459,7 @@ public class LSTMLayer<T> : LayerBase<T>
 
                 if (!_velocities.TryGetValue(paramName, out var velocity))
                 {
-                    velocity = new Tensor<T>(param.Shape._dims);
+                    velocity = new Tensor<T>(param.Shape.ToArray());
                     velocity.Fill(NumOps.Zero);
                     var gpu1 = gpuEngine ?? throw new InvalidOperationException("GPU engine is not available.");
                     gpu1.RegisterPersistentTensor(velocity, PersistentTensorRole.OptimizerState);

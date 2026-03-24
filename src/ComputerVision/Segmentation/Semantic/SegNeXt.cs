@@ -428,7 +428,7 @@ public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = _onnxSession.InputMetadata;
 
         string inputName = inputMeta.Keys.FirstOrDefault() ?? "pixel_values";

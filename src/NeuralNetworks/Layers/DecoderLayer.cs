@@ -214,7 +214,7 @@ public class DecoderLayer<T> : LayerBase<T>
         // Handle any rank >= 2: last 2 dims are [seq, features], earlier dims are batch-like
         int rank = decoderInput.Shape.Length;
         _inputWas2D = rank == 2;
-        _originalInputShape = decoderInput.Shape._dims;
+        _originalInputShape = decoderInput.Shape.ToArray();
         Tensor<T> input3D, encoderOutput3D;
 
         if (_inputWas2D)

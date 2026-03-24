@@ -262,7 +262,7 @@ public class FlattenLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        return Engine.Reshape(outputGradient, _lastInput.Shape._dims);
+        return Engine.Reshape(outputGradient, _lastInput.Shape.ToArray());
     }
 
     /// <summary>
@@ -469,7 +469,7 @@ public class FlattenLayer<T> : LayerBase<T>
         // Cache input shape for BackwardGpu
         if (IsTrainingMode)
         {
-            _lastInputGpuShape = input.Shape._dims.ToArray();
+            _lastInputGpuShape = input.Shape.ToArray().ToArray();
         }
 
         // Handle unbatched input (3D: [C, H, W] or 2D: [H, W] or 1D)

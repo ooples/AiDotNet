@@ -443,7 +443,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape._dims));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -672,7 +672,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
 
         _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
         _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
-        var normalized = new Tensor<T>(input.Shape._dims);
+        var normalized = new Tensor<T>(input.Shape.ToArray());
 
         var epsilon = NumOps.FromDouble(1e-5);
 
@@ -806,7 +806,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session not initialized.");
 
         var inputData = ConvertToFloatArray(input);
-        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
+        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
 
         var inputs = new List<NamedOnnxValue>
         {
@@ -842,7 +842,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
         int seqLen = output.Shape[1];
         int features = output.Shape[2];
 
-        var denormalized = new Tensor<T>(output.Shape._dims);
+        var denormalized = new Tensor<T>(output.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -918,7 +918,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
         int seqLen = input.Shape[1];
         int features = input.Shape[2];
 
-        var newInput = new Tensor<T>(input.Shape._dims);
+        var newInput = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

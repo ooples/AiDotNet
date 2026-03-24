@@ -151,7 +151,7 @@ public class HuberLoss<T> : LossFunctionBase<T>
         backend.SmoothL1Backward(predicted.Buffer, actual.Buffer, gradientBuffer, size, beta);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape._dims, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

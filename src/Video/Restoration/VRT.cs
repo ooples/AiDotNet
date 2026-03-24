@@ -374,7 +374,7 @@ public class VRT<T> : VideoSuperResolutionBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -413,7 +413,7 @@ public class VRT<T> : VideoSuperResolutionBase<T>
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape._dims, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         var currentGradient = outputGradientTensor;
         for (int i = Layers.Count - 1; i >= 0; i--)

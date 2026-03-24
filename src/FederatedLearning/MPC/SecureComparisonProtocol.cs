@@ -108,7 +108,7 @@ public class SecureComparisonProtocol<T> : FederatedLearningComponentBase<T>
         for (int p = 0; p < max.Length; p++)
         {
             int total = ComputeTotalElements(max[p]);
-            negMax[p] = new Tensor<T>(max[p].Shape._dims);
+            negMax[p] = new Tensor<T>(max[p].Shape.ToArray());
             for (int i = 0; i < total; i++)
             {
                 negMax[p][i] = NumOps.FromDouble(-NumOps.ToDouble(max[p][i]));
@@ -160,7 +160,7 @@ public class SecureComparisonProtocol<T> : FederatedLearningComponentBase<T>
         for (int p = 0; p < shares.Length; p++)
         {
             int total = ComputeTotalElements(shares[p]);
-            result[p] = new Tensor<T>(shares[p].Shape._dims);
+            result[p] = new Tensor<T>(shares[p].Shape.ToArray());
             for (int i = 0; i < total; i++)
             {
                 double val = NumOps.ToDouble(shares[p][i]);

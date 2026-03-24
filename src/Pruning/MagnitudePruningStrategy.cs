@@ -145,7 +145,7 @@ public class MagnitudePruningStrategy<T> : IPruningStrategy<T>
             scores[i] = _numOps.Abs(flatWeights[i]);
         }
 
-        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights.Shape._dims.Clone());
+        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights.Shape.ToArray().Clone());
     }
 
     #endregion
@@ -462,7 +462,7 @@ public class MagnitudePruningStrategy<T> : IPruningStrategy<T>
         var flatWeights = new T[flatWeightsVec.Length];
         for (int i = 0; i < flatWeightsVec.Length; i++)
             flatWeights[i] = flatWeightsVec[i];
-        var dims = (int[])weights.Shape._dims.Clone();
+        var dims = (int[])weights.Shape.ToArray().Clone();
 
         return format switch
         {

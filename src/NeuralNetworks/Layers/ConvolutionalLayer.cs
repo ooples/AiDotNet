@@ -895,7 +895,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             throw new ArgumentException($"Convolutional layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
         Tensor<T> input4D;
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         if (rank == 3)
@@ -1033,7 +1033,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
                 $"Conv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Reshape input to 4D [B, C, H, W] for convolution
@@ -1173,7 +1173,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int[] dilation = [1, 1];
 
         // Step 1: Compute kernel gradient
-        int[] kernelShape = _kernels.Shape._dims.ToArray();
+        int[] kernelShape = _kernels.Shape.ToArray().ToArray();
         var kernelsGradGpu = gpuEngine.Conv2DBackwardKernelGpu<T>(activationGradient, _lastInputGpu, kernelShape, stride, padding, dilation);
         _kernelsGradient = kernelsGradGpu.ToTensor();
 
@@ -1288,10 +1288,10 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int[] dilationArr = [1, 1];
 
         // Input gradient: dL/dX = ConvTranspose(dL/dY, W)
-        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape._dims, strideArr, paddingArr, dilationArr);
+        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape.ToArray(), strideArr, paddingArr, dilationArr);
 
         // Kernel gradient: dL/dW = Conv(X, dL/dY) - correlation between input and output gradient
-        var kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape._dims, strideArr, paddingArr, dilationArr);
+        var kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape.ToArray(), strideArr, paddingArr, dilationArr);
 
         // Bias gradient: dL/db = sum over batch and spatial dimensions
         // delta shape: [batch, outputDepth, outputH, outputW]
@@ -1511,13 +1511,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             // Initialize velocity tensors if needed (for SGD momentum, even if 0 here)
             if (_kernelsVelocity == null)
             {
-                _kernelsVelocity = new Tensor<T>(_kernels.Shape._dims);
+                _kernelsVelocity = new Tensor<T>(_kernels.Shape.ToArray());
                 _kernelsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_kernelsVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_biasesVelocity == null)
             {
-                _biasesVelocity = new Tensor<T>(_biases.Shape._dims);
+                _biasesVelocity = new Tensor<T>(_biases.Shape.ToArray());
                 _biasesVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
             }

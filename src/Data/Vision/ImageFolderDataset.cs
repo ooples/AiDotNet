@@ -314,7 +314,7 @@ public class ImageFolderDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source.Shape._dims.Clone();
+        var newShape = (int[])source.Shape.ToArray().Clone();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

@@ -206,7 +206,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // PNA is a graph layer: normalize to 3D [batch, nodes, features]
@@ -258,7 +258,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         _lastDegrees = Engine.ReduceSum(_adjacencyMatrix, [2], keepDims: false); // [batch, nodes]
 
         // Avoid division by zero - clamp degrees to minimum of 1
-        var oneTensor = new Tensor<T>(_lastDegrees.Shape._dims);
+        var oneTensor = new Tensor<T>(_lastDegrees.Shape.ToArray());
         oneTensor.Fill(NumOps.One);
         var safeDegrees = Engine.TensorMax(_lastDegrees, oneTensor);
 
@@ -285,7 +285,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         _lastMlpHiddenPreRelu = Engine.TensorAdd(hidden, bias1Broadcast);
 
         // ReLU activation using Engine operations
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape._dims);
+        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape.ToArray());
         zeroTensor.Fill(NumOps.Zero);
         _lastMlpHidden = Engine.TensorMax(_lastMlpHiddenPreRelu, zeroTensor);
 
@@ -362,7 +362,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var input = inputs[0];
 
         // Handle batch dimension
-        int[] inputShape = input.Shape._dims;
+        int[] inputShape = input.Shape.ToArray();
         int batchSize;
         int numNodes;
         int inputFeatures;
@@ -786,11 +786,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var adjExpanded = adjacencyMatrix.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with -inf
-        var negInf = new Tensor<T>(tiled.Shape._dims);
+        var negInf = new Tensor<T>(tiled.Shape.ToArray());
         negInf.Fill(NumOps.MinValue);
 
         // Where adj > 0, use tiled values; else use -inf
-        var zeroTensor = new Tensor<T>(adjExpanded.Shape._dims);
+        var zeroTensor = new Tensor<T>(adjExpanded.Shape.ToArray());
         zeroTensor.Fill(NumOps.Zero);
         var mask = Engine.TensorGreaterThan(adjExpanded, zeroTensor);
 
@@ -821,10 +821,10 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var adjExpanded = adjacencyMatrix.Reshape([batchSize, numNodes, numNodes, 1]);
 
         // Mask non-neighbors with +inf
-        var posInf = new Tensor<T>(tiled.Shape._dims);
+        var posInf = new Tensor<T>(tiled.Shape.ToArray());
         posInf.Fill(NumOps.MaxValue);
 
-        var zeroTensor = new Tensor<T>(adjExpanded.Shape._dims);
+        var zeroTensor = new Tensor<T>(adjExpanded.Shape.ToArray());
         zeroTensor.Fill(NumOps.Zero);
         var mask = Engine.TensorGreaterThan(adjExpanded, zeroTensor);
 
@@ -861,7 +861,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var variance = Engine.TensorSubtract(meanSquared, meanSq);
 
         // Add epsilon for numerical stability
-        var epsilon = new Tensor<T>(variance.Shape._dims);
+        var epsilon = new Tensor<T>(variance.Shape.ToArray());
         epsilon.Fill(NumOps.FromDouble(1e-8));
         variance = Engine.TensorAdd(variance, epsilon);
 
@@ -986,10 +986,10 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         var mlpHiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
 
         // ReLU derivative
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape._dims);
+        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape.ToArray());
         zeroTensor.Fill(NumOps.Zero);
         var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape._dims);
+        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape.ToArray());
         oneTensor.Fill(NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var mlpHiddenGrad = Engine.TensorMultiply(mlpHiddenGradPre, reluDeriv);
@@ -1324,7 +1324,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         }
 
         // Extract input gradient
-        var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape._dims);
+        var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape.ToArray());
 
         // Restore gradient to original input shape
         if (_originalInputShape != null && _originalInputShape.Length != 3)
@@ -1383,10 +1383,10 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         // ReLU derivative
         var mlpHiddenPreRelu = _lastMlpHiddenPreRelu ?? throw new InvalidOperationException("_lastMlpHiddenPreRelu has not been initialized.");
-        var zeroTensor = new Tensor<T>(mlpHiddenPreRelu.Shape._dims);
+        var zeroTensor = new Tensor<T>(mlpHiddenPreRelu.Shape.ToArray());
         zeroTensor.Fill(NumOps.Zero);
         var reluMask = Engine.TensorGreaterThan(mlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(mlpHiddenPreRelu.Shape._dims);
+        var oneTensor = new Tensor<T>(mlpHiddenPreRelu.Shape.ToArray());
         oneTensor.Fill(NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var mlpHiddenGrad = Engine.TensorMultiply(mlpHiddenGradPre, reluDeriv);
@@ -1533,28 +1533,28 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         int index = 0;
 
         _preTransformWeights = Tensor<T>.FromVector(parameters.SubVector(index, preTransformWeightCount))
-            .Reshape(_preTransformWeights.Shape._dims);
+            .Reshape(_preTransformWeights.Shape.ToArray());
         index += preTransformWeightCount;
 
         _preTransformBias = Tensor<T>.FromVector(parameters.SubVector(index, preTransformBiasCount));
         index += preTransformBiasCount;
 
         _postAggregationWeights1 = Tensor<T>.FromVector(parameters.SubVector(index, post1WeightCount))
-            .Reshape(_postAggregationWeights1.Shape._dims);
+            .Reshape(_postAggregationWeights1.Shape.ToArray());
         index += post1WeightCount;
 
         _postAggregationBias1 = Tensor<T>.FromVector(parameters.SubVector(index, post1BiasCount));
         index += post1BiasCount;
 
         _postAggregationWeights2 = Tensor<T>.FromVector(parameters.SubVector(index, post2WeightCount))
-            .Reshape(_postAggregationWeights2.Shape._dims);
+            .Reshape(_postAggregationWeights2.Shape.ToArray());
         index += post2WeightCount;
 
         _postAggregationBias2 = Tensor<T>.FromVector(parameters.SubVector(index, post2BiasCount));
         index += post2BiasCount;
 
         _selfWeights = Tensor<T>.FromVector(parameters.SubVector(index, selfWeightCount))
-            .Reshape(_selfWeights.Shape._dims);
+            .Reshape(_selfWeights.Shape.ToArray());
         index += selfWeightCount;
 
         _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));

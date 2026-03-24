@@ -193,8 +193,8 @@ public class ScanPatternsTests
         var results = ScanPatterns<float>.SpatioTemporalScan(frames, height, width, numFrames);
 
         Assert.Equal(2, results.Count);
-        Assert.Equal(new[] { batchSize, totalPatches, dim }, results[0].Shape);
-        Assert.Equal(new[] { batchSize, totalPatches, dim }, results[1].Shape);
+        Assert.Equal(new[] { batchSize, totalPatches, dim }, results[0].Shape.ToArray());
+        Assert.Equal(new[] { batchSize, totalPatches, dim }, results[1].Shape.ToArray());
     }
 
     [Fact]

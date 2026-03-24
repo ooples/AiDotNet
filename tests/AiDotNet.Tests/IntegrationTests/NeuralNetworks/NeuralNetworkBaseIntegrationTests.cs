@@ -62,8 +62,8 @@ public class NeuralNetworkBaseIntegrationTests
         Assert.Equal(2, features.Count);
         Assert.True(features.ContainsKey(0));
         Assert.True(features.ContainsKey(1));
-        Assert.Equal(new[] { 2, 3 }, features[0].Shape);
-        Assert.Equal(new[] { 2, 2 }, features[1].Shape);
+        Assert.Equal(new[] { 2, 3 }, features[0].Shape.ToArray());
+        Assert.Equal(new[] { 2, 2 }, features[1].Shape.ToArray());
     }
 
     [Fact]

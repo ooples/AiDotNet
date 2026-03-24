@@ -82,7 +82,7 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
             var resultTensor = Tensor<T>.FromVector(result);
             if (gradientTensor.Shape.Length > 1)
             {
-                resultTensor = resultTensor.Reshape(gradientTensor.Shape._dims);
+                resultTensor = resultTensor.Reshape(gradientTensor.Shape.ToArray());
             }
 
             return (TOutput)(object)resultTensor;

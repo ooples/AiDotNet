@@ -439,7 +439,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape._dims));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -832,7 +832,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -876,7 +876,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
         if (input.Length != processed.Length)
         {
             int minLen = Math.Min(input.Length, processed.Length);
-            var result = new Tensor<T>(input.Shape._dims);
+            var result = new Tensor<T>(input.Shape.ToArray());
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Add(input[i], processed[i]);
             for (int i = minLen; i < input.Length; i++)
@@ -911,7 +911,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
             _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
             _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-            var normalized = new Tensor<T>(input.Shape._dims);
+            var normalized = new Tensor<T>(input.Shape.ToArray());
             T epsilon = NumOps.FromDouble(1e-5);
 
             for (int b = 0; b < batchSize; b++)
@@ -949,7 +949,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input.Shape._dims);
+            var denormalized = new Tensor<T>(input.Shape.ToArray());
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];

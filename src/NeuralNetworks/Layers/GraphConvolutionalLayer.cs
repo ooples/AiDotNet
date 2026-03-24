@@ -461,10 +461,10 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape._dims);
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape._dims);
+        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -646,7 +646,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims for rank > 3
@@ -823,7 +823,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         var input = inputs[0];
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Determine batch size and reshape if needed
@@ -1089,7 +1089,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         var gradForBackward = outputGradient;
         if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
         {
-            gradForBackward = outputGradient.Reshape(_lastOutput.Shape._dims);
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape.ToArray());
         }
 
         var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
@@ -1136,7 +1136,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         var weightsT = Engine.TensorTranspose(_weights); // [outputFeatures, inputFeatures]
 
         // For batched computation
-        var inputGradient = new Tensor<T>(_lastInput.Shape._dims);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
         inputGradient.Fill(NumOps.Zero);
 
         for (int b = 0; b < batchSize; b++)
@@ -1183,7 +1183,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         var gradForBackward = outputGradient;
         if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
         {
-            gradForBackward = outputGradient.Reshape(_lastOutput.Shape._dims);
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape.ToArray());
         }
 
         // Production-grade: Compute activation derivative using cached output
@@ -1308,13 +1308,13 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
             if (_weightsVelocity == null)
             {
-                _weightsVelocity = new Tensor<T>(_weights.Shape._dims);
+                _weightsVelocity = new Tensor<T>(_weights.Shape.ToArray());
                 _weightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_weightsVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_biasVelocity == null)
             {
-                _biasVelocity = new Tensor<T>(_bias.Shape._dims);
+                _biasVelocity = new Tensor<T>(_bias.Shape.ToArray());
                 _biasVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_biasVelocity, PersistentTensorRole.OptimizerState);
             }
@@ -1410,7 +1410,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
         // Set weights using Tensor.FromVector
         var weightsParams = parameters.SubVector(index, weightsSize);
-        _weights = Tensor<T>.FromVector(weightsParams).Reshape(_weights.Shape._dims);
+        _weights = Tensor<T>.FromVector(weightsParams).Reshape(_weights.Shape.ToArray());
         index += weightsSize;
 
         // Set bias using Tensor.FromVector

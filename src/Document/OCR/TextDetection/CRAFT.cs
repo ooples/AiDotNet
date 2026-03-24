@@ -398,7 +398,7 @@ public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape._dims);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 

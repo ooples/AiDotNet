@@ -463,7 +463,7 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ComputeLossGradient(Tensor<T> predictions, Tensor<T> labels, bool[]? mask)
     {
-        var gradient = new Tensor<T>(predictions.Shape._dims);
+        var gradient = new Tensor<T>(predictions.Shape.ToArray());
         int numNodes = predictions.Shape[0];
         int numClasses = predictions.Shape[1];
         int count = 0;
@@ -516,7 +516,7 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ComputeGraphLossGradient(Tensor<T> predictions, Tensor<T> labels)
     {
-        var gradient = new Tensor<T>(predictions.Shape._dims);
+        var gradient = new Tensor<T>(predictions.Shape.ToArray());
         int numClasses = predictions.Shape[1];
 
         // Compute softmax probabilities
@@ -952,7 +952,7 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         // Reshape gradient back to tensor shape if needed
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape._dims);
+            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
         }
 
         // Backward pass through all layers

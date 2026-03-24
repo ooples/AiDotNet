@@ -245,7 +245,7 @@ public class CLSToken<T>
     /// </summary>
     public Tensor<T> GetEmbedding()
     {
-        var copy = new Tensor<T>(_clsEmbedding.Shape._dims);
+        var copy = new Tensor<T>(_clsEmbedding.Shape.ToArray());
         for (int i = 0; i < _clsEmbedding.Length; i++)
         {
             copy[i] = _clsEmbedding[i];

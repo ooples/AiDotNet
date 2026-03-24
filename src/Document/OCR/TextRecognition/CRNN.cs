@@ -340,7 +340,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int height = processed.Shape[2];
         int width = processed.Shape[3];
 
-        var normalized = new Tensor<T>(processed.Shape._dims);
+        var normalized = new Tensor<T>(processed.Shape.ToArray());
         for (int i = 0; i < processed.Data.Length; i++)
         {
             double val = NumOps.ToDouble(processed.Data.Span[i]);
@@ -418,7 +418,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         if (output.Rank == 3)
         {
-            int classDim = Array.IndexOf(output.Shape._dims, expectedClasses);
+            int classDim = Array.IndexOf(output.Shape.ToArray(), expectedClasses);
             if (classDim < 0)
             {
                 classDim = 2;

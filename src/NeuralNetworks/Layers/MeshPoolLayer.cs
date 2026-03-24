@@ -220,7 +220,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
         if (input.Rank != 2 || input.Shape[1] != InputChannels)
         {
             throw new ArgumentException(
-                $"MeshPoolLayer expects input shape [numEdges, {InputChannels}], got [{string.Join(", ", input.Shape._dims)}].",
+                $"MeshPoolLayer expects input shape [numEdges, {InputChannels}], got [{string.Join(", ", input.Shape.ToArray())}].",
                 nameof(input));
         }
 
@@ -404,7 +404,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        int[] shape = input.Shape._dims;
+        int[] shape = input.Shape.ToArray();
 
         if (shape.Length != 2 || shape[1] != InputChannels)
         {

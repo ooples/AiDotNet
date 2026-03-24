@@ -238,7 +238,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
         int inputElements = input.Length;
 
         // If element counts match, reshape to expected shape
-        if (inputElements == expectedElements && !input.Shape._dims.SequenceEqual(expectedShape))
+        if (inputElements == expectedElements && !input.Shape.ToArray().SequenceEqual(expectedShape))
         {
             workingInput = input.Reshape(expectedShape);
         }
@@ -536,7 +536,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<Complex<T>> ConvertToComplexTensor(Tensor<T> realTensor)
     {
-        var complexTensor = new Tensor<Complex<T>>(realTensor.Shape._dims);
+        var complexTensor = new Tensor<Complex<T>>(realTensor.Shape.ToArray());
         for (int i = 0; i < realTensor.Length; i++)
         {
             complexTensor[i] = new Complex<T>(realTensor[i], NumOps.Zero);
@@ -583,7 +583,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> ExtractRealPart(Tensor<Complex<T>> complexTensor)
     {
-        var realTensor = new Tensor<T>(complexTensor.Shape._dims);
+        var realTensor = new Tensor<T>(complexTensor.Shape.ToArray());
         for (int i = 0; i < complexTensor.Length; i++)
         {
             realTensor[i] = complexTensor[i].Real;

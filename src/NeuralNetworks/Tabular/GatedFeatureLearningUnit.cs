@@ -110,7 +110,7 @@ public class GatedFeatureLearningUnit<T> : LayerBase<T>
         var gateGrad = Engine.TensorMultiply(gradient, _transformedCache);
 
         // Gradient through sigmoid: dL/dlogits = dL/dgate * gate * (1 - gate)
-        var ones = Tensor<T>.CreateDefault(_gateCache.Shape._dims, NumOps.One);
+        var ones = Tensor<T>.CreateDefault(_gateCache.Shape.ToArray(), NumOps.One);
         var sigmoidDeriv = Engine.TensorMultiply(_gateCache, Engine.TensorSubtract(ones, _gateCache));
         var gateLogitsGrad = Engine.TensorMultiply(gateGrad, sigmoidDeriv);
 

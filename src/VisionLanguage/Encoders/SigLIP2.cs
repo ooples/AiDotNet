@@ -372,7 +372,7 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         }
 
         // Create masked input: zero out masked patches
-        var maskedInput = new Tensor<T>(preprocessed.Shape._dims);
+        var maskedInput = new Tensor<T>(preprocessed.Shape.ToArray());
         for (int i = 0; i < preprocessed.Length; i++)
             maskedInput[i] = preprocessed[i];
 

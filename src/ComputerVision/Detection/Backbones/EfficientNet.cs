@@ -284,7 +284,7 @@ public class EfficientNet<T> : BackboneBase<T>
 
     private Tensor<T> ApplySwish(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);
@@ -504,7 +504,7 @@ internal class MBConvBlock<T>
 
     private Tensor<T> ApplySwish(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);
@@ -566,7 +566,7 @@ internal class SqueezeExcitation<T>
         excited = ApplySigmoid(excited);
 
         // Scale input channels
-        var output = new Tensor<T>(input.Shape._dims);
+        var output = new Tensor<T>(input.Shape.ToArray());
         for (int n = 0; n < batch; n++)
         {
             for (int c = 0; c < channels; c++)
@@ -587,7 +587,7 @@ internal class SqueezeExcitation<T>
 
     private Tensor<T> ApplySwish(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);
@@ -599,7 +599,7 @@ internal class SqueezeExcitation<T>
 
     private Tensor<T> ApplySigmoid(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);

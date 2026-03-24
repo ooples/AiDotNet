@@ -324,7 +324,7 @@ public class MultiplyLayer<T> : LayerBase<T>
             _lastInputs = cpuInputs;
         }
 
-        return new GpuTensor<T>(backend, resultBuffer, inputs[0].Shape._dims, GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, resultBuffer, inputs[0].Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <inheritdoc/>
@@ -380,7 +380,7 @@ public class MultiplyLayer<T> : LayerBase<T>
                 }
             }
 
-            inputGradients[i] = new GpuTensor<T>(backend, gradBuffer, outputGradient.Shape._dims, GpuTensorRole.Gradient, ownsBuffer: true);
+            inputGradients[i] = new GpuTensor<T>(backend, gradBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
         }
 
         // Dispose uploaded input buffers

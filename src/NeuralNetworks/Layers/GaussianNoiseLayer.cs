@@ -159,7 +159,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
             float stdDevF = Convert.ToSingle(_standardDeviation);
 
             // Generate Gaussian noise N(mean, stdDev) directly on GPU
-            var noise = gpuEngine.RandomNormalGpu<T>(input.Shape._dims, meanF, stdDevF, seed);
+            var noise = gpuEngine.RandomNormalGpu<T>(input.Shape.ToArray(), meanF, stdDevF, seed);
 
             var result = gpuEngine.AddGpu(input, noise);
 
@@ -266,7 +266,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
         _lastInput = input;
         if (IsTrainingMode)
         {
-            _lastNoise = GenerateNoise(input.Shape._dims);
+            _lastNoise = GenerateNoise(input.Shape.ToArray());
             return Engine.TensorAdd(input, _lastNoise);
         }
 

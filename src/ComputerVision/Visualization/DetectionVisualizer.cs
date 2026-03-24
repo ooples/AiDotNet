@@ -51,7 +51,7 @@ public class DetectionVisualizer<T>
         if (image.Shape.Length != 4)
         {
             throw new ArgumentException(
-                $"Expected 4D image tensor [batch, channels, height, width], got shape [{string.Join(", ", image.Shape._dims)}]",
+                $"Expected 4D image tensor [batch, channels, height, width], got shape [{string.Join(", ", image.Shape.ToArray())}]",
                 nameof(image));
         }
 
@@ -294,7 +294,7 @@ public class DetectionVisualizer<T>
 
     private Tensor<T> CloneImage(Tensor<T> image)
     {
-        var clone = new Tensor<T>(image.Shape._dims);
+        var clone = new Tensor<T>(image.Shape.ToArray());
         for (int i = 0; i < image.Length; i++)
         {
             clone[i] = image[i];

@@ -417,10 +417,10 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape._dims);
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape._dims);
+        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -556,8 +556,8 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         var input = inputs[0];
         var memory = inputs[1];
-        int[] inputShape = input.Shape._dims;
-        int[] memoryShape = memory.Shape._dims;
+        int[] inputShape = input.Shape.ToArray();
+        int[] memoryShape = memory.Shape.ToArray();
 
         int batchSize = inputShape.Length >= 2 ? inputShape[0] : 1;
         int inputDim = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];
@@ -859,8 +859,8 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var lastInputT = Engine.TensorTranspose(_lastInput);
         _valueWeightsGradient = Engine.TensorMatMul(lastInputT, valuesGradient);
 
-        _queryWeightsGradient = Tensor<T>.CreateDefault(_queryWeights.Shape._dims, NumOps.Zero);
-        _keyWeightsGradient = Tensor<T>.CreateDefault(_keyWeights.Shape._dims, NumOps.Zero);
+        _queryWeightsGradient = Tensor<T>.CreateDefault(_queryWeights.Shape.ToArray(), NumOps.Zero);
+        _keyWeightsGradient = Tensor<T>.CreateDefault(_keyWeights.Shape.ToArray(), NumOps.Zero);
 
         // Input gradient: values gradient × valueWeights^T
         var valueWeightsT = Engine.TensorTranspose(_valueWeights);
@@ -1048,22 +1048,22 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Set query weights using Tensor.FromVector
         var queryParams = parameters.SubVector(index, querySize);
-        _queryWeights = Tensor<T>.FromVector(queryParams).Reshape(_queryWeights.Shape._dims);
+        _queryWeights = Tensor<T>.FromVector(queryParams).Reshape(_queryWeights.Shape.ToArray());
         index += querySize;
 
         // Set key weights
         var keyParams = parameters.SubVector(index, keySize);
-        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights.Shape._dims);
+        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights.Shape.ToArray());
         index += keySize;
 
         // Set value weights
         var valueParams = parameters.SubVector(index, valueSize);
-        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights.Shape._dims);
+        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights.Shape.ToArray());
         index += valueSize;
 
         // Set output weights
         var outputParams = parameters.SubVector(index, outputSize);
-        _outputWeights = Tensor<T>.FromVector(outputParams).Reshape(_outputWeights.Shape._dims);
+        _outputWeights = Tensor<T>.FromVector(outputParams).Reshape(_outputWeights.Shape.ToArray());
         index += outputSize;
 
         // Set output bias

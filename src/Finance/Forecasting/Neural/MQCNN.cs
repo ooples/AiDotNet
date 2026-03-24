@@ -939,7 +939,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CalculateQuantileLossGradient(Tensor<T> predictions, Tensor<T> actuals)
     {
-        var gradient = new Tensor<T>(predictions.Shape._dims);
+        var gradient = new Tensor<T>(predictions.Shape.ToArray());
         int totalElements = _forecastHorizon * _quantiles.Length;
 
         for (int t = 0; t < _forecastHorizon && t < actuals.Length; t++)
@@ -1095,7 +1095,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
         }
 
         // Create ONNX tensor using input shape
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1135,7 +1135,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         int totalElements = _lookbackWindow * _numFeatures;
-        var newInput = new Tensor<T>(input.Shape._dims);
+        var newInput = new Tensor<T>(input.Shape.ToArray());
 
         // Shift old values left
         int shift = stepsUsed * _numFeatures;

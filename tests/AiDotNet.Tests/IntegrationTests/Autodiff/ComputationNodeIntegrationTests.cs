@@ -887,7 +887,7 @@ public class ComputationNodeIntegrationTests
         y.Backward();
 
         // Assert - All gradients should be 2
-        Assert.Equal(new[] { 2, 3 }, x.Gradient!.Shape);
+        Assert.Equal(new[] { 2, 3 }, x.Gradient!.Shape.ToArray());
         for (int i = 0; i < 6; i++)
         {
             Assert.Equal(2.0, x.Gradient[i], Tolerance);

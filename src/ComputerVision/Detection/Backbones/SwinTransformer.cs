@@ -704,7 +704,7 @@ internal class SwinTransformerBlock<T>
         int w = x.Shape[2];
         int c = x.Shape[3];
 
-        var shifted = new Tensor<T>(x.Shape._dims);
+        var shifted = new Tensor<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -988,7 +988,7 @@ internal class SwinTransformerBlock<T>
         int batch = x.Shape[0];
         int seqLen = x.Shape[1];
 
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -1132,7 +1132,7 @@ internal class SwinLayerNorm<T>
         int seqLen = x.Shape[1];
         int dim = x.Shape[2];
 
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {

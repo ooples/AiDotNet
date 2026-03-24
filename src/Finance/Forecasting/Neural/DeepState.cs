@@ -507,7 +507,7 @@ public class DeepState<T> : ForecastingModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, predictions.Shape._dims));
+            Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -941,7 +941,7 @@ public class DeepState<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
 
         // Defensive check: verify OnnxSession.InputMetadata is not null/empty
         var inputMeta = OnnxSession.InputMetadata;
@@ -1038,7 +1038,7 @@ public class DeepState<T> : ForecastingModelBase<T>
     {
         int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
         int totalElements = _lookbackWindow * _numFeatures;
-        var newInput = new Tensor<T>(input.Shape._dims);
+        var newInput = new Tensor<T>(input.Shape.ToArray());
 
         int steps = Math.Min(stepsUsed, _lookbackWindow);
         int shift = steps * _numFeatures;

@@ -212,7 +212,7 @@ public sealed class FinancialPreprocessor<T>
         }
 
         stats = (new Vector<T>(min), new Vector<T>(max));
-        return new Tensor<T>(input.Shape._dims, new Vector<T>(normalized));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(normalized));
     }
 
     /// <summary>
@@ -280,7 +280,7 @@ public sealed class FinancialPreprocessor<T>
         }
 
         stats = (new Vector<T>(mean), new Vector<T>(std));
-        return new Tensor<T>(input.Shape._dims, new Vector<T>(normalized));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(normalized));
     }
 
     /// <summary>

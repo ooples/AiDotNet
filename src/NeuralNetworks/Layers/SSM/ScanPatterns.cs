@@ -358,12 +358,12 @@ public static class ScanPatterns<T>
         if (scannedOutputs == null || scannedOutputs.Count == 0)
             throw new ArgumentException("Must provide at least one scan output.", nameof(scannedOutputs));
 
-        var referenceShape = scannedOutputs[0].Shape._dims;
+        var referenceShape = scannedOutputs[0].Shape.ToArray();
         for (int i = 1; i < scannedOutputs.Count; i++)
         {
-            if (!ShapesEqual(scannedOutputs[i].Shape._dims, referenceShape))
+            if (!ShapesEqual(scannedOutputs[i].Shape.ToArray(), referenceShape))
                 throw new ArgumentException(
-                    $"All scan outputs must have the same shape. Output {i} has shape [{string.Join(",", scannedOutputs[i].Shape._dims)}] but expected [{string.Join(",", referenceShape)}].");
+                    $"All scan outputs must have the same shape. Output {i} has shape [{string.Join(",", scannedOutputs[i].Shape.ToArray())}] but expected [{string.Join(",", referenceShape)}].");
         }
 
         // Clone the first output to avoid mutating the input

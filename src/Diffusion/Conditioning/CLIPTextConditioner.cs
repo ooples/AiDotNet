@@ -100,7 +100,7 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// <inheritdoc />
     public override Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null)
     {
-        var shape = tokenIds.Shape._dims;
+        var shape = tokenIds.Shape.ToArray();
         int batchSize = shape[0];
         int seqLen = shape.Length > 1 ? shape[1] : MaxSequenceLength;
 
@@ -158,7 +158,7 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// <inheritdoc />
     public override Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
-        var shape = sequenceEmbeddings.Shape._dims;
+        var shape = sequenceEmbeddings.Shape.ToArray();
         int batchSize = shape[0];
         int seqLen = shape[1];
 

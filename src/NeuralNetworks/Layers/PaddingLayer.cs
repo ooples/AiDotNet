@@ -156,7 +156,7 @@ public class PaddingLayer<T> : LayerBase<T>
             backend.Copy2DStrided(permutedInput.Buffer, outputBuffer, (int)outerSize, dimSize, newDimSize, pad);
 
             // Create padded tensor
-            int[] newShape = permutedInput.Shape._dims.ToArray();
+            int[] newShape = permutedInput.Shape.ToArray().ToArray();
             newShape[rank - 1] = newDimSize;
             var paddedPermuted = new GpuTensor<T>(backend, outputBuffer, newShape, GpuTensorRole.Activation, ownsBuffer: true);
 
@@ -197,7 +197,7 @@ public class PaddingLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _lastInput = input.ToTensor();
-            _gpuCachedInputShape = (int[])input.Shape._dims.Clone();
+            _gpuCachedInputShape = (int[])input.Shape.ToArray().Clone();
         }
 
         return currentTensor;
@@ -436,7 +436,7 @@ public class PaddingLayer<T> : LayerBase<T>
         if (_padding.Length != _lastInput.Shape.Length)
             throw new ArgumentException("Padding array length must match input dimensions.");
 
-        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape._dims);
+        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape.ToArray());
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
 
@@ -461,7 +461,7 @@ public class PaddingLayer<T> : LayerBase<T>
         if (_padding.Length != _lastInput.Shape.Length)
             throw new ArgumentException("Padding array length must match input dimensions.");
 
-        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape._dims);
+        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape.ToArray());
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
 

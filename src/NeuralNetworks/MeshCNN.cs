@@ -399,7 +399,7 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape._dims, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         var gradients = new List<Tensor<T>>();
         var currentGradient = outputGradientTensor;

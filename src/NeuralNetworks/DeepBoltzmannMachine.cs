@@ -402,11 +402,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 
             // Copy the trained weights and biases to our DBM
             _layerWeights[layer] = new Tensor<T>(
-                _layerWeights[layer].Shape._dims,
+                _layerWeights[layer].Shape.ToArray(),
                 tmpRBM.GetParameters().GetSubVector(0, _layerSizes[layer] * _layerSizes[layer + 1]));
 
             _layerBiases[layer] = new Tensor<T>(
-                _layerBiases[layer].Shape._dims,
+                _layerBiases[layer].Shape.ToArray(),
                 tmpRBM.GetParameters().GetSubVector(
                     _layerSizes[layer] * _layerSizes[layer + 1],
                     _layerSizes[layer]));
@@ -611,7 +611,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> Reconstruct(Tensor<T> input)
     {
         // Remember original shape
-        var originalShape = input.Shape._dims;
+        var originalShape = input.Shape.ToArray();
         var was1D = originalShape.Length == 1;
 
         var hidden = PropagateUp(input);
@@ -680,7 +680,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         for (int layer = _layerSizes.Count - 2; layer >= 0; layer--)
         {
             // O(1) view-based transpose — no data copy unless MatMul needs contiguous
-            var transposed = _layerWeights[layer].Transpose([1, 0]).Contiguous();
+            var transposed = _layerWeights[layer].Transpose([1, 0]);
             var product = MatMul2D(visible, transposed);
             var biasDown = _layerBiases[layer];
             var bias = biasDown.Rank < product.Rank
@@ -951,12 +951,12 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         {
             int weightCount = _layerWeights[i].Length;
             var weightVector = parameters.GetSubVector(index, weightCount);
-            _layerWeights[i] = new Tensor<T>(_layerWeights[i].Shape._dims, weightVector);
+            _layerWeights[i] = new Tensor<T>(_layerWeights[i].Shape.ToArray(), weightVector);
             index += weightCount;
 
             int biasCount = _layerBiases[i].Length;
             var biasVector = parameters.GetSubVector(index, biasCount);
-            _layerBiases[i] = new Tensor<T>(_layerBiases[i].Shape._dims, biasVector);
+            _layerBiases[i] = new Tensor<T>(_layerBiases[i].Shape.ToArray(), biasVector);
             index += biasCount;
         }
     }

@@ -111,8 +111,8 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// </remarks>
     public Tensor<T> EstimateAleatoricUncertainty(Tensor<T> input)
     {
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape._dims);
-        var aleatoric = new Tensor<T>(totalUncertainty.Shape._dims);
+        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape.ToArray());
+        var aleatoric = new Tensor<T>(totalUncertainty.Shape.ToArray());
         for (int i = 0; i < aleatoric.Length; i++)
         {
             aleatoric[i] = _numOps.Zero;
@@ -133,7 +133,7 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// </remarks>
     public Tensor<T> EstimateEpistemicUncertainty(Tensor<T> input)
     {
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape._dims);
+        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape.ToArray());
         return totalUncertainty;
     }
 
@@ -164,7 +164,7 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
         if (predictions.Count == 0)
             throw new ArgumentException("Cannot compute mean of empty prediction list");
 
-        var sum = new Tensor<T>(predictions[0].Shape._dims);
+        var sum = new Tensor<T>(predictions[0].Shape.ToArray());
         foreach (var pred in predictions)
         {
             for (int i = 0; i < pred.Length; i++)
@@ -187,7 +187,7 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// </summary>
     private Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
     {
-        var variance = new Tensor<T>(mean.Shape._dims);
+        var variance = new Tensor<T>(mean.Shape.ToArray());
 
         foreach (var pred in predictions)
         {

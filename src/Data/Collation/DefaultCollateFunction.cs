@@ -19,12 +19,12 @@ public class DefaultCollateFunction<T> : ICollateFunction<Tensor<T>, Tensor<T>>
         if (samples.Count == 0)
             throw new ArgumentException("Cannot collate an empty sample list.", nameof(samples));
 
-        int[] sampleShape = samples[0].Shape._dims;
+        int[] sampleShape = samples[0].Shape.ToArray();
 
         // Verify all samples have the same shape
         for (int i = 1; i < samples.Count; i++)
         {
-            int[] shape = samples[i].Shape._dims;
+            int[] shape = samples[i].Shape.ToArray();
             if (shape.Length != sampleShape.Length)
                 throw new ArgumentException(
                     $"Sample {i} has rank {shape.Length} but expected {sampleShape.Length}.");

@@ -162,7 +162,7 @@ public class QuantumLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse to 2D for processing
@@ -211,12 +211,12 @@ public class QuantumLayer<T> : LayerBase<T>
             realState = Engine.TensorSlice(processInput, [0, 0], [batchSize, dimension]);
         }
 
-        var imagState = new Tensor<T>(realState.Shape._dims);
+        var imagState = new Tensor<T>(realState.Shape.ToArray());
 
         // Normalize each batch item: divide by sqrt(sum(|state|^2) + eps)
         var magnitudeSquared = Engine.ComplexMagnitudeSquared(realState, imagState);
         var normPerBatch = Engine.ReduceSum(magnitudeSquared, [1], keepDims: true);
-        var epsilonTensor = new Tensor<T>(normPerBatch.Shape._dims);
+        var epsilonTensor = new Tensor<T>(normPerBatch.Shape.ToArray());
         epsilonTensor.Fill(NumOps.FromDouble(1e-10));
         var safeDenom = Engine.TensorAdd(normPerBatch, epsilonTensor);
         var denomExpanded = Engine.TensorRepeatElements(safeDenom, dimension, axis: 1);
@@ -583,7 +583,7 @@ public class QuantumLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
         int dimension = 1 << _numQubits;
         int inputSize = _lastInput.Shape[1];
-        var inputGradient = new Tensor<T>(_lastInput.Shape._dims);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         // Reset angle gradients
         _angleGradients.Fill(NumOps.Zero);

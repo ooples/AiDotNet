@@ -160,7 +160,7 @@ public class CroppingLayer<T> : LayerBase<T>
 
         var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
 
-        int[] inputShape = input.Shape._dims;
+        int[] inputShape = input.Shape.ToArray();
         int[] outputShape = CalculateOutputShape(inputShape, _cropTop, _cropBottom, _cropLeft, _cropRight);
         int outputSize = 1;
         foreach (var dim in outputShape) outputSize *= dim;
@@ -240,7 +240,7 @@ public class CroppingLayer<T> : LayerBase<T>
         var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
 
         int[] inputShape = _gpuCachedInputShape;
-        int[] outputShape = outputGradient.Shape._dims;
+        int[] outputShape = outputGradient.Shape.ToArray();
 
         int inputSize = 1;
         foreach (var dim in inputShape) inputSize *= dim;
@@ -448,7 +448,7 @@ public class CroppingLayer<T> : LayerBase<T>
                 nameof(input));
         }
 
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Rank;
 
         Tensor<T> input4D;
@@ -570,7 +570,7 @@ public class CroppingLayer<T> : LayerBase<T>
         var outputGradientNCHW = gradient4D.Transpose([0, 3, 1, 2]);
 
         // Convert input shape from NHWC to NCHW for CropBackward
-        var inputShape4D = _lastInput.Shape._dims;
+        var inputShape4D = _lastInput.Shape.ToArray();
         var inputShapeNCHW = new int[] { inputShape4D[0], inputShape4D[3], inputShape4D[1], inputShape4D[2] };
 
         var inputGradientNCHW = Engine.CropBackward(outputGradientNCHW, inputShapeNCHW, _cropTop[1], _cropLeft[2]);

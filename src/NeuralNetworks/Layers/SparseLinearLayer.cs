@@ -343,7 +343,7 @@ public class SparseLinearLayer<T> : LayerBase<T>
 
         // Compute input gradient using transpose of weights
         var transposedWeights = _engine.SparseTranspose(_weights);
-        var inputGradient = new Tensor<T>(_lastInput.Shape._dims);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

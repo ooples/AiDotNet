@@ -890,7 +890,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         }
 
         // ImageNet normalization: (x - mean) / std
-        var normalized = new Tensor<T>(image.Shape._dims);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 
@@ -1063,7 +1063,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Rank);
-        foreach (var dim in tensor.Shape._dims)
+        foreach (var dim in tensor.Shape.ToArray())
             writer.Write(dim);
 
         writer.Write(tensor.Data.Length);

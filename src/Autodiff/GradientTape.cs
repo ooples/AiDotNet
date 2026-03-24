@@ -537,7 +537,7 @@ public class GradientTape<T> : IDisposable
         }
 
         // Initialize root gradient to ones (for final node)
-        target.Gradient = new Tensor<T>(target.Value.Shape._dims);
+        target.Gradient = new Tensor<T>(target.Value.Shape.ToArray());
         var numOps = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < target.Gradient.Length; i++)
         {

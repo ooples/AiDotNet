@@ -307,7 +307,7 @@ public class MegalodonLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -940,7 +940,7 @@ public class MegalodonLayer<T> : LayerBase<T>
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var result = TensorAllocator.Rent<T>(template.Shape._dims);
+        var result = TensorAllocator.Rent<T>(template.Shape.ToArray());
         for (int i = 0; i < result.Length; i++) result[i] = NumOps.One;
         return result;
     }

@@ -374,8 +374,8 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <param name="scale">The scale factor for the random values.</param>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape._dims);
-        var halfTensor = new Tensor<T>(tensor.Shape._dims);
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
+        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
@@ -419,7 +419,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Graph layer expects 3D: [batchSize, numNodes, features]
@@ -553,7 +553,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var input = inputs[0];
 
         // Handle batch dimension
-        int[] inputShape = input.Shape._dims;
+        int[] inputShape = input.Shape.ToArray();
         int batchSize;
         int numNodes;
         int inputFeatures;
@@ -1122,7 +1122,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// </remarks>
     private Tensor<T> ApplyFFNActivation(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape._dims);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             result[i] = _ffnActivation.Activate(input.GetFlat(i));
@@ -1147,7 +1147,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var gradForBackward = outputGradient;
         if (_originalInputShape != null && _originalInputShape.Length != _lastOutput.Shape.Length)
         {
-            gradForBackward = outputGradient.Reshape(_lastOutput.Shape._dims);
+            gradForBackward = outputGradient.Reshape(_lastOutput.Shape.ToArray());
         }
 
         var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
@@ -1156,15 +1156,15 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int numNodes = _lastInput.Shape[1];
 
         // Initialize gradients
-        _outputWeightsGradient = new Tensor<T>(_outputWeights.Shape._dims);
-        _outputBiasGradient = new Tensor<T>(_outputBias.Shape._dims);
-        _queryWeightsGradient = new Tensor<T>(_queryWeights.Shape._dims);
-        _keyWeightsGradient = new Tensor<T>(_keyWeights.Shape._dims);
-        _valueWeightsGradient = new Tensor<T>(_valueWeights.Shape._dims);
-        _ffnWeights1Gradient = new Tensor<T>(_ffnWeights1.Shape._dims);
-        _ffnWeights2Gradient = new Tensor<T>(_ffnWeights2.Shape._dims);
-        _ffnBias1Gradient = new Tensor<T>(_ffnBias1.Shape._dims);
-        _ffnBias2Gradient = new Tensor<T>(_ffnBias2.Shape._dims);
+        _outputWeightsGradient = new Tensor<T>(_outputWeights.Shape.ToArray());
+        _outputBiasGradient = new Tensor<T>(_outputBias.Shape.ToArray());
+        _queryWeightsGradient = new Tensor<T>(_queryWeights.Shape.ToArray());
+        _keyWeightsGradient = new Tensor<T>(_keyWeights.Shape.ToArray());
+        _valueWeightsGradient = new Tensor<T>(_valueWeights.Shape.ToArray());
+        _ffnWeights1Gradient = new Tensor<T>(_ffnWeights1.Shape.ToArray());
+        _ffnWeights2Gradient = new Tensor<T>(_ffnWeights2.Shape.ToArray());
+        _ffnBias1Gradient = new Tensor<T>(_ffnBias1.Shape.ToArray());
+        _ffnBias2Gradient = new Tensor<T>(_ffnBias2.Shape.ToArray());
 
         _outputWeightsGradient.Fill(NumOps.Zero);
         _outputBiasGradient.Fill(NumOps.Zero);
@@ -1291,7 +1291,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// </remarks>
     private Tensor<T> BackwardFFNActivation(Tensor<T> input, Tensor<T> grad)
     {
-        var result = new Tensor<T>(grad.Shape._dims);
+        var result = new Tensor<T>(grad.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             T x = input.GetFlat(i);
@@ -1697,19 +1697,19 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int index = 0;
 
         var queryParams = parameters.SubVector(index, querySize);
-        _queryWeights = Tensor<T>.FromVector(queryParams).Reshape(_queryWeights.Shape._dims);
+        _queryWeights = Tensor<T>.FromVector(queryParams).Reshape(_queryWeights.Shape.ToArray());
         index += querySize;
 
         var keyParams = parameters.SubVector(index, keySize);
-        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights.Shape._dims);
+        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights.Shape.ToArray());
         index += keySize;
 
         var valueParams = parameters.SubVector(index, valueSize);
-        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights.Shape._dims);
+        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights.Shape.ToArray());
         index += valueSize;
 
         var outputWeightsParams = parameters.SubVector(index, outputWeightsSize);
-        _outputWeights = Tensor<T>.FromVector(outputWeightsParams).Reshape(_outputWeights.Shape._dims);
+        _outputWeights = Tensor<T>.FromVector(outputWeightsParams).Reshape(_outputWeights.Shape.ToArray());
         index += outputWeightsSize;
 
         var outputBiasParams = parameters.SubVector(index, outputBiasSize);
@@ -1717,11 +1717,11 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         index += outputBiasSize;
 
         var ffn1Params = parameters.SubVector(index, ffn1Size);
-        _ffnWeights1 = Tensor<T>.FromVector(ffn1Params).Reshape(_ffnWeights1.Shape._dims);
+        _ffnWeights1 = Tensor<T>.FromVector(ffn1Params).Reshape(_ffnWeights1.Shape.ToArray());
         index += ffn1Size;
 
         var ffn2Params = parameters.SubVector(index, ffn2Size);
-        _ffnWeights2 = Tensor<T>.FromVector(ffn2Params).Reshape(_ffnWeights2.Shape._dims);
+        _ffnWeights2 = Tensor<T>.FromVector(ffn2Params).Reshape(_ffnWeights2.Shape.ToArray());
         index += ffn2Size;
 
         var ffnBias1Params = parameters.SubVector(index, ffnBias1Size);
@@ -1757,7 +1757,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         if (hasBias)
         {
             writer.Write(_structuralBias!.Shape.Length);
-            foreach (var dim in _structuralBias.Shape._dims) writer.Write(dim);
+            foreach (var dim in _structuralBias.Shape.ToArray()) writer.Write(dim);
             for (int i = 0; i < _structuralBias.Length; i++)
                 writer.Write(NumOps.ToDouble(_structuralBias[i]));
         }

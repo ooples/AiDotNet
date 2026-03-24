@@ -447,7 +447,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Handle any rank >= 2: last 2 dims are [seq, embed], earlier dims are batch-like
         int rank = input.Shape.Length;
         _inputWas2D = rank == 2;
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
 
         Tensor<T> input3D;
         if (_inputWas2D)
@@ -524,7 +524,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var input = inputs[0];
 
         // Get dimensions from input shape
-        int[] inputShape = input.Shape._dims;
+        int[] inputShape = input.Shape.ToArray();
         int rank = inputShape.Length;
 
         IGpuTensor<T> input3D;
@@ -618,7 +618,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
 
         // If forward received 2D input, we need to reshape the gradient to 3D
-        int[] originalShape = outputGradient.Shape._dims;
+        int[] originalShape = outputGradient.Shape.ToArray();
         bool gradWas2D = originalShape.Length == 2;
 
         IGpuTensor<T> grad3D;

@@ -899,7 +899,7 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     private Tensor<T> ApplyGuidance(Tensor<T> uncondPred, Tensor<T> condPred, double scale)
     {
-        var result = new Tensor<T>(condPred.Shape._dims);
+        var result = new Tensor<T>(condPred.Shape.ToArray());
         var scaleT = NumOps.FromDouble(scale);
 
         for (int i = 0; i < result.Length; i++)
@@ -920,7 +920,7 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         double sigma = timestep; // sigma schedule proportional to timestep
         double dt = 1.0 / numSteps;
 
-        var result = new Tensor<T>(latents.Shape._dims);
+        var result = new Tensor<T>(latents.Shape.ToArray());
 
         for (int i = 0; i < result.Length; i++)
         {

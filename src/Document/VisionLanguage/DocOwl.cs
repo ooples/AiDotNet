@@ -475,7 +475,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape._dims);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         double[] means = [0.48145466, 0.4578275, 0.40821073];
         double[] stds = [0.26862954, 0.26130258, 0.27577711];
 

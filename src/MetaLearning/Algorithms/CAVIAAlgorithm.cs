@@ -619,7 +619,7 @@ internal static class CAVIAContextHelper<T>
             if (tensor.Shape[0] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match tensor dimension ({tensor.Shape[0]}) for Addition injection mode.");
-            var result = new Tensor<T>(tensor.Shape._dims);
+            var result = new Tensor<T>(tensor.Shape.ToArray());
             for (int i = 0; i < tensor.Shape[0]; i++)
                 result[new int[] { i }] = numOps.Add(tensor[new int[] { i }], context[i]);
             return result;
@@ -629,7 +629,7 @@ internal static class CAVIAContextHelper<T>
             if (tensor.Shape[1] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match feature dimension ({tensor.Shape[1]}) for Addition injection mode.");
-            var result = new Tensor<T>(tensor.Shape._dims);
+            var result = new Tensor<T>(tensor.Shape.ToArray());
             for (int b = 0; b < tensor.Shape[0]; b++)
                 for (int f = 0; f < tensor.Shape[1]; f++)
                     result[new int[] { b, f }] = numOps.Add(tensor[new int[] { b, f }], context[f]);
@@ -676,7 +676,7 @@ internal static class CAVIAContextHelper<T>
             if (tensor.Shape[0] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match tensor dimension ({tensor.Shape[0]}) for Multiplication injection mode.");
-            var result = new Tensor<T>(tensor.Shape._dims);
+            var result = new Tensor<T>(tensor.Shape.ToArray());
             for (int i = 0; i < tensor.Shape[0]; i++)
                 result[new int[] { i }] = numOps.Multiply(tensor[new int[] { i }], context[i]);
             return result;
@@ -686,7 +686,7 @@ internal static class CAVIAContextHelper<T>
             if (tensor.Shape[1] != context.Length)
                 throw new ArgumentException(
                     $"Context dimension ({context.Length}) must match feature dimension ({tensor.Shape[1]}) for Multiplication injection mode.");
-            var result = new Tensor<T>(tensor.Shape._dims);
+            var result = new Tensor<T>(tensor.Shape.ToArray());
             for (int b = 0; b < tensor.Shape[0]; b++)
                 for (int f = 0; f < tensor.Shape[1]; f++)
                     result[new int[] { b, f }] = numOps.Multiply(tensor[new int[] { b, f }], context[f]);

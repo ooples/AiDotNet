@@ -365,7 +365,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> accumulatedOutput = inputMatrix.Multiply(_accumulatedWeight.Transpose());
 
         // Sum all contributions
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape._dims);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
         for (int i = 0; i < batchSize; i++)
         {
             for (int j = 0; j < outputSize; j++)
@@ -440,7 +440,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> accumulatedInputGrad = new Tensor<T>(new[] { batchSize, inputSize }, accInputGradData);
 
         // Sum all input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape._dims);
+        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
         for (int i = 0; i < loraInputGrad.Length; i++)
         {
             inputGrad[i] = NumOps.Add(NumOps.Add(loraInputGrad[i], baseInputGrad[i]), accumulatedInputGrad[i]);

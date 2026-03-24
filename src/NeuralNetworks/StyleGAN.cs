@@ -453,7 +453,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         int maxMixingLayer = Math.Max(2, styleSize / 2);
         int mixingLayer = random.Next(1, maxMixingLayer);
 
-        var mixedStyles = new Tensor<T>(styles1.Shape._dims);
+        var mixedStyles = new Tensor<T>(styles1.Shape.ToArray());
 
         for (int b = 0; b < styles1.Shape[0]; b++)
         {
@@ -638,7 +638,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape._dims);
+        var gradients = new Tensor<T>(predictions.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-10);
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 

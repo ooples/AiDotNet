@@ -393,7 +393,7 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
             }
         }
 
-        return new Tensor<T>(_lastInput.Shape._dims, inputGradient);
+        return new Tensor<T>(_lastInput.Shape.ToArray(), inputGradient);
     }
 
     /// <inheritdoc/>

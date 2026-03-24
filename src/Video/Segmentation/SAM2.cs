@@ -590,7 +590,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         for (int i = 0; i < copyLen; i++)
             targetFlat[i] = expectedOutput[i];
         var gradVec = LossFunction.CalculateDerivative(predFlat, targetFlat);
-        var lossGradient = new Tensor<T>(predicted.Shape._dims);
+        var lossGradient = new Tensor<T>(predicted.Shape.ToArray());
         for (int i = 0; i < gradVec.Length; i++)
             lossGradient[i] = gradVec[i];
 
@@ -641,7 +641,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         // Create ONNX input tensor
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, image.Shape._dims);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, image.Shape.ToArray());
         var inputMeta = _onnxSession.InputMetadata;
 
         // SAM2 encoder typically has 'image' as input name
@@ -737,7 +737,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         // Average pool memory features
-        var memoryAggregate = new Tensor<T>(currentFeatures.Shape._dims);
+        var memoryAggregate = new Tensor<T>(currentFeatures.Shape.ToArray());
         foreach (var memory in _memoryBank)
         {
             memoryAggregate = AddTensors(memoryAggregate, memory);

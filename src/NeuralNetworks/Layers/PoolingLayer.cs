@@ -286,7 +286,7 @@ public class PoolingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         if (input.Shape.Length < 3)
@@ -416,7 +416,7 @@ public class PoolingLayer<T> : LayerBase<T>
             outGrad4D = outputGradient;
             inputShape4D = _lastInput.Shape.Length == 3
                 ? new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] }
-                : _lastInput.Shape._dims;
+                : _lastInput.Shape.ToArray();
         }
         else
         {
@@ -445,7 +445,7 @@ public class PoolingLayer<T> : LayerBase<T>
         };
 
         // Restore to original input shape
-        return inputGrad.Reshape(_lastInput.Shape._dims);
+        return inputGrad.Reshape(_lastInput.Shape.ToArray());
     }
 
     /// <summary>

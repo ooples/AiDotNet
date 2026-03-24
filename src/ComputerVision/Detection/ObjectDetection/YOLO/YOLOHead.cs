@@ -680,7 +680,7 @@ internal class YOLOv8Head<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);

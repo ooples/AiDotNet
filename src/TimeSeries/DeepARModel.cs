@@ -292,7 +292,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         T dLdScaleRaw = NumOps.Multiply(dLdScale, dSoftplus);
 
         // Compute gradients for mean weights
-        var meanWeightGrad = new Tensor<T>(_meanWeights.Shape._dims);
+        var meanWeightGrad = new Tensor<T>(_meanWeights.Shape.ToArray());
         for (int j = 0; j < _meanWeights.Shape[1]; j++)
         {
             meanWeightGrad[0, j] = NumOps.Multiply(dLdMean, hidden[j]);
@@ -304,7 +304,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         gradients["mean_bias"] = meanBiasGrad;
 
         // Compute gradients for scale weights
-        var scaleWeightGrad = new Tensor<T>(_scaleWeights.Shape._dims);
+        var scaleWeightGrad = new Tensor<T>(_scaleWeights.Shape.ToArray());
         for (int j = 0; j < _scaleWeights.Shape[1]; j++)
         {
             scaleWeightGrad[0, j] = NumOps.Multiply(dLdScaleRaw, hidden[j]);
@@ -316,7 +316,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         gradients["scale_bias"] = scaleBiasGrad;
 
         // Backprop through LSTM layers
-        var dHidden = new Tensor<T>(hidden.Shape._dims);
+        var dHidden = new Tensor<T>(hidden.Shape.ToArray());
         for (int j = 0; j < hidden.Length; j++)
         {
             dHidden[j] = NumOps.Add(
@@ -585,7 +585,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape._dims)
+        foreach (var dim in tensor.Shape.ToArray())
             writer.Write(dim);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(Convert.ToDouble(tensor[i]));
@@ -826,8 +826,8 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         var gradients = new Dictionary<string, Tensor<T>>();
 
         // Weight gradients
-        var dWeights = new Tensor<T>(_weights.Shape._dims);
-        var dBias = new Tensor<T>(_bias.Shape._dims);
+        var dWeights = new Tensor<T>(_weights.Shape.ToArray());
+        var dBias = new Tensor<T>(_bias.Shape.ToArray());
         var dInput = new Tensor<T>([_inputSize]);
 
         // Backprop through output: h = o * tanh(c)
@@ -933,13 +933,13 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         writer.Write(_hiddenSize);
 
         writer.Write(_weights.Shape.Length);
-        foreach (var dim in _weights.Shape._dims)
+        foreach (var dim in _weights.Shape.ToArray())
             writer.Write(dim);
         for (int i = 0; i < _weights.Length; i++)
             writer.Write(Convert.ToDouble(_weights[i]));
 
         writer.Write(_bias.Shape.Length);
-        foreach (var dim in _bias.Shape._dims)
+        foreach (var dim in _bias.Shape.ToArray())
             writer.Write(dim);
         for (int i = 0; i < _bias.Length; i++)
             writer.Write(Convert.ToDouble(_bias[i]));

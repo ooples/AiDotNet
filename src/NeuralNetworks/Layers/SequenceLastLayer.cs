@@ -72,7 +72,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
     /// <returns>Output tensor of shape [features] or [batch, features].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalShape = input.Shape._dims;
+        _originalShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         if (rank == 1)
@@ -157,7 +157,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        var shape = input.Shape._dims;
+        var shape = input.Shape.ToArray();
         int rank = shape.Length;
 
         _originalShape = shape;

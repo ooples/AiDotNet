@@ -300,7 +300,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         T error = NumOps.Subtract(prediction, target);
 
         // Backprop through output layer
-        var dOutput = new Tensor<T>(output.Shape._dims);
+        var dOutput = new Tensor<T>(output.Shape.ToArray());
         if (predIdx < dOutput.Length)
         {
             dOutput[predIdx] = NumOps.Multiply(NumOps.FromDouble(2.0), error);
@@ -358,7 +358,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape._dims);
+        var output = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
@@ -552,7 +552,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         int inSize = weight.Shape[1];
 
         // Weight gradients
-        var dWeight = new Tensor<T>(weight.Shape._dims);
+        var dWeight = new Tensor<T>(weight.Shape.ToArray());
         for (int i = 0; i < outSize && i < dOutput.Length; i++)
         {
             for (int j = 0; j < inSize && j < input.Length; j++)
@@ -699,7 +699,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         }
 
         // Backprop through output projection
-        var dOutputWeight = new Tensor<T>(_outputWeight.Shape._dims);
+        var dOutputWeight = new Tensor<T>(_outputWeight.Shape.ToArray());
         var dFinalHidden = new Tensor<T>([hiddenSize]);
 
         for (int i = 0; i < hiddenSize && i < dOutput.Length; i++)
@@ -802,9 +802,9 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         }
 
         // Compute weight gradients for Q, K, V projections (accumulated over positions)
-        var dQWeight = new Tensor<T>(_queryWeight.Shape._dims);
-        var dKWeight = new Tensor<T>(_keyWeight.Shape._dims);
-        var dVWeight = new Tensor<T>(_valueWeight.Shape._dims);
+        var dQWeight = new Tensor<T>(_queryWeight.Shape.ToArray());
+        var dKWeight = new Tensor<T>(_keyWeight.Shape.ToArray());
+        var dVWeight = new Tensor<T>(_valueWeight.Shape.ToArray());
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -1118,7 +1118,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape._dims)
+        foreach (var dim in tensor.Shape.ToArray())
             writer.Write(dim);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(Convert.ToDouble(tensor[i]));

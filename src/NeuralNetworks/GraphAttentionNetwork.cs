@@ -333,7 +333,7 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ComputeLossGradient(Tensor<T> predictions, Tensor<T> labels, bool[]? mask)
     {
-        var gradient = new Tensor<T>(predictions.Shape._dims);
+        var gradient = new Tensor<T>(predictions.Shape.ToArray());
         int numNodes = predictions.Shape[0];
         int numClasses = predictions.Shape[1];
         int count = 0;
@@ -755,7 +755,7 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
                 _cachedAdjacencyMatrix.Shape[1] != numNodes)
             {
                 throw new ArgumentException(
-                    $"Adjacency matrix shape [{string.Join(", ", _cachedAdjacencyMatrix.Shape._dims)}] does not match node count {numNodes}.",
+                    $"Adjacency matrix shape [{string.Join(", ", _cachedAdjacencyMatrix.Shape.ToArray())}] does not match node count {numNodes}.",
                     nameof(_cachedAdjacencyMatrix));
             }
 
@@ -830,7 +830,7 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         // Reshape gradient back to tensor shape if needed
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape._dims);
+            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
         }
 
         // Backward pass through all layers

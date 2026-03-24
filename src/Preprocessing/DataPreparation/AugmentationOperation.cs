@@ -144,7 +144,7 @@ public class AugmentationOperation<T> : IRowOperation<T>
         int newSamples = augmentedMatrix.Rows;
 
         // Convert back to tensor shape
-        int[] newXShape = (int[])X.Shape._dims.Clone();
+        int[] newXShape = (int[])X.Shape.ToArray().Clone();
         newXShape[0] = newSamples;
         var augmentedX = new Tensor<T>(newXShape);
 
@@ -165,7 +165,7 @@ public class AugmentationOperation<T> : IRowOperation<T>
         var augmentedVectorY = GenerateAugmentedLabels(matrixX, vectorY, augmentedMatrix);
 
         // Convert vector back to tensor
-        int[] newYShape = (int[])y.Shape._dims.Clone();
+        int[] newYShape = (int[])y.Shape.ToArray().Clone();
         newYShape[0] = newSamples;
         var augmentedY = new Tensor<T>(newYShape);
 

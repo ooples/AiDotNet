@@ -234,7 +234,7 @@ public class MaskingLayer<T> : LayerBase<T>
         // Store mask GPU tensor for backward pass (if training)
         if (IsTrainingMode)
         {
-            _lastMaskGpu = new GpuTensor<T>(backend, maskBuffer, input.Shape._dims, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _lastMaskGpu = new GpuTensor<T>(backend, maskBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate, ownsBuffer: true);
         }
         else
         {
@@ -242,7 +242,7 @@ public class MaskingLayer<T> : LayerBase<T>
             maskBuffer.Dispose();
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape._dims, GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <inheritdoc/>
@@ -271,7 +271,7 @@ public class MaskingLayer<T> : LayerBase<T>
         var gradInputBuffer = backend.AllocateBuffer(size);
         backend.Multiply(outputGradient.Buffer, _lastMaskGpu.Buffer, gradInputBuffer, size);
 
-        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape._dims, GpuTensorRole.Gradient, ownsBuffer: true);
+        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>

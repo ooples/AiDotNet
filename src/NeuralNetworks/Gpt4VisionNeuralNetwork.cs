@@ -1414,7 +1414,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Tensor<T> ApplyGELU(Tensor<T> x)
     {
-        var result = Tensor<T>.CreateDefault(x.Shape._dims, NumOps.Zero);
+        var result = Tensor<T>.CreateDefault(x.Shape.ToArray(), NumOps.Zero);
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);
@@ -1476,7 +1476,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             return tensor;
         }
 
-        var normalized = Tensor<T>.CreateDefault(tensor.Shape._dims, NumOps.Zero);
+        var normalized = Tensor<T>.CreateDefault(tensor.Shape.ToArray(), NumOps.Zero);
         for (int i = 0; i < tensor.Shape[0]; i++)
         {
             for (int j = 0; j < tensor.Shape[1]; j++)

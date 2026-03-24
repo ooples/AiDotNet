@@ -407,7 +407,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape._dims));
+        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -762,7 +762,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputName = OnnxSession.InputMetadata.Keys.First();
-        var inputShape = input.Shape._dims.Select(d => (long)d).ToArray();
+        var inputShape = input.Shape.ToArray().Select(d => (long)d).ToArray();
         var onnxInput = new OnnxTensors.DenseTensor<float>(
             input.ToArray().Select(x => Convert.ToSingle(x)).ToArray(),
             inputShape.Select(d => (int)d).ToArray());
@@ -792,7 +792,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private (Tensor<T> trend, Tensor<T> seasonal) InitializeDecomposition(Tensor<T> input)
     {
-        var trend = new Tensor<T>(input.Shape._dims);
+        var trend = new Tensor<T>(input.Shape.ToArray());
         var seasonal = input.Clone();
         return (trend, seasonal);
     }
@@ -822,7 +822,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> MovingAverage(Tensor<T> input, int kernelSize)
     {
-        var result = new Tensor<T>(input.Shape._dims);
+        var result = new Tensor<T>(input.Shape.ToArray());
         int seqLen = input.Shape[1];
         int halfKernel = kernelSize / 2;
 
@@ -868,7 +868,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
             _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
             _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-            var normalized = new Tensor<T>(input.Shape._dims);
+            var normalized = new Tensor<T>(input.Shape.ToArray());
             T epsilon = NumOps.FromDouble(1e-5);
 
             for (int b = 0; b < batchSize; b++)
@@ -906,7 +906,7 @@ public class Autoformer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input.Shape._dims);
+            var denormalized = new Tensor<T>(input.Shape.ToArray());
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];

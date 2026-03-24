@@ -81,7 +81,7 @@ public class IRBuilder
             var tensorId = _nextTensorId++;
             _nodeToTensorId[input] = tensorId;
             graph.InputIds.Add(tensorId);
-            graph.TensorShapes[tensorId] = input.Value.Shape._dims;
+            graph.TensorShapes[tensorId] = input.Value.Shape.ToArray();
         }
 
         // Perform topological sort to process nodes in order
@@ -167,7 +167,7 @@ public class IRBuilder
         var irType = InferIRType(typeof(T));
 
         // Get output shape
-        var outputShape = node.Value.Shape._dims;
+        var outputShape = node.Value.Shape.ToArray();
 
         // Create IR operation based on operation type
         IROp op = node.OperationType.Value switch
@@ -587,7 +587,7 @@ public class IRBuilder
         // Output gradient is input to backward pass (initialized to 1s typically)
         var outputGradId = _nextTensorId++;
         graph.InputIds.Add(outputGradId);
-        graph.TensorShapes[outputGradId] = outputNode.Value.Shape._dims;
+        graph.TensorShapes[outputGradId] = outputNode.Value.Shape.ToArray();
         gradientMap[outputNode] = outputGradId;
 
         // Traverse in reverse topological order for backpropagation
@@ -651,7 +651,7 @@ public class IRBuilder
                         OutputId = _nextTensorId++,
                         InputIds = new[] { existingGradId, parentGradId },
                         OutputType = InferIRType(typeof(T)),
-                        OutputShape = parent.Value.Shape._dims
+                        OutputShape = parent.Value.Shape.ToArray()
                     };
                     graph.Operations.Add(accumOp);
                     graph.TensorShapes[accumOp.OutputId] = accumOp.OutputShape;
@@ -710,7 +710,7 @@ public class IRBuilder
                         InputIds = new[] { outputGradId },
                         InputIndex = i,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -725,7 +725,7 @@ public class IRBuilder
                         InputIds = new[] { outputGradId },
                         InputIndex = i,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -741,7 +741,7 @@ public class IRBuilder
                         InputIds = new[] { outputGradId, otherInputId },
                         InputIndex = i,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -753,7 +753,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardInputIds[1] },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims
+                    OutputShape = node.Parents[0].Value.Shape.ToArray()
                 });
                 // grad_B = A^T @ grad_C
                 ops.Add(new Operations.GradMatMulRightOp
@@ -761,7 +761,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { forwardInputIds[0], outputGradId },
                     OutputType = irType,
-                    OutputShape = node.Parents[1].Value.Shape._dims
+                    OutputShape = node.Parents[1].Value.Shape.ToArray()
                 });
                 break;
 
@@ -772,7 +772,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -784,7 +784,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardOutputId },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardOutputId
                 });
                 break;
@@ -796,7 +796,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardOutputId },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardOutputId
                 });
                 break;
@@ -808,7 +808,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardOutputId },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardOutputId
                 });
                 break;
@@ -820,7 +820,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -834,7 +834,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId, forwardOutputId },
                     Axis = axis,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardOutputId
                 });
                 break;
@@ -853,7 +853,7 @@ public class IRBuilder
                         Stride = convStride,
                         Padding = convPadding,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -869,7 +869,7 @@ public class IRBuilder
                     PoolSize = maxPoolSize,
                     Stride = maxPoolStride,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -885,7 +885,7 @@ public class IRBuilder
                     PoolSize = avgPoolSize,
                     Stride = avgPoolStride,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims
+                    OutputShape = node.Parents[0].Value.Shape.ToArray()
                 });
                 break;
 
@@ -901,7 +901,7 @@ public class IRBuilder
                         InputIndex = i,
                         Epsilon = bnEpsilon,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -916,7 +916,7 @@ public class IRBuilder
                         InputIds = new[] { outputGradId, forwardInputIds[0], forwardInputIds[1] },
                         InputIndex = i,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -930,7 +930,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     Exponent = exponent,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -943,7 +943,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId },
                     InputIndex = 1, // Use subtrahend path which negates
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims
+                    OutputShape = node.Parents[0].Value.Shape.ToArray()
                 });
                 break;
 
@@ -954,7 +954,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardOutputId },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardOutputId
                 });
                 break;
@@ -965,9 +965,9 @@ public class IRBuilder
                 {
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId },
-                    OriginalShape = node.Parents[0].Value.Shape._dims,
+                    OriginalShape = node.Parents[0].Value.Shape.ToArray(),
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims
+                    OutputShape = node.Parents[0].Value.Shape.ToArray()
                 });
                 break;
 
@@ -980,7 +980,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId },
                     Axes = transposeAxes,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims
+                    OutputShape = node.Parents[0].Value.Shape.ToArray()
                 });
                 break;
 
@@ -990,7 +990,7 @@ public class IRBuilder
                 int startIndex = 0;
                 for (int i = 0; i < node.Parents.Count; i++)
                 {
-                    var parentShape = node.Parents[i].Value.Shape._dims;
+                    var parentShape = node.Parents[i].Value.Shape.ToArray();
                     var sizeAlongAxis = parentShape[concatAxis < 0 ? parentShape.Length + concatAxis : concatAxis];
                     ops.Add(new Operations.GradConcatOp
                     {
@@ -1016,7 +1016,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId },
                     Padding = padding,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims
+                    OutputShape = node.Parents[0].Value.Shape.ToArray()
                 });
                 break;
 
@@ -1027,10 +1027,10 @@ public class IRBuilder
                 {
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId },
-                    OriginalShape = node.Parents[0].Value.Shape._dims,
+                    OriginalShape = node.Parents[0].Value.Shape.ToArray(),
                     CropOffsets = cropOffsets,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims
+                    OutputShape = node.Parents[0].Value.Shape.ToArray()
                 });
                 break;
 
@@ -1045,7 +1045,7 @@ public class IRBuilder
                     Scale = upsampleScale,
                     Mode = upsampleMode,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims
+                    OutputShape = node.Parents[0].Value.Shape.ToArray()
                 });
                 break;
 
@@ -1063,7 +1063,7 @@ public class IRBuilder
                         Epsilon = lnEpsilon,
                         NormalizedShape = normalizedShape,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -1084,7 +1084,7 @@ public class IRBuilder
                         Padding = ctPadding,
                         OutputPadding = ctOutPadding,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -1103,7 +1103,7 @@ public class IRBuilder
                         Stride = dwStride,
                         Padding = dwPadding,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -1113,7 +1113,7 @@ public class IRBuilder
             case OperationType.ReduceMean:
                 // grad_x = broadcast(grad_y / count_if_mean, original_shape)
                 var reduceAxes = GetParam<int[]?>(node, "Axes", null);
-                var originalShape = node.Parents[0].Value.Shape._dims;
+                var originalShape = node.Parents[0].Value.Shape.ToArray();
                 var isMean = node.OperationType.Value == OperationType.Mean ||
                              node.OperationType.Value == OperationType.ReduceMean;
                 if (isMean)
@@ -1171,7 +1171,7 @@ public class IRBuilder
                         HiddenSize = lstmHiddenSize,
                         InputIndex = i,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -1189,7 +1189,7 @@ public class IRBuilder
                         HiddenSize = gruHiddenSize,
                         InputIndex = i,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -1205,7 +1205,7 @@ public class IRBuilder
                             OutputId = _nextTensorId++,
                             InputIds = new[] { outputGradId, forwardInputIds[0] },
                             OutputType = irType,
-                            OutputShape = node.Parents[0].Value.Shape._dims,
+                            OutputShape = node.Parents[0].Value.Shape.ToArray(),
                             SavedForwardTensorId = forwardInputIds[0]
                         });
                         break;
@@ -1215,7 +1215,7 @@ public class IRBuilder
                             OutputId = _nextTensorId++,
                             InputIds = new[] { outputGradId, forwardOutputId },
                             OutputType = irType,
-                            OutputShape = node.Parents[0].Value.Shape._dims,
+                            OutputShape = node.Parents[0].Value.Shape.ToArray(),
                             SavedForwardTensorId = forwardOutputId
                         });
                         break;
@@ -1225,7 +1225,7 @@ public class IRBuilder
                             OutputId = _nextTensorId++,
                             InputIds = new[] { outputGradId, forwardOutputId },
                             OutputType = irType,
-                            OutputShape = node.Parents[0].Value.Shape._dims,
+                            OutputShape = node.Parents[0].Value.Shape.ToArray(),
                             SavedForwardTensorId = forwardOutputId
                         });
                         break;
@@ -1237,7 +1237,7 @@ public class IRBuilder
                             InputIds = new[] { outputGradId, forwardInputIds[0] },
                             Alpha = alpha,
                             OutputType = irType,
-                            OutputShape = node.Parents[0].Value.Shape._dims,
+                            OutputShape = node.Parents[0].Value.Shape.ToArray(),
                             SavedForwardTensorId = forwardInputIds[0]
                         });
                         break;
@@ -1249,7 +1249,7 @@ public class IRBuilder
                             InputIds = new[] { outputGradId, forwardInputIds[0] },
                             Approximate = approximate,
                             OutputType = irType,
-                            OutputShape = node.Parents[0].Value.Shape._dims,
+                            OutputShape = node.Parents[0].Value.Shape.ToArray(),
                             SavedForwardTensorId = forwardInputIds[0]
                         });
                         break;
@@ -1268,13 +1268,13 @@ public class IRBuilder
                     InputIds = new[] { outputGradId, forwardInputIds.Length > 1 ? forwardInputIds[1] : forwardOutputId },
                     Probability = dropoutProb,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims
+                    OutputShape = node.Parents[0].Value.Shape.ToArray()
                 });
                 break;
 
             case OperationType.Embedding:
                 // grad_embedding = scatter_add(grad_y, indices, embedding_shape)
-                var embeddingShape = node.Parents[0].Value.Shape._dims;
+                var embeddingShape = node.Parents[0].Value.Shape.ToArray();
                 ops.Add(new Operations.GradEmbeddingOp
                 {
                     OutputId = _nextTensorId++,
@@ -1288,7 +1288,7 @@ public class IRBuilder
             case OperationType.Gather:
                 // grad_x = scatter(grad_y, indices, axis, input_shape)
                 var gatherAxis = GetParam<int>(node, "Axis", 0);
-                var gatherInputShape = node.Parents[0].Value.Shape._dims;
+                var gatherInputShape = node.Parents[0].Value.Shape.ToArray();
                 ops.Add(new Operations.GradGatherOp
                 {
                     OutputId = _nextTensorId++,
@@ -1303,7 +1303,7 @@ public class IRBuilder
             case OperationType.Slice:
                 // grad_x = pad_with_zeros(grad_y, original_shape, start_indices)
                 var sliceStartIndices = GetParam<int[]>(node, "StartIndices", Array.Empty<int>());
-                var sliceOriginalShape = node.Parents[0].Value.Shape._dims;
+                var sliceOriginalShape = node.Parents[0].Value.Shape.ToArray();
                 ops.Add(new Operations.GradSliceOp
                 {
                     OutputId = _nextTensorId++,
@@ -1317,7 +1317,7 @@ public class IRBuilder
 
             case OperationType.Broadcast:
                 // grad_x = reduce_sum(grad_y, broadcasted_axes)
-                var broadcastOriginalShape = GetParam<int[]>(node, "OriginalShape", node.Parents[0].Value.Shape._dims);
+                var broadcastOriginalShape = GetParam<int[]>(node, "OriginalShape", node.Parents[0].Value.Shape.ToArray());
                 var broadcastedAxes = GetParam<int[]>(node, "BroadcastedAxes", Array.Empty<int>());
                 ops.Add(new Operations.GradBroadcastOp
                 {
@@ -1344,7 +1344,7 @@ public class IRBuilder
                         Scale = attentionScale,
                         CausalMask = causalMask,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -1363,7 +1363,7 @@ public class IRBuilder
                         NumHeads = mhaNumHeads,
                         HeadDim = mhaHeadDim,
                         OutputType = irType,
-                        OutputShape = node.Parents[i].Value.Shape._dims
+                        OutputShape = node.Parents[i].Value.Shape.ToArray()
                     });
                 }
                 break;
@@ -1377,7 +1377,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     Alpha = leakyAlpha,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -1391,7 +1391,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     Approximate = geluApproximate,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -1405,7 +1405,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId },
                     Axis = splitAxis,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims
+                    OutputShape = node.Parents[0].Value.Shape.ToArray()
                 });
                 break;
 
@@ -1419,7 +1419,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId, forwardInputIds[0], forwardOutputId },
                     Alpha = eluAlpha,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -1431,7 +1431,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardInputIds[0], forwardOutputId },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -1443,7 +1443,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -1457,7 +1457,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     Beta = softplusBeta,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -1469,7 +1469,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -1481,7 +1481,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -1497,7 +1497,7 @@ public class IRBuilder
                     MinVal = hardTanhMin,
                     MaxVal = hardTanhMax,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -1509,7 +1509,7 @@ public class IRBuilder
                     OutputId = _nextTensorId++,
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;
@@ -1523,7 +1523,7 @@ public class IRBuilder
                     InputIds = new[] { outputGradId, forwardInputIds[0] },
                     Alpha = celuAlpha,
                     OutputType = irType,
-                    OutputShape = node.Parents[0].Value.Shape._dims,
+                    OutputShape = node.Parents[0].Value.Shape.ToArray(),
                     SavedForwardTensorId = forwardInputIds[0]
                 });
                 break;

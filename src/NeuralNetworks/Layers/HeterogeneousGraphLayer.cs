@@ -289,8 +289,8 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// </summary>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape._dims);
-        var halfTensor = new Tensor<T>(tensor.Shape._dims);
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
+        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
@@ -344,7 +344,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: normalize to 3D [batchSize, numNodes, features] for graph processing
@@ -517,7 +517,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         }
 
         var input = inputs[0];
-        int[] inputShape = input.Shape._dims;
+        int[] inputShape = input.Shape.ToArray();
 
         // Handle shape normalization
         int batchSize;
@@ -885,7 +885,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             adj3D = adjacency;
         }
 
-        var normalized = new Tensor<T>(adj3D.Shape._dims);
+        var normalized = new Tensor<T>(adj3D.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1008,7 +1008,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         _selfLoopWeightsGradients = new Dictionary<string, Tensor<T>>();
         _biasesGradients = new Dictionary<string, Tensor<T>>();
 
-        var inputGradient = new Tensor<T>(input3D.Shape._dims);
+        var inputGradient = new Tensor<T>(input3D.Shape.ToArray());
         inputGradient.Fill(NumOps.Zero);
 
         // Compute gradients for edge type weights
@@ -1432,7 +1432,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         }
 
         var inputNode = inputNodes[0]; // Node features [batch, numNodes, inputFeatures]
-        var inputShape = inputNode.Value.Shape._dims;
+        var inputShape = inputNode.Value.Shape.ToArray();
         int batchSize = inputShape[0];
         int numNodes = inputShape[1];
 

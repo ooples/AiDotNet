@@ -154,8 +154,8 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape._dims);
-        int totalElements = input.Shape.Product;
+        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
+        int totalElements = input.Length;
 
         for (int i = 0; i < totalElements; i++)
         {
@@ -186,7 +186,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         int[] outputShape = new int[input.Shape.Length + 1];
-        Array.Copy(input.Shape._dims, outputShape, input.Shape.Length);
+        Array.Copy(input.Shape.ToArray(), outputShape, input.Shape.Length);
         outputShape[outputShape.Length - 1] = input.Shape[input.Shape.Length - 1];
 
         Tensor<T> output = new Tensor<T>(outputShape);

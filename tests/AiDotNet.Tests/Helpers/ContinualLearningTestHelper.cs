@@ -421,6 +421,8 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
     }
 
     public bool SupportsJitCompilation => false;
+
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 }
 
 /// <summary>

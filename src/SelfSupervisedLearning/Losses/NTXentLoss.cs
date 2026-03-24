@@ -192,7 +192,7 @@ public class NTXentLoss<T>
             result[i] = NumOps.Multiply(similarity.Data.Span[i], invTemp);
         }
 
-        return new Tensor<T>(result, similarity.Shape._dims);
+        return new Tensor<T>(result, similarity.Shape.ToArray());
     }
 
     private T ComputeContrastiveLoss(Tensor<T> similarity, int batchSize)

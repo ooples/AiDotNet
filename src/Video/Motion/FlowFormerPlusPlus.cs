@@ -147,7 +147,7 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
             throw new ArgumentException($"frame1 must be at least rank 3 [C,H,W], got rank {frame1.Rank}.", nameof(frame1));
         if (frame0.Shape[0] != frame1.Shape[0] || frame0.Shape[1] != frame1.Shape[1] || frame0.Shape[2] != frame1.Shape[2])
             throw new ArgumentException(
-                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape._dims)}], frame1: [{string.Join(",", frame1.Shape._dims)}].",
+                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape.ToArray())}], frame1: [{string.Join(",", frame1.Shape.ToArray())}].",
                 nameof(frame1));
         int height = frame0.Shape[1];
         int width = frame0.Shape[2];
@@ -184,7 +184,7 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
             throw new ArgumentException(
                 $"Expected output length {expectedOutput.Length} does not match model output length {output.Length}.",
                 nameof(expectedOutput));
-        var gradient = new Tensor<T>(output.Shape._dims);
+        var gradient = new Tensor<T>(output.Shape.ToArray());
         for (int i = 0; i < output.Length; i++)
         {
             gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);

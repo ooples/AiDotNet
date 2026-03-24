@@ -554,7 +554,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape._dims));
+        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -896,7 +896,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -932,7 +932,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
-        var result = new Tensor<T>(input.Shape._dims);
+        var result = new Tensor<T>(input.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-5);
 
         if (normalize)
@@ -1034,7 +1034,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
         Array.Copy(input.Data.ToArray(), shiftAmount, newData, 0, input.Length - shiftAmount);
         Array.Copy(predictions.Data.ToArray(), 0, newData, input.Length - shiftAmount, shiftAmount);
 
-        return new Tensor<T>(input.Shape._dims, new Vector<T>(newData));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(newData));
     }
 
     /// <summary>

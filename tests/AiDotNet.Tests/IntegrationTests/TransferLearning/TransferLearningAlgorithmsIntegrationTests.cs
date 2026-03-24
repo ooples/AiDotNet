@@ -555,6 +555,8 @@ public class TransferLearningAlgorithmsIntegrationTests
         {
             throw new NotSupportedException("Mock model does not support JIT compilation");
         }
+
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
     }
 
     #endregion

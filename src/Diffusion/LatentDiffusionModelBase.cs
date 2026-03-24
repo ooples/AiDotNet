@@ -183,7 +183,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
 
         // Encode input image to latent
         var latents = EncodeToLatent(inputImage, sampleMode: false);
-        var latentShape = latents.Shape._dims;
+        var latentShape = latents.Shape.ToArray();
 
         // Encode text prompts
         var promptTokens = Conditioner.Tokenize(prompt);
@@ -264,7 +264,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
 
         // Encode input image to latent
         var originalLatents = EncodeToLatent(inputImage, sampleMode: false);
-        var latentShape = originalLatents.Shape._dims;
+        var latentShape = originalLatents.Shape.ToArray();
 
         // Resize mask to latent size
         var latentMask = ResizeMaskToLatent(mask, latentShape);
@@ -346,7 +346,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         // Reshape output back to match input shape if we reshaped the input
         if (noisySample.Shape.Length < 4 && result.Shape.Length == 4)
         {
-            return result.Reshape(noisySample.Shape._dims);
+            return result.Reshape(noisySample.Shape.ToArray());
         }
 
         return result;
@@ -483,7 +483,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         var latentWidth = latentShape[3];
         var result = new Tensor<T>(new[] { latentShape[0], 1, latentHeight, latentWidth });
 
-        var maskShape = mask.Shape._dims;
+        var maskShape = mask.Shape.ToArray();
         var inputHeight = maskShape[2];
         var inputWidth = maskShape[3];
 
@@ -520,16 +520,16 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         // Use a seeded RNG based on timestep for consistency across calls
         // This ensures the same noise is used for the same timestep during denoising
         var seededRng = RandomHelper.CreateSeededRandom(timestep);
-        var noise = SampleNoiseTensor(original.Shape._dims, seededRng);
+        var noise = SampleNoiseTensor(original.Shape.ToArray(), seededRng);
         var noisyOriginal = Scheduler.AddNoise(original.ToVector(), noise.ToVector(), timestep);
 
-        var result = new Tensor<T>(generated.Shape._dims);
+        var result = new Tensor<T>(generated.Shape.ToArray());
         var genSpan = generated.AsSpan();
         var resultSpan = result.AsWritableSpan();
 
         // Expand mask to all latent channels
-        var maskShape = mask.Shape._dims;
-        var genShape = generated.Shape._dims;
+        var maskShape = mask.Shape.ToArray();
+        var genShape = generated.Shape.ToArray();
 
         for (int b = 0; b < genShape[0]; b++)
         {

@@ -553,7 +553,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims for rank > 5
@@ -673,7 +673,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape._dims;
+        var shape = input.Shape.ToArray();
         int rank = shape.Length;
 
         // Support any rank >= 4: last 4 dims are [T, H, W, C], earlier dims are batch-like
@@ -1155,7 +1155,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         int stateSize = batchSize * _filters * outHeight * outWidth;
         int inputSliceSize = batchSize * channels * height * width;
-        int outputGradSize = outputGradient.Shape.Product;
+        int outputGradSize = outputGradient.ElementCount;
 
         // Prepare NCHW-format weight buffers for backward convolutions
         var weightsFiNCHW = _weightsFi.Transpose([3, 2, 0, 1]);
@@ -1441,18 +1441,18 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             // and store in gradients dictionary
             _gradients = new Dictionary<string, object>
             {
-                ["weightsFi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWFiData), _weightsFi.Shape._dims).Transpose([2, 3, 1, 0]),
-                ["weightsIi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWIiData), _weightsIi.Shape._dims).Transpose([2, 3, 1, 0]),
-                ["weightsCi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWCiData), _weightsCi.Shape._dims).Transpose([2, 3, 1, 0]),
-                ["weightsOi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWOiData), _weightsOi.Shape._dims).Transpose([2, 3, 1, 0]),
-                ["weightsFh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWFhData), _weightsFh.Shape._dims).Transpose([2, 3, 1, 0]),
-                ["weightsIh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWIhData), _weightsIh.Shape._dims).Transpose([2, 3, 1, 0]),
-                ["weightsCh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWChData), _weightsCh.Shape._dims).Transpose([2, 3, 1, 0]),
-                ["weightsOh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWOhData), _weightsOh.Shape._dims).Transpose([2, 3, 1, 0]),
-                ["biasF"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBFData), _biasF.Shape._dims),
-                ["biasI"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBIData), _biasI.Shape._dims),
-                ["biasC"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBCData), _biasC.Shape._dims),
-                ["biasO"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBOData), _biasO.Shape._dims)
+                ["weightsFi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWFiData), _weightsFi.Shape.ToArray()).Transpose([2, 3, 1, 0]),
+                ["weightsIi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWIiData), _weightsIi.Shape.ToArray()).Transpose([2, 3, 1, 0]),
+                ["weightsCi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWCiData), _weightsCi.Shape.ToArray()).Transpose([2, 3, 1, 0]),
+                ["weightsOi"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWOiData), _weightsOi.Shape.ToArray()).Transpose([2, 3, 1, 0]),
+                ["weightsFh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWFhData), _weightsFh.Shape.ToArray()).Transpose([2, 3, 1, 0]),
+                ["weightsIh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWIhData), _weightsIh.Shape.ToArray()).Transpose([2, 3, 1, 0]),
+                ["weightsCh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWChData), _weightsCh.Shape.ToArray()).Transpose([2, 3, 1, 0]),
+                ["weightsOh"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradWOhData), _weightsOh.Shape.ToArray()).Transpose([2, 3, 1, 0]),
+                ["biasF"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBFData), _biasF.Shape.ToArray()),
+                ["biasI"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBIData), _biasI.Shape.ToArray()),
+                ["biasC"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBCData), _biasC.Shape.ToArray()),
+                ["biasO"] = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradBOData), _biasO.Shape.ToArray())
             };
 
             // Clear GPU cache
@@ -1634,18 +1634,18 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         // 6. Extract and Store Gradients in Dictionary
         _gradients = new Dictionary<string, object>
         {
-            ["weightsFi"] = wFi.Gradient ?? Tensor<T>.CreateDefault(_weightsFi.Shape._dims, NumOps.Zero),
-            ["weightsIi"] = wIi.Gradient ?? Tensor<T>.CreateDefault(_weightsIi.Shape._dims, NumOps.Zero),
-            ["weightsCi"] = wCi.Gradient ?? Tensor<T>.CreateDefault(_weightsCi.Shape._dims, NumOps.Zero),
-            ["weightsOi"] = wOi.Gradient ?? Tensor<T>.CreateDefault(_weightsOi.Shape._dims, NumOps.Zero),
-            ["weightsFh"] = wFh.Gradient ?? Tensor<T>.CreateDefault(_weightsFh.Shape._dims, NumOps.Zero),
-            ["weightsIh"] = wIh.Gradient ?? Tensor<T>.CreateDefault(_weightsIh.Shape._dims, NumOps.Zero),
-            ["weightsCh"] = wCh.Gradient ?? Tensor<T>.CreateDefault(_weightsCh.Shape._dims, NumOps.Zero),
-            ["weightsOh"] = wOh.Gradient ?? Tensor<T>.CreateDefault(_weightsOh.Shape._dims, NumOps.Zero),
-            ["biasF"] = bF.Gradient ?? Tensor<T>.CreateDefault(_biasF.Shape._dims, NumOps.Zero),
-            ["biasI"] = bI.Gradient ?? Tensor<T>.CreateDefault(_biasI.Shape._dims, NumOps.Zero),
-            ["biasC"] = bC.Gradient ?? Tensor<T>.CreateDefault(_biasC.Shape._dims, NumOps.Zero),
-            ["biasO"] = bO.Gradient ?? Tensor<T>.CreateDefault(_biasO.Shape._dims, NumOps.Zero)
+            ["weightsFi"] = wFi.Gradient ?? Tensor<T>.CreateDefault(_weightsFi.Shape.ToArray(), NumOps.Zero),
+            ["weightsIi"] = wIi.Gradient ?? Tensor<T>.CreateDefault(_weightsIi.Shape.ToArray(), NumOps.Zero),
+            ["weightsCi"] = wCi.Gradient ?? Tensor<T>.CreateDefault(_weightsCi.Shape.ToArray(), NumOps.Zero),
+            ["weightsOi"] = wOi.Gradient ?? Tensor<T>.CreateDefault(_weightsOi.Shape.ToArray(), NumOps.Zero),
+            ["weightsFh"] = wFh.Gradient ?? Tensor<T>.CreateDefault(_weightsFh.Shape.ToArray(), NumOps.Zero),
+            ["weightsIh"] = wIh.Gradient ?? Tensor<T>.CreateDefault(_weightsIh.Shape.ToArray(), NumOps.Zero),
+            ["weightsCh"] = wCh.Gradient ?? Tensor<T>.CreateDefault(_weightsCh.Shape.ToArray(), NumOps.Zero),
+            ["weightsOh"] = wOh.Gradient ?? Tensor<T>.CreateDefault(_weightsOh.Shape.ToArray(), NumOps.Zero),
+            ["biasF"] = bF.Gradient ?? Tensor<T>.CreateDefault(_biasF.Shape.ToArray(), NumOps.Zero),
+            ["biasI"] = bI.Gradient ?? Tensor<T>.CreateDefault(_biasI.Shape.ToArray(), NumOps.Zero),
+            ["biasC"] = bC.Gradient ?? Tensor<T>.CreateDefault(_biasC.Shape.ToArray(), NumOps.Zero),
+            ["biasO"] = bO.Gradient ?? Tensor<T>.CreateDefault(_biasO.Shape.ToArray(), NumOps.Zero)
         };
 
         var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
@@ -1701,31 +1701,31 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         int batchSize = lastInput.Shape[0];
         int timeSteps = lastInput.Shape[1];
 
-        var dInput = TensorAllocator.Rent<T>(lastInput.Shape._dims);
-        var dWeightsFi = new Tensor<T>(_weightsFi.Shape._dims);
-        var dWeightsIi = new Tensor<T>(_weightsIi.Shape._dims);
-        var dWeightsCi = new Tensor<T>(_weightsCi.Shape._dims);
-        var dWeightsOi = new Tensor<T>(_weightsOi.Shape._dims);
-        var dWeightsFh = new Tensor<T>(_weightsFh.Shape._dims);
-        var dWeightsIh = new Tensor<T>(_weightsIh.Shape._dims);
-        var dWeightsCh = new Tensor<T>(_weightsCh.Shape._dims);
-        var dWeightsOh = new Tensor<T>(_weightsOh.Shape._dims);
-        var dBiasF = new Tensor<T>(_biasF.Shape._dims);
-        var dBiasI = new Tensor<T>(_biasI.Shape._dims);
-        var dBiasC = new Tensor<T>(_biasC.Shape._dims);
-        var dBiasO = new Tensor<T>(_biasO.Shape._dims);
+        var dInput = TensorAllocator.Rent<T>(lastInput.Shape.ToArray());
+        var dWeightsFi = new Tensor<T>(_weightsFi.Shape.ToArray());
+        var dWeightsIi = new Tensor<T>(_weightsIi.Shape.ToArray());
+        var dWeightsCi = new Tensor<T>(_weightsCi.Shape.ToArray());
+        var dWeightsOi = new Tensor<T>(_weightsOi.Shape.ToArray());
+        var dWeightsFh = new Tensor<T>(_weightsFh.Shape.ToArray());
+        var dWeightsIh = new Tensor<T>(_weightsIh.Shape.ToArray());
+        var dWeightsCh = new Tensor<T>(_weightsCh.Shape.ToArray());
+        var dWeightsOh = new Tensor<T>(_weightsOh.Shape.ToArray());
+        var dBiasF = new Tensor<T>(_biasF.Shape.ToArray());
+        var dBiasI = new Tensor<T>(_biasI.Shape.ToArray());
+        var dBiasC = new Tensor<T>(_biasC.Shape.ToArray());
+        var dBiasO = new Tensor<T>(_biasO.Shape.ToArray());
 
         var lastHiddenState = _lastHiddenState ?? throw new InvalidOperationException("_lastHiddenState has not been initialized.");
-        var dNextH = new Tensor<T>(lastHiddenState.Shape._dims);
+        var dNextH = new Tensor<T>(lastHiddenState.Shape.ToArray());
         var lastCellState = _lastCellState ?? throw new InvalidOperationException("_lastCellState has not been initialized.");
-        var dNextC = new Tensor<T>(lastCellState.Shape._dims);
+        var dNextC = new Tensor<T>(lastCellState.Shape.ToArray());
 
         for (int t = timeSteps - 1; t >= 0; t--)
         {
             var currentDh = outGrad5D.GetSlice(t).Add(dNextH);
             var xt = lastInput.GetSlice(t);
-            var prevH = t > 0 ? lastHiddenState.GetSlice(t - 1) : new Tensor<T>(lastHiddenState.Shape._dims);
-            var prevC = t > 0 ? lastCellState.GetSlice(t - 1) : new Tensor<T>(lastCellState.Shape._dims);
+            var prevH = t > 0 ? lastHiddenState.GetSlice(t - 1) : new Tensor<T>(lastHiddenState.Shape.ToArray());
+            var prevC = t > 0 ? lastCellState.GetSlice(t - 1) : new Tensor<T>(lastCellState.Shape.ToArray());
 
             var (dxt, dprevH, dprevC, cellGrads) = BackwardStep(xt, prevH, prevC, currentDh, dNextC);
 
@@ -1877,26 +1877,26 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var doNCHW = do_.Transpose([0, 3, 1, 2]);
 
         // Weight gradients: dW = Conv2DBackwardKernel(gradient, input, kernelShape, stride, padding, dilation)
-        var kernelShape = _weightsFi.Transpose([3, 2, 0, 1]).Shape._dims; // NHWC kernel → NCHW kernel shape
+        var kernelShape = _weightsFi.Transpose([3, 2, 0, 1]).Shape.ToArray(); // NHWC kernel → NCHW kernel shape
         var dWfi = Engine.Conv2DBackwardKernel(dfNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWii = Engine.Conv2DBackwardKernel(diNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWci = Engine.Conv2DBackwardKernel(dcNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWoi = Engine.Conv2DBackwardKernel(doNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
 
-        var hKernelShape = _weightsFh.Transpose([3, 2, 0, 1]).Shape._dims;
+        var hKernelShape = _weightsFh.Transpose([3, 2, 0, 1]).Shape.ToArray();
         var dWfh = Engine.Conv2DBackwardKernel(dfNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWih = Engine.Conv2DBackwardKernel(diNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWch = Engine.Conv2DBackwardKernel(dcNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWoh = Engine.Conv2DBackwardKernel(doNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
 
         // Bias gradients: sum over batch, height, width (NHWC → sum dims 0,1,2)
-        var dbf = df.Sum([0, 1, 2]).Reshape(_biasF.Shape._dims);
-        var dbi = di.Sum([0, 1, 2]).Reshape(_biasI.Shape._dims);
-        var dbc = dc_.Sum([0, 1, 2]).Reshape(_biasC.Shape._dims);
-        var dbo = do_.Sum([0, 1, 2]).Reshape(_biasO.Shape._dims);
+        var dbf = df.Sum([0, 1, 2]).Reshape(_biasF.Shape.ToArray());
+        var dbi = di.Sum([0, 1, 2]).Reshape(_biasI.Shape.ToArray());
+        var dbc = dc_.Sum([0, 1, 2]).Reshape(_biasC.Shape.ToArray());
+        var dbo = do_.Sum([0, 1, 2]).Reshape(_biasO.Shape.ToArray());
 
         // Input gradient: dxt = Conv2DBackwardInput(gradient, kernel, inputShape, stride, padding, dilation)
-        var inputNCHWShape = xtNCHW.Shape._dims;
+        var inputNCHWShape = xtNCHW.Shape.ToArray();
         var wFiNCHW = _weightsFi.Transpose([3, 2, 0, 1]);
         var wIiNCHW = _weightsIi.Transpose([3, 2, 0, 1]);
         var wCiNCHW = _weightsCi.Transpose([3, 2, 0, 1]);
@@ -1907,7 +1907,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
             .Add(Engine.Conv2DBackwardInput(doNCHW, wOiNCHW, inputNCHWShape, stride, padding, dilation));
         var dxt = dxtNCHW.Transpose([0, 2, 3, 1]); // NCHW → NHWC
 
-        var prevHNCHWShape = prevHNCHW.Shape._dims;
+        var prevHNCHWShape = prevHNCHW.Shape.ToArray();
         var wFhNCHW = _weightsFh.Transpose([3, 2, 0, 1]);
         var wIhNCHW = _weightsIh.Transpose([3, 2, 0, 1]);
         var wChNCHW = _weightsCh.Transpose([3, 2, 0, 1]);
@@ -2153,7 +2153,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         if (!_momentums.TryGetValue(paramName, out var momentum))
         {
-            momentum = new Tensor<T>(parameter.Shape._dims);
+            momentum = new Tensor<T>(parameter.Shape.ToArray());
             // Initialize to zero (new Tensor does this)
         }
 

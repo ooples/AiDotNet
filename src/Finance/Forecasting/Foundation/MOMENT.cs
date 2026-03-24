@@ -429,7 +429,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape._dims));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -596,7 +596,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         // MOMENT uses RevIN (Reversible Instance Normalization)
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape._dims);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -747,7 +747,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
                 "Imputation requires native mode. ONNX inference only supports forecasting.");
 
         // Apply mask to input (zero out missing values)
-        var masked = new Tensor<T>(series.Shape._dims);
+        var masked = new Tensor<T>(series.Shape.ToArray());
         for (int i = 0; i < series.Length && i < mask.Length; i++)
         {
             masked.Data.Span[i] = NumOps.Multiply(series[i], mask[i]);
@@ -758,7 +758,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         var reconstructed = ReconstructNative(normalized);
 
         // Blend: use original where mask=1, reconstruction where mask=0
-        var result = new Tensor<T>(series.Shape._dims);
+        var result = new Tensor<T>(series.Shape.ToArray());
         for (int i = 0; i < series.Length; i++)
         {
             if (i < mask.Length && NumOps.GreaterThan(mask[i], NumOps.FromDouble(0.5)))

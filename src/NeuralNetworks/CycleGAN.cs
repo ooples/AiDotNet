@@ -470,7 +470,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
         // Combine all generator gradients before backward to avoid gradient loss
         // GeneratorAtoB receives: adversarial + cycle + identity gradients
-        var combinedGenAtoBGrad = new Tensor<T>(genAtoBGrad.Shape._dims);
+        var combinedGenAtoBGrad = new Tensor<T>(genAtoBGrad.Shape.ToArray());
         for (int i = 0; i < genAtoBGrad.Length; i++)
             combinedGenAtoBGrad.SetFlat(i, NumOps.Add(genAtoBGrad.GetFlat(i), identityBGrad.GetFlat(i)));
 
@@ -478,7 +478,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         UpdateGeneratorAtoBParameters();
 
         // GeneratorBtoA receives: adversarial + cycle + identity gradients
-        var combinedGenBtoAGrad = new Tensor<T>(genBtoAGrad.Shape._dims);
+        var combinedGenBtoAGrad = new Tensor<T>(genBtoAGrad.Shape.ToArray());
         for (int i = 0; i < genBtoAGrad.Length; i++)
             combinedGenBtoAGrad.SetFlat(i, NumOps.Add(genBtoAGrad.GetFlat(i), identityAGrad.GetFlat(i)));
 
@@ -605,7 +605,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape._dims);
+        var gradients = new Tensor<T>(predictions.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-10);
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
@@ -635,7 +635,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateL1Gradient(Tensor<T> predictions, Tensor<T> targets, double coefficient)
     {
-        var gradients = new Tensor<T>(predictions.Shape._dims);
+        var gradients = new Tensor<T>(predictions.Shape.ToArray());
         int count = predictions.Length;
         T coeff = NumOps.FromDouble(coefficient / count);
 

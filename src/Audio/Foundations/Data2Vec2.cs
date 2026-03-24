@@ -196,7 +196,7 @@ public class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
             }
         }
 
-        var result = new Tensor<T>(layerOutputs[0].Shape._dims);
+        var result = new Tensor<T>(layerOutputs[0].Shape.ToArray());
         for (int li = 0; li < count; li++)
         {
             for (int i = 0; i < result.Length && i < layerOutputs[li].Length; i++)

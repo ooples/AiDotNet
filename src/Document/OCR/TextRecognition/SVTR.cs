@@ -363,7 +363,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T> PreprocessTextImage(Tensor<T> image)
     {
         var processed = EnsureBatchDimension(image);
-        var normalized = new Tensor<T>(processed.Shape._dims);
+        var normalized = new Tensor<T>(processed.Shape.ToArray());
 
         for (int i = 0; i < processed.Data.Length; i++)
         {

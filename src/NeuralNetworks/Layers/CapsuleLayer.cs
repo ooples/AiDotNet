@@ -229,7 +229,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        int totalElements = _transformationMatrix.Shape.Product;
+        int totalElements = _transformationMatrix.Length;
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / totalElements));
         InitializeTensor(_transformationMatrix, scale);
 
@@ -263,7 +263,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // For multi-dimensional tensors, create random and apply transformation
-        int totalElements = tensor.Shape.Product;
+        int totalElements = tensor.Length;
 
         // Create a flat random tensor [0, 1]
         var randomTensor = Tensor<T>.CreateRandom(totalElements, 1).Reshape([totalElements]);
@@ -325,7 +325,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Clamp values to avoid log(0)
         T epsilon = NumOps.FromDouble(1e-10);
-        var epsilonTensor = new Tensor<T>(_lastCouplingCoefficients.Shape._dims);
+        var epsilonTensor = new Tensor<T>(_lastCouplingCoefficients.Shape.ToArray());
         epsilonTensor.Fill(epsilon);
 
         // p_clamped = max(p, epsilon) - element-wise
@@ -342,7 +342,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         T totalPLogP = sumPLogP.GetFlat(0);
 
         // Average across all distributions (total elements / distribution size)
-        int flatSize = _lastCouplingCoefficients.Shape.Product;
+        int flatSize = _lastCouplingCoefficients.Length;
         int distributionSize = _numCapsules;
         int numDistributions = flatSize / distributionSize;
 
@@ -460,7 +460,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: need at least 2D [capsules, dim]
@@ -713,7 +713,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (ScalarActivation != null)
         {
             // Apply scalar derivative element-by-element to avoid Jacobian shape mismatch
-            var deriv = new Tensor<T>(_lastOutput.Shape._dims);
+            var deriv = new Tensor<T>(_lastOutput.Shape.ToArray());
             for (int i = 0; i < _lastOutput.Length; i++)
                 deriv[i] = ScalarActivation.Derivative(_lastOutput[i]);
             activationGradient = Engine.TensorMultiply(deriv, outputGradient);
@@ -921,7 +921,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 7. Store Gradients
         // _biasGradient is flattened - use default zero tensor if gradient is null
-        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape._dims, NumOps.Zero);
+        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape.ToArray(), NumOps.Zero);
 
         // _transformationMatrixGradient needs [I, D_in, O, D_out]
         // weightsPermuted.Gradient is [I, O, D_in, D_out]
@@ -933,7 +933,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else
         {
-            _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape._dims, NumOps.Zero);
+            _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape.ToArray(), NumOps.Zero);
         }
 
         var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
@@ -1088,14 +1088,14 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int matrixSize = _transformationMatrix.Shape.Product;
+        int matrixSize = _transformationMatrix.Length;
         int biasSize = _bias.Length;
 
         if (parameters.Length != matrixSize + biasSize)
             throw new ArgumentException($"Expected {matrixSize + biasSize} parameters, but got {parameters.Length}");
 
         // Set parameters without hot-path conversions
-        _transformationMatrix = new Tensor<T>(_transformationMatrix.Shape._dims, parameters.Slice(0, matrixSize));
+        _transformationMatrix = new Tensor<T>(_transformationMatrix.Shape.ToArray(), parameters.Slice(0, matrixSize));
         _bias = new Tensor<T>([biasSize], parameters.Slice(matrixSize, biasSize));
     }
 

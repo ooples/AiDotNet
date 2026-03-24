@@ -171,7 +171,7 @@ public class TabTransformerRegression<T> : TabTransformerBase<T>
         int batchSize = _predictionsCache.Shape[0];
         int outputDim = _predictionsCache.Shape.Length > 1 ? _predictionsCache.Shape[1] : 1;
 
-        var predictionGrad = new Tensor<T>(_predictionsCache.Shape._dims);
+        var predictionGrad = new Tensor<T>(_predictionsCache.Shape.ToArray());
         var scale = NumOps.FromDouble(2.0 / (batchSize * outputDim));
 
         for (int i = 0; i < _predictionsCache.Length; i++)

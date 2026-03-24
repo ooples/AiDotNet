@@ -672,7 +672,7 @@ public class ImageEncoder<T>
     private Tensor<T> FlattenPatches(Tensor<T> image)
     {
         // Simplified: just flatten the image
-        var flatData = new T[image.Shape.Product];
+        var flatData = new T[image.Length];
         var span = image.AsSpan();
         for (int i = 0; i < span.Length && i < flatData.Length; i++)
         {
@@ -683,7 +683,7 @@ public class ImageEncoder<T>
 
     private Tensor<T> ApplyGelu(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         var span = x.AsSpan();
         var resultSpan = result.AsWritableSpan();
 

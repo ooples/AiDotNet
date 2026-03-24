@@ -391,7 +391,7 @@ public class CRNN<T> : OCRBase<T>
         int height = x.Shape[2];
         int width = x.Shape[3];
 
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         double epsilon = 1e-5;
 
         for (int c = 0; c < channels; c++)
@@ -731,7 +731,7 @@ public class CRNN<T> : OCRBase<T>
 
     private Tensor<T> ApplyReLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);

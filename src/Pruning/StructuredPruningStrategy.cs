@@ -417,7 +417,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
         if (weights.Rank != 4)
             throw new ArgumentException("Filter pruning requires 4D tensor [filters, channels, height, width]");
 
-        var dims = weights.Shape._dims;
+        var dims = weights.Shape.ToArray();
         int filters = dims[0];
         int channels = dims[1];
         int height = dims[2];
@@ -454,7 +454,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
         if (weights.Rank != 4)
             throw new ArgumentException("Channel pruning requires 4D tensor [filters, channels, height, width]");
 
-        var dims = weights.Shape._dims;
+        var dims = weights.Shape.ToArray();
         int filters = dims[0];
         int channels = dims[1];
         int height = dims[2];
@@ -787,7 +787,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                     Values = nonZeroValues.ToArray(),
                     RowIndices = rowIndices.ToArray(),
                     ColumnIndices = columnIndices.ToArray(),
-                    OriginalShape = weights.Shape._dims.ToArray()
+                    OriginalShape = weights.Shape.ToArray().ToArray()
                 };
 
             case SparseFormat.CSR:
@@ -801,7 +801,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                 {
                     Format = SparseFormat.Structured2to4,
                     Values = nonZeroValues.ToArray(),
-                    OriginalShape = weights.Shape._dims.ToArray(),
+                    OriginalShape = weights.Shape.ToArray().ToArray(),
                     SparsityN = 2,
                     SparsityM = 4
                 };
@@ -867,7 +867,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
             SparsityMask = mask.ToArray(),
             SparsityN = n,
             SparsityM = m,
-            OriginalShape = weights.Shape._dims.ToArray()
+            OriginalShape = weights.Shape.ToArray().ToArray()
         };
     }
 

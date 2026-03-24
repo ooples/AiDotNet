@@ -199,8 +199,8 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
             grad1Buffer, grad2Buffer, batchSize, embeddingSize, margin);
 
         // Create gradient tensors
-        var grad1Tensor = new GpuTensor<T>(backend, grad1Buffer, output1.Shape._dims, GpuTensorRole.Gradient);
-        var grad2Tensor = new GpuTensor<T>(backend, grad2Buffer, output2.Shape._dims, GpuTensorRole.Gradient);
+        var grad1Tensor = new GpuTensor<T>(backend, grad1Buffer, output1.Shape.ToArray(), GpuTensorRole.Gradient);
+        var grad2Tensor = new GpuTensor<T>(backend, grad2Buffer, output2.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), grad1Tensor, grad2Tensor);
     }

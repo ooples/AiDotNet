@@ -453,7 +453,7 @@ public class TimeGPT<T> : ForecastingModelBase<T>
 
             // Backward pass
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, output.Shape._dims));
+            Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -796,7 +796,7 @@ public class TimeGPT<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1033,7 +1033,7 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var result = new Tensor<T>(input.Shape._dims);
+        var result = new Tensor<T>(input.Shape.ToArray());
         // Use effective context length based on actual input size
         int effectiveContext = Math.Min(_contextLength, input.Length);
         int steps = Math.Min(stepsUsed, effectiveContext);

@@ -65,7 +65,7 @@ public class MaskBlur<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>The blurred mask.</returns>
     public Tensor<T> Apply(Tensor<T> mask)
     {
-        var shape = mask.Shape._dims;
+        var shape = mask.Shape.ToArray();
         var result = new Tensor<T>(shape);
         int height = shape[0];
         int width = shape.Length > 1 ? shape[1] : 1;

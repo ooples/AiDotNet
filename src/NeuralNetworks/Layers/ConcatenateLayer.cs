@@ -171,7 +171,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
         }
         else
         {
-            Array.Copy(inputs[0].Shape._dims, permutedOutputShape, rank);
+            Array.Copy(inputs[0].Shape.ToArray(), permutedOutputShape, rank);
             permutedOutputShape[axis] = totalAxisDim;
         }
 

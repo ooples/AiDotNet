@@ -1307,7 +1307,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             data[i] = numOps.FromDouble(grad * sig * (1.0 - sig));
         }
 
-        return new Tensor<T>(data, gradient.Shape._dims);
+        return new Tensor<T>(data, gradient.Shape.ToArray());
     }
 
     private Tensor<T> ApplySoftplusGradient(Tensor<T> raw, Tensor<T> gradient)
@@ -1322,7 +1322,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             data[i] = numOps.FromDouble(grad * sigmoid);
         }
 
-        return new Tensor<T>(data, gradient.Shape._dims);
+        return new Tensor<T>(data, gradient.Shape.ToArray());
     }
 
     private Tensor<T> AddTensors(Tensor<T> left, Tensor<T> right)

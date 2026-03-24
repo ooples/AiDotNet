@@ -243,8 +243,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var gradFlow = gradOutput;
 
         // Initialize gradient accumulators for input frames
-        var gradInput1 = new Tensor<T>(_lastInput1.Shape._dims);
-        var gradInput2 = new Tensor<T>(_lastInput2.Shape._dims);
+        var gradInput1 = new Tensor<T>(_lastInput1.Shape.ToArray());
+        var gradInput2 = new Tensor<T>(_lastInput2.Shape.ToArray());
 
         // Fine-to-coarse gradient propagation (reverse of forward)
         for (int level = 0; level < _numLevels; level++)
@@ -260,7 +260,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             // moduleInput was: [img1, warped2, flow]
             // Split gradient back to these components
             var (gradImg1Contrib, gradWarped2, gradFlowFromConcat) =
-                SplitConcatenationGradient(moduleGrad, _cachedPyramid1[level].Shape._dims, hasBatch);
+                SplitConcatenationGradient(moduleGrad, _cachedPyramid1[level].Shape.ToArray(), hasBatch);
 
             // 4. Backprop through GridSample warping using IEngine
             if (_cachedGrids.Count > level && _cachedPyramid2.Count > level)
@@ -275,7 +275,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
                 // Convert gradWarped2 from NCHW to NHWC for GridSampleBackwardInput
                 var gradWarped4D = hasBatch ? gradWarped2 : gradWarped2.Reshape(new[] { 1, gradWarped2.Shape[0], gradWarped2.Shape[1], gradWarped2.Shape[2] });
-                var gradWarped4DNHWC = gradWarped4D.Transpose(new[] { 0, 2, 3, 1 }).Contiguous(); // NCHW → NHWC
+                var gradWarped4DNHWC = gradWarped4D.Transpose(new[] { 0, 2, 3, 1 }); // NCHW → NHWC
 
                 var gradImg2FromWarp = _engine.GridSampleBackwardInput(
                     gradWarped4DNHWC,
@@ -285,9 +285,9 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 // Get gradient w.r.t. grid (which depends on flow)
                 // GridSampleBackwardGrid also expects NHWC format
                 var img2_4DNHWC = hasBatch
-                    ? _cachedPyramid2[level].Transpose(new[] { 0, 2, 3, 1 }).Contiguous()
+                    ? _cachedPyramid2[level].Transpose(new[] { 0, 2, 3, 1 })
                     : _cachedPyramid2[level].Reshape(new[] { 1, _cachedPyramid2[level].Shape[0], _cachedPyramid2[level].Shape[1], _cachedPyramid2[level].Shape[2] })
-                        .Transpose(new[] { 0, 2, 3, 1 }).Contiguous();
+                        .Transpose(new[] { 0, 2, 3, 1 });
                 var gradGrid = _engine.GridSampleBackwardGrid(
                     gradWarped4DNHWC,
                     img2_4DNHWC,
@@ -300,7 +300,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 gradFlow = AddTensors(gradFlowFromConcat, gradFlowFromWarp);
 
                 // Convert gradImg2FromWarp from NHWC [1,H,W,C] back to NCHW [C,H,W] or [B,C,H,W]
-                var gradImg2NCHW = gradImg2FromWarp.Transpose(new[] { 0, 3, 1, 2 }).Contiguous();
+                var gradImg2NCHW = gradImg2FromWarp.Transpose(new[] { 0, 3, 1, 2 });
                 if (!hasBatch)
                     gradImg2NCHW = gradImg2NCHW.Reshape(new[] { gradImg2NCHW.Shape[1], gradImg2NCHW.Shape[2], gradImg2NCHW.Shape[3] });
 
@@ -875,7 +875,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int height = hasBatch ? image.Shape[2] : image.Shape[1];
         int width = hasBatch ? image.Shape[3] : image.Shape[2];
 
-        var output = TensorAllocator.Rent<T>(image.Shape._dims);
+        var output = TensorAllocator.Rent<T>(image.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -1022,7 +1022,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int height = hasBatch ? flow.Shape[2] : flow.Shape[1];
         int width = hasBatch ? flow.Shape[3] : flow.Shape[2];
 
-        var output = TensorAllocator.Rent<T>(flow.Shape._dims);
+        var output = TensorAllocator.Rent<T>(flow.Shape.ToArray());
         int pixelsPerChannel = height * width;
 
         for (int b = 0; b < batch; b++)
@@ -1389,7 +1389,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 flowNode = TensorOperations<T>.Upsample(flowNode, 2);
                 // Scale flow values by 2 for upsampling
                 var scaleNode = TensorOperations<T>.Constant(
-                    CreateScaleTensor(flowNode.Value.Shape._dims, 2.0), $"{namePrefix}scale_{level}");
+                    CreateScaleTensor(flowNode.Value.Shape.ToArray(), 2.0), $"{namePrefix}scale_{level}");
                 flowNode = TensorOperations<T>.ElementwiseMultiply(flowNode, scaleNode);
             }
 
@@ -1436,7 +1436,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     {
         // Create identity grid and add flow to get sampling positions
         // Grid should be [batch, height, width, 2] in normalized coordinates [-1, 1]
-        var flowShape = flowNode.Value.Shape._dims;
+        var flowShape = flowNode.Value.Shape.ToArray();
         int batch = flowShape[0];
         int height = flowShape[2];
         int width = flowShape[3];

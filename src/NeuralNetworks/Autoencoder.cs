@@ -490,7 +490,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         Vector<T> gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
 
         // Reshape the gradient back to the original tensor shape
-        return new Tensor<T>(predicted.Shape._dims, gradientVector);
+        return new Tensor<T>(predicted.Shape.ToArray(), gradientVector);
     }
 
     /// <summary>
@@ -636,7 +636,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         scalingFactor = NumOps.Multiply(scalingFactor, AuxiliaryLossWeight);
 
         // Create gradient tensor with the same shape as encoder activations
-        var gradient = new Tensor<T>(_lastEncoderActivations.Shape._dims);
+        var gradient = new Tensor<T>(_lastEncoderActivations.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             gradient[i] = scalingFactor;

@@ -343,7 +343,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
         }
 
-        var inputShape = input.Shape._dims;
+        var inputShape = input.Shape.ToArray();
         var expectedShape = Architecture.GetInputShape();
 
         // Ensure input has correct shape

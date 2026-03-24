@@ -419,7 +419,7 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                 for (int f = 0; f < featureSize; f++)
                 {
                     int flatIndex = b * featureSize + f;
-                    var multiDimIndex = ComputeMultiDimIndex(flatIndex, tensor.Shape._dims, 1);
+                    var multiDimIndex = ComputeMultiDimIndex(flatIndex, tensor.Shape.ToArray(), 1);
                     multiDimIndex[0] = b;
                     result[b, f] = tensor[multiDimIndex];
                 }

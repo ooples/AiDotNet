@@ -362,7 +362,7 @@ public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
         SetTrainingMode(true);
         var output = PredictNative(input);
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var gradTensor = Tensor<T>.FromVector(gradient, output.Shape._dims);
+        var gradTensor = Tensor<T>.FromVector(gradient, output.Shape.ToArray());
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
@@ -675,7 +675,7 @@ public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         string inputName = OnnxSession.InputMetadata.Keys.First();
 
         using var results = OnnxSession.Run(new[]

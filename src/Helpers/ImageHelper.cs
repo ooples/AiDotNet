@@ -345,7 +345,7 @@ public static class ImageHelper<T>
     /// <param name="denormalize">Whether to denormalize from [0, 1] to [0, 255].</param>
     public static void SaveBmp(Tensor<T> tensor, string filePath, bool denormalize = true)
     {
-        var shape = tensor.Shape._dims;
+        var shape = tensor.Shape.ToArray();
         int channels, height, width;
 
         if (shape.Length == 4)
@@ -431,7 +431,7 @@ public static class ImageHelper<T>
     /// <param name="binary">Whether to save as binary (P6) or ASCII (P3).</param>
     public static void SavePpm(Tensor<T> tensor, string filePath, bool denormalize = true, bool binary = true)
     {
-        var shape = tensor.Shape._dims;
+        var shape = tensor.Shape.ToArray();
         int height, width;
 
         if (shape.Length == 4)

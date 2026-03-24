@@ -821,7 +821,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         else
         {
             // Create zero gradient for base layer
-            baseInputGrad = new Tensor<T>(_lastInput.Shape._dims);
+            baseInputGrad = new Tensor<T>(_lastInput.Shape.ToArray());
         }
 
         // Sum input gradients from DVoRA and base layer

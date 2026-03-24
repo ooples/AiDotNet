@@ -617,7 +617,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Flatten original input for comparison
         // Validate the input can be flattened before attempting reshape
         int expectedLength = 1;
-        foreach (int dim in input.Shape._dims)
+        foreach (int dim in input.Shape.ToArray())
         {
             expectedLength *= dim;
         }

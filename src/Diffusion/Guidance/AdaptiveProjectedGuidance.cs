@@ -65,7 +65,7 @@ public class AdaptiveProjectedGuidance<T> : IGuidanceMethod<T>
         // Project direction onto conditional prediction
         double projScale = condNormSq > 1e-10 ? dotProduct / condNormSq : 0;
 
-        var result = new Tensor<T>(unconditional.Shape._dims);
+        var result = new Tensor<T>(unconditional.Shape.ToArray());
         var resultSpan = result.AsWritableSpan();
 
         for (int i = 0; i < len; i++)

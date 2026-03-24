@@ -260,7 +260,7 @@ public class MinLSTMLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -307,7 +307,7 @@ public class MinLSTMLayer<T> : LayerBase<T>
         // Step 4: Normalize gates -- f' = f/(f+i), i' = i/(f+i)
         var gateSum = Engine.TensorAdd(forgetSigmoid, inputGateSigmoid);
         // Add small epsilon for numerical stability to avoid division by zero
-        var epsilon = new Tensor<T>(gateSum.Shape._dims);
+        var epsilon = new Tensor<T>(gateSum.Shape.ToArray());
         epsilon.Fill(NumOps.FromDouble(1e-8));
         gateSum = Engine.TensorAdd(gateSum, epsilon);
 
@@ -579,7 +579,7 @@ public class MinLSTMLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var ones = new Tensor<T>(template.Shape._dims);
+        var ones = new Tensor<T>(template.Shape.ToArray());
         ones.Fill(NumOps.One);
         return ones;
     }

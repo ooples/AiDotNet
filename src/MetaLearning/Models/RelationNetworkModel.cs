@@ -101,7 +101,7 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
             for (int i = 0; i < numSamples; i++)
             {
                 // Extract individual sample
-                var sampleTensor = new Tensor<T>(supportTensor.Shape._dims.Skip(1).ToArray());
+                var sampleTensor = new Tensor<T>(supportTensor.Shape.ToArray().Skip(1).ToArray());
                 for (int j = 0; j < sampleSize; j++)
                 {
                     sampleTensor.SetFlat(j, supportTensor.GetFlat(i * sampleSize + j));

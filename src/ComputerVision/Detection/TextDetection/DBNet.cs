@@ -248,7 +248,7 @@ public class DBNet<T> : TextDetectorBase<T>
 
     private Tensor<T> ApplyDifferentiableBinarization(Tensor<T> prob, Tensor<T> thresh)
     {
-        var result = new Tensor<T>(prob.Shape._dims);
+        var result = new Tensor<T>(prob.Shape.ToArray());
 
         for (int i = 0; i < prob.Length; i++)
         {
@@ -365,7 +365,7 @@ public class DBNet<T> : TextDetectorBase<T>
 
     private Tensor<T> ApplyReLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);
@@ -376,7 +376,7 @@ public class DBNet<T> : TextDetectorBase<T>
 
     private Tensor<T> ApplySigmoid(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape._dims);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);

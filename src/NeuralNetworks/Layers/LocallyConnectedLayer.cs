@@ -494,7 +494,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Assign the scaled tensor to weights (preserving shape)
         // Note: Array.Copy to _weights.ToArray() creates a temporary copy, not updating _weights
-        _weights = scaledTensor.Reshape(_weights.Shape._dims);
+        _weights = scaledTensor.Reshape(_weights.Shape.ToArray());
 
         // Initialize biases to zero
         _biases.Fill(NumOps.Zero);
@@ -526,7 +526,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Normalize to 4D NHWC [batch, height, width, channels] for processing
@@ -656,7 +656,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
                 $"LocallyConnected input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        _originalInputShape = input.Shape._dims;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Reshape input to 4D NCHW [B, C, H, W] for locally connected operation
@@ -828,7 +828,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // Download and permute weight gradients back to [oh, ow, oc, kh, kw, ic]
         float[] weightGradData = backend.DownloadBuffer(weightGradBuffer);
         weightGradBuffer.Dispose();
-        var weightGradPermuted = new Tensor<T>(weightsPermuted.Shape._dims,
+        var weightGradPermuted = new Tensor<T>(weightsPermuted.Shape.ToArray(),
             new Vector<T>(DirectGpuEngine.FromFloatArray<T>(weightGradData)));
         _weightGradients = weightGradPermuted.Transpose([0, 1, 2, 4, 5, 3]);
 
@@ -954,12 +954,12 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
 
         // Compute input gradient using Engine operation
         var inputGradNCHW = Engine.LocallyConnectedConv2DBackwardInput(
-            gradNCHW, weightsPermuted, inputNCHW.Shape._dims, strideArr);
+            gradNCHW, weightsPermuted, inputNCHW.Shape.ToArray(), strideArr);
 
         // Compute weight gradients using Engine operation
         // Result is [oh, ow, oc, ic, kh, kw]
         var weightGradsPermuted = Engine.LocallyConnectedConv2DBackwardWeights(
-            gradNCHW, inputNCHW, weightsPermuted.Shape._dims, strideArr);
+            gradNCHW, inputNCHW, weightsPermuted.Shape.ToArray(), strideArr);
 
         // Permute weight gradients back from [oh, ow, oc, ic, kh, kw] to [oh, ow, oc, kh, kw, ic]
         _weightGradients = weightGradsPermuted.Transpose([0, 1, 2, 4, 5, 3]);
@@ -1243,8 +1243,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         var biasesVector = parameters.Slice(weightsLength, _biases.Length);
 
         // Convert vectors to tensors and assign
-        _weights = Tensor<T>.FromVector(weightsVector, _weights.Shape._dims);
-        _biases = Tensor<T>.FromVector(biasesVector, _biases.Shape._dims);
+        _weights = Tensor<T>.FromVector(weightsVector, _weights.Shape.ToArray());
+        _biases = Tensor<T>.FromVector(biasesVector, _biases.Shape.ToArray());
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_weights);

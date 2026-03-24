@@ -63,13 +63,13 @@ public static class TensorExtensions
             throw new ArgumentNullException(nameof(flattenedValues));
 
         // Calculate the total size of the tensor
-        int totalSize = tensor.Shape.Product;
+        int totalSize = tensor.Length;
 
         if (flattenedValues.Length != totalSize)
             throw new ArgumentException($"The size of the flattened vector ({flattenedValues.Length}) does not match the tensor shape total size ({totalSize})");
 
         // Create a new tensor with the same shape
-        var result = new Tensor<T>(tensor.Shape._dims);
+        var result = new Tensor<T>(tensor.Shape.ToArray());
 
         // Use SIMD Copy for bulk transfer
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -138,7 +138,7 @@ public static class TensorExtensions
     public static bool TensorEquals<T>(this Tensor<T> a, Tensor<T> b)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        if (!a.Shape._dims.SequenceEqual(b.Shape._dims))
+        if (!a.Shape.ToArray().SequenceEqual(b.Shape.ToArray()))
             return false;
 
         // Use spans for vectorized comparison
@@ -165,8 +165,8 @@ public static class TensorExtensions
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Get shapes and verify they can be concatenated
-        int[] shapeA = tensorA.Shape._dims;
-        int[] shapeB = tensorB.Shape._dims;
+        int[] shapeA = tensorA.Shape.ToArray();
+        int[] shapeB = tensorB.Shape.ToArray();
 
         if (shapeA.Length != shapeB.Length)
         {

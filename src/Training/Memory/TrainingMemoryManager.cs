@@ -483,7 +483,7 @@ public class TrainingMemoryManager<T> : IDisposable
         // If pooling is enabled, get a tensor from the pool
         if (_activationPool is not null)
         {
-            var clone = _activationPool.Rent(source.Shape._dims);
+            var clone = _activationPool.Rent(source.Shape.ToArray());
             // Copy data
             var sourceSpan = source.AsSpan();
             var cloneSpan = clone.AsWritableSpan();
@@ -495,7 +495,7 @@ public class TrainingMemoryManager<T> : IDisposable
         }
 
         // Otherwise create a new tensor
-        var newTensor = new Tensor<T>(source.Shape._dims);
+        var newTensor = new Tensor<T>(source.Shape.ToArray());
         var srcSpan = source.AsSpan();
         var dstSpan = newTensor.AsWritableSpan();
         for (int i = 0; i < srcSpan.Length; i++)
