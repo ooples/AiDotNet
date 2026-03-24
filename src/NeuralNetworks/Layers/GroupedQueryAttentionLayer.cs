@@ -636,6 +636,7 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
 
     public override void ClearGradients()
     {
+        base.ClearGradients();
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;

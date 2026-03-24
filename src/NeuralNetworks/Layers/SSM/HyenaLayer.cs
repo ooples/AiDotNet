@@ -862,6 +862,7 @@ public class HyenaLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void ClearGradients()
     {
+        base.ClearGradients();
         _inputProjectionWeightsGradients = null;
         _inputProjectionBiasesGradients = null;
         _filterWeights1Gradients = null;

@@ -772,13 +772,18 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
             new Vector<T>(_expertAGradient!.ToArray()),
             new Vector<T>(_expertBGradient!.ToArray()),
             new Vector<T>(_expertCGradient!.ToArray()),
-            new Vector<T>(_expertDGradient!.ToArray()));
+            new Vector<T>(_expertDGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _routerWeightsGradient = null; _routerBiasGradient = null; _expertAGradient = null; _expertBGradient = null; _expertCGradient = null; _expertDGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />
