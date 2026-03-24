@@ -520,7 +520,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             0), classLogits.Length - 1);
 
         var softmax = ComputeSoftmax(classLogits);
-        int[] gradShape = _lastClassOutput is not null ? _lastClassOutput.Shape : [softmax.Length];
+        int[] gradShape = _lastClassOutput is not null ? _lastClassOutput.Shape._dims : [softmax.Length];
         var classOutputGrad = new Tensor<T>(gradShape);
         for (int c = 0; c < softmax.Length && c < classOutputGrad.Length; c++)
         {

@@ -460,7 +460,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         }
 
         var combinedGradients = new Tensor<T>(discInputGradients.Shape._dims);
-        int gradLength = discInputGradients.Shape.Aggregate(1, (a, b) => a * b);
+        int gradLength = discInputGradients.Shape.Product;
         for (int i = 0; i < gradLength; i++)
         {
             combinedGradients.SetFlat(i, NumOps.Add(

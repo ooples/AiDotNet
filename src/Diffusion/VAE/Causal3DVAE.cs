@@ -140,7 +140,7 @@ public class Causal3DVAE<T> : VAEModelBase<T>
         var meanShape = GetReducedShape(x.Shape._dims, halfLen);
         var mean = new Tensor<T>(meanShape);
         var logVar = new Tensor<T>(meanShape);
-        int elements = mean.Shape.Aggregate(1, (a, b) => a * b);
+        int elements = mean.Shape.Product;
         for (int i = 0; i < elements; i++)
         {
             mean[i] = x[i];

@@ -198,7 +198,7 @@ public static class ValidationHelper<T>
         if (x.Shape[0] != y.Shape[0])
             throw new ArgumentException($"First dimension of {datasetName.ToLower()} input tensor must match the first dimension of the {datasetName.ToLower()} target tensor.");
 
-        if (x.Shape.Any(dim => dim == 0) || y.Shape.Any(dim => dim == 0))
+        if (x.Shape._dims.Any(dim => dim == 0) || y.Shape._dims.Any(dim => dim == 0))
             throw new ArgumentException($"{datasetName} tensors cannot have zero-sized dimensions.");
     }
 
@@ -211,8 +211,8 @@ public static class ValidationHelper<T>
         }
         else if (xTrain is Tensor<T> xTrainTensor && xValidation is Tensor<T> xValTensor && xTest is Tensor<T> xTestTensor)
         {
-            if (!Enumerable.SequenceEqual(xTrainTensor.Shape.Skip(1), xValTensor.Shape.Skip(1)) ||
-                !Enumerable.SequenceEqual(xTrainTensor.Shape.Skip(1), xTestTensor.Shape.Skip(1)))
+            if (!Enumerable.SequenceEqual(xTrainTensor.Shape._dims.Skip(1), xValTensor.Shape._dims.Skip(1)) ||
+                !Enumerable.SequenceEqual(xTrainTensor.Shape._dims.Skip(1), xTestTensor.Shape._dims.Skip(1)))
                 throw new ArgumentException("All input tensors must have the same shape (except for the first dimension).");
         }
         else

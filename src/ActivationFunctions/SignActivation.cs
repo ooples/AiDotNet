@@ -155,7 +155,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Activate(Tensor<T> input)
     {
         Tensor<T> output = new Tensor<T>(input.Shape._dims);
-        int totalElements = input.Shape.Aggregate(1, (a, b) => a * b);
+        int totalElements = input.Shape.Product;
 
         for (int i = 0; i < totalElements; i++)
         {

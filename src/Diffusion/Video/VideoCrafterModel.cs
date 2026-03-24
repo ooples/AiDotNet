@@ -537,7 +537,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         // This ensures we don't lose information from either embedding
         int imageSize = imageSpan.Length;
         int textSize = textSpan.Length;
-        var combinedShape = imageSize >= textSize ? imageEmbedding.Shape : textEmbedding.Shape;
+        var combinedShape = imageSize >= textSize ? imageEmbedding.Shape._dims : textEmbedding.Shape._dims;
 
         var combined = new Tensor<T>(combinedShape);
         var combinedSpan = combined.AsWritableSpan();

@@ -809,7 +809,7 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         else
         {
             upsampleGrad = grad;
-            skipGrad = new Tensor<T>(_lastSkip?.Shape ?? [1]);
+            skipGrad = new Tensor<T>(_lastSkip?.Shape._dims ?? new[] { 1 });
         }
 
         // Backward through upsample

@@ -63,7 +63,7 @@ public static class TensorExtensions
             throw new ArgumentNullException(nameof(flattenedValues));
 
         // Calculate the total size of the tensor
-        int totalSize = tensor.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int totalSize = tensor.Shape.Product;
 
         if (flattenedValues.Length != totalSize)
             throw new ArgumentException($"The size of the flattened vector ({flattenedValues.Length}) does not match the tensor shape total size ({totalSize})");

@@ -517,8 +517,8 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         int outW = gradOutput4D.Shape[3];
 
         // Initialize gradients
-        _weightGradients = new Tensor<T>(_weights.Shape._dims._dims);
-        _biasGradients = new Tensor<T>(_bias.Shape._dims._dims);
+        _weightGradients = new Tensor<T>(_weights.Shape._dims);
+        _biasGradients = new Tensor<T>(_bias.Shape._dims);
         _offsetWeightGradients = new Tensor<T>(_offsetWeights.Shape._dims);
         _offsetBiasGradients = new Tensor<T>(_offsetBias.Shape._dims);
 
@@ -551,7 +551,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             _weights,
             _lastOffsets,
             _lastMask,
-            inputShape: input4D.Shape,
+            inputShape: input4D.Shape._dims,
             stride: new[] { _stride, _stride },
             padding: new[] { _padding, _padding },
             dilation: new[] { 1, 1 });
@@ -653,7 +653,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         var gradInput = _engine.Conv2DBackwardInput(
             gradOutput,
             weights,
-            inputShape: input.Shape,
+            inputShape: input.Shape._dims,
             stride: new[] { _stride, _stride },
             padding: new[] { _padding, _padding },
             dilation: new[] { 1, 1 });
@@ -662,7 +662,7 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         var computedWeightGrad = _engine.Conv2DBackwardKernel(
             gradOutput,
             input,
-            kernelShape: weights.Shape,
+            kernelShape: weights.Shape._dims,
             stride: new[] { _stride, _stride },
             padding: new[] { _padding, _padding },
             dilation: new[] { 1, 1 });
@@ -932,8 +932,8 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
             backend.DownloadBuffer(gradOffsetBiasBuffer, offsetBiasGradFlat);
 
             // Convert to Tensor<T> gradients for UpdateParameters
-            _weightGradients = new Tensor<T>(_weights.Shape._dims._dims);
-            _biasGradients = new Tensor<T>(_bias.Shape._dims._dims);
+            _weightGradients = new Tensor<T>(_weights.Shape._dims);
+            _biasGradients = new Tensor<T>(_bias.Shape._dims);
             _offsetWeightGradients = new Tensor<T>(_offsetWeights.Shape._dims);
             _offsetBiasGradients = new Tensor<T>(_offsetBias.Shape._dims);
 
@@ -968,11 +968,11 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
 
             // Store GPU gradient tensors for GPU-resident training (UpdateParametersGpu)
             _gpuWeightGradient?.Dispose();
-            _gpuWeightGradient = new GpuTensor<T>(backend, gradWeightsBuffer, _weights.Shape._dims._dims, GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuWeightGradient = new GpuTensor<T>(backend, gradWeightsBuffer, _weights.Shape._dims, GpuTensorRole.Gradient, ownsBuffer: true);
             gradWeightsBuffer = null; // Prevent disposal in finally block
 
             _gpuBiasGradient?.Dispose();
-            _gpuBiasGradient = new GpuTensor<T>(backend, gradBiasBuffer, _bias.Shape._dims._dims, GpuTensorRole.Gradient, ownsBuffer: true);
+            _gpuBiasGradient = new GpuTensor<T>(backend, gradBiasBuffer, _bias.Shape._dims, GpuTensorRole.Gradient, ownsBuffer: true);
             gradBiasBuffer = null;
 
             _gpuOffsetWeightGradient?.Dispose();

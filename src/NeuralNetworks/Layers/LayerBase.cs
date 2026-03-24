@@ -3190,13 +3190,13 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         if (string.Equals(name, WeightParameterName, StringComparison.OrdinalIgnoreCase))
         {
             var weights = GetWeights();
-            return weights?.Shape;
+            return weights?.Shape._dims ?? Array.Empty<int>();
         }
 
         if (string.Equals(name, BiasParameterName, StringComparison.OrdinalIgnoreCase))
         {
             var biases = GetBiases();
-            return biases?.Shape;
+            return biases?.Shape._dims ?? Array.Empty<int>();
         }
 
         return null;

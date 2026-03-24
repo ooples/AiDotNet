@@ -672,7 +672,7 @@ public class ImageEncoder<T>
     private Tensor<T> FlattenPatches(Tensor<T> image)
     {
         // Simplified: just flatten the image
-        var flatData = new T[image.Shape.Aggregate((a, b) => a * b)];
+        var flatData = new T[image.Shape.Product];
         var span = image.AsSpan();
         for (int i = 0; i < span.Length && i < flatData.Length; i++)
         {

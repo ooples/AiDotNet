@@ -1155,7 +1155,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
 
         int stateSize = batchSize * _filters * outHeight * outWidth;
         int inputSliceSize = batchSize * channels * height * width;
-        int outputGradSize = outputGradient.Shape.Aggregate(1, (a, b) => a * b);
+        int outputGradSize = outputGradient.Shape.Product;
 
         // Prepare NCHW-format weight buffers for backward convolutions
         var weightsFiNCHW = _weightsFi.Transpose([3, 2, 0, 1]);
@@ -1877,13 +1877,13 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var doNCHW = do_.Transpose([0, 3, 1, 2]);
 
         // Weight gradients: dW = Conv2DBackwardKernel(gradient, input, kernelShape, stride, padding, dilation)
-        var kernelShape = _weightsFi.Transpose([3, 2, 0, 1]).Shape; // NHWC kernel → NCHW kernel shape
+        var kernelShape = _weightsFi.Transpose([3, 2, 0, 1]).Shape._dims; // NHWC kernel → NCHW kernel shape
         var dWfi = Engine.Conv2DBackwardKernel(dfNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWii = Engine.Conv2DBackwardKernel(diNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWci = Engine.Conv2DBackwardKernel(dcNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWoi = Engine.Conv2DBackwardKernel(doNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
 
-        var hKernelShape = _weightsFh.Transpose([3, 2, 0, 1]).Shape;
+        var hKernelShape = _weightsFh.Transpose([3, 2, 0, 1]).Shape._dims;
         var dWfh = Engine.Conv2DBackwardKernel(dfNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWih = Engine.Conv2DBackwardKernel(diNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWch = Engine.Conv2DBackwardKernel(dcNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);

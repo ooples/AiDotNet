@@ -59,7 +59,7 @@ public class ModalitySample<T>
     /// <summary>
     /// Gets the shape of the data tensor.
     /// </summary>
-    public int[] Shape => Data.Shape;
+    public int[] Shape => Data.Shape._dims;
 
     /// <summary>
     /// Gets the total number of elements in the data tensor.

@@ -820,7 +820,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape._dims, strideArr, paddingArr, dilationArr);
 
         // Calculate kernel gradient using Engine
-        _kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape._dims._dims, strideArr, paddingArr, dilationArr);
+        _kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape._dims, strideArr, paddingArr, dilationArr);
 
         // Restore original input shape for higher-rank tensors
         if (_originalInputShape != null && _originalInputShape.Length > 4)
@@ -1017,7 +1017,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         var inputGrad = gpuEngine.Conv2DBackwardInputGpu<T>(
             activationGrad,
             _kernels,
-            _gpuInput.Shape,
+            _gpuInput.Shape._dims,
             new[] { _stride, _stride },
             new[] { _padding, _padding },
             new[] { _dilation, _dilation });

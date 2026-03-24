@@ -1307,7 +1307,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
                     // This might require a specific transformation based on your architecture
                     var transformedGradient = TransformHiddenGradientToOutputGradient(
                         hiddenStateGradients[lstmIndex],
-                        currentGradient.Shape);
+                        currentGradient.Shape._dims);
 
                     currentGradient = currentGradient.Add(transformedGradient);
                 }

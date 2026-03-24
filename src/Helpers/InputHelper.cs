@@ -33,7 +33,7 @@ public static class InputHelper<T, TInput>
             Tensor<T> tensor => tensor.Shape.Length >= 2
                 ? (tensor.Shape.Length == 2
                     ? tensor.Shape[1]
-                    : tensor.Shape.Skip(1).Aggregate((a, b) => a * b))
+                    : tensor.Shape._dims.Skip(1).Aggregate((a, b) => a * b))
                 : tensor.Shape[0],
             _ => throw new ArgumentException("Unsupported input type")
         };

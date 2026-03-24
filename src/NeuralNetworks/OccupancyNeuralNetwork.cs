@@ -222,7 +222,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             throw new TensorShapeMismatchException(
                 expectedShape,
-                input.Shape,
+                input.Shape._dims,
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(ForwardTemporal)
             );
@@ -357,7 +357,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 {
                     throw new TensorShapeMismatchException(
                         new[] { -1, _historyWindowSize, Architecture.InputSize },
-                        input.Shape,
+                        input.Shape._dims,
                         nameof(OccupancyNeuralNetwork<T>),
                         nameof(Predict)
                     );
@@ -500,7 +500,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             throw new TensorShapeMismatchException(
                 expectedShape,
-                input.Shape,
+                input.Shape._dims,
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(TrainTemporal)
             );
@@ -583,8 +583,8 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         if (!predicted.Shape._dims.SequenceEqual(expected.Shape._dims))
         {
             throw new TensorShapeMismatchException(
-                expected.Shape,
-                predicted.Shape,
+                expected.Shape._dims,
+                predicted.Shape._dims,
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(CalculateError)
             );

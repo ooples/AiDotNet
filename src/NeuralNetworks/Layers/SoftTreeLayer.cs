@@ -262,7 +262,7 @@ public class SoftTreeLayer<T> : LayerBase<T>
         //   left child: nodeProb * (1-r_n), right child: nodeProb * r_n
         // Gradient: dL/d(r_n) = sum over descendants of (dL/d(leafProb) * d(leafProb)/d(r_n))
         var dRightProbs = new Tensor<T>([batchSize, _numInternalNodes]);
-        var dNodeProbs = new Tensor<T>(_cachedNodeProbs!.Shape);
+        var dNodeProbs = new Tensor<T>(_cachedNodeProbs!.Shape._dims);
 
         // Seed leaf gradients from pathProbsGrad
         for (int b = 0; b < batchSize; b++)

@@ -416,7 +416,7 @@ public class PoolingLayer<T> : LayerBase<T>
             outGrad4D = outputGradient;
             inputShape4D = _lastInput.Shape.Length == 3
                 ? new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] }
-                : _lastInput.Shape;
+                : _lastInput.Shape._dims;
         }
         else
         {

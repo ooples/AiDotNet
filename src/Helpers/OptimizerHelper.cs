@@ -244,7 +244,7 @@ public static class OptimizerHelper<T, TInput, TOutput>
         var selectedX = new Tensor<T>(newShape);
 
         // Calculate the total number of elements to process
-        int totalElements = X.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int totalElements = X.Shape.Product;
         int featuresCount = X.Shape[1];
         int elementsPerSample = totalElements / X.Shape[0];
 

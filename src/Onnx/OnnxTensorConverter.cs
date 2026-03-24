@@ -215,7 +215,7 @@ public static class OnnxTensorConverter
         var numOps = MathHelper.GetNumericOperations<T>();
         var batchShape = new int[tensor.Shape.Length + 1];
         batchShape[0] = 1;
-        tensor.Shape.CopyTo(batchShape, 1);
+        Array.Copy(tensor.Shape._dims, 0, batchShape, 1, tensor.Shape.Length);
 
         var onnxTensor = new OnnxTensors.DenseTensor<float>(batchShape);
         var sourceData = tensor.ToArray();

@@ -614,7 +614,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         var varianceTensor = uqResult.Variance != null
             ? uqResult.Variance.Clone()
             : new Tensor<T>(
-                uqResult.Prediction.Shape,
+                uqResult.Prediction.Shape._dims,
                 Vector<T>.CreateDefault(uqResult.Prediction.Length, MathHelper.GetNumericOperations<T>().Zero));
 
         if (uq.DenormalizeUncertainty)

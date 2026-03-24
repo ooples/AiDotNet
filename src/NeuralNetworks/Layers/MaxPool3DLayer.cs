@@ -429,7 +429,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         {
             batchedGradient = outputGradient;
             inputShape = _lastInput.Shape.Length == 5
-                ? _lastInput.Shape
+                ? _lastInput.Shape._dims
                 : new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3] };
         }
         else if (rank == 4)

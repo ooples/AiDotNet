@@ -192,8 +192,7 @@ public class ResidualLayer<T> : LayerBase<T>
 
             var innerOutputGpu = new GpuTensor<T>(
                 backend,
-                innerOutputCpu.Data.ToArray(),
-                innerOutputCpu.Shape,
+                innerOutputCpu,
                 GpuTensorRole.Intermediate);
 
             result = gpuEngine.AddGpu(input, innerOutputGpu);

@@ -1107,7 +1107,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
             inputData[i] = NumOps.ToFloat(input.Data.Span[i]);
         }
 
-        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.Select(d => (int)d).ToArray());
+        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input.Shape._dims.Select(d => (int)d).ToArray());
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) };
 
         using var results = OnnxSession.Run(inputs);

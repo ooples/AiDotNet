@@ -229,7 +229,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        int totalElements = _transformationMatrix.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int totalElements = _transformationMatrix.Shape.Product;
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / totalElements));
         InitializeTensor(_transformationMatrix, scale);
 
@@ -263,7 +263,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // For multi-dimensional tensors, create random and apply transformation
-        int totalElements = tensor.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int totalElements = tensor.Shape.Product;
 
         // Create a flat random tensor [0, 1]
         var randomTensor = Tensor<T>.CreateRandom(totalElements, 1).Reshape([totalElements]);
@@ -342,7 +342,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         T totalPLogP = sumPLogP.GetFlat(0);
 
         // Average across all distributions (total elements / distribution size)
-        int flatSize = _lastCouplingCoefficients.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int flatSize = _lastCouplingCoefficients.Shape.Product;
         int distributionSize = _numCapsules;
         int numDistributions = flatSize / distributionSize;
 
@@ -921,7 +921,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 7. Store Gradients
         // _biasGradient is flattened - use default zero tensor if gradient is null
-        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape._dims._dims, NumOps.Zero);
+        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape._dims, NumOps.Zero);
 
         // _transformationMatrixGradient needs [I, D_in, O, D_out]
         // weightsPermuted.Gradient is [I, O, D_in, D_out]
@@ -1088,7 +1088,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int matrixSize = _transformationMatrix.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int matrixSize = _transformationMatrix.Shape.Product;
         int biasSize = _bias.Length;
 
         if (parameters.Length != matrixSize + biasSize)

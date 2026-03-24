@@ -430,7 +430,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape._dims._dims, NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape._dims, NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
         _biases = new Tensor<T>(_biases.Shape._dims);
@@ -1424,7 +1424,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             var biasGradData = backend.DownloadBuffer(biasGradBuffer);
             _biasesGradient = new Tensor<T>(
                 DirectGpuEngine.FromFloatArray<T>(biasGradData),
-                _biases.Shape);
+                _biases.Shape._dims);
 
             _gpuWeightsGradient?.Dispose();
             _gpuWeightsGradient = new GpuTensor<T>(
@@ -1439,7 +1439,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             _gpuBiasesGradient = new GpuTensor<T>(
                 backend,
                 biasGradBuffer,
-                _biases.Shape,
+                _biases.Shape._dims,
                 GpuTensorRole.Gradient,
                 ownsBuffer: true);
             biasGradBuffer = null;
@@ -2061,7 +2061,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
 
         int idx = 0;
-        _weights = new Tensor<T>(_weights.Shape._dims._dims, parameters.Slice(idx, _weights.Length));
+        _weights = new Tensor<T>(_weights.Shape._dims, parameters.Slice(idx, _weights.Length));
         idx += _weights.Length;
         _biases = new Tensor<T>(_biases.Shape._dims, parameters.Slice(idx, _biases.Length));
         idx += _biases.Length;
@@ -2270,7 +2270,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         {
             weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _weights = new Tensor<T>(weightArray, _weights.Shape._dims._dims);
+        _weights = new Tensor<T>(weightArray, _weights.Shape._dims);
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[_biases.Length];

@@ -160,7 +160,7 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
             guidedGradients: explanation.GuidedGradients,
             targetClass: explanation.TargetClass,
             prediction: explanation.Prediction,
-            inputShape: input.Shape,
+            inputShape: input.Shape._dims,
             gradientTensor: gradTensor);
     }
 

@@ -474,7 +474,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
         var latent = _imageVAE.Encode(image, sampleMode: false);
 
         // Flatten to conditioning vector
-        var flatSize = latent.Shape.Aggregate(1, (a, b) => a * b);
+        var flatSize = latent.Shape.Product;
         return new Tensor<T>(new[] { 1, 1, flatSize }, latent.ToVector());
     }
 
