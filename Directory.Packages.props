@@ -15,7 +15,7 @@
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.5" />
     <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
-    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.24.3" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.24.4" />
     <PackageVersion Include="Microsoft.Research.SEALNet" Version="4.1.1" />
     <PackageVersion Include="Microsoft.Bcl.Numerics" Version="10.0.5" />
     <PackageVersion Include="System.Net.Http" Version="4.3.4" />
