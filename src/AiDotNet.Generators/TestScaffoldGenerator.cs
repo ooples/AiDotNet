@@ -1799,7 +1799,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static LayerTestInfo? ExtractLayerInfo(INamedTypeSymbol symbol)
     {
         bool isTrainable = true, hasTrainingMode = false, changesShape = false, isStateful = false;
-        bool supportsBackprop = true;
+        bool supportsBackprop = true, normalizesInput = false;
         int apiShape = LayerApiShapeSingleTensor;
         string testInputShape = "";
         string testConstructorArgs = "";
@@ -1842,6 +1842,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     case "TestSetupCode":
                         testSetupCode = (string)(named.Value.Value ?? "");
                         break;
+                    case "NormalizesInput":
+                        normalizesInput = (bool)(named.Value.Value ?? false);
+                        break;
                 }
             }
         }
@@ -1862,7 +1865,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ApiShape = apiShape,
             TestInputShape = testInputShape,
             TestConstructorArgs = testConstructorArgs,
-            TestSetupCode = testSetupCode
+            TestSetupCode = testSetupCode,
+            NormalizesInput = normalizesInput
         };
     }
 
@@ -1956,6 +1960,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (!layer.IsTrainable)
             sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
 
+        // Override ExpectsDifferentOutputForConstantInputs for normalizing layers
+        if (layer.NormalizesInput)
+            sb.AppendLine("    protected override bool ExpectsDifferentOutputForConstantInputs => false;");
+
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
@@ -1996,6 +2004,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Override ExpectsTrainableParameters
         if (!layer.IsTrainable)
             sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
+
+        // Override ExpectsDifferentOutputForConstantInputs for normalizing layers
+        if (layer.NormalizesInput)
+            sb.AppendLine("    protected override bool ExpectsDifferentOutputForConstantInputs => false;");
 
         sb.AppendLine("}");
 
@@ -2108,6 +2120,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public string TestInputShape { get; set; } = "";
         public string TestConstructorArgs { get; set; } = "";
         public string TestSetupCode { get; set; } = "";
+        public bool NormalizesInput { get; set; }
     }
 
     /// <summary>

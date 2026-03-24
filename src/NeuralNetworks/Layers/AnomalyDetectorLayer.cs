@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 0.5")]
+[LayerProperty(IsTrainable = false, NormalizesInput = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 0.5")]
 public class AnomalyDetectorLayer<T> : LayerBase<T>
 {
     /// <summary>
