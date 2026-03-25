@@ -112,6 +112,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private int[]? _originalInputShape;
     private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastPreSquash;
     private Tensor<T>? _lastCouplingCoefficients;
 
     /// <summary>
@@ -545,6 +546,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             weightedSum = Engine.TensorBroadcastAdd(weightedSum, biasReshaped);
 
             // Apply squash activation
+            _lastPreSquash = weightedSum;
             output = ApplyActivation(weightedSum);
 
             // Update coupling coefficients
@@ -715,11 +717,14 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (ScalarActivation != null)
         {
             int totalCapsules = batchSize * _numCapsules;
-            var flatOutput = _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
+            // Use pre-squash values for Jacobian computation (Squash derivative uses input norms)
+            var preSquash = _lastPreSquash is not null
+                ? _lastPreSquash.Reshape([totalCapsules, _capsuleDimension])
+                : _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
             var flatGrad = outputGradient.Reshape([totalCapsules, _capsuleDimension]);
 
             // Get Jacobian: [totalCapsules, capsuleDim, capsuleDim]
-            var jacobians = ScalarActivation.Derivative(flatOutput);
+            var jacobians = ScalarActivation.Derivative(preSquash);
 
             if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _capsuleDimension && jacobians.Shape[2] == _capsuleDimension)
             {
