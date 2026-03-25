@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4")]
 public class TemporalMemoryLayer<T> : LayerBase<T>
 {
     /// <summary>

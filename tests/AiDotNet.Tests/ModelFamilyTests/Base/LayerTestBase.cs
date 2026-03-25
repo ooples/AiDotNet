@@ -54,6 +54,7 @@ public abstract class LayerTestBase
     /// </summary>
     protected virtual bool ExpectsDifferentOutputForConstantInputs => true;
 
+
     // =========================================================================
     // Helpers
     // =========================================================================

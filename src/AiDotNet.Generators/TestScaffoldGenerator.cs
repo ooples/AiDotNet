@@ -1960,6 +1960,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (!layer.IsTrainable)
             sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
 
+        // Override ExpectsNonZeroGradients for non-backprop layers (Hebbian, HTM, etc.)
+        if (!layer.SupportsBackpropagation)
+            sb.AppendLine("    protected override bool ExpectsNonZeroGradients => false;");
+
         // Override ExpectsDifferentOutputForConstantInputs for normalizing layers
         if (layer.NormalizesInput)
             sb.AppendLine("    protected override bool ExpectsDifferentOutputForConstantInputs => false;");
@@ -2004,6 +2008,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Override ExpectsTrainableParameters
         if (!layer.IsTrainable)
             sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
+
+        // Override ExpectsNonZeroGradients for non-backprop layers (Hebbian, HTM, etc.)
+        if (!layer.SupportsBackpropagation)
+            sb.AppendLine("    protected override bool ExpectsNonZeroGradients => false;");
 
         // Override ExpectsDifferentOutputForConstantInputs for normalizing layers
         if (layer.NormalizesInput)
