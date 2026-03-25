@@ -457,24 +457,10 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int windowArea = windows.Shape[1];
         int c = windows.Shape[2];
 
-        // Project to Q, K, V for all windows
-        var qkv = new Tensor<T>([numWindows, windowArea, 3 * c]);
-        for (int win = 0; win < numWindows; win++)
-        {
-            for (int t = 0; t < windowArea; t++)
-            {
-                var tokenIn = new Tensor<T>([1, c]);
-                for (int d = 0; d < c; d++)
-                {
-                    tokenIn[0, d] = windows[win, t, d];
-                }
-                var tokenQkv = _qkvProj.Forward(tokenIn);
-                for (int d = 0; d < 3 * c; d++)
-                {
-                    qkv[win, t, d] = tokenQkv[0, d];
-                }
-            }
-        }
+        // Project to Q, K, V for all windows (batched for correct backward)
+        var flatWindows = windows.Reshape([numWindows * windowArea, c]);
+        var flatQkv = _qkvProj.Forward(flatWindows);
+        var qkv = flatQkv.Reshape([numWindows, windowArea, 3 * c]);
 
         // Compute attention per window
         var output = TensorAllocator.Rent<T>([numWindows, windowArea, c]);
@@ -582,31 +568,11 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = x.Shape[0];
         int seqLen = x.Shape[1];
 
-        var result = TensorAllocator.Rent<T>(x.Shape.ToArray());
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var tokenIn = new Tensor<T>([1, _dim]);
-                for (int d = 0; d < _dim; d++)
-                {
-                    tokenIn[0, d] = x[b, s, d];
-                }
-
-                // FC1 + GELU (activation built into layer)
-                var hidden = _mlpFc1.Forward(tokenIn);
-
-                // FC2
-                var tokenOut = _mlpFc2.Forward(hidden);
-                for (int d = 0; d < _dim; d++)
-                {
-                    result[b, s, d] = tokenOut[0, d];
-                }
-            }
-        }
-
-        return result;
+        // Batch all tokens for correct Forward/Backward (single _lastInput)
+        var flat = x.Reshape([batch * seqLen, _dim]);
+        var hidden = _mlpFc1.Forward(flat);
+        var flatOut = _mlpFc2.Forward(hidden);
+        return flatOut.Reshape([batch, seqLen, _dim]);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -642,61 +608,23 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        var result = TensorAllocator.Rent<T>(gradient.Shape.ToArray());
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var tokenGrad = new Tensor<T>([1, _dim]);
-                for (int d = 0; d < _dim; d++)
-                {
-                    tokenGrad[0, d] = gradient[b, s, d];
-                }
-
-                var fc2Grad = _mlpFc2.Backward(tokenGrad);
-                var fc1Grad = _mlpFc1.Backward(fc2Grad);
-
-                for (int d = 0; d < _dim; d++)
-                {
-                    result[b, s, d] = fc1Grad[0, d];
-                }
-            }
-        }
-
-        return result;
+        // Batch all tokens (matching batched ApplyMLP Forward)
+        var flatGrad = gradient.Reshape([batch * seqLen, _dim]);
+        var fc2Grad = _mlpFc2.Backward(flatGrad);
+        var fc1Grad = _mlpFc1.Backward(fc2Grad);
+        return fc1Grad.Reshape([batch, seqLen, _dim]);
     }
 
     private Tensor<T> BackwardWindowAttention(Tensor<T> gradient)
     {
-        // Simplified backward - in full implementation would need to track
-        // all intermediate values and compute gradients through attention
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        var result = TensorAllocator.Rent<T>(gradient.Shape.ToArray());
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var tokenGrad = new Tensor<T>([1, _dim]);
-                for (int d = 0; d < _dim; d++)
-                {
-                    tokenGrad[0, d] = gradient[b, s, d];
-                }
-
-                var outProjGrad = _outProj.Backward(tokenGrad);
-                var qkvGrad = _qkvProj.Backward(outProjGrad);
-
-                for (int d = 0; d < _dim; d++)
-                {
-                    result[b, s, d] = qkvGrad[0, d];
-                }
-            }
-        }
-
-        return result;
+        // Batch all tokens for correct backward (matching batched Forward)
+        var flatGrad = gradient.Reshape([batch * seqLen, _dim]);
+        var outProjGrad = _outProj.Backward(flatGrad);
+        var qkvGrad = _qkvProj.Backward(outProjGrad);
+        return qkvGrad.Reshape([batch, seqLen, _dim]);
     }
 
     /// <inheritdoc/>
