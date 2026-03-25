@@ -140,7 +140,7 @@ public class FreeNoiseModule<T>
     public Tensor<T>? GetBaseNoise()
     {
         if (_baseNoise is null) return null;
-        var copy = new Tensor<T>(_baseNoise.Shape);
+        var copy = new Tensor<T>(_baseNoise.Shape.ToArray());
         _baseNoise.Data.Span.CopyTo(copy.Data.Span);
         return copy;
     }

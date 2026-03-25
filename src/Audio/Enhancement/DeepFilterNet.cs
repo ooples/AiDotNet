@@ -523,7 +523,7 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Backward pass and update
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape);
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape.ToArray());
         BackwardNative(gradientTensor);
 
         _optimizer?.UpdateParameters(Layers);
@@ -708,7 +708,7 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int dfCoeffSize = _dfBins * _dfOrder * 2;
 
         // Apply ERB gains and deep filtering to complex STFT
-        var enhancedStft = new Tensor<Complex<T>>(_cachedComplexStft.Shape);
+        var enhancedStft = new Tensor<Complex<T>>(_cachedComplexStft.Shape.ToArray());
 
         for (int frame = 0; frame < numFrames; frame++)
         {

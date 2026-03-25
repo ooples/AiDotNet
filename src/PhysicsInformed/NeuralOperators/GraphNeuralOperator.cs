@@ -285,7 +285,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                     history.AddEpoch(loss);
 
                     var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), targetTensor.ToVector());
-                    var outputGradient = new Tensor<T>(prediction.Shape, outputGradientVector);
+                    var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
                     Backpropagate(outputGradient);
 
                     var gradients = GetGradients();
@@ -439,7 +439,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
                 var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                var outputGradient = new Tensor<T>(prediction.Shape, outputGradientVector);
+                var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
 
                 Backpropagate(outputGradient);
 
@@ -814,7 +814,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         private Tensor<T> NormalizeAdjacencySingle(Tensor<T> adjacency)
         {
             int numNodes = adjacency.Shape[0];
-            var normalized = new Tensor<T>(adjacency.Shape);
+            var normalized = new Tensor<T>(adjacency.Shape.ToArray());
             var degrees = new T[numNodes];
             var invSqrt = new T[numNodes];
             T epsilon = NumOps.FromDouble(1e-10);
@@ -845,7 +845,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             int batch = adjacency.Shape[0];
             int numNodes = adjacency.Shape[1];
-            var normalized = new Tensor<T>(adjacency.Shape);
+            var normalized = new Tensor<T>(adjacency.Shape.ToArray());
             var degrees = new T[numNodes];
             var invSqrt = new T[numNodes];
             T epsilon = NumOps.FromDouble(1e-10);

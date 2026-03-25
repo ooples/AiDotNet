@@ -49,7 +49,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -63,7 +63,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -77,7 +77,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -91,7 +91,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -105,7 +105,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -119,7 +119,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -133,7 +133,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -151,7 +151,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -165,7 +165,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -179,7 +179,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -193,7 +193,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -207,7 +207,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -221,7 +221,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -235,7 +235,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -249,7 +249,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -263,7 +263,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -277,7 +277,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -291,7 +291,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -305,7 +305,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -323,7 +323,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -337,7 +337,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -351,7 +351,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -365,7 +365,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -379,7 +379,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -393,7 +393,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -407,7 +407,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -421,7 +421,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -435,7 +435,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -449,7 +449,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -463,7 +463,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -477,7 +477,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -491,7 +491,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -505,7 +505,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -519,7 +519,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -533,7 +533,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -549,7 +549,7 @@ public class SegmentationTrainingRobustnessTests
         var input = Rand(42, 1, 3, 32, 32);
 
         var outputBefore = model.Predict(input);
-        var expected = Rand(99, outputBefore.Shape);
+        var expected = Rand(99, outputBefore.Shape.ToArray());
         model.Train(input, expected);
         var outputAfter = model.Predict(input);
 
@@ -568,7 +568,7 @@ public class SegmentationTrainingRobustnessTests
         var input = Rand(42, 1, 3, 32, 32);
 
         var outputBefore = model.Predict(input);
-        var expected = Rand(99, outputBefore.Shape);
+        var expected = Rand(99, outputBefore.Shape.ToArray());
         model.Train(input, expected);
         var outputAfter = model.Predict(input);
 
@@ -583,7 +583,7 @@ public class SegmentationTrainingRobustnessTests
         var input = Rand(42, 1, 3, 32, 32);
 
         var outputBefore = model.Predict(input);
-        var expected = Rand(99, outputBefore.Shape);
+        var expected = Rand(99, outputBefore.Shape.ToArray());
         model.Train(input, expected);
         var outputAfter = model.Predict(input);
 
@@ -601,7 +601,7 @@ public class SegmentationTrainingRobustnessTests
         var model = new SegFormer<double>(Arch(), numClasses: 5, modelSize: SegFormerModelSize.B0);
         var input = Rand(42, 3, 32, 32); // 3D unbatched
         var predicted = model.Predict(input);
-        var expected = Rand(99, predicted.Shape);
+        var expected = Rand(99, predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -611,7 +611,7 @@ public class SegmentationTrainingRobustnessTests
         var model = new Mask2Former<double>(Arch(), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(99, predicted.Shape);
+        var expected = Rand(99, predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -621,7 +621,7 @@ public class SegmentationTrainingRobustnessTests
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(99, predicted.Shape);
+        var expected = Rand(99, predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -631,7 +631,7 @@ public class SegmentationTrainingRobustnessTests
         var model = new NnUNet<double>(Arch(), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(99, predicted.Shape);
+        var expected = Rand(99, predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -641,7 +641,7 @@ public class SegmentationTrainingRobustnessTests
         var model = new PIDNet<double>(Arch(), numClasses: 5, modelSize: PIDNetModelSize.Small);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(99, predicted.Shape);
+        var expected = Rand(99, predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -651,7 +651,7 @@ public class SegmentationTrainingRobustnessTests
         var model = new VisionMamba<double>(Arch(), numClasses: 5, modelSize: VisionMambaModelSize.Tiny);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(99, predicted.Shape);
+        var expected = Rand(99, predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -661,7 +661,7 @@ public class SegmentationTrainingRobustnessTests
         var model = new DEVA<double>(Arch(), numClasses: 5, modelSize: DEVAModelSize.Base);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(99, predicted.Shape);
+        var expected = Rand(99, predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -671,7 +671,7 @@ public class SegmentationTrainingRobustnessTests
         var model = new LISA<double>(Arch(), numClasses: 5);
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(99, predicted.Shape);
+        var expected = Rand(99, predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -688,7 +688,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -702,7 +702,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -716,7 +716,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -730,7 +730,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -744,7 +744,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -762,7 +762,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -776,7 +776,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -790,7 +790,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -804,7 +804,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -818,7 +818,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -832,7 +832,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -846,7 +846,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -860,7 +860,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -874,7 +874,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -888,7 +888,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -902,7 +902,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -916,7 +916,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -930,7 +930,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -944,7 +944,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -958,7 +958,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -972,7 +972,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -986,7 +986,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1000,7 +1000,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1014,7 +1014,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1032,7 +1032,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1046,7 +1046,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1060,7 +1060,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1074,7 +1074,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1088,7 +1088,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1102,7 +1102,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1116,7 +1116,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1130,7 +1130,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1144,7 +1144,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1158,7 +1158,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }
@@ -1172,7 +1172,7 @@ public class SegmentationTrainingRobustnessTests
 
         for (int step = 0; step < 3; step++)
         {
-            var expected = Rand(step + 100, predicted.Shape);
+            var expected = Rand(step + 100, predicted.Shape.ToArray());
             Assert.Null(Record.Exception(() => model.Train(input, expected)));
         }
     }

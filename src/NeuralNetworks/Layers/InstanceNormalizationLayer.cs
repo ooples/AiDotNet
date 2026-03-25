@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -34,6 +36,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Normalization)]
+[LayerTask(LayerTask.ActivationNormalization)]
+[LayerProperty(IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
 public class InstanceNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
@@ -159,7 +164,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         // Instance Norm expects input [batch, channels, ...spatial]
         // We flatten to 4D and use GroupNorm with numGroups = numChannels
@@ -246,7 +251,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         var backend = gpuEngine.GetBackend();
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");
@@ -396,7 +401,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         _betaGradient = new Tensor<T>([channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(gradBetaData)));
 
         // Return input gradient as GPU tensor
-        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>

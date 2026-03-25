@@ -294,21 +294,21 @@ public class FeatureTokenizer<T>
         var inputGrad = new Tensor<T>([batchSize, _numNumericalFeatures]);
 
         // Initialize gradients
-        _numericalWeightsGrad = new Tensor<T>(_numericalWeights.Shape);
+        _numericalWeightsGrad = new Tensor<T>(_numericalWeights.Shape.ToArray());
         _numericalWeightsGrad.Fill(_numOps.Zero);
 
         if (_numericalBias != null)
         {
-            _numericalBiasGrad = new Tensor<T>(_numericalBias.Shape);
+            _numericalBiasGrad = new Tensor<T>(_numericalBias.Shape.ToArray());
             _numericalBiasGrad.Fill(_numOps.Zero);
         }
 
-        _clsTokenGrad = new Tensor<T>(_clsToken.Shape);
+        _clsTokenGrad = new Tensor<T>(_clsToken.Shape.ToArray());
         _clsTokenGrad.Fill(_numOps.Zero);
 
         for (int i = 0; i < _categoricalEmbeddingsGrad.Count; i++)
         {
-            var catEmbGrad = new Tensor<T>(_categoricalEmbeddings[i].Shape);
+            var catEmbGrad = new Tensor<T>(_categoricalEmbeddings[i].Shape.ToArray());
             catEmbGrad.Fill(_numOps.Zero);
             _categoricalEmbeddingsGrad[i] = catEmbGrad;
         }

@@ -128,6 +128,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         public AiDotNet.Autodiff.ComputationNode<double> ExportComputationGraph(
             List<AiDotNet.Autodiff.ComputationNode<double>> inputNodes)
             => throw new NotImplementedException();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

@@ -175,7 +175,7 @@ public class SegFormerIntegrationTests
         var input = CreateRandomTensor([1, 3, 32, 32]);
         // Expected output needs to match actual predict output shape
         var predicted = model.Predict(input);
-        var expectedOutput = CreateRandomTensor(predicted.Shape);
+        var expectedOutput = CreateRandomTensor(predicted.Shape.ToArray());
 
         // Training should not throw in native mode
         var exception = Record.Exception(() => model.Train(input, expectedOutput));

@@ -160,7 +160,7 @@ public class ComputationNodeIntegrationTests
                 // y = 2*x, so dy/dx = 2, gradient flows: x.grad += 2 * grad
                 if (x.Gradient == null)
                 {
-                    x.Gradient = new Tensor<double>(x.Value.Shape);
+                    x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 }
                 x.Gradient[0] += 2.0 * grad[0];
             },
@@ -177,7 +177,7 @@ public class ComputationNodeIntegrationTests
                 // z = y + 1, so dz/dy = 1, gradient flows: y.grad += 1 * grad
                 if (y.Gradient == null)
                 {
-                    y.Gradient = new Tensor<double>(y.Value.Shape);
+                    y.Gradient = new Tensor<double>(y.Value.Shape.ToArray());
                 }
                 y.Gradient[0] += grad[0];
             },
@@ -224,8 +224,8 @@ public class ComputationNodeIntegrationTests
             {
                 // z = x * y elementwise
                 // dz/dx = y, dz/dy = x
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
-                if (y.Gradient == null) y.Gradient = new Tensor<double>(y.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
+                if (y.Gradient == null) y.Gradient = new Tensor<double>(y.Value.Shape.ToArray());
 
                 for (int i = 0; i < grad.Length; i++)
                 {
@@ -271,7 +271,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 x.Gradient[0] += grad[0];  // dy1/dx = 1
             },
             name: "y1");
@@ -284,7 +284,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 x.Gradient[0] += grad[0];  // dy2/dx = 1
             },
             name: "y2");
@@ -297,8 +297,8 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { y1, y2 },
             backwardFunction: grad =>
             {
-                if (y1.Gradient == null) y1.Gradient = new Tensor<double>(y1.Value.Shape);
-                if (y2.Gradient == null) y2.Gradient = new Tensor<double>(y2.Value.Shape);
+                if (y1.Gradient == null) y1.Gradient = new Tensor<double>(y1.Value.Shape.ToArray());
+                if (y2.Gradient == null) y2.Gradient = new Tensor<double>(y2.Value.Shape.ToArray());
                 y1.Gradient[0] += grad[0];  // dz/dy1 = 1
                 y2.Gradient[0] += grad[0];  // dz/dy2 = 1
             },
@@ -331,7 +331,7 @@ public class ComputationNodeIntegrationTests
             backwardFunction: grad =>
             {
                 // z = x * x, dz/dx = 2x
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 x.Gradient[0] += 2 * x.Value[0] * grad[0];
             },
             name: "z");
@@ -393,7 +393,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 x.Gradient[0] += grad[0];
             });
         var z = new ComputationNode<double>(
@@ -402,7 +402,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { y },
             backwardFunction: grad =>
             {
-                if (y.Gradient == null) y.Gradient = new Tensor<double>(y.Value.Shape);
+                if (y.Gradient == null) y.Gradient = new Tensor<double>(y.Value.Shape.ToArray());
                 y.Gradient[0] += grad[0];
             });
 
@@ -472,7 +472,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x1, x2 },
             backwardFunction: grad =>
             {
-                if (x1.Gradient == null) x1.Gradient = new Tensor<double>(x1.Value.Shape);
+                if (x1.Gradient == null) x1.Gradient = new Tensor<double>(x1.Value.Shape.ToArray());
                 x1.Gradient[0] += grad[0];
                 // x2 doesn't require gradient, but we could still set it
             },
@@ -514,7 +514,7 @@ public class ComputationNodeIntegrationTests
                 backwardFunction: grad =>
                 {
                     if (prevNode.Gradient == null)
-                        prevNode.Gradient = new Tensor<double>(prevNode.Value.Shape);
+                        prevNode.Gradient = new Tensor<double>(prevNode.Value.Shape.ToArray());
                     prevNode.Gradient[0] += grad[0];
                 });
             nodes.Add(node);
@@ -557,8 +557,8 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x1, x2 },
             backwardFunction: grad =>
             {
-                if (x1.Gradient == null) x1.Gradient = new Tensor<double>(x1.Value.Shape);
-                if (x2.Gradient == null) x2.Gradient = new Tensor<double>(x2.Value.Shape);
+                if (x1.Gradient == null) x1.Gradient = new Tensor<double>(x1.Value.Shape.ToArray());
+                if (x2.Gradient == null) x2.Gradient = new Tensor<double>(x2.Value.Shape.ToArray());
                 x1.Gradient[0] += grad[0];  // dy1/dx1 = 1
                 x2.Gradient[0] += grad[0];  // dy1/dx2 = 1
             },
@@ -573,8 +573,8 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x1, x2 },
             backwardFunction: grad =>
             {
-                if (x1.Gradient == null) x1.Gradient = new Tensor<double>(x1.Value.Shape);
-                if (x2.Gradient == null) x2.Gradient = new Tensor<double>(x2.Value.Shape);
+                if (x1.Gradient == null) x1.Gradient = new Tensor<double>(x1.Value.Shape.ToArray());
+                if (x2.Gradient == null) x2.Gradient = new Tensor<double>(x2.Value.Shape.ToArray());
                 x1.Gradient[0] += grad[0];   // dy2/dx1 = 1
                 x2.Gradient[0] += -grad[0];  // dy2/dx2 = -1
             },
@@ -589,8 +589,8 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { y1, y2 },
             backwardFunction: grad =>
             {
-                if (y1.Gradient == null) y1.Gradient = new Tensor<double>(y1.Value.Shape);
-                if (y2.Gradient == null) y2.Gradient = new Tensor<double>(y2.Value.Shape);
+                if (y1.Gradient == null) y1.Gradient = new Tensor<double>(y1.Value.Shape.ToArray());
+                if (y2.Gradient == null) y2.Gradient = new Tensor<double>(y2.Value.Shape.ToArray());
                 y1.Gradient[0] += y2.Value[0] * grad[0];  // dz/dy1 = y2
                 y2.Gradient[0] += y1.Value[0] * grad[0];  // dz/dy2 = y1
             },
@@ -629,7 +629,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 x.Gradient[0] += 2.0 * grad[0];  // dy1/dx = 2
             },
             name: "y1");
@@ -642,7 +642,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 x.Gradient[0] += 3.0 * grad[0];  // dy2/dx = 3
             },
             name: "y2");
@@ -655,8 +655,8 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { y1, y2 },
             backwardFunction: grad =>
             {
-                if (y1.Gradient == null) y1.Gradient = new Tensor<double>(y1.Value.Shape);
-                if (y2.Gradient == null) y2.Gradient = new Tensor<double>(y2.Value.Shape);
+                if (y1.Gradient == null) y1.Gradient = new Tensor<double>(y1.Value.Shape.ToArray());
+                if (y2.Gradient == null) y2.Gradient = new Tensor<double>(y2.Value.Shape.ToArray());
                 y1.Gradient[0] += grad[0];
                 y2.Gradient[0] += grad[0];
             },
@@ -689,7 +689,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 x.Gradient[0] += 2.0 * grad[0];
             });
 
@@ -726,7 +726,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<float>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<float>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<float>(x.Value.Shape.ToArray());
                 x.Gradient[0] += 2.0f * x.Value[0] * grad[0];  // dy/dx = 2x
             });
 
@@ -876,7 +876,7 @@ public class ComputationNodeIntegrationTests
             backwardFunction: grad =>
             {
                 // y = 2*x, dy/dx = 2
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 for (int i = 0; i < grad.Length; i++)
                 {
                     x.Gradient[i] += 2.0 * grad[i];
@@ -887,7 +887,7 @@ public class ComputationNodeIntegrationTests
         y.Backward();
 
         // Assert - All gradients should be 2
-        Assert.Equal(new[] { 2, 3 }, x.Gradient!.Shape);
+        Assert.Equal(new[] { 2, 3 }, x.Gradient!.Shape.ToArray());
         for (int i = 0; i < 6; i++)
         {
             Assert.Equal(2.0, x.Gradient[i], Tolerance);
@@ -908,7 +908,7 @@ public class ComputationNodeIntegrationTests
 
         // Assert
         Assert.NotNull(x.Gradient);
-        Assert.Equal(new[] { 2, 2, 2 }, x.Gradient.Shape);
+        Assert.Equal(new[] { 2, 2, 2 }, x.Gradient.Shape.ToArray());
         for (int i = 0; i < 8; i++)
         {
             Assert.Equal(1.0, x.Gradient[i], Tolerance);
@@ -936,7 +936,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 x.Gradient[0] += yTensor[0] * grad[0];  // d(e^x)/dx = e^x
             });
 
@@ -966,7 +966,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 x.Gradient[0] += 2.0 * x.Value[0] * grad[0];  // dy/dx = 2x
             });
 
@@ -979,7 +979,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { y },
             backwardFunction: grad =>
             {
-                if (y.Gradient == null) y.Gradient = new Tensor<double>(y.Value.Shape);
+                if (y.Gradient == null) y.Gradient = new Tensor<double>(y.Value.Shape.ToArray());
                 y.Gradient[0] += Math.Cos(yTensor[0]) * grad[0];  // dz/dy = cos(y)
             });
 
@@ -1012,7 +1012,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 x.Gradient[0] += expX * grad[0];  // de^x/dx = e^x
             });
 
@@ -1026,7 +1026,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { y },
             backwardFunction: grad =>
             {
-                if (y.Gradient == null) y.Gradient = new Tensor<double>(y.Value.Shape);
+                if (y.Gradient == null) y.Gradient = new Tensor<double>(y.Value.Shape.ToArray());
                 y.Gradient[0] += grad[0];  // d(1+y)/dy = 1
             });
 
@@ -1039,7 +1039,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { w },
             backwardFunction: grad =>
             {
-                if (w.Gradient == null) w.Gradient = new Tensor<double>(w.Value.Shape);
+                if (w.Gradient == null) w.Gradient = new Tensor<double>(w.Value.Shape.ToArray());
                 w.Gradient[0] += (1.0 / wTensor[0]) * grad[0];  // dlog(w)/dw = 1/w
             });
 
@@ -1082,8 +1082,8 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x, y },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
-                if (y.Gradient == null) y.Gradient = new Tensor<double>(y.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
+                if (y.Gradient == null) y.Gradient = new Tensor<double>(y.Value.Shape.ToArray());
                 x.Gradient[0] += (2 * x.Value[0] + 2 * y.Value[0]) * grad[0];
                 y.Gradient[0] += (2 * x.Value[0] + 2 * y.Value[0]) * grad[0];
             });
@@ -1124,7 +1124,7 @@ public class ComputationNodeIntegrationTests
             parents: new List<ComputationNode<double>> { x },
             backwardFunction: grad =>
             {
-                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape);
+                if (x.Gradient == null) x.Gradient = new Tensor<double>(x.Value.Shape.ToArray());
                 double xv = x.Value[0];
                 double denom = 1 + xv * xv;
                 double deriv = (1 - xv * xv) / (denom * denom);

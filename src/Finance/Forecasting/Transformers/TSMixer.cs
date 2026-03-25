@@ -519,7 +519,7 @@ public class TSMixer<T> : ForecastingModelBase<T>
         var predictions = Forward(input);
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -848,8 +848,8 @@ public class TSMixer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException(
                 $"Input projection failed to transform features. " +
                 $"Expected output last dimension = {_hiddenDim}, got {currentLastDim}. " +
-                $"Input shape: [{string.Join(", ", normalized.Shape)}], " +
-                $"Output shape: [{string.Join(", ", current.Shape)}]. " +
+                $"Input shape: [{string.Join(", ", normalized.Shape.ToArray())}], " +
+                $"Output shape: [{string.Join(", ", current.Shape.ToArray())}]. " +
                 $"Layer used: {layerType}. " +
                 $"NumFeatures={_numFeatures}, HiddenDim={_hiddenDim}.");
         }
@@ -1058,7 +1058,7 @@ public class TSMixer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftAndAppend(Tensor<T> input, Tensor<T> prediction)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         int seqLen = _sequenceLength;
         int predLen = Math.Min(_predictionHorizon, seqLen);
 

@@ -107,7 +107,7 @@ internal static class FlashAttention<T>
             : NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
 
         // Initialize output tensor
-        var output = new Tensor<T>(query.Shape);
+        var output = new Tensor<T>(query.Shape.ToArray());
 
         // Optional: materialize attention weights for debugging
         Tensor<T>? attentionWeights = config.ReturnAttentionWeights
@@ -148,7 +148,7 @@ internal static class FlashAttention<T>
             : NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
 
         // Initialize output tensor
-        var output = new Tensor<T>(query.Shape);
+        var output = new Tensor<T>(query.Shape.ToArray());
 
         // Optional: materialize attention weights for debugging
         Tensor<T>? attentionWeights = config.ReturnAttentionWeights
@@ -589,9 +589,9 @@ internal static class FlashAttention<T>
         int seqLenKV = key.Shape[1];
         int headDim = query.Shape[2];
 
-        var gradQuery = new Tensor<T>(query.Shape);
-        var gradKey = new Tensor<T>(key.Shape);
-        var gradValue = new Tensor<T>(value.Shape);
+        var gradQuery = new Tensor<T>(query.Shape.ToArray());
+        var gradKey = new Tensor<T>(key.Shape.ToArray());
+        var gradValue = new Tensor<T>(value.Shape.ToArray());
 
         T scale = config.ScaleFactor.HasValue
             ? NumOps.FromDouble(config.ScaleFactor.Value)
@@ -786,9 +786,9 @@ internal static class FlashAttention<T>
         int seqLenKV = key.Shape[2];
         int headDim = query.Shape[3];
 
-        var gradQuery = new Tensor<T>(query.Shape);
-        var gradKey = new Tensor<T>(key.Shape);
-        var gradValue = new Tensor<T>(value.Shape);
+        var gradQuery = new Tensor<T>(query.Shape.ToArray());
+        var gradKey = new Tensor<T>(key.Shape.ToArray());
+        var gradValue = new Tensor<T>(value.Shape.ToArray());
 
         T scale = config.ScaleFactor.HasValue
             ? NumOps.FromDouble(config.ScaleFactor.Value)

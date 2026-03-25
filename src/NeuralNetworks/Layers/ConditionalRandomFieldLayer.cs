@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -37,6 +39,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Other)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 {
     private Tensor<T> _transitionMatrix;
@@ -414,22 +419,22 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         T half = NumOps.FromDouble(0.5);
 
         // Initialize transition matrix: (random - 0.5) * scale
-        var transRandom = Tensor<T>.CreateRandom(_transitionMatrix.Length, 1).Reshape(_transitionMatrix.Shape);
-        var transHalf = new Tensor<T>(_transitionMatrix.Shape);
+        var transRandom = Tensor<T>.CreateRandom(_transitionMatrix.Length, 1).Reshape(_transitionMatrix.Shape.ToArray());
+        var transHalf = new Tensor<T>(_transitionMatrix.Shape.ToArray());
         transHalf.Fill(half);
         var transCentered = Engine.TensorSubtract(transRandom, transHalf);
         _transitionMatrix = Engine.TensorMultiplyScalar(transCentered, scale);
 
         // Initialize start scores: (random - 0.5) * scale
-        var startRandom = Tensor<T>.CreateRandom(_startScores.Length, 1).Reshape(_startScores.Shape);
-        var startHalf = new Tensor<T>(_startScores.Shape);
+        var startRandom = Tensor<T>.CreateRandom(_startScores.Length, 1).Reshape(_startScores.Shape.ToArray());
+        var startHalf = new Tensor<T>(_startScores.Shape.ToArray());
         startHalf.Fill(half);
         var startCentered = Engine.TensorSubtract(startRandom, startHalf);
         _startScores = Engine.TensorMultiplyScalar(startCentered, scale);
 
         // Initialize end scores: (random - 0.5) * scale
-        var endRandom = Tensor<T>.CreateRandom(_endScores.Length, 1).Reshape(_endScores.Shape);
-        var endHalf = new Tensor<T>(_endScores.Shape);
+        var endRandom = Tensor<T>.CreateRandom(_endScores.Length, 1).Reshape(_endScores.Shape.ToArray());
+        var endHalf = new Tensor<T>(_endScores.Shape.ToArray());
         endHalf.Fill(half);
         var endCentered = Engine.TensorSubtract(endRandom, endHalf);
         _endScores = Engine.TensorMultiplyScalar(endCentered, scale);
@@ -472,7 +477,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // CRF expects 3D input: [batchSize, sequenceLength, numClasses]
@@ -558,23 +563,48 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 var prevExpanded = prevViterbi.Reshape([_numClasses, 1]); // [numClasses, 1]
                 var scoresWithTrans = Engine.TensorBroadcastAdd(prevExpanded, _transitionMatrix); // [numClasses, numClasses]
 
-                // Get max over previous classes and store backpointers
+                // During training: use log-sum-exp (smooth, differentiable)
+                // During inference: use max (Viterbi, non-differentiable)
                 var maxScores = new Tensor<T>([_numClasses]);
                 for (int c = 0; c < _numClasses; c++)
                 {
-                    T maxVal = NumOps.MinValue;
-                    int maxIdx = 0;
-                    for (int prevC = 0; prevC < _numClasses; prevC++)
+                    if (IsTrainingMode)
                     {
-                        T val = scoresWithTrans[prevC, c];
-                        if (NumOps.GreaterThan(val, maxVal))
+                        // Log-sum-exp: logsumexp_prevC(score[prevC, c])
+                        // = maxVal + log(sum(exp(score[prevC, c] - maxVal)))
+                        T maxVal = NumOps.MinValue;
+                        for (int prevC = 0; prevC < _numClasses; prevC++)
                         {
-                            maxVal = val;
-                            maxIdx = prevC;
+                            T val = scoresWithTrans[prevC, c];
+                            if (NumOps.GreaterThan(val, maxVal))
+                                maxVal = val;
                         }
+                        T sumExp = NumOps.Zero;
+                        for (int prevC = 0; prevC < _numClasses; prevC++)
+                        {
+                            T val = scoresWithTrans[prevC, c];
+                            sumExp = NumOps.Add(sumExp, NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(val, maxVal)))));
+                        }
+                        maxScores[c] = NumOps.Add(maxVal, NumOps.FromDouble(Math.Log(NumOps.ToDouble(NumOps.Add(sumExp, NumOps.FromDouble(1e-10))))));
+                        backpointers[t, c] = 0; // Not used during training
                     }
-                    maxScores[c] = maxVal;
-                    backpointers[t, c] = maxIdx;
+                    else
+                    {
+                        // Viterbi max
+                        T maxVal = NumOps.MinValue;
+                        int maxIdx = 0;
+                        for (int prevC = 0; prevC < _numClasses; prevC++)
+                        {
+                            T val = scoresWithTrans[prevC, c];
+                            if (NumOps.GreaterThan(val, maxVal))
+                            {
+                                maxVal = val;
+                                maxIdx = prevC;
+                            }
+                        }
+                        maxScores[c] = maxVal;
+                        backpointers[t, c] = maxIdx;
+                    }
                 }
 
                 // Add emissions: maxScores + currentEmissions
@@ -606,11 +636,24 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 bestPath[t] = backpointers[t + 1, bestPath[t + 1]];
             }
 
-            // === VECTORIZED: Set one-hot output ===
-            // Create one-hot tensor for this batch
-            for (int t = 0; t < _sequenceLength; t++)
+            if (IsTrainingMode)
             {
-                output[b, t, bestPath[t]] = NumOps.One;
+                // During training: output the continuous viterbi scores for gradient flow
+                for (int t = 0; t < _sequenceLength; t++)
+                {
+                    for (int c = 0; c < _numClasses; c++)
+                    {
+                        output[b, t, c] = viterbi[t, c];
+                    }
+                }
+            }
+            else
+            {
+                // During inference: one-hot encoded class labels
+                for (int t = 0; t < _sequenceLength; t++)
+                {
+                    output[b, t, bestPath[t]] = NumOps.One;
+                }
             }
         }
 
@@ -951,6 +994,28 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var flatTrans = _transitionMatrixGradient != null
+            ? new Vector<T>(_transitionMatrixGradient.ToArray())
+            : new Vector<T>(_numClasses * _numClasses);
+        var flatStart = _startScoresGradient != null
+            ? new Vector<T>(_startScoresGradient.ToArray())
+            : new Vector<T>(_numClasses);
+        var flatEnd = _endScoresGradient != null
+            ? new Vector<T>(_endScoresGradient.ToArray())
+            : new Vector<T>(_numClasses);
+
+        return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
+    }
+
+    public override void ClearGradients()
+    {
+        _transitionMatrixGradient = null;
+        _startScoresGradient = null;
+        _endScoresGradient = null;
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int transSize = _numClasses * _numClasses;
@@ -964,9 +1029,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         var startVec = parameters.Slice(transSize, _numClasses);
         var endVec = parameters.Slice(transSize + _numClasses, _numClasses);
 
-        _transitionMatrix = Tensor<T>.FromVector(transVec).Reshape(_transitionMatrix.Shape);
-        _startScores = Tensor<T>.FromVector(startVec).Reshape(_startScores.Shape);
-        _endScores = Tensor<T>.FromVector(endVec).Reshape(_endScores.Shape);
+        _transitionMatrix = Tensor<T>.FromVector(transVec).Reshape(_transitionMatrix.Shape.ToArray());
+        _startScores = Tensor<T>.FromVector(startVec).Reshape(_startScores.Shape.ToArray());
+        _endScores = Tensor<T>.FromVector(endVec).Reshape(_endScores.Shape.ToArray());
     }
 
     /// <summary>

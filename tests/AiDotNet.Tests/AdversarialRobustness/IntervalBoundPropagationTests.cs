@@ -634,6 +634,8 @@ public class IntervalBoundPropagationTests
         public Dictionary<string, double> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0 / _inputDim);
         public bool SupportsJitCompilation => false;
         public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     /// <summary>
@@ -691,6 +693,8 @@ public class IntervalBoundPropagationTests
         public Dictionary<string, double> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0 / _inputDim);
         public bool SupportsJitCompilation => false;
         public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     /// <summary>
@@ -747,6 +751,8 @@ public class IntervalBoundPropagationTests
         public Dictionary<string, float> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0f / _inputDim);
         public bool SupportsJitCompilation => false;
         public ComputationNode<float> ExportComputationGraph(List<ComputationNode<float>> inputNodes) => throw new NotSupportedException();
+
+    public Vector<float> SanitizeParameters(Vector<float> parameters) => parameters;
     }
 
     #endregion

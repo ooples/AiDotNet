@@ -1,6 +1,10 @@
 
 
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -24,7 +28,12 @@ namespace AiDotNet.ActivationFunctions;
 /// gradient problem").
 /// </para>
 /// </remarks>
-public class SigmoidActivation<T> : ActivationFunctionBase<T>
+[ActivationCategory(ActivationCategory.Gate)]
+[ActivationCategory(ActivationCategory.Output)]
+[ActivationTask(ActivationTask.RecurrentGating)]
+[ActivationTask(ActivationTask.OutputLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = false, IsBounded = true, Cost = ComputeCost.Medium)]
+public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
 {
     /// <summary>
     /// Indicates whether this activation function supports scalar operations.
@@ -143,7 +152,7 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         var sigmoid = Activate(input);
-        var oneMinusSigmoid = Engine.TensorSubtract(Tensor<T>.CreateDefault(input.Shape, NumOps.One), sigmoid);
+        var oneMinusSigmoid = Engine.TensorSubtract(Tensor<T>.CreateDefault(input.Shape.ToArray(), NumOps.One), sigmoid);
         return Engine.TensorMultiply(sigmoid, oneMinusSigmoid);
     }
 
@@ -243,4 +252,14 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>
     }
 
     #endregion
+
+    /// <summary>
+    /// Computes sigmoid derivative given the post-activation output: y * (1 - y).
+    /// </summary>
+    public Tensor<T> DerivativeFromOutput(Tensor<T> output)
+    {
+        var ones = new Tensor<T>(output.Shape.ToArray());
+        ones.Fill(NumOps.One);
+        return output.ElementwiseMultiply(ones.Subtract(output));
+    }
 }

@@ -298,7 +298,7 @@ public class BiFPN<T> : NeckBase<T>
         }
 
         // Weighted sum
-        var result = new Tensor<T>(inputs[0].Shape);
+        var result = new Tensor<T>(inputs[0].Shape.ToArray());
         for (int i = 0; i < result.Length; i++)
         {
             double sum = 0;
@@ -457,7 +457,7 @@ public class BiFPN<T> : NeckBase<T>
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Rank);
-        foreach (int dim in tensor.Shape)
+        foreach (int dim in tensor.Shape.ToArray())
         {
             writer.Write(dim);
         }
@@ -520,7 +520,7 @@ public class BiFPN<T> : NeckBase<T>
 
     private Tensor<T> ApplySwish(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);

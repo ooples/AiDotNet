@@ -397,7 +397,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         int height = query.Shape[2];
         int width = query.Shape[3];
 
-        var output = new Tensor<T>(value.Shape);
+        var output = new Tensor<T>(value.Shape.ToArray());
         double scale = 1.0 / Math.Sqrt(channels);
 
         // Use local window attention for efficiency (window size based on feature resolution)
@@ -584,7 +584,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var warped = new Tensor<T>(image.Shape);
+        var warped = new Tensor<T>(image.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

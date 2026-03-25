@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -26,6 +28,10 @@ namespace AiDotNet.ActivationFunctions;
 /// older activation functions in many deep learning tasks.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationTask(ActivationTask.TransformerFFN)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.High)]
 public class GELUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
@@ -146,7 +152,7 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         // Use the tensor-level derivative computation
-        Tensor<T> output = new Tensor<T>(input.Shape);
+        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = Derivative(input[i]);

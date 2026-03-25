@@ -90,7 +90,7 @@ public class NeuralNetworkLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Create upstream gradient
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         for (int i = 0; i < outputSize; i++)
         {
             upstreamGradient[0, i] = 1.0;
@@ -236,7 +236,7 @@ public class NeuralNetworkLayersIntegrationTests
         InitializeRandomTensor(input);
 
         var output = layer.Forward(input);
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         InitializeTensorWithValue(upstreamGradient, 1.0);
 
         // Act
@@ -319,7 +319,7 @@ public class NeuralNetworkLayersIntegrationTests
         InitializeRandomTensor(input);
 
         var output = layer.Forward(input);
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         InitializeTensorWithValue(upstreamGradient, 1.0);
 
         // Act
@@ -407,7 +407,7 @@ public class NeuralNetworkLayersIntegrationTests
         // Assert - Both should produce valid outputs
         Assert.NotNull(trainingOutput);
         Assert.NotNull(inferenceOutput);
-        Assert.Equal(trainingOutput.Shape, inferenceOutput.Shape);
+        Assert.Equal(trainingOutput.Shape.ToArray(), inferenceOutput.Shape.ToArray());
 
         bool outputsDiffer = false;
         for (int i = 0; i < trainingOutput.Length; i++)
@@ -439,7 +439,7 @@ public class NeuralNetworkLayersIntegrationTests
         InitializeRandomTensor(input);
 
         var output = layer.Forward(input);
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         InitializeTensorWithValue(upstreamGradient, 1.0);
 
         // Act
@@ -551,7 +551,7 @@ public class NeuralNetworkLayersIntegrationTests
         InitializeTensorWithValue(input, 1.0);
 
         var output = layer.Forward(input);
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         InitializeTensorWithValue(upstreamGradient, 1.0);
 
         // Act
@@ -635,7 +635,7 @@ public class NeuralNetworkLayersIntegrationTests
         InitializeRandomTensor(input);
 
         var output = layer.Forward(input);
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         InitializeTensorWithValue(upstreamGradient, 1.0);
 
         // Act
@@ -810,7 +810,7 @@ public class NeuralNetworkLayersIntegrationTests
         // tests) to catch bugs that only appear under certain random initializations.
         var random = new Random(42);
         int totalElements = 1;
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
         {
             totalElements *= dim;
         }
@@ -825,7 +825,7 @@ public class NeuralNetworkLayersIntegrationTests
     private void InitializeTensorWithValue(Tensor<double> tensor, double value)
     {
         int totalElements = 1;
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
         {
             totalElements *= dim;
         }

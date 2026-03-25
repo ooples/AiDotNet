@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -23,6 +25,9 @@ namespace AiDotNet.ActivationFunctions;
 /// activation function is to input signals.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = false, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class ThresholdedReLUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

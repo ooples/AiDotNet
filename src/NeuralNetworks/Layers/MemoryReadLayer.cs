@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -32,6 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Memory)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -383,10 +388,10 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape);
+        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -547,23 +552,23 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         // Ensure gradient matches stored output shape for activation derivative
-        if (!outputGradient.Shape.SequenceEqual(_lastOutput.Shape))
+        if (!outputGradient.Shape.ToArray().SequenceEqual(_lastOutput.Shape.ToArray()))
         {
             if (outputGradient.Length == _lastOutput.Length)
             {
-                outputGradient = outputGradient.Reshape(_lastOutput.Shape);
+                outputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
             }
             else
             {
                 // Sizes differ — truncate or pad to match
-                var resized = new Tensor<T>(_lastOutput.Shape);
+                var resized = new Tensor<T>(_lastOutput.Shape.ToArray());
                 int minLen = Math.Min(outputGradient.Length, resized.Length);
                 for (int i = 0; i < minLen; i++)
                     resized.SetFlat(i, outputGradient.GetFlatIndexValue(i));
                 outputGradient = resized;
             }
         }
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         // Output weights gradient: transformed^T × activationGradient
         // For Y = X × W, gradient ∂L/∂W = X^T × ∂L/∂Y where X is _lastTransformed (input to output weights)
@@ -579,14 +584,23 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var afterOutputGrad = Engine.TensorMatMul(activationGradient, outputWeightsT);
         var valueGradient = Engine.TensorMatMul(afterOutputGrad, valueWeightsT);
 
-        // Softmax derivative for attention
-        var softmaxActivation = new SoftmaxActivation<T>();
-        var softmaxDerivative = softmaxActivation.Derivative(_lastAttentionScores);
-
-        // Attention weights gradient through softmax
+        // Softmax backward: for attention scores a = softmax(s),
+        // dL/ds_i = a_i * (dL/da_i - sum_j(a_j * dL/da_j))
         var memoryT = Engine.TensorTranspose(_lastMemory);
-        var valueGradTimesMemoryT = Engine.TensorMatMul(valueGradient, memoryT);
-        var attentionWeightsGradient = Engine.TensorMultiply(softmaxDerivative, valueGradTimesMemoryT);
+        var dAttentionWeights = Engine.TensorMatMul(valueGradient, memoryT); // dL/da
+        // Element-wise: a * dL/da
+        var aDotGrad = Engine.TensorMultiply(_lastAttentionScores, dAttentionWeights);
+        // Sum over last axis
+        var sumADotGrad = Engine.ReduceSum(aDotGrad, [aDotGrad.Rank - 1], keepDims: true);
+        // Broadcast and subtract: dL/da - sum
+        var sumExpanded = sumADotGrad;
+        if (sumADotGrad.Shape.Length < dAttentionWeights.Shape.Length ||
+            sumADotGrad.Shape[sumADotGrad.Shape.Length - 1] != dAttentionWeights.Shape[dAttentionWeights.Shape.Length - 1])
+        {
+            sumExpanded = Engine.TensorRepeatElements(sumADotGrad, dAttentionWeights.Shape[dAttentionWeights.Shape.Length - 1], axis: dAttentionWeights.Rank - 1);
+        }
+        var attentionWeightsGradient = Engine.TensorMultiply(_lastAttentionScores,
+            Engine.TensorSubtract(dAttentionWeights, sumExpanded));
 
         // Key weights gradient: input^T × (attentionWeightsGradient × memory)
         var lastInputT = Engine.TensorTranspose(_lastInput);
@@ -727,8 +741,8 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _outputBiasGradient = outputBias.Gradient;
 
         // Combine input and memory gradients
-        var inputGrad = input.Gradient ?? new Tensor<T>(_lastInput.Shape);
-        var memoryGrad = memory.Gradient ?? new Tensor<T>(_lastMemory.Shape);
+        var inputGrad = input.Gradient ?? new Tensor<T>(_lastInput.Shape.ToArray());
+        var memoryGrad = memory.Gradient ?? new Tensor<T>(_lastMemory.Shape.ToArray());
         return CombineGradients(inputGrad, memoryGrad);
     }
 
@@ -878,7 +892,7 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape.ToArray();
         int batchSize = inputShape.Length >= 2 ? inputShape[0] : 1;
         int inputDim = inputShape.Length >= 2 ? inputShape[1] : inputShape[0];
 
@@ -1070,17 +1084,17 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Set key weights using Tensor.FromVector
         var keyParams = parameters.SubVector(index, keySize);
-        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights.Shape);
+        _keyWeights = Tensor<T>.FromVector(keyParams).Reshape(_keyWeights.Shape.ToArray());
         index += keySize;
 
         // Set value weights
         var valueParams = parameters.SubVector(index, valueSize);
-        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights.Shape);
+        _valueWeights = Tensor<T>.FromVector(valueParams).Reshape(_valueWeights.Shape.ToArray());
         index += valueSize;
 
         // Set output weights
         var outputParams = parameters.SubVector(index, outputSize);
-        _outputWeights = Tensor<T>.FromVector(outputParams).Reshape(_outputWeights.Shape);
+        _outputWeights = Tensor<T>.FromVector(outputParams).Reshape(_outputWeights.Shape.ToArray());
         index += outputSize;
 
         // Set output bias

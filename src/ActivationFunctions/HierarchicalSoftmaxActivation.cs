@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -27,6 +29,10 @@ namespace AiDotNet.ActivationFunctions;
 /// - Any task where computing standard Softmax would be too slow
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Normalization)]
+[ActivationCategory(ActivationCategory.Output)]
+[ActivationTask(ActivationTask.OutputLayer)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, IsVectorActivation = true, Cost = ComputeCost.High)]
 public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

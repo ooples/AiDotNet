@@ -261,7 +261,7 @@ public static class GradientClippingHelper
 
         // Scale gradients
         T scale = numOps.Divide(maxNormT, norm);
-        var clipped = new Tensor<T>(gradients.Shape);
+        var clipped = new Tensor<T>(gradients.Shape.ToArray());
         for (int i = 0; i < length; i++)
         {
             clipped.SetFlatIndexValue(i, numOps.Multiply(gradients.GetFlatIndexValue(i), scale));

@@ -431,7 +431,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         var probs = Softmax(modelOutput.Data.ToArray());
-        return new Tensor<T>(probs, modelOutput.Shape);
+        return new Tensor<T>(probs, modelOutput.Shape.ToArray());
     }
 
     /// <inheritdoc/>
@@ -465,7 +465,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape);
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape.ToArray());
 
         BackwardNative(gradientTensor);
         _optimizer?.UpdateParameters(Layers);
@@ -794,7 +794,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
             }
         }
 
-        return new Tensor<T>(output, input.Shape);
+        return new Tensor<T>(output, input.Shape.ToArray());
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)

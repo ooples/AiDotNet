@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -32,6 +33,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.VolumetricProcessing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "1, 2, 3, 4, 4, 4, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class Conv3DLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -424,10 +429,10 @@ public class Conv3DLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize kernels in [-scale, scale] range
-        _kernels = Engine.TensorRandomUniformRange<T>(_kernels.Shape, NumOps.Negate(scale), scale);
+        _kernels = Engine.TensorRandomUniformRange<T>(_kernels.Shape.ToArray(), NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape);
+        _biases = new Tensor<T>(_biases.Shape.ToArray());
         Engine.TensorFill(_biases, NumOps.Zero);
     }
 
@@ -459,7 +464,7 @@ public class Conv3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         Tensor<T> batchedInput;
 
@@ -701,7 +706,7 @@ public class Conv3DLayer<T> : LayerBase<T>
             ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3])
             : outputGradient;
 
-        var delta = ApplyActivationDerivative(_lastOutput, outGrad5D);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outGrad5D);
 
         Tensor<T> batchedDelta = hasBatch
             ? delta
@@ -716,7 +721,7 @@ public class Conv3DLayer<T> : LayerBase<T>
         var inputGrad = Engine.Conv3DBackwardInput(
             batchedDelta,
             _kernels,
-            batchedInput.Shape,
+            batchedInput.Shape.ToArray(),
             [Stride, Stride, Stride],
             [Padding, Padding, Padding],
             [1, 1, 1]);
@@ -724,7 +729,7 @@ public class Conv3DLayer<T> : LayerBase<T>
         _kernelsGradient = Engine.Conv3DBackwardKernel(
             batchedDelta,
             batchedInput,
-            _kernels.Shape,
+            _kernels.Shape.ToArray(),
             [Stride, Stride, Stride],
             [Padding, Padding, Padding],
             [1, 1, 1]);
@@ -830,9 +835,9 @@ public class Conv3DLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
 
         int index = 0;
-        _kernels = new Tensor<T>(_kernels.Shape, parameters.Slice(index, _kernels.Length));
+        _kernels = new Tensor<T>(_kernels.Shape.ToArray(), parameters.Slice(index, _kernels.Length));
         index += _kernels.Length;
-        _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
+        _biases = new Tensor<T>(_biases.Shape.ToArray(), parameters.Slice(index, _biases.Length));
 
         // Invalidate GPU cache after parameter update
         Engine.InvalidatePersistentTensor(_kernels);
@@ -992,7 +997,7 @@ public class Conv3DLayer<T> : LayerBase<T>
         {
             kernelArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _kernels = new Tensor<T>(kernelArray, _kernels.Shape);
+        _kernels = new Tensor<T>(kernelArray, _kernels.Shape.ToArray());
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[_biases.Length];
@@ -1000,7 +1005,7 @@ public class Conv3DLayer<T> : LayerBase<T>
         {
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _biases = new Tensor<T>(biasArray, _biases.Shape);
+        _biases = new Tensor<T>(biasArray, _biases.Shape.ToArray());
     }
 
     #endregion

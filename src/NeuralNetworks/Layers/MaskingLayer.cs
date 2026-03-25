@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -32,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }")]
 public class MaskingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -230,7 +234,7 @@ public class MaskingLayer<T> : LayerBase<T>
         // Store mask GPU tensor for backward pass (if training)
         if (IsTrainingMode)
         {
-            _lastMaskGpu = new GpuTensor<T>(backend, maskBuffer, input.Shape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _lastMaskGpu = new GpuTensor<T>(backend, maskBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate, ownsBuffer: true);
         }
         else
         {
@@ -238,7 +242,7 @@ public class MaskingLayer<T> : LayerBase<T>
             maskBuffer.Dispose();
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <inheritdoc/>
@@ -267,7 +271,7 @@ public class MaskingLayer<T> : LayerBase<T>
         var gradInputBuffer = backend.AllocateBuffer(size);
         backend.Multiply(outputGradient.Buffer, _lastMaskGpu.Buffer, gradInputBuffer, size);
 
-        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>

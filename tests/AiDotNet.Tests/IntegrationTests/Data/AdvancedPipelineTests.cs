@@ -102,10 +102,10 @@ public class AdvancedPipelineTests
             Assert.Equal(2, shape[1]);
 
             var featureTensor = hdf5.ReadDataset("features");
-            Assert.Equal(new[] { 3, 2 }, featureTensor.Shape);
+            Assert.Equal(new[] { 3, 2 }, featureTensor.Shape.ToArray());
 
             var labelTensor = hdf5.ReadDataset("labels");
-            Assert.Equal(new[] { 3 }, labelTensor.Shape);
+            Assert.Equal(new[] { 3 }, labelTensor.Shape.ToArray());
         }
         finally
         {
@@ -131,7 +131,7 @@ public class AdvancedPipelineTests
             using var hdf5 = new Hdf5Dataset<double>(new Hdf5DatasetOptions { FilePath = tempFile });
 
             var slice = hdf5.ReadSlice("data", 1, 2);
-            Assert.Equal(new[] { 2, 2 }, slice.Shape);
+            Assert.Equal(new[] { 2, 2 }, slice.Shape.ToArray());
         }
         finally
         {
@@ -209,8 +209,8 @@ public class AdvancedPipelineTests
             using var arrow = new ArrowDataset<double>(new ArrowDatasetOptions { DataPath = tempFile });
 
             var (featureTensor, labelTensor) = arrow.ReadBatch(0, 2);
-            Assert.Equal(new[] { 2, 2 }, featureTensor.Shape);
-            Assert.Equal(new[] { 2 }, labelTensor.Shape);
+            Assert.Equal(new[] { 2, 2 }, featureTensor.Shape.ToArray());
+            Assert.Equal(new[] { 2 }, labelTensor.Shape.ToArray());
         }
         finally
         {

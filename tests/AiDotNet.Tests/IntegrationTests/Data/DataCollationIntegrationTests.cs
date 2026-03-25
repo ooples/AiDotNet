@@ -26,7 +26,7 @@ public class DataCollationIntegrationTests
 
         var batch = collate.Collate(samples);
 
-        Assert.Equal(new[] { 2, 3 }, batch.Shape);
+        Assert.Equal(new[] { 2, 3 }, batch.Shape.ToArray());
         Assert.Equal(1.0, batch[0, 0], Tolerance);
         Assert.Equal(4.0, batch[1, 0], Tolerance);
         Assert.Equal(6.0, batch[1, 2], Tolerance);
@@ -44,7 +44,7 @@ public class DataCollationIntegrationTests
 
         var batch = collate.Collate(samples);
 
-        Assert.Equal(new[] { 2, 2, 2 }, batch.Shape);
+        Assert.Equal(new[] { 2, 2, 2 }, batch.Shape.ToArray());
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public class DataCollationIntegrationTests
 
         var batch = collate.Collate(samples);
 
-        Assert.Equal(new[] { 1, 4 }, batch.Shape);
+        Assert.Equal(new[] { 1, 4 }, batch.Shape.ToArray());
         Assert.Equal(1.0, batch[0, 0], Tolerance);
     }
 
@@ -112,7 +112,7 @@ public class DataCollationIntegrationTests
 
         var batch = collate.Collate(samples);
 
-        Assert.Equal(new[] { 2, 5 }, batch.Shape);
+        Assert.Equal(new[] { 2, 5 }, batch.Shape.ToArray());
         // First sample padded with zeros
         Assert.Equal(1.0, batch[0, 0], Tolerance);
         Assert.Equal(3.0, batch[0, 2], Tolerance);
@@ -134,7 +134,7 @@ public class DataCollationIntegrationTests
 
         var batch = collate.Collate(samples);
 
-        Assert.Equal(new[] { 2, 4 }, batch.Shape);
+        Assert.Equal(new[] { 2, 4 }, batch.Shape.ToArray());
         Assert.Equal(-1.0, batch[0, 2], Tolerance); // custom pad
         Assert.Equal(-1.0, batch[0, 3], Tolerance); // custom pad
     }
@@ -151,7 +151,7 @@ public class DataCollationIntegrationTests
 
         var batch = collate.Collate(samples);
 
-        Assert.Equal(new[] { 2, 3 }, batch.Shape);
+        Assert.Equal(new[] { 2, 3 }, batch.Shape.ToArray());
         // First sample truncated to 3 elements
         Assert.Equal(1.0, batch[0, 0], Tolerance);
         Assert.Equal(3.0, batch[0, 2], Tolerance);
@@ -169,7 +169,7 @@ public class DataCollationIntegrationTests
 
         var batch = collate.Collate(samples);
 
-        Assert.Equal(new[] { 2, 3 }, batch.Shape);
+        Assert.Equal(new[] { 2, 3 }, batch.Shape.ToArray());
         Assert.Equal(1.0, batch[0, 0], Tolerance);
         Assert.Equal(6.0, batch[1, 2], Tolerance);
     }

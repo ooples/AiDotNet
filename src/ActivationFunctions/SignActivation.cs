@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -19,6 +21,9 @@ namespace AiDotNet.ActivationFunctions;
 /// used in modern neural networks that rely on gradient-based learning.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class SignActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
@@ -149,8 +154,8 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape);
-        int totalElements = input.Shape.Aggregate(1, (a, b) => a * b);
+        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
+        int totalElements = input.Length;
 
         for (int i = 0; i < totalElements; i++)
         {
@@ -181,7 +186,7 @@ public class SignActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         int[] outputShape = new int[input.Shape.Length + 1];
-        Array.Copy(input.Shape, outputShape, input.Shape.Length);
+        Array.Copy(input.Shape.ToArray(), outputShape, input.Shape.Length);
         outputShape[outputShape.Length - 1] = input.Shape[input.Shape.Length - 1];
 
         Tensor<T> output = new Tensor<T>(outputShape);

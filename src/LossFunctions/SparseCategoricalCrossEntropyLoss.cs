@@ -1,4 +1,5 @@
-
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 
 namespace AiDotNet.LossFunctions;
 
@@ -36,6 +37,9 @@ namespace AiDotNet.LossFunctions;
 /// - For batches: flatten your data appropriately or process samples individually
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.MultiClass)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, RequiresProbabilityInputs = true, ApiShape = LossApiShape.SparseIndex, ExpectedOutput = OutputType.Probabilities)]
 public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

@@ -1,4 +1,6 @@
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -31,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -187,7 +192,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override int ParameterCount =>
-        _attentionSize * _inputSize * 3; // Wq, Wk, Wv
+        _attentionSize * _inputSize * 3 + _inputSize * _attentionSize; // Wq, Wk, Wv, Wo
 
     public override void SetParameters(Vector<T> parameters)
     {
@@ -199,21 +204,27 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int idx = 0;
 
         // Create new mutable tensors to avoid immutable Engine tensor issue
-        _Wq = new Tensor<T>(_Wq.Shape);
+        _Wq = new Tensor<T>(_Wq.Shape.ToArray());
         var wqSpan = _Wq.Data.Span;
         for (int i = 0; i < wqLen; i++) wqSpan[i] = parameters[idx++];
 
-        _Wk = new Tensor<T>(_Wk.Shape);
+        _Wk = new Tensor<T>(_Wk.Shape.ToArray());
         var wkSpan = _Wk.Data.Span;
         for (int i = 0; i < wkLen; i++) wkSpan[i] = parameters[idx++];
 
-        _Wv = new Tensor<T>(_Wv.Shape);
+        _Wv = new Tensor<T>(_Wv.Shape.ToArray());
         var wvSpan = _Wv.Data.Span;
         for (int i = 0; i < wvLen; i++) wvSpan[i] = parameters[idx++];
+
+        int woLen = _Wo.Length;
+        _Wo = new Tensor<T>(_Wo.Shape.ToArray());
+        var woSpan = _Wo.Data.Span;
+        for (int i = 0; i < woLen; i++) woSpan[i] = parameters[idx++];
 
         RegisterTrainableParameter(_Wq, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_Wk, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_Wv, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_Wo, PersistentTensorRole.Weights);
     }
 
     /// <summary>
@@ -416,7 +427,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int rank = input.Shape.Length;
         _inputWas2D = rank == 2;
         Tensor<T> input3D;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         if (_inputWas2D)
         {
@@ -438,7 +449,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 throw new ArgumentException(
                     $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
-                    $"but got {input.Shape[2]} in shape [{string.Join(", ", input.Shape)}].",
+                    $"but got {input.Shape[2]} in shape [{string.Join(", ", input.Shape.ToArray())}].",
                     nameof(input));
             }
             input3D = input;
@@ -450,7 +461,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             {
                 throw new ArgumentException(
                     $"AttentionLayer input size mismatch. Expected InputSize={_inputSize}, " +
-                    $"but got {input.Shape[rank - 1]} in shape [{string.Join(", ", input.Shape)}].",
+                    $"but got {input.Shape[rank - 1]} in shape [{string.Join(", ", input.Shape.ToArray())}].",
                     nameof(input));
             }
             int flatBatch = 1;
@@ -515,9 +526,17 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         else
         {
             // Fallback to manual computation for custom activations
-            // 2. Compute Attention Scores: Q @ K.T
+            // 2. Compute Attention Scores: Q @ K.T (per-batch, Engine.BatchMatMul has issues)
             var KT = K.Transpose(new[] { 0, 2, 1 });
-            var attentionScores = Engine.BatchMatMul(Q, KT);
+            var attentionScores = new Tensor<T>([batchSize, seqLen, seqLen]);
+            for (int b = 0; b < batchSize; b++)
+            {
+                var qB = Q.GetSliceAlongDimension(b, 0);
+                var ktB = KT.GetSliceAlongDimension(b, 0);
+                var scoresB = Engine.TensorMatMul(qB, ktB);
+                for (int i = 0; i < scoresB.Length; i++)
+                    attentionScores.SetFlat(b * seqLen * seqLen + i, scoresB.GetFlat(i));
+            }
 
             // 3. Scale
             T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
@@ -526,8 +545,16 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // 4. Apply activation (custom, not softmax)
             _lastAttentionWeights = ApplyActivation(attentionScores);
 
-            // 5. Output: Weights @ V
-            attentionOutput = Engine.BatchMatMul(_lastAttentionWeights, V);
+            // 5. Output: Weights @ V (per-batch)
+            attentionOutput = new Tensor<T>([batchSize, seqLen, _attentionSize]);
+            for (int b = 0; b < batchSize; b++)
+            {
+                var wB = _lastAttentionWeights.GetSliceAlongDimension(b, 0);
+                var vB = V.GetSliceAlongDimension(b, 0);
+                var outB = Engine.TensorMatMul(wB, vB);
+                for (int i = 0; i < outB.Length; i++)
+                    attentionOutput.SetFlat(b * seqLen * _attentionSize + i, outB.GetFlat(i));
+            }
         }
         _lastAttentionOutput = attentionOutput; // Cache for backward pass
 
@@ -577,7 +604,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         // Handle 2D [Batch, InputSize] or 3D [Batch, Seq, InputSize] input
         int batchSize;
@@ -651,7 +678,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuInput = input3D;
             _gpuBatchSize = batchSize;
             _gpuSeqLen = seqLen;
-            _gpuInputShape = input.Shape;
+            _gpuInputShape = input.Shape.ToArray();
 
             // Reshape Q, K, V back to 3D [B, S, A] for backward
             _gpuQ = gpuEngine.ReshapeGpu(qFlat, [batchSize, seqLen, _attentionSize]);
@@ -792,7 +819,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             else
             {
                 throw new ArgumentException(
-                    $"Second input tensor has ambiguous shape {string.Join("x", secondInput.Shape)}. " +
+                    $"Second input tensor has ambiguous shape {string.Join("x", secondInput.Shape.ToArray())}. " +
                     $"Expected either a mask [batch, queryLen, keyLen] or cross-attention K/V [batch, seqLen, {_inputSize}].");
             }
         }
@@ -1139,7 +1166,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Compute dAttentionOutput: [N, inputSize] @ [inputSize, attentionSize] = [N, attentionSize]
         var dAttnOutputFlat = Engine.TensorMatMul(dOutputFlat, _Wo);
-        var dAttnOutput = dAttnOutputFlat.Reshape(_lastAttentionOutput.Shape);
+        var dAttnOutput = dAttnOutputFlat.Reshape(_lastAttentionOutput.Shape.ToArray());
 
         // Now backprop through the attention computation using dAttnOutput
         // Build permutation to transpose last two dimensions for any-rank tensors
@@ -1168,45 +1195,51 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             (vPerm[vRank - 2], vPerm[vRank - 1]) = (vPerm[vRank - 1], vPerm[vRank - 2]);
         }
 
-        // dAttentionWeights = dAttnOutput @ V^T -> [B, S, S]
-        var dAttentionWeights = Engine.BatchMatMul(dAttnOutput, V.Transpose(vPerm));
-
-        // Softmax backward: dL/dz_i = y_i * (dL/dy_i - sum_j(y_j * dL/dy_j))
-        // where y is softmax output (attention weights), z is pre-softmax scores
-        int sumAxis = _lastAttentionWeights.Rank - 1;
-
-        // Compute weighted sum: sum_j(y_j * dL/dy_j)
-        var weightedGrad = _lastAttentionWeights.ElementwiseMultiply(dAttentionWeights);
-        var weightedSum = weightedGrad.SumOverAxis(sumAxis); // Shape reduces by 1 dimension
-
-        // Broadcast sum back to original shape by expanding the dimension
-        var broadcastShape = new int[_lastAttentionWeights.Rank];
-        for (int i = 0; i < _lastAttentionWeights.Rank; i++)
+        // dAttentionWeights = dAttnOutput @ V^T -> [B, S, S] (manual per-batch, Engine.BatchMatMul has issues)
+        var VT = V.Transpose(vPerm);
+        var dAttentionWeights = new Tensor<T>([batchSize, seqLen, seqLen]);
+        for (int b = 0; b < batchSize; b++)
         {
-            broadcastShape[i] = i == sumAxis ? 1 : _lastAttentionWeights.Shape[i];
+            var dAttnB = dAttnOutput.GetSliceAlongDimension(b, 0);
+            var vtB = VT.GetSliceAlongDimension(b, 0);
+            var resultB = Engine.TensorMatMul(dAttnB, vtB);
+            for (int i = 0; i < resultB.Length; i++)
+                dAttentionWeights.SetFlat(b * seqLen * seqLen + i, resultB.GetFlat(i));
         }
-        var sumBroadcast = weightedSum.Reshape(broadcastShape);
 
-        // Create result tensor and fill with broadcast values
-        var sumExpanded = new Tensor<T>(_lastAttentionWeights.Shape);
-        var totalBatches = 1;
-        for (int i = 0; i < sumAxis; i++) totalBatches *= _lastAttentionWeights.Shape[i];
-        var lastDim = _lastAttentionWeights.Shape[sumAxis];
-
-        for (int batch = 0; batch < totalBatches; batch++)
+        // Backward through activation function applied to attention scores
+        // For softmax: dL/dz = y * (dL/dy - sum(y * dL/dy))
+        // For other activations: dL/dz = f'(z) * dL/dy (using post-activation value)
+        Tensor<T> dAttentionScores;
+        if (VectorActivation is SoftmaxActivation<T>)
         {
-            T sumVal = sumBroadcast.GetFlat(batch);
-            for (int j = 0; j < lastDim; j++)
+            int sumAxis = _lastAttentionWeights.Rank - 1;
+            var weightedGrad = _lastAttentionWeights.ElementwiseMultiply(dAttentionWeights);
+            var weightedSum = weightedGrad.SumOverAxis(sumAxis);
+            var broadcastShape = new int[_lastAttentionWeights.Rank];
+            for (int i = 0; i < _lastAttentionWeights.Rank; i++)
+                broadcastShape[i] = i == sumAxis ? 1 : _lastAttentionWeights.Shape[i];
+            var sumBroadcast = weightedSum.Reshape(broadcastShape);
+            var sumExpanded = new Tensor<T>(_lastAttentionWeights.Shape.ToArray());
+            var totalBatches = 1;
+            for (int i = 0; i < sumAxis; i++) totalBatches *= _lastAttentionWeights.Shape[i];
+            var lastDim = _lastAttentionWeights.Shape[sumAxis];
+            for (int batch = 0; batch < totalBatches; batch++)
             {
-                sumExpanded.SetFlat(batch * lastDim + j, sumVal);
+                T sumVal = sumBroadcast.GetFlat(batch);
+                for (int j = 0; j < lastDim; j++)
+                    sumExpanded.SetFlat(batch * lastDim + j, sumVal);
             }
+            dAttentionScores = _lastAttentionWeights.ElementwiseMultiply(
+                dAttentionWeights.Subtract(sumExpanded));
+        }
+        else
+        {
+            // General activation backward: use ApplyActivationDerivativeFromOutput
+            dAttentionScores = ApplyActivationDerivativeFromOutput(_lastAttentionWeights, dAttentionWeights);
         }
 
-        var dAttentionScores = _lastAttentionWeights.ElementwiseMultiply(
-            dAttentionWeights.Subtract(sumExpanded)
-        );
-
-        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_Wk.Shape[_Wk.Shape.Length - 1]));
+        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_attentionSize));
         T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
         dAttentionScores = dAttentionScores.Scale(scaleValue);
 
@@ -1219,28 +1252,40 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var Q = qProjected.Reshape([batchSize, seqLen, _attentionSize]);
         var K = kProjected.Reshape([batchSize, seqLen, _attentionSize]);
 
-        // Correct attention backward formulas:
+        // Correct attention backward formulas (manual per-batch, Engine.BatchMatMul has issues):
         // scores = Q @ K^T, so: dQ = dScores @ K, dK = dScores^T @ Q
-        var dQ = Engine.BatchMatMul(dAttentionScores, K);
-        var dK = Engine.BatchMatMul(dAttentionScores.Transpose([0, 2, 1]), Q);
+        var dQ = new Tensor<T>(Q.Shape.ToArray());
+        var dK = new Tensor<T>(K.Shape.ToArray());
+        for (int b = 0; b < batchSize; b++)
+        {
+            var dScoresB = dAttentionScores.GetSliceAlongDimension(b, 0);
+            var qB = Q.GetSliceAlongDimension(b, 0);
+            var kB = K.GetSliceAlongDimension(b, 0);
+            var dQB = Engine.TensorMatMul(dScoresB, kB);
+            var dKB = Engine.TensorMatMul(Engine.TensorTranspose(dScoresB), qB);
+            for (int i = 0; i < dQB.Length; i++)
+            {
+                dQ.SetFlat(b * dQB.Length + i, dQB.GetFlat(i));
+                dK.SetFlat(b * dKB.Length + i, dKB.GetFlat(i));
+            }
+        }
 
         // Flatten for weight gradient computation: [B*S, attentionSize]
         var dQFlat = dQ.Reshape([batchSize * seqLen, _attentionSize]);
         var dKFlat = dK.Reshape([batchSize * seqLen, _attentionSize]);
         var dVFlat = dV.Reshape([batchSize * seqLen, _attentionSize]);
 
-        // Weight gradients: dWq = input^T @ dQ, etc.
-        var inputFlatT = Engine.TensorTranspose(inputFlat);
-        _dWq = Engine.TensorMatMul(inputFlatT, dQFlat);
-        _dWk = Engine.TensorMatMul(inputFlatT, dKFlat);
-        _dWv = Engine.TensorMatMul(inputFlatT, dVFlat);
+        // Weight gradients: for Q = input @ Wq^T, dWq = dQ^T @ input = [A, B*S] @ [B*S, input] = [A, input]
+        _dWq = Engine.TensorMatMul(Engine.TensorTranspose(dQFlat), inputFlat);
+        _dWk = Engine.TensorMatMul(Engine.TensorTranspose(dKFlat), inputFlat);
+        _dWv = Engine.TensorMatMul(Engine.TensorTranspose(dVFlat), inputFlat);
 
         // Input gradient: dInput = dQ @ Wq^T + dK @ Wk^T + dV @ Wv^T
         var dinputFromQ = Engine.TensorMatMul(dQFlat, _Wq);
         var dinputFromK = Engine.TensorMatMul(dKFlat, _Wk);
         var dinputFromV = Engine.TensorMatMul(dVFlat, _Wv);
         var dinputFlat = dinputFromQ.Add(dinputFromK).Add(dinputFromV);
-        var dinput = dinputFlat.Reshape(_lastInput.Shape);
+        var dinput = dinputFlat.Reshape(_lastInput.Shape.ToArray());
 
         return dinput;
     }
@@ -1404,17 +1449,17 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Update Wq - slice and copy
         var wqParams = parameters.Slice(startIndex, _Wq.Length);
-        _Wq = Tensor<T>.FromVector(wqParams).Reshape(_Wq.Shape);
+        _Wq = Tensor<T>.FromVector(wqParams).Reshape(_Wq.Shape.ToArray());
         startIndex += _Wq.Length;
 
         // Update Wk - slice and copy
         var wkParams = parameters.Slice(startIndex, _Wk.Length);
-        _Wk = Tensor<T>.FromVector(wkParams).Reshape(_Wk.Shape);
+        _Wk = Tensor<T>.FromVector(wkParams).Reshape(_Wk.Shape.ToArray());
         startIndex += _Wk.Length;
 
         // Update Wv - slice and copy
         var wvParams = parameters.Slice(startIndex, _Wv.Length);
-        _Wv = Tensor<T>.FromVector(wvParams).Reshape(_Wv.Shape);
+        _Wv = Tensor<T>.FromVector(wvParams).Reshape(_Wv.Shape.ToArray());
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_Wq);
@@ -1446,7 +1491,24 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var wkVec = _Wk.ToVector();
         var wvVec = _Wv.ToVector();
 
-        return Vector<T>.Concatenate(Vector<T>.Concatenate(wqVec, wkVec), wvVec);
+        var woVec = _Wo.ToVector();
+        return Vector<T>.Concatenate(Vector<T>.Concatenate(wqVec, wkVec), Vector<T>.Concatenate(wvVec, woVec));
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        var gQ = _dWq != null ? _dWq.ToVector() : new Vector<T>(_Wq.Length);
+        var gK = _dWk != null ? _dWk.ToVector() : new Vector<T>(_Wk.Length);
+        var gV = _dWv != null ? _dWv.ToVector() : new Vector<T>(_Wv.Length);
+        var gO = new Vector<T>(_Wo.Length); // Wo gradient not tracked separately yet
+        return Vector<T>.Concatenate(Vector<T>.Concatenate(gQ, gK), Vector<T>.Concatenate(gV, gO));
+    }
+
+    public override void ClearGradients()
+    {
+        _dWq = null;
+        _dWk = null;
+        _dWv = null;
     }
 
     /// <summary>

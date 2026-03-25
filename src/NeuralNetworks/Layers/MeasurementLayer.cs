@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -27,6 +29,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Other)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
 public class MeasurementLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -134,7 +139,7 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int stateSize = input.Shape[^1];
         if (stateSize != InputShape[0])
         {
@@ -271,7 +276,7 @@ public class MeasurementLayer<T> : LayerBase<T>
         else
         {
             // Restore original shape
-            outputShape = (int[])input.Shape.Clone();
+            outputShape = (int[])input.Shape.ToArray().Clone();
             outputShape[input.Shape.Length - 1] = stateSize;
         }
 
@@ -342,7 +347,7 @@ public class MeasurementLayer<T> : LayerBase<T>
         {
             if (outputGradient.Length == _lastOutput.Length)
             {
-                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape);
+                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
             }
             else
             {
@@ -435,7 +440,7 @@ public class MeasurementLayer<T> : LayerBase<T>
         {
             if (outputGradient.Length == _lastOutput.Length)
             {
-                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape);
+                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
             }
             else
             {

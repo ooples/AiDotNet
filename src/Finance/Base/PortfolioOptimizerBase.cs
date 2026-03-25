@@ -137,7 +137,7 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     /// even if you don't own much of it.
     /// </para>
     /// </remarks>
-    public virtual Tensor<T> ComputeRiskContribution(Tensor<T> weights, Tensor<T> covariance) => new Tensor<T>(weights.Shape);
+    public virtual Tensor<T> ComputeRiskContribution(Tensor<T> weights, Tensor<T> covariance) => new Tensor<T>(weights.Shape.ToArray());
 
     /// <summary>
     /// Calculates the expected return of the portfolio.

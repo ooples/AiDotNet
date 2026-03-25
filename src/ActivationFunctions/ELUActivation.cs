@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -21,6 +23,9 @@ namespace AiDotNet.ActivationFunctions;
 /// ELU is often used in deep neural networks where ReLU might cause training issues.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.Medium)]
 public class ELUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

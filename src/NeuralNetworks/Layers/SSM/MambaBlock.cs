@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -50,6 +52,10 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 internal class MambaBlock<T> : LayerBase<T>
 {
     // Configuration
@@ -325,7 +331,7 @@ internal class MambaBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -669,7 +675,7 @@ internal class MambaBlock<T> : LayerBase<T>
     /// </summary>
     private static Tensor<T> SliceTensor(Tensor<T> input, int axis, int start, int length)
     {
-        var shape = (int[])input.Shape.Clone();
+        var shape = (int[])input.Shape.ToArray().Clone();
         shape[axis] = length;
         var output = new Tensor<T>(shape);
 
@@ -789,21 +795,30 @@ internal class MambaBlock<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_convWeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
             new Vector<T>(_convWeightsGradient!.ToArray()),
             new Vector<T>(_convBiasGradient!.ToArray()),
             new Vector<T>(_xProjectionWeightsGradient!.ToArray()),
             new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
             new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
             new Vector<T>(_aLogGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()));
+            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _convWeightsGradient = null; _convBiasGradient = null; _xProjectionWeightsGradient = null; _dtProjectionWeightsGradient = null; _dtProjectionBiasGradient = null; _aLogGradient = null; _dParamGradient = null;
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null;
+        _convWeightsGradient = null; _convBiasGradient = null;
+        _xProjectionWeightsGradient = null;
+        _dtProjectionWeightsGradient = null; _dtProjectionBiasGradient = null;
+        _aLogGradient = null; _dParamGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

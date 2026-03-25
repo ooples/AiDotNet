@@ -329,7 +329,7 @@ public class VAEDecoder<T> : LayerBase<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
         var inputSpan = input.AsSpan();
         var outputSpan = output.AsWritableSpan();
 
@@ -343,7 +343,7 @@ public class VAEDecoder<T> : LayerBase<T>
 
     private Tensor<T> ApplyTanh(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
         var inputSpan = input.AsSpan();
         var outputSpan = output.AsWritableSpan();
 
@@ -396,7 +396,7 @@ public class VAEDecoder<T> : LayerBase<T>
 
     private Tensor<T> ApplySiLUDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
         var inputSpan = input.AsSpan();
         var gradSpan = gradient.AsSpan();
         var outputSpan = output.AsWritableSpan();
@@ -411,7 +411,7 @@ public class VAEDecoder<T> : LayerBase<T>
 
     private Tensor<T> ApplyTanhDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
         var inputSpan = input.AsSpan();
         var gradSpan = gradient.AsSpan();
         var outputSpan = output.AsWritableSpan();

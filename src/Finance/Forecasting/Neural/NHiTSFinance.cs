@@ -435,7 +435,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -801,7 +801,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -941,7 +941,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         if (a.Length != b.Length)
         {
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a.Shape);
+            var result = new Tensor<T>(a.Shape.ToArray());
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Subtract(a[i], b[i]);
             for (int i = minLen; i < a.Length; i++)
@@ -965,7 +965,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         if (a.Length != b.Length)
         {
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a.Shape);
+            var result = new Tensor<T>(a.Shape.ToArray());
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Add(a[i], b[i]);
             for (int i = minLen; i < a.Length; i++)
@@ -990,7 +990,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
         int steps = Math.Min(stepsUsed, seqLen);
 
-        var shifted = new Tensor<T>(input.Shape);
+        var shifted = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

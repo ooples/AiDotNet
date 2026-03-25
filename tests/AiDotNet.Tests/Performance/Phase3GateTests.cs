@@ -39,7 +39,7 @@ public class Phase3GateTests
 
         var tensor = context.Rent1D(100);
 
-        Assert.Single(tensor.Shape);
+        Assert.Single(tensor.Shape.ToArray());
         Assert.Equal(100, tensor.Shape[0]);
     }
 
@@ -368,7 +368,7 @@ public class Phase3GateTests
 
         var output = layer.Forward(query, context);
 
-        Assert.Equal(new[] { 1, 8, 32 }, output.Shape);
+        Assert.Equal(new[] { 1, 8, 32 }, output.Shape.ToArray());
     }
 
     [Fact]

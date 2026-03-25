@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -28,6 +30,9 @@ namespace AiDotNet.ActivationFunctions;
 /// efficiency is important, or in certain types of recurrent neural networks.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Gate)]
+[ActivationTask(ActivationTask.RecurrentGating)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = false, IsBounded = true, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

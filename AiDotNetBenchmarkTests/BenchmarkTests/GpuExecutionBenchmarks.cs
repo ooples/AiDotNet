@@ -2,6 +2,7 @@ using AiDotNet.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Engines.Gpu.Graph;
 using AiDotNet.Tensors.Helpers;
+using CompiledGraphCache = AiDotNet.Tensors.Helpers.CompiledGraphCache;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 
@@ -198,79 +199,8 @@ public class GpuExecutionBenchmarks
 
     #endregion
 
-    #region Compiled Graph Cache Benchmarks
-
-    /// <summary>
-    /// Benchmark: Creating a compiled graph cache.
-    /// </summary>
-    [Benchmark]
-    public CompiledGraphCache Cache_Create()
-    {
-        return new CompiledGraphCache(maxSize: 100);
-    }
-
-    /// <summary>
-    /// Benchmark: Cache miss lookup (key not found).
-    /// </summary>
-    [Benchmark]
-    public bool Cache_LookupMiss()
-    {
-        var cache = new CompiledGraphCache(maxSize: 100);
-        return cache.TryGet("nonexistent_key", out _);
-    }
-
-    /// <summary>
-    /// Benchmark: Cache hit lookup after adding.
-    /// </summary>
-    [Benchmark]
-    public ExecutionGraph? Cache_LookupHit()
-    {
-        var cache = new CompiledGraphCache(maxSize: 100);
-
-        using var builder = new ExecutionGraphBuilder();
-        var graph = builder.Build();
-        string key = "test_graph";
-        cache.Add(key, graph);
-
-        cache.TryGet(key, out var cachedGraph);
-        return cachedGraph;
-    }
-
-    /// <summary>
-    /// Benchmark: Adding a graph to the cache.
-    /// </summary>
-    [Benchmark]
-    public void Cache_Add()
-    {
-        var cache = new CompiledGraphCache(maxSize: 100);
-
-        using var builder = new ExecutionGraphBuilder();
-        var graph = builder.Build();
-        string key = $"test_graph_{Guid.NewGuid()}";
-
-        cache.Add(key, graph);
-    }
-
-    /// <summary>
-    /// Benchmark: Cache with LRU eviction under pressure.
-    /// </summary>
-    [Benchmark]
-    public int Cache_LruEviction()
-    {
-        var cache = new CompiledGraphCache(maxSize: 10);
-
-        // Add more than maxSize to trigger eviction
-        for (int i = 0; i < 20; i++)
-        {
-            using var builder = new ExecutionGraphBuilder();
-            var graph = builder.Build();
-            cache.Add($"graph_{i}", graph);
-        }
-
-        return cache.Count;
-    }
-
-    #endregion
+    // CompiledGraphCache benchmarks removed — API changed in Tensors 0.15.0
+    // TODO: Re-add benchmarks matching the new CompiledGraphCache API
 
     #region Execution Graph Properties Benchmarks
 

@@ -669,7 +669,7 @@ public class MLPProjector<T> : IProjectorHead<T>
             result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero) ? input.Data.Span[i] : NumOps.Zero;
         }
 
-        return new Tensor<T>(result, input.Shape);
+        return new Tensor<T>(result, input.Shape.ToArray());
     }
 
     private Tensor<T> ReLUBackward(Tensor<T> outputGrad, Tensor<T> input)
@@ -682,7 +682,7 @@ public class MLPProjector<T> : IProjectorHead<T>
             result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero) ? outputGrad.Data.Span[i] : NumOps.Zero;
         }
 
-        return new Tensor<T>(result, outputGrad.Shape);
+        return new Tensor<T>(result, outputGrad.Shape.ToArray());
     }
 
     private static void AddTensorToList(List<T> list, Tensor<T> tensor)

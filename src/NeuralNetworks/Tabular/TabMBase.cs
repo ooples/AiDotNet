@@ -248,7 +248,7 @@ public abstract class TabMBase<T>
             // Get the layer's output to determine which activations were positive
             // Since we don't cache the pre-ReLU output, we use the post-ReLU (which is the next layer's input or final output)
             // For ReLU: gradient = gradient * (output > 0)
-            var reluGrad = new Tensor<T>(grad.Shape);
+            var reluGrad = new Tensor<T>(grad.Shape.ToArray());
             // We need to check against the original output before ReLU
             // Actually, we need to check the input to the NEXT layer or the final output
             // Let's use a simpler approach: backward through layer, then through ReLU of previous
@@ -277,7 +277,7 @@ public abstract class TabMBase<T>
             int embedDim = Options.FeatureEmbeddingDimension;
 
             // Note: grad is [batchSize, numFeatures * embedDim]
-            _featureEmbeddingsGrad = new Tensor<T>(_featureEmbeddings.Shape);
+            _featureEmbeddingsGrad = new Tensor<T>(_featureEmbeddings.Shape.ToArray());
             _featureEmbeddingsGrad.Fill(NumOps.Zero);
 
             var inputGrad = new Tensor<T>([batchSize, NumFeatures]);

@@ -91,7 +91,7 @@ public class MambaBlockTests
 
         var output = block.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -106,7 +106,7 @@ public class MambaBlockTests
 
         var output = block.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -120,10 +120,10 @@ public class MambaBlockTests
         var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
 
         var output = block.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = block.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -137,10 +137,10 @@ public class MambaBlockTests
         var input = CreateRandomTensor(new[] { seqLen, modelDim });
 
         var output = block.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = block.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -301,16 +301,16 @@ public class MambaBlockTests
         var block = new MambaBlock<float>(8, modelDim, stateDim, expandFactor);
 
         var inputWeights = block.GetInputProjectionWeights();
-        Assert.Equal(new[] { modelDim, innerDim * 2 }, inputWeights.Shape);
+        Assert.Equal(new[] { modelDim, innerDim * 2 }, inputWeights.Shape.ToArray());
 
         var outputWeights = block.GetOutputProjectionWeights();
-        Assert.Equal(new[] { innerDim, modelDim }, outputWeights.Shape);
+        Assert.Equal(new[] { innerDim, modelDim }, outputWeights.Shape.ToArray());
 
         var aLog = block.GetALogParameter();
-        Assert.Equal(new[] { innerDim, stateDim }, aLog.Shape);
+        Assert.Equal(new[] { innerDim, stateDim }, aLog.Shape.ToArray());
 
         var dParam = block.GetDParameter();
-        Assert.Equal(new[] { innerDim }, dParam.Shape);
+        Assert.Equal(new[] { innerDim }, dParam.Shape.ToArray());
     }
 
     [Fact]
@@ -324,7 +324,7 @@ public class MambaBlockTests
 
         var output = block.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaNDouble(output));
     }
 
@@ -338,10 +338,10 @@ public class MambaBlockTests
         var input = CreateRandomDoubleTensor(new[] { 1, seqLen, modelDim });
 
         var output = block.Forward(input);
-        var grad = CreateRandomDoubleTensor(output.Shape);
+        var grad = CreateRandomDoubleTensor(output.Shape.ToArray());
         var inputGrad = block.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaNDouble(inputGrad));
     }
 

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -29,6 +31,9 @@ namespace AiDotNet.LossFunctions;
 /// This approach is simpler than Triplet Loss as it only requires pairs of examples rather than triplets.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Contrastive)]
+[LossTask(LossTask.Embedding)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ApiShape = LossApiShape.PairedEmbedding, TestInputFormat = LossTestInputFormat.SimilarityLabels, ExpectedOutput = OutputType.Distances)]
 public class ContrastiveLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -194,8 +199,8 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
             grad1Buffer, grad2Buffer, batchSize, embeddingSize, margin);
 
         // Create gradient tensors
-        var grad1Tensor = new GpuTensor<T>(backend, grad1Buffer, output1.Shape, GpuTensorRole.Gradient);
-        var grad2Tensor = new GpuTensor<T>(backend, grad2Buffer, output2.Shape, GpuTensorRole.Gradient);
+        var grad1Tensor = new GpuTensor<T>(backend, grad1Buffer, output1.Shape.ToArray(), GpuTensorRole.Gradient);
+        var grad2Tensor = new GpuTensor<T>(backend, grad2Buffer, output2.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), grad1Tensor, grad2Tensor);
     }

@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -71,6 +73,10 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class MegalodonLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -301,7 +307,7 @@ public class MegalodonLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -934,7 +940,7 @@ public class MegalodonLayer<T> : LayerBase<T>
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var result = TensorAllocator.Rent<T>(template.Shape);
+        var result = TensorAllocator.Rent<T>(template.Shape.ToArray());
         for (int i = 0; i < result.Length; i++) result[i] = NumOps.One;
         return result;
     }
@@ -1014,13 +1020,16 @@ public class MegalodonLayer<T> : LayerBase<T>
             new Vector<T>(_keyWeightsGradient!.ToArray()),
             new Vector<T>(_valueWeightsGradient!.ToArray()),
             new Vector<T>(_gateWeightsGradient!.ToArray()),
-            new Vector<T>(_gateBiasGradient!.ToArray()));
+            new Vector<T>(_gateBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _emaAlphaRealGradient = null; _emaAlphaImagGradient = null; _emaInputWeightsGradient = null; _emaInputBiasGradient = null; _emaOutputWeightsGradient = null; _emaOutputBiasGradient = null; _tsNormGammaGradient = null; _tsNormBetaGradient = null; _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _gateWeightsGradient = null; _gateBiasGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

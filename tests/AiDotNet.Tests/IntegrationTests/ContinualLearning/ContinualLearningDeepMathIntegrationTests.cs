@@ -872,6 +872,8 @@ public class ContinualLearningDeepMathIntegrationTests
         public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
             => throw new NotSupportedException();
         public bool SupportsJitCompilation => false;
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     /// <summary>

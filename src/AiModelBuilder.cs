@@ -5676,6 +5676,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             };
             return Task.FromResult(result);
         }
+        catch (InvalidOperationException)
+        {
+            // Re-throw validation errors (e.g., non-neural-network student) —
+            // these are configuration bugs that must not be silently swallowed.
+            throw;
+        }
         catch (Exception ex)
         {
             Console.WriteLine($"Error setting up knowledge distillation: {ex.Message}");

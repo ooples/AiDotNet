@@ -134,7 +134,7 @@ public class DeploymentExtendedIntegrationTests
 
         Assert.Equal(string.Empty, node.Name);
         Assert.Equal("float", node.DataType);
-        Assert.Null(node.Shape);
+        Assert.Null(node.Shape.ToArray());
         Assert.Null(node.DocString);
     }
 
@@ -151,7 +151,7 @@ public class DeploymentExtendedIntegrationTests
 
         Assert.Equal("features", node.Name);
         Assert.Equal("double", node.DataType);
-        Assert.Equal(new[] { 1, 512 }, node.Shape);
+        Assert.Equal(new[] { 1, 512 }, node.Shape.ToArray());
         Assert.Equal("Feature vector", node.DocString);
     }
 

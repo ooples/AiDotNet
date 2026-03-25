@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Engines;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -35,6 +37,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Residual)]
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1, 1, 8, 8")]
 public class BasicBlock<T> : LayerBase<T>
 {
     /// <summary>
@@ -280,7 +287,7 @@ public class BasicBlock<T> : LayerBase<T>
 
         // Backward through identity branch
         int elementCount = gradConv1.ElementCount;
-        int[] resultShape = (int[])gradConv1.Shape.Clone();
+        int[] resultShape = (int[])gradConv1.Shape.ToArray().Clone();
         IGpuTensor<T> gradInput;
 
         if (_hasDownsample && _downsampleBn is not null && _downsampleConv is not null)
@@ -322,7 +329,7 @@ public class BasicBlock<T> : LayerBase<T>
         {
             // CPU fallback
             var gradData = backend.DownloadBuffer(gradient.Buffer);
-            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), gradient.Shape);
+            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), gradient.Shape.ToArray());
             var cpuResult = layer.Backward(cpuGrad);
             return gpuEngine.UploadToGpu(cpuResult, GpuTensorRole.Gradient);
         }

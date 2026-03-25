@@ -149,10 +149,10 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
         x = _encoderOut.Forward(x);
 
         int halfLen = x.Shape[^1] / 2;
-        var meanShape = GetReducedShape(x.Shape, halfLen);
+        var meanShape = GetReducedShape(x.Shape.ToArray(), halfLen);
         var mean = new Tensor<T>(meanShape);
         var logVar = new Tensor<T>(meanShape);
-        int elements = mean.Shape.Aggregate(1, (a, b) => a * b);
+        int elements = mean.Length;
         for (int i = 0; i < elements; i++)
         {
             mean[i] = x[i];

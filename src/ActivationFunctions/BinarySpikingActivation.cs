@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -26,6 +28,9 @@ namespace AiDotNet.ActivationFunctions;
 /// - Energy-efficient neural networks for specialized hardware
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Stochastic)]
+[ActivationTask(ActivationTask.SpikingNeuron)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
@@ -233,7 +238,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape);
+        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
 
         // Apply the activation to each element in the tensor
         for (int i = 0; i < input.Length; i++)
@@ -263,7 +268,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        Tensor<T> derivatives = new Tensor<T>(input.Shape);
+        Tensor<T> derivatives = new Tensor<T>(input.Shape.ToArray());
 
         // Calculate the derivative for each element in the tensor
         for (int i = 0; i < input.Length; i++)

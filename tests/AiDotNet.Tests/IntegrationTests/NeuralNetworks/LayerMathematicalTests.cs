@@ -55,7 +55,7 @@ public class LayerMathematicalTests
         var layer = new DenseLayer<double>(4, 3);
         var input = new Tensor<double>(new[] { 1.0, 2.0, 3.0, 4.0 }, [4]);
         var output = layer.Forward(input);
-        Assert.Single(output.Shape);
+        Assert.Single(output.Shape.ToArray());
         Assert.Equal(3, output.Shape[0]);
     }
 
@@ -72,7 +72,7 @@ public class LayerMathematicalTests
         var upstreamGrad = new Tensor<double>(new[] { 1.0, 1.0, 1.0 }, [3]);
         var inputGrad = layer.Backward(upstreamGrad);
 
-        Assert.Single(inputGrad.Shape);
+        Assert.Single(inputGrad.Shape.ToArray());
         Assert.Equal(4, inputGrad.Shape[0]);
     }
 

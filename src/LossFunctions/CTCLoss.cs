@@ -1,5 +1,8 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -28,6 +31,9 @@ namespace AiDotNet.LossFunctions;
 /// - Any task where input and output sequences have different lengths and unknown alignment
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.TextGeneration)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Probabilities)]
 public class CTCLoss<T> : ISequenceLossFunction<T>
 {
     private readonly INumericOperations<T> _numOps;
@@ -150,7 +156,7 @@ public class CTCLoss<T> : ISequenceLossFunction<T>
         int numClasses = logProbs.Shape[2];
 
         // Initialize gradient tensor with same shape as input
-        var gradient = new Tensor<T>(logProbs.Shape);
+        var gradient = new Tensor<T>(logProbs.Shape.ToArray());
 
         // For each item in the batch
         for (int b = 0; b < batchSize; b++)

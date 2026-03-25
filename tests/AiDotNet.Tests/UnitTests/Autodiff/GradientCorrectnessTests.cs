@@ -78,7 +78,7 @@ public class GradientCorrectnessTests
         var autodiffWeightGradient = layer.GetParameters(); // Simplified
 
         // Assert - Gradients should be nearly identical
-        Assert.Equal(manualInputGradient.Shape, autodiffInputGradient.Shape);
+        Assert.Equal(manualInputGradient.Shape.ToArray(), autodiffInputGradient.Shape.ToArray());
 
         // Compare input gradients element-wise
         // NOTE: Using relaxed tolerance due to known issue with bias broadcasting in autodiff reconstruction
@@ -126,7 +126,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert - Gradients should be nearly identical
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -169,7 +169,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -212,7 +212,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -258,7 +258,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -305,7 +305,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         // Note: Dropout uses stochastic masking, so we check that both produce
         // the same pattern (zeros in same places) rather than exact values
@@ -356,7 +356,7 @@ public class GradientCorrectnessTests
         var manual = manualGradient;
         var autodiff = autodiffGradient;
 
-        Assert.Equal(manual.Shape, autodiff.Shape);
+        Assert.Equal(manual.Shape.ToArray(), autodiff.Shape.ToArray());
 
         for (int i = 0; i < manual.Length; i++)
         {
@@ -394,7 +394,7 @@ public class GradientCorrectnessTests
         var manual = manualGradient;
         var autodiff = autodiffGradient;
 
-        Assert.Equal(manual.Shape, autodiff.Shape);
+        Assert.Equal(manual.Shape.ToArray(), autodiff.Shape.ToArray());
 
         for (int i = 0; i < manual.Length; i++)
         {
@@ -431,7 +431,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         // NOTE: Using very relaxed tolerance because ResidualLayer has large gradient discrepancies (requires investigation)
         for (int i = 0; i < manualGradient.Length; i++)
@@ -468,7 +468,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -514,7 +514,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = dense1.Backward(grad2);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         // NOTE: Using relaxed tolerance because MultiLayerNetwork contains DenseLayer with known autodiff issues
         for (int i = 0; i < manualGradient.Length; i++)
@@ -783,7 +783,7 @@ public class GradientCorrectnessTests
             var autodiffGradient = inputNode.Gradient!;
 
             // Verify gradient has correct shape and non-zero values
-            Assert.Equal(shape, autodiffGradient.Shape);
+            Assert.Equal(shape, autodiffGradient.Shape.ToArray());
             Assert.True(autodiffGradient.Length > 0);
 
             // Verify gradient values are reasonable (not NaN/Inf)
@@ -995,8 +995,8 @@ public class GradientCorrectnessTests
             var grad2 = node2.Gradient!;
 
             // Assert - gradients should be split correctly
-            Assert.Equal(new int[] { 2, 3 }, grad1.Shape);
-            Assert.Equal(new int[] { 2, 4 }, grad2.Shape);
+            Assert.Equal(new int[] { 2, 3 }, grad1.Shape.ToArray());
+            Assert.Equal(new int[] { 2, 4 }, grad2.Shape.ToArray());
 
             // Check values match corresponding slices
             for (int r = 0; r < 2; r++)
@@ -1044,7 +1044,7 @@ public class GradientCorrectnessTests
             var gradient = inputNode.Gradient!;
 
             // Assert - gradient should match center region of output gradient
-            Assert.Equal(new int[] { 3, 4 }, gradient.Shape);
+            Assert.Equal(new int[] { 3, 4 }, gradient.Shape.ToArray());
 
             for (int r = 0; r < 3; r++)
             {
@@ -1345,7 +1345,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1378,7 +1378,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1411,7 +1411,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1447,7 +1447,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1480,7 +1480,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1514,7 +1514,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1549,7 +1549,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1584,7 +1584,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1620,7 +1620,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1653,7 +1653,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1687,7 +1687,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1725,7 +1725,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1759,7 +1759,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1794,7 +1794,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1829,7 +1829,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1863,7 +1863,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1897,7 +1897,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1930,7 +1930,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -1964,7 +1964,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -2000,7 +2000,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {
@@ -2037,7 +2037,7 @@ public class GradientCorrectnessTests
         var autodiffGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(manualGradient.Shape, autodiffGradient.Shape);
+        Assert.Equal(manualGradient.Shape.ToArray(), autodiffGradient.Shape.ToArray());
 
         for (int i = 0; i < manualGradient.Length; i++)
         {

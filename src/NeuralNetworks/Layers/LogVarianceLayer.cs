@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -30,6 +32,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "new[] { 2, 4 }, 0")]
 public class LogVarianceLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -251,7 +256,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        int[] shape = input.Shape;
+        int[] shape = input.Shape.ToArray();
         int inputRank = shape.Length;
 
         // Validate Axis is within bounds
@@ -404,7 +409,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null || _meanValues == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        int[] inputShape = _lastInput.Shape;
+        int[] inputShape = _lastInput.Shape.ToArray();
         int inputRank = inputShape.Length;
         int axisSize = inputShape[Axis];
         int totalSize = _lastInput.Length;
@@ -549,7 +554,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
         {
             varianceData[i] = NumOps.Exp(varianceData[i]);
         }
-        var variance = new Tensor<T>(_lastOutput.Shape, new Vector<T>(varianceData));
+        var variance = new Tensor<T>(_lastOutput.Shape.ToArray(), new Vector<T>(varianceData));
 
         // Use Engine operation for backward pass
         return Engine.ReduceLogVarianceBackward(outputGradient, _lastInput, _meanValues, variance, [Axis]);
