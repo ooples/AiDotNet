@@ -9,6 +9,26 @@ using Xunit;
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
 /// <summary>
+/// Loss strategies for gradient checking. Each produces a different gradient signal
+/// to expose different classes of backward pass bugs.
+/// </summary>
+public enum GradientCheckLossStrategy
+{
+    /// <summary>L = sum(x^2)/2, dL/dx = x. Gradient proportional to output — bugs where backward
+    /// multiplies by output direction cancel out and become invisible.</summary>
+    MSE,
+
+    /// <summary>L = sum(w*x) with fixed random w, dL/dx = w. Random gradient direction with no
+    /// alignment to output — exposes bugs hidden by MSE's output-aligned gradient.</summary>
+    RandomProjection,
+
+    /// <summary>L = sum(huber(x)), dL/dx = x for |x|&lt;1, sign(x) for |x|&gt;=1. Smooth L1 — constant
+    /// magnitude gradients for large values, differentiable everywhere (unlike raw L1 which causes
+    /// false positives at x=0 in finite difference checks).</summary>
+    Huber,
+}
+
+/// <summary>
 /// Base test class for ILayer&lt;double&gt; implementations.
 /// Tests mathematical invariants that every layer must satisfy:
 /// finite forward output, backward gradient flow, parameter consistency,
@@ -17,7 +37,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Subclasses override CreateLayer() and optionally InputShape/OutputShape.
 /// All invariant tests are inherited automatically.
 ///
-/// Gradient checking uses multiple loss strategies (MSE, RandomProjection, L1) to expose
+/// Gradient checking uses multiple loss strategies (MSE, RandomProjection, Huber) to expose
 /// bugs hidden by specific gradient alignments. Activation functions are auto-discovered
 /// via reflection so new activations are automatically tested.
 /// </summary>
@@ -55,12 +75,12 @@ public abstract class LayerTestBase
     protected virtual double Tolerance => 1e-12;
 
     /// <summary>
-    /// Whether to use random projection loss for the basic gradient check (Invariant 12).
-    /// Capsule layers need this because MSE gradient aligns with Squash output direction,
-    /// which the Squash Jacobian attenuates. Random projection avoids this alignment.
+    /// Loss strategy for the basic gradient check (Invariant 12).
+    /// Capsule layers should use RandomProjection because MSE gradient aligns with Squash
+    /// output direction, which the Squash Jacobian attenuates.
     /// Note: The loss variant Theory test (Invariant 13) tests ALL strategies regardless.
     /// </summary>
-    protected virtual bool UseRandomProjectionLoss => false;
+    protected virtual GradientCheckLossStrategy DefaultLossStrategy => GradientCheckLossStrategy.MSE;
 
     /// <summary>
     /// Whether constant inputs (all 0.1 vs all 0.9) should produce different outputs.
@@ -161,19 +181,11 @@ public abstract class LayerTestBase
     }
 
     /// <summary>
-    /// Loss strategies for gradient checking. Each provides a different gradient signal
-    /// to expose different classes of backward pass bugs:
-    /// - MSE: dL/dx = x (gradient proportional to output — bugs where backward multiplies by output cancel out)
-    /// - RandomProjection: dL/dx = w (random direction — no alignment with activation output)
-    /// - L1: dL/dx = sign(x) (constant magnitude — tests backward with uniform gradient)
-    /// Adding a new entry here automatically tests ALL layers with the new strategy.
+    /// All loss strategies for gradient checking, derived from the GradientCheckLossStrategy enum.
+    /// Adding a new enum value automatically tests ALL layers with the new strategy.
     /// </summary>
-    public static IEnumerable<object[]> LossStrategyNames =>
-    [
-        ["MSE"],
-        ["RandomProjection"],
-        ["L1"],
-    ];
+    public static IEnumerable<object[]> LossStrategyValues =>
+        Enum.GetValues<GradientCheckLossStrategy>().Select(s => new object[] { s });
 
     /// <summary>
     /// All scalar-compatible activation functions, auto-discovered via reflection.
@@ -191,18 +203,18 @@ public abstract class LayerTestBase
     /// <summary>
     /// Computes a scalar loss value from the output tensor using the specified strategy.
     /// </summary>
-    private static double ComputeStrategyLoss(Tensor<double> output, string strategy)
+    private static double ComputeStrategyLoss(Tensor<double> output, GradientCheckLossStrategy strategy)
     {
         switch (strategy)
         {
-            case "MSE":
+            case GradientCheckLossStrategy.MSE:
             {
                 double loss = 0;
                 for (int i = 0; i < output.Length; i++)
                     loss += output[i] * output[i];
                 return loss / 2.0;
             }
-            case "RandomProjection":
+            case GradientCheckLossStrategy.RandomProjection:
             {
                 var rng = RandomHelper.CreateSeededRandom(12345);
                 double loss = 0;
@@ -210,43 +222,46 @@ public abstract class LayerTestBase
                     loss += (rng.NextDouble() * 2.0 - 1.0) * output[i];
                 return loss;
             }
-            case "L1":
+            case GradientCheckLossStrategy.Huber:
             {
                 double loss = 0;
                 for (int i = 0; i < output.Length; i++)
-                    loss += Math.Abs(output[i]);
+                {
+                    double absVal = Math.Abs(output[i]);
+                    loss += absVal < 1.0 ? 0.5 * output[i] * output[i] : absVal - 0.5;
+                }
                 return loss;
             }
             default:
-                throw new ArgumentException($"Unknown loss strategy: {strategy}");
+                throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown loss strategy");
         }
     }
 
     /// <summary>
     /// Computes the gradient dL/dOutput for the specified loss strategy.
     /// </summary>
-    private static Tensor<double> ComputeStrategyGradient(Tensor<double> output, string strategy)
+    private static Tensor<double> ComputeStrategyGradient(Tensor<double> output, GradientCheckLossStrategy strategy)
     {
         var grad = new Tensor<double>(output.Shape.ToArray());
         switch (strategy)
         {
-            case "MSE":
+            case GradientCheckLossStrategy.MSE:
                 for (int i = 0; i < output.Length; i++)
                     grad[i] = output[i];
                 break;
-            case "RandomProjection":
+            case GradientCheckLossStrategy.RandomProjection:
             {
                 var rng = RandomHelper.CreateSeededRandom(12345);
                 for (int i = 0; i < output.Length; i++)
                     grad[i] = rng.NextDouble() * 2.0 - 1.0;
                 break;
             }
-            case "L1":
+            case GradientCheckLossStrategy.Huber:
                 for (int i = 0; i < output.Length; i++)
-                    grad[i] = output[i] >= 0 ? 1.0 : -1.0;
+                    grad[i] = Math.Abs(output[i]) < 1.0 ? output[i] : Math.Sign(output[i]);
                 break;
             default:
-                throw new ArgumentException($"Unknown loss strategy: {strategy}");
+                throw new ArgumentOutOfRangeException(nameof(strategy), strategy, "Unknown loss strategy");
         }
         return grad;
     }
@@ -283,7 +298,7 @@ public abstract class LayerTestBase
     /// for a given layer, input, and loss strategy. Returns failure count and details.
     /// </summary>
     private static (int FailCount, int CheckCount, string DebugInfo) RunGradientCheck(
-        ILayer<double> layer, Tensor<double> input, string lossStrategy, double epsilon = 1e-5)
+        ILayer<double> layer, Tensor<double> input, GradientCheckLossStrategy lossStrategy, double epsilon = 1e-5)
     {
         layer.SetTrainingMode(true);
         layer.ClearGradients();
@@ -672,7 +687,7 @@ public abstract class LayerTestBase
     // For trainable layers, verify that analytical gradients match numerical
     // approximation: dL/dw = (L(w+e) - L(w-e)) / 2e
     // This is the gold standard for gradient correctness.
-    // Uses the loss strategy specified by UseRandomProjectionLoss.
+    // Uses the loss strategy specified by DefaultLossStrategy.
     // =========================================================================
 
     [Fact]
@@ -682,14 +697,13 @@ public abstract class LayerTestBase
 
         var layer = CreateLayer();
         var input = CreateRandomTensor(InputShape);
-        string strategy = UseRandomProjectionLoss ? "RandomProjection" : "MSE";
 
-        var (failCount, checkCount, debugInfo) = RunGradientCheck(layer, input, strategy);
+        var (failCount, checkCount, debugInfo) = RunGradientCheck(layer, input, DefaultLossStrategy);
         if (checkCount == 0) return;
 
         Assert.True(failCount <= checkCount / 3,
             $"Numerical gradient check failed for {failCount}/{checkCount} parameters. " +
-            $"Analytical gradients don't match finite differences (loss={strategy}). " +
+            $"Analytical gradients don't match finite differences (loss={DefaultLossStrategy}). " +
             $"Details: {debugInfo}");
     }
 
@@ -705,8 +719,8 @@ public abstract class LayerTestBase
 
     [Theory]
     [Trait("Category", "GradientVariant")]
-    [MemberData(nameof(LossStrategyNames), MemberType = typeof(LayerTestBase))]
-    public void Backward_GradientCheck_LossVariant(string lossStrategy)
+    [MemberData(nameof(LossStrategyValues), MemberType = typeof(LayerTestBase))]
+    public void Backward_GradientCheck_LossVariant(GradientCheckLossStrategy lossStrategy)
     {
         if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
 
@@ -747,7 +761,7 @@ public abstract class LayerTestBase
         var layer = CreateLayerWithActivation(activation);
         var input = CreateRandomTensor(InputShape);
 
-        var (failCount, checkCount, debugInfo) = RunGradientCheck(layer, input, "MSE");
+        var (failCount, checkCount, debugInfo) = RunGradientCheck(layer, input, GradientCheckLossStrategy.MSE);
         if (checkCount == 0) return;
 
         Assert.True(failCount <= checkCount / 3,
