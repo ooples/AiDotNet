@@ -712,6 +712,13 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         var activationGradient = activationGradientFlat
             .Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+
+        try {
+            var dbg = $"flatGrad[0..3]=[{NumOps.ToDouble(flatGrad[0,0]):E3},{NumOps.ToDouble(flatGrad[0,1]):E3},{NumOps.ToDouble(flatGrad[0,2]):E3},{NumOps.ToDouble(flatGrad[0,3]):E3}]\n" +
+                      $"actGrad[0..3]=[{NumOps.ToDouble(activationGradientFlat[0,0]):E3},{NumOps.ToDouble(activationGradientFlat[0,1]):E3},{NumOps.ToDouble(activationGradientFlat[0,2]):E3},{NumOps.ToDouble(activationGradientFlat[0,3]):E3}]\n" +
+                      $"preSquash[0..3]=[{NumOps.ToDouble(preSquash[0,0]):E3},{NumOps.ToDouble(preSquash[0,1]):E3},{NumOps.ToDouble(preSquash[0,2]):E3},{NumOps.ToDouble(preSquash[0,3]):E3}]\n";
+        } catch { }
+
         int outputChannels = _capsuleChannels * _capsuleDimension;
 
         // Reshape activation gradient to NCHW [batch, outC, H, W]
