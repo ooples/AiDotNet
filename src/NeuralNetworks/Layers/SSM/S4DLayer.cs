@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.StateSpaceModel)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "8, 8", TestConstructorArgs = "8, 8, 4")]
 public class S4DLayer<T> : LayerBase<T>
 {
     // Configuration
@@ -689,14 +689,42 @@ public class S4DLayer<T> : LayerBase<T>
             dhReal = newDhReal;
             dhImag = newDhImag;
 
-            // Accumulate A gradient
-            // d_A_bar contribution from h_prev multiplication
-            var dAr_t = Engine.ReduceSum(Engine.TensorAdd(
+            // Accumulate A gradient with discretization chain rule.
+            // dL/dA_bar = (dhReal * hReal_prev + dhImag * hImag_prev,
+            //              dhImag * hReal_prev - dhReal * hImag_prev)
+            var dAbarR = Engine.ReduceSum(Engine.TensorAdd(
                 Engine.TensorMultiply(dhReal, hReal_prev),
                 Engine.TensorMultiply(dhImag, hImag_prev)), new int[] { 0 });
-            var dAi_t = Engine.ReduceSum(Engine.TensorAdd(
+            var dAbarI = Engine.ReduceSum(Engine.TensorAdd(
                 Engine.TensorMultiply(dhImag, hReal_prev),
                 Engine.TensorNegate(Engine.TensorMultiply(dhReal, hImag_prev))), new int[] { 0 });
+
+            // Chain rule: A_bar = exp(dt * A) where A = A_real + i*A_imag
+            // dA_bar/dA_real = dt * exp(dt*ar) * cos(dt*ai)  (real part)
+            //                + dt * exp(dt*ar) * sin(dt*ai)  (imag part contribution)
+            // dL/dA_real = dAbarR * dt*exp(dt*ar)*cos(dt*ai) + dAbarI * dt*exp(dt*ar)*sin(dt*ai)
+            var dAr_t = new Tensor<T>([_innerDimension, _stateDimension]);
+            var dAi_t = new Tensor<T>([_innerDimension, _stateDimension]);
+            for (int d = 0; d < _innerDimension; d++)
+            {
+                double dt = NumOps.ToDouble(delta[d]);
+                for (int n = 0; n < _stateDimension; n++)
+                {
+                    double ar = NumOps.ToDouble(_aReal[d, n]);
+                    double ai = NumOps.ToDouble(_aImag[d, n]);
+                    double expDtAr = Math.Exp(dt * ar);
+                    double cosDtAi = Math.Cos(dt * ai);
+                    double sinDtAi = Math.Sin(dt * ai);
+
+                    double dAbR = NumOps.ToDouble(dAbarR[d, n]);
+                    double dAbI = NumOps.ToDouble(dAbarI[d, n]);
+
+                    // dL/dA_real = dAbR * dt*exp*cos + dAbI * dt*exp*sin
+                    dAr_t[d, n] = NumOps.FromDouble(dAbR * dt * expDtAr * cosDtAi + dAbI * dt * expDtAr * sinDtAi);
+                    // dL/dA_imag = dAbR * (-dt*exp*sin) + dAbI * dt*exp*cos
+                    dAi_t[d, n] = NumOps.FromDouble(dAbR * (-dt * expDtAr * sinDtAi) + dAbI * dt * expDtAr * cosDtAi);
+                }
+            }
             _aRealGradient = Engine.TensorAdd(_aRealGradient, dAr_t);
             _aImagGradient = Engine.TensorAdd(_aImagGradient, dAi_t);
 
