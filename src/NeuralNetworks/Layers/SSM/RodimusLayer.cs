@@ -642,8 +642,10 @@ public class RodimusLayer<T> : LayerBase<T>
                         T selW = _lastSelectionWeights[new[] { bi, t, hi, ki }];
                         T dSelW = NumOps.Multiply(selW, NumOps.Subtract(dSelWeights[ki], dotSW));
 
-                        // dScore = dSelW / tau (since score was divided by tau for softmax)
-                        T dScore = NumOps.Divide(dSelW, tau);
+                        // dScore is the softmax backward result — no extra division by tau
+                        // (score = q*k*scale/tau, softmax is applied to score directly,
+                        //  so softmax backward gives d(loss)/d(score))
+                        T dScore = dSelW;
 
                         // score = q * k * baseScale / tau
                         // dQ += dScore * k * baseScale / tau
@@ -688,6 +690,7 @@ public class RodimusLayer<T> : LayerBase<T>
         var dForgetFlat = dForgetGateRaw.Reshape(batchSize * seqLen, _numHeads);
         _forgetGateWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dForgetFlat);
         _forgetGateBiasGradient = Engine.ReduceSum(dForgetGateRaw, new int[] { 0, 1 });
+
 
         // Q, K, V weight gradients
         var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
