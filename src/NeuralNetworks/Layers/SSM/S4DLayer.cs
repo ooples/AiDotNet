@@ -718,6 +718,9 @@ public class S4DLayer<T> : LayerBase<T>
             // Recompute B_bar for this gradient step (simplified: use delta * B approximation for gradient)
             var x_t_3D = Engine.TensorExpandDims(x_t, 2);
 
+            // Debug: log to file for tracing
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "s4d_debug.txt"), $"t={t}: dhR[0,0,0]={NumOps.ToDouble(dhReal[0,0,0]):E6} hP[0,0,0]={NumOps.ToDouble(hReal_prev[0,0,0]):E6} x={NumOps.ToDouble(x_t[0,0]):E6}\n"); } catch { }
+
             // dB: dh * x (for each complex component)
             var dBr_t = Engine.ReduceSum(Engine.TensorBroadcastMultiply(dhReal, x_t_3D), new int[] { 0 });
             var dBi_t = Engine.ReduceSum(Engine.TensorBroadcastMultiply(dhImag, x_t_3D), new int[] { 0 });
@@ -740,7 +743,17 @@ public class S4DLayer<T> : LayerBase<T>
             var deltaExpanded = Engine.TensorExpandDims(delta, 0);
             dX_t = Engine.TensorAdd(dX_t, Engine.TensorBroadcastMultiply(deltaExpanded, dXFromState));
 
-            // Propagate gradient to previous hidden state
+            // Accumulate A gradient BEFORE BPTT (dhReal is dL/dh[t+1] at this point).
+            // dL/dA_bar = (dhReal * hReal_prev + dhImag * hImag_prev,
+            //              dhImag * hReal_prev - dhReal * hImag_prev)
+            var dAbarR = Engine.ReduceSum(Engine.TensorAdd(
+                Engine.TensorMultiply(dhReal, hReal_prev),
+                Engine.TensorMultiply(dhImag, hImag_prev)), new int[] { 0 });
+            var dAbarI = Engine.ReduceSum(Engine.TensorAdd(
+                Engine.TensorMultiply(dhImag, hReal_prev),
+                Engine.TensorNegate(Engine.TensorMultiply(dhReal, hImag_prev))), new int[] { 0 });
+
+            // Propagate gradient to previous hidden state (BPTT)
             // dh_prev = conj(A_bar) * dh (for complex: A_bar^* * dh)
             var newDhReal = Engine.TensorAdd(
                 Engine.TensorBroadcastMultiply(aBarReal3D, dhReal),
@@ -751,69 +764,81 @@ public class S4DLayer<T> : LayerBase<T>
             dhReal = newDhReal;
             dhImag = newDhImag;
 
-            // Accumulate A gradient with discretization chain rule.
-            // dL/dA_bar = (dhReal * hReal_prev + dhImag * hImag_prev,
-            //              dhImag * hReal_prev - dhReal * hImag_prev)
-            var dAbarR = Engine.ReduceSum(Engine.TensorAdd(
-                Engine.TensorMultiply(dhReal, hReal_prev),
-                Engine.TensorMultiply(dhImag, hImag_prev)), new int[] { 0 });
-            var dAbarI = Engine.ReduceSum(Engine.TensorAdd(
-                Engine.TensorMultiply(dhImag, hReal_prev),
-                Engine.TensorNegate(Engine.TensorMultiply(dhReal, hImag_prev))), new int[] { 0 });
-
-            // A gradient via full recurrence finite differences.
-            // Changing A affects both A_bar and B_bar, and the recurrence
-            // makes the dependency non-trivial. Rerun the forward recurrence
-            // with perturbed A to get exact dOutput/dA, then chain with dL/dOutput.
-            // (This matches PyTorch's autograd behavior exactly.)
-            //
-            // For efficiency, only compute for (d,n) pairs that have non-zero dh.
-            double fdEps = 1e-6;
+            // A gradient: chain through discretization A_bar = exp(dt * A)
+            // dL/dA = dL/dA_bar * dt * A_bar  (PyTorch reference)
+            // For complex: dL/dA_real = Re(dt * A_bar * dL/dA_bar_complex)
             for (int d = 0; d < _innerDimension; d++)
             {
                 double dt = NumOps.ToDouble(delta[d]);
                 for (int n = 0; n < _stateDimension; n++)
                 {
-                    // Perturb A_real[d,n] by +eps and -eps, rerun recurrence for dim d
-                    double origAr = NumOps.ToDouble(_aReal[d, n]);
+                    double ar = NumOps.ToDouble(_aReal[d, n]);
                     double ai = NumOps.ToDouble(_aImag[d, n]);
-                    double br = NumOps.ToDouble(_bReal[d, n]);
-                    double bi = NumOps.ToDouble(_bImag[d, n]);
-                    double cr = NumOps.ToDouble(_cReal[d, n]);
-                    double ci = NumOps.ToDouble(_cImag[d, n]);
+                    double expR = Math.Exp(dt * ar);
+                    double cosA = Math.Cos(dt * ai);
+                    double sinA = Math.Sin(dt * ai);
 
-                    // Run recurrence with ar+eps
-                    double arP = origAr + fdEps;
-                    var outPlus = RunSingleStateRecurrence(x, batchSize, seqLen, d, n, dt, arP, ai, br, bi, cr, ci);
-                    // Run recurrence with ar-eps
-                    double arM = origAr - fdEps;
-                    var outMinus = RunSingleStateRecurrence(x, batchSize, seqLen, d, n, dt, arM, ai, br, bi, cr, ci);
+                    double dAbR = NumOps.ToDouble(dAbarR[d, n]);
+                    double dAbI = NumOps.ToDouble(dAbarI[d, n]);
 
-                    // dOutput[d]/dA_real[d,n] = (outPlus - outMinus) / (2*eps)
-                    // Then dL/dA_real[d,n] = sum_t sum_b dL/dScanOutput * dScanOutput/dA_real
-                    double grad = 0;
-                    for (int b = 0; b < batchSize; b++)
-                        for (int tt = 0; tt < seqLen; tt++)
-                            grad += NumOps.ToDouble(dOutput[b, tt, d]) * (outPlus[b, tt] - outMinus[b, tt]) / (2 * fdEps);
+                    // dL/dA_real = Re(dt * A_bar * dL/dA_bar_complex)
+                    //            = dt * (dAbR * abar_r - dAbI * abar_i)
+                    double abar_r = expR * cosA;
+                    double abar_i = expR * sinA;
+                    double gradAr = dt * (dAbR * abar_r - dAbI * abar_i);
+                    double gradAi = dt * (dAbR * abar_i + dAbI * abar_r);
 
-                    _aRealGradient[d, n] = NumOps.Add(_aRealGradient[d, n], NumOps.FromDouble(grad));
+                    // B_bar contribution: dL/dA += dL/dB_bar * dB_bar/dA
+                    // B_bar = f(A) * B where f(A) = (exp(Δ*A) - 1) / A
+                    // df/dA = [Δ*A_bar*A - (A_bar - 1)] / A²
+                    // dB_bar/dA = df/dA * B
+                    // dL/dA += Re(conj(dL/dB_bar) * dB_bar/dA)... but since we track real/imag separately:
+                    // dL/dA_real = Re(dL_dBbar_complex * dBbar/dA_complex)
+                    double dBbR = NumOps.ToDouble(dBr_t[d, n]);
+                    double dBbI = NumOps.ToDouble(dBi_t[d, n]);
+                    double brV = NumOps.ToDouble(_bReal[d, n]);
+                    double biV = NumOps.ToDouble(_bImag[d, n]);
 
-                    // Same for A_imag
-                    double origAi = ai;
-                    double aiP = origAi + fdEps;
-                    var outAiPlus = RunSingleStateRecurrence(x, batchSize, seqLen, d, n, dt, origAr, aiP, br, bi, cr, ci);
-                    double aiM = origAi - fdEps;
-                    var outAiMinus = RunSingleStateRecurrence(x, batchSize, seqLen, d, n, dt, origAr, aiM, br, bi, cr, ci);
+                    double aMagSq = ar * ar + ai * ai;
+                    if (aMagSq > 1e-12)
+                    {
+                        // num = Δ * A_bar * A - (A_bar - 1)  (complex)
+                        // A_bar * A: (abar_r + i*abar_i) * (ar + i*ai)
+                        double abarA_r = abar_r * ar - abar_i * ai;
+                        double abarA_i = abar_r * ai + abar_i * ar;
+                        double num_r = dt * abarA_r - (abar_r - 1);
+                        double num_i = dt * abarA_i - abar_i;
 
-                    double gradAi = 0;
-                    for (int b = 0; b < batchSize; b++)
-                        for (int tt = 0; tt < seqLen; tt++)
-                            gradAi += NumOps.ToDouble(dOutput[b, tt, d]) * (outAiPlus[b, tt] - outAiMinus[b, tt]) / (2 * fdEps);
+                        // A² = (ar² - ai²) + 2*ar*ai*i
+                        double aSq_r = ar * ar - ai * ai;
+                        double aSq_i = 2 * ar * ai;
+                        double aSqMagSq = aSq_r * aSq_r + aSq_i * aSq_i;
 
+                        // df/dA = num / A² (complex division)
+                        double dfda_r = (num_r * aSq_r + num_i * aSq_i) / aSqMagSq;
+                        double dfda_i = (num_i * aSq_r - num_r * aSq_i) / aSqMagSq;
+
+                        // dBbar/dA = df/dA * B (complex multiply)
+                        double dBbardA_r = dfda_r * brV - dfda_i * biV;
+                        double dBbardA_i = dfda_r * biV + dfda_i * brV;
+
+                        // dL/dA_real += dBbR * dBbardA_r + dBbI * dBbardA_i
+                        gradAr += dBbR * dBbardA_r + dBbI * dBbardA_i;
+                        // dL/dA_imag += dBbR * dBbardA_i_wrt_ai + dBbI * ...
+                        // For A_imag: df/dA_imag = i * df/dA (since d(A)/d(ai) = i)
+                        // So dBbar/dA_imag = i * dBbar/dA = (-dBbardA_i, dBbardA_r)
+                        gradAi += dBbR * (-dBbardA_i) + dBbI * dBbardA_r;
+                    }
+
+                    if (d == 0 && n == 0)
+                        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "s4d_debug.txt"), $"  chain: dAbR={dAbR:E4} gradAr={gradAr:E4} dBbR={dBbR:E4}\n"); } catch { }
+
+                    _aRealGradient[d, n] = NumOps.Add(_aRealGradient[d, n], NumOps.FromDouble(gradAr));
                     _aImagGradient[d, n] = NumOps.Add(_aImagGradient[d, n], NumOps.FromDouble(gradAi));
                 }
             }
 
+            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "s4d_debug.txt"), $"  AFTER chain: cumGradAr[0,0]={NumOps.ToDouble(_aRealGradient[0,0]):E6}\n"); } catch { }
             dX.SetSlice(1, t, dX_t);
         }
 
@@ -889,6 +914,7 @@ public class S4DLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_aRealGradient == null) return new Vector<T>(ParameterCount);
+        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "s4d_debug.txt"), $"GetParamGrads: shape={string.Join(",",_aRealGradient.Shape.ToArray())} [0,0]={NumOps.ToDouble(_aRealGradient[0,0]):E6} arr[0]={NumOps.ToDouble(_aRealGradient.ToArray()[0]):E6} length={_aRealGradient.Length} ParameterCount={ParameterCount}\n"); } catch { }
         return Vector<T>.Concatenate(
             new Vector<T>(_aRealGradient!.ToArray()),
             new Vector<T>(_aImagGradient!.ToArray()),
