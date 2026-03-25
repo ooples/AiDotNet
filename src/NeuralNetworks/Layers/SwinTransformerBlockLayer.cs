@@ -64,6 +64,10 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
     private Tensor<T>? _cachedAttnOutput;
     private Tensor<T>? _cachedResidual1;
     private Tensor<T>? _cachedNorm2Output;
+    private Tensor<T>? _cachedQkv; // [numWindows, windowArea, 3*dim]
+    private double[,,,]? _cachedAttnProbs; // [numWindows, numHeads, windowArea, windowArea]
+    private int _cachedNumWindows;
+    private int _cachedWindowArea;
     private int _cachedH;
     private int _cachedW;
 
@@ -461,6 +465,9 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         var flatWindows = windows.Reshape([numWindows * windowArea, c]);
         var flatQkv = _qkvProj.Forward(flatWindows);
         var qkv = flatQkv.Reshape([numWindows, windowArea, 3 * c]);
+        _cachedQkv = qkv;
+        _cachedNumWindows = numWindows;
+        _cachedWindowArea = windowArea;
 
         // Compute attention per window
         var output = TensorAllocator.Rent<T>([numWindows, windowArea, c]);
@@ -523,6 +530,14 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
                 }
             }
 
+            // Cache attention probs for backward
+            if (_cachedAttnProbs == null)
+                _cachedAttnProbs = new double[numWindows, _numHeads, windowArea, windowArea];
+            for (int head = 0; head < _numHeads; head++)
+                for (int i = 0; i < windowArea; i++)
+                    for (int j = 0; j < windowArea; j++)
+                        _cachedAttnProbs[win, head, i, j] = attnProbs[head, i, j];
+
             // Apply attention to values and concatenate heads
             var attnOut = new double[windowArea, c];
             for (int head = 0; head < _numHeads; head++)
@@ -544,23 +559,16 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
                 }
             }
 
-            // Output projection
+            // Cache attention output in the output tensor for outProj batching
             for (int t = 0; t < windowArea; t++)
-            {
-                var tokenIn = new Tensor<T>([1, c]);
                 for (int d = 0; d < c; d++)
-                {
-                    tokenIn[0, d] = NumOps.FromDouble(attnOut[t, d]);
-                }
-                var tokenOut = _outProj.Forward(tokenIn);
-                for (int d = 0; d < c; d++)
-                {
-                    output[win, t, d] = tokenOut[0, d];
-                }
-            }
+                    output[win, t, d] = NumOps.FromDouble(attnOut[t, d]);
         }
 
-        return output;
+        // Batch output projection across ALL windows and tokens for correct backward
+        var flatAttnOut = output.Reshape([numWindows * windowArea, c]);
+        var flatProjOut = _outProj.Forward(flatAttnOut);
+        return flatProjOut.Reshape([numWindows, windowArea, c]);
     }
 
     private Tensor<T> ApplyMLP(Tensor<T> x)
@@ -620,10 +628,81 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        // Batch all tokens for correct backward (matching batched Forward)
+        if (_cachedQkv == null || _cachedAttnProbs == null)
+            throw new InvalidOperationException("Forward must be called before backward.");
+
+        int numWindows = _cachedNumWindows;
+        int windowArea = _cachedWindowArea;
+
+        // Step 1: Backward through outProj (batched)
         var flatGrad = gradient.Reshape([batch * seqLen, _dim]);
         var outProjGrad = _outProj.Backward(flatGrad);
-        var qkvGrad = _qkvProj.Backward(outProjGrad);
+        // outProjGrad shape: [numWindows * windowArea, dim]
+        var dAttnOut = outProjGrad.Reshape([numWindows, windowArea, _dim]);
+
+        // Step 2: Backward through attention per window
+        // attnOut[i, d] = sum_j probs[head, i, j] * V[j, headOffset + d]
+        // dV[j, d] += sum_i probs[head, i, j] * dAttnOut[i, d]
+        // dProbs[head, i, j] += sum_d dAttnOut[i, headOffset+d] * V[j, headOffset+d]
+        var dQkv = new Tensor<T>([numWindows, windowArea, 3 * _dim]);
+
+        for (int win = 0; win < numWindows; win++)
+        {
+            for (int head = 0; head < _numHeads; head++)
+            {
+                int headOffset = head * _headDim;
+                int vOffset = 2 * _dim + headOffset;
+
+                // Compute dProbs and dV
+                var dProbs = new double[windowArea, windowArea];
+                for (int i = 0; i < windowArea; i++)
+                {
+                    for (int j = 0; j < windowArea; j++)
+                    {
+                        double dp = 0;
+                        for (int d = 0; d < _headDim; d++)
+                        {
+                            double dOut = NumOps.ToDouble(dAttnOut[win, i, headOffset + d]);
+                            double vVal = NumOps.ToDouble(_cachedQkv[win, j, vOffset + d]);
+                            dp += dOut * vVal;
+                            // dV[j, vOffset+d] += probs[i,j] * dAttnOut[i, headOffset+d]
+                            dQkv[win, j, vOffset + d] = NumOps.Add(dQkv[win, j, vOffset + d],
+                                NumOps.FromDouble(_cachedAttnProbs[win, head, i, j] * dOut));
+                        }
+                        dProbs[i, j] = dp;
+                    }
+                }
+
+                // Softmax backward: dScores[i,j] = probs[i,j] * (dProbs[i,j] - dot(probs[i,:], dProbs[i,:]))
+                for (int i = 0; i < windowArea; i++)
+                {
+                    double dot = 0;
+                    for (int j = 0; j < windowArea; j++)
+                        dot += _cachedAttnProbs[win, head, i, j] * dProbs[i, j];
+
+                    for (int j = 0; j < windowArea; j++)
+                    {
+                        double dScore = _cachedAttnProbs[win, head, i, j] * (dProbs[i, j] - dot) * _scale;
+
+                        // dQ[i, headOffset+d] += dScore * K[j, headOffset+d]
+                        // dK[j, headOffset+d] += dScore * Q[i, headOffset+d]
+                        for (int d = 0; d < _headDim; d++)
+                        {
+                            double kVal = NumOps.ToDouble(_cachedQkv[win, j, _dim + headOffset + d]);
+                            double qVal = NumOps.ToDouble(_cachedQkv[win, i, headOffset + d]);
+                            dQkv[win, i, headOffset + d] = NumOps.Add(dQkv[win, i, headOffset + d],
+                                NumOps.FromDouble(dScore * kVal));
+                            dQkv[win, j, _dim + headOffset + d] = NumOps.Add(dQkv[win, j, _dim + headOffset + d],
+                                NumOps.FromDouble(dScore * qVal));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Step 3: Backward through qkvProj
+        var flatDQkv = dQkv.Reshape([numWindows * windowArea, 3 * _dim]);
+        var qkvGrad = _qkvProj.Backward(flatDQkv);
         return qkvGrad.Reshape([batch, seqLen, _dim]);
     }
 
