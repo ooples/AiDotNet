@@ -134,4 +134,6 @@ public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>
     {
         throw new NotSupportedException("JIT compilation not supported in mock model");
     }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }

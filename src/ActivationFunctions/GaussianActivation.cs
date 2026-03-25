@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -26,6 +28,9 @@ namespace AiDotNet.ActivationFunctions;
 /// The mathematical formula is: f(x) = exp(-x²)
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, Cost = ComputeCost.Medium)]
 public class GaussianActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

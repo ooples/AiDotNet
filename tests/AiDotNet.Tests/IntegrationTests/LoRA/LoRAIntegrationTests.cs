@@ -482,7 +482,7 @@ public class LoRAIntegrationTests
             var output = adapter.Forward(input);
 
             // Compute MSE loss gradient with clipping
-            var gradient = new Tensor<double>(output.Shape);
+            var gradient = new Tensor<double>(output.Shape.ToArray());
             double loss = 0;
             for (int i = 0; i < output.Length; i++)
             {

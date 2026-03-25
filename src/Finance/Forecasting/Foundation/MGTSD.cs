@@ -246,13 +246,13 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
             var rand = RandomHelper.CreateSecureRandom();
             int t = rand.Next(_diffusionSteps);
 
-            var noise = new Tensor<T>(target.Shape);
+            var noise = new Tensor<T>(target.Shape.ToArray());
             for (int i = 0; i < target.Length; i++)
                 noise.Data.Span[i] = SampleStandardNormal(rand);
 
             T sqrtAlphaBar = _sqrtAlphasCumprod[t];
             T sqrtOneMinusAlphaBar = _sqrtOneMinusAlphasCumprod[t];
-            var noisyTarget = new Tensor<T>(target.Shape);
+            var noisyTarget = new Tensor<T>(target.Shape.ToArray());
             for (int i = 0; i < target.Length; i++)
                 noisyTarget.Data.Span[i] = NumOps.Add(
                     NumOps.Multiply(sqrtAlphaBar, target[i]),
@@ -261,7 +261,7 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
             var predictedNoise = ForwardTraining(input, noisyTarget, t);
             LastLoss = _lossFunction.CalculateLoss(predictedNoise.ToVector(), noise.ToVector());
             var gradient = _lossFunction.CalculateDerivative(predictedNoise.ToVector(), noise.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, predictedNoise.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, predictedNoise.Shape.ToArray()));
             _optimizer.UpdateParameters(Layers);
         }
         finally { SetTrainingMode(false); }
@@ -325,7 +325,7 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0; for (int i = 0; i < predictions.Length && i < actuals.Length; i++) { var diff = NumOps.Subtract(predictions[i], actuals[i]); mse = NumOps.Add(mse, NumOps.Multiply(diff, diff)); mae = NumOps.Add(mae, NumOps.Abs(diff)); count++; } if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
 
-    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) { int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; var result = new Tensor<T>(input.Shape); for (int b = 0; b < batchSize; b++) { T mean = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) mean = NumOps.Add(mean, input[idx]); } mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen)); T variance = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } } variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen)); T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5))); for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); } } return result; }
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) { int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; var result = new Tensor<T>(input.Shape.ToArray()); for (int b = 0; b < batchSize; b++) { T mean = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) mean = NumOps.Add(mean, input[idx]); } mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen)); T variance = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } } variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen)); T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5))); for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); } } return result; }
 
     public override Dictionary<string, T> GetFinancialMetrics() { T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero; return new Dictionary<string, T> { ["ContextLength"] = NumOps.FromDouble(_contextLength), ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon), ["NumGranularities"] = NumOps.FromDouble(_numGranularities), ["LastLoss"] = lastLoss }; }
 

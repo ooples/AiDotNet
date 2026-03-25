@@ -27,13 +27,13 @@ public class GeometryDataIntegrationTests
         Assert.Equal(0.0, bounds.max[2], 6);
 
         var faceNormals = mesh.ComputeFaceNormals();
-        Assert.Equal(new[] { 1, 3 }, faceNormals.Shape);
+        Assert.Equal(new[] { 1, 3 }, faceNormals.Shape.ToArray());
         Assert.Equal(0.0, faceNormals[0], 6);
         Assert.Equal(0.0, faceNormals[1], 6);
         Assert.Equal(1.0, faceNormals[2], 6);
 
         var vertexNormals = mesh.ComputeVertexNormals();
-        Assert.Equal(new[] { 3, 3 }, vertexNormals.Shape);
+        Assert.Equal(new[] { 3, 3 }, vertexNormals.Shape.ToArray());
         for (int i = 0; i < 3; i++)
         {
             int offset = i * 3;

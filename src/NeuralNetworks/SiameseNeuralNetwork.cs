@@ -355,8 +355,8 @@ namespace AiDotNet.NeuralNetworks
                 var (grad1, grad2) = contrastiveLoss.CalculateDerivative(emb1, emb2, label);
 
                 // Backpropagate through both branches (shared parameters)
-                Backpropagate(new Tensor<T>(prediction1.Shape, grad1));
-                Backpropagate(new Tensor<T>(prediction2.Shape, grad2));
+                Backpropagate(new Tensor<T>(prediction1.Shape.ToArray(), grad1));
+                Backpropagate(new Tensor<T>(prediction2.Shape.ToArray(), grad2));
             }
             else
             {
@@ -365,7 +365,7 @@ namespace AiDotNet.NeuralNetworks
                 LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
                 var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                Backpropagate(new Tensor<T>(prediction.Shape, outputGradient));
+                Backpropagate(new Tensor<T>(prediction.Shape.ToArray(), outputGradient));
             }
 
             _optimizer.UpdateParameters(Layers);

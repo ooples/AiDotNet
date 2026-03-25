@@ -298,7 +298,7 @@ public class TrOCR<T> : OCRBase<T>
         int seqLen = x.Shape[1];
         int hiddenDim = x.Shape[2];
 
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -511,8 +511,8 @@ public class TrOCR<T> : OCRBase<T>
             throw new ArgumentException(
                 $"Weight shape mismatch: source has {source.Length} elements, " +
                 $"destination has {dest.Length} elements. " +
-                $"Source shape: [{string.Join(", ", source.Shape)}], " +
-                $"Destination shape: [{string.Join(", ", dest.Shape)}]");
+                $"Source shape: [{string.Join(", ", source.Shape.ToArray())}], " +
+                $"Destination shape: [{string.Join(", ", dest.Shape.ToArray())}]");
         }
 
         for (int i = 0; i < source.Length; i++)
@@ -820,7 +820,7 @@ internal class TrOCREncoderLayer<T>
     private Tensor<T> ApplyFFN(Tensor<T> x, int batch, int seqLen)
     {
         int ffnDim = _ffn1.OutputSize;
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -1229,7 +1229,7 @@ internal class TrOCRDecoderLayer<T>
     private Tensor<T> ApplyFFN(Tensor<T> x, int batch, int seqLen)
     {
         int ffnDim = _ffn1.OutputSize;
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -1374,7 +1374,7 @@ internal class TrOCRLayerNorm<T>
         int seqLen = x.Shape[1];
         int hiddenDim = x.Shape[2];
 
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {

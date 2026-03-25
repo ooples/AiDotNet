@@ -43,7 +43,7 @@ public class ELLAAdapter<T> : IGuidanceMethod<T>
     /// <inheritdoc />
     public Tensor<T> Apply(Tensor<T> unconditional, Tensor<T> conditional, double scale, double timestep)
     {
-        var result = new Tensor<T>(unconditional.Shape);
+        var result = new Tensor<T>(unconditional.Shape.ToArray());
         var uncondSpan = unconditional.AsSpan();
         var condSpan = conditional.AsSpan();
         var resultSpan = result.AsWritableSpan();

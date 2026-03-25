@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -27,6 +29,10 @@ namespace AiDotNet.ActivationFunctions;
 /// that needs to make discrete choices while remaining differentiable.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Stochastic)]
+[ActivationCategory(ActivationCategory.Normalization)]
+[ActivationTask(ActivationTask.NormalizationOutput)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, IsVectorActivation = true, Cost = ComputeCost.High)]
 public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

@@ -463,7 +463,7 @@ public class PointCloudLayersIntegrationTests
 
         var coords = cloud.GetCoordinates();
 
-        Assert.Equal(new[] { 2, 3 }, coords.Shape);
+        Assert.Equal(new[] { 2, 3 }, coords.Shape.ToArray());
         Assert.Equal(1.0, coords[0], Tolerance);
         Assert.Equal(2.0, coords[1], Tolerance);
         Assert.Equal(3.0, coords[2], Tolerance);
@@ -506,7 +506,7 @@ public class PointCloudLayersIntegrationTests
         var features = cloud.GetFeatures();
 
         Assert.NotNull(features);
-        Assert.Equal(new[] { 2, 3 }, features.Shape);
+        Assert.Equal(new[] { 2, 3 }, features.Shape.ToArray());
         Assert.Equal(100.0, features[0], Tolerance);
         Assert.Equal(200.0, features[1], Tolerance);
         Assert.Equal(50.0, features[2], Tolerance);

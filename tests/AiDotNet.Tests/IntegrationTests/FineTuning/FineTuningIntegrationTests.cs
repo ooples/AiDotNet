@@ -168,6 +168,8 @@ public class FineTuningIntegrationTests
         {
             return new AiDotNet.Autodiff.ComputationNode<double>(new Tensor<double>(new[] { 1 }), false, null, null, "mock");
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     private static Vector<double> CreateVector(int size)

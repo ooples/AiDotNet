@@ -227,7 +227,7 @@ public class OnnxIntegrationTests
     {
         var info = new OnnxTensorInfo();
         Assert.Equal(string.Empty, info.Name);
-        Assert.Empty(info.Shape);
+        Assert.Empty(info.Shape.ToArray());
         Assert.Equal("float", info.ElementType);
     }
 
@@ -242,7 +242,7 @@ public class OnnxIntegrationTests
         };
 
         Assert.Equal("input_ids", info.Name);
-        Assert.Equal(new[] { -1, 512 }, info.Shape);
+        Assert.Equal(new[] { -1, 512 }, info.Shape.ToArray());
         Assert.Equal("int64", info.ElementType);
     }
 

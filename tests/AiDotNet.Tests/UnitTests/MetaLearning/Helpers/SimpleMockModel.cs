@@ -179,4 +179,6 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         }
         return gradients;
     }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }

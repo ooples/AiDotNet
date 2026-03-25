@@ -921,7 +921,7 @@ public class InferenceOptimizationIntegrationTests
         var tensorType = new TensorType();
 
         Assert.Equal(IRDataType.Float32, tensorType.DataType);
-        Assert.Empty(tensorType.Shape);
+        Assert.Empty(tensorType.Shape.ToArray());
         Assert.Equal(MemoryLayout.RowMajor, tensorType.Layout);
         Assert.Equal(DeviceType.Auto, tensorType.Device);
         Assert.Null(tensorType.Quantization);
@@ -1010,8 +1010,8 @@ public class InferenceOptimizationIntegrationTests
         var clone = original.Clone();
 
         Assert.Equal(original.DataType, clone.DataType);
-        Assert.Equal(original.Shape, clone.Shape);
-        Assert.NotSame(original.Shape, clone.Shape);
+        Assert.Equal(original.Shape.ToArray(), clone.Shape.ToArray());
+        Assert.NotSame(original.Shape.ToArray(), clone.Shape.ToArray());
         Assert.Equal(original.Layout, clone.Layout);
         Assert.Equal(original.Device, clone.Device);
     }

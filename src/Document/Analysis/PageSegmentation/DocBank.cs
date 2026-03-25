@@ -531,7 +531,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
 
         // ImageNet normalization (industry standard for DocBank)
         double[] means = [0.485, 0.456, 0.406];

@@ -397,7 +397,7 @@ namespace AiDotNet.NeuralNetworks
             LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
             var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+            var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
             Backpropagate(outputGradientTensor);
             _optimizer.UpdateParameters(Layers);

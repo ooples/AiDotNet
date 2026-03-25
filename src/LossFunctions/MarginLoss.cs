@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -29,6 +32,11 @@ namespace AiDotNet.LossFunctions;
 /// - It helps in achieving equivariance, a key property of Capsule Networks
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossCategory(LossCategory.Ranking)]
+[LossTask(LossTask.BinaryClassification)]
+[LossTask(LossTask.Ranking)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, TestInputFormat = LossTestInputFormat.MarginBased, ExpectedOutput = OutputType.Logits)]
 public class MarginLoss<T> : LossFunctionBase<T>
 {
     private readonly T _mPlus;

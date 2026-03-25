@@ -580,7 +580,7 @@ public class PruningIntegrationTests
         var scores = strategy.ComputeImportanceScores(weights);
 
         // All elements in same filter should have same score
-        Assert.Equal(scores.Shape, weights.Shape);
+        Assert.Equal(scores.Shape.ToArray(), weights.Shape.ToArray());
     }
 
     [Fact]
@@ -595,7 +595,7 @@ public class PruningIntegrationTests
 
         var scores = strategy.ComputeImportanceScores(weights);
 
-        Assert.Equal(scores.Shape, weights.Shape);
+        Assert.Equal(scores.Shape.ToArray(), weights.Shape.ToArray());
     }
 
     [Fact]
@@ -836,7 +836,7 @@ public class PruningIntegrationTests
     {
         var mask = new PruningMask<double>(3, 4);
 
-        Assert.Equal(new[] { 3, 4 }, mask.Shape);
+        Assert.Equal(new[] { 3, 4 }, mask.Shape.ToArray());
         Assert.Equal(0.0, mask.GetSparsity(), 6); // No pruning = 0 sparsity
     }
 

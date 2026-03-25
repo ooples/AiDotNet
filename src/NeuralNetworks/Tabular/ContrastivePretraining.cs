@@ -114,7 +114,7 @@ public class ContrastivePretraining<T>
                 $"Input has {numFeatures} features but expected {_numFeatures}.");
         }
 
-        var corrupted = new Tensor<T>(input.Shape);
+        var corrupted = new Tensor<T>(input.Shape.ToArray());
         var corruptedIndices = new List<int>();
 
         // Copy original values
@@ -217,7 +217,7 @@ public class ContrastivePretraining<T>
 
     private Tensor<T> L2Normalize(Tensor<T> embeddings, int batchSize, int dim)
     {
-        var normalized = new Tensor<T>(embeddings.Shape);
+        var normalized = new Tensor<T>(embeddings.Shape.ToArray());
         var epsilon = NumOps.FromDouble(1e-8);
 
         for (int b = 0; b < batchSize; b++)

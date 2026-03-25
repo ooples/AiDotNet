@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -32,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for computations (e.g., float, double).</typeparam>
+[LayerCategory(LayerCategory.Regularization)]
+[LayerTask(LayerTask.Regularization)]
+[LayerProperty(IsTrainable = false, HasTrainingMode = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }")]
 public class GaussianNoiseLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -155,7 +159,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
             float stdDevF = Convert.ToSingle(_standardDeviation);
 
             // Generate Gaussian noise N(mean, stdDev) directly on GPU
-            var noise = gpuEngine.RandomNormalGpu<T>(input.Shape, meanF, stdDevF, seed);
+            var noise = gpuEngine.RandomNormalGpu<T>(input.Shape.ToArray(), meanF, stdDevF, seed);
 
             var result = gpuEngine.AddGpu(input, noise);
 
@@ -262,7 +266,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
         _lastInput = input;
         if (IsTrainingMode)
         {
-            _lastNoise = GenerateNoise(input.Shape);
+            _lastNoise = GenerateNoise(input.Shape.ToArray());
             return Engine.TensorAdd(input, _lastNoise);
         }
 

@@ -56,7 +56,7 @@ public class LayerMathematicalTests2
 
         // Output should be the bias value (which may be zero or initialized)
         // At minimum, output should be finite
-        for (int i = 0; i < output.Shape.Aggregate(1, (a, b) => a * b); i++)
+        for (int i = 0; i < output.Shape.ToArray().Aggregate(1, (a, b) => a * b); i++)
             Assert.False(double.IsNaN(output[i]) || double.IsInfinity(output[i]),
                 $"Conv output[{i}] should be finite");
     }
@@ -106,7 +106,7 @@ public class LayerMathematicalTests2
         var input = new Tensor<double>(data, [1, 1, 4, 4]);
         var output = layer.Forward(input);
 
-        for (int i = 0; i < output.Shape.Aggregate(1, (a, b) => a * b); i++)
+        for (int i = 0; i < output.Shape.ToArray().Aggregate(1, (a, b) => a * b); i++)
             Assert.Equal(7.0, output[i], Tol);
     }
 

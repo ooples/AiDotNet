@@ -160,7 +160,7 @@ public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
                 layerOutputs.Add(c);
         }
         if (layerOutputs.Count == 0) return c;
-        var result = new Tensor<T>(layerOutputs[0].Shape);
+        var result = new Tensor<T>(layerOutputs[0].Shape.ToArray());
         int count = layerOutputs.Count;
         for (int li = 0; li < count; li++)
         {

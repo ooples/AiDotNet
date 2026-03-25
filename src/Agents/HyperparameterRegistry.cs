@@ -39,6 +39,9 @@ internal class HyperparameterRegistry
     /// <returns>The C# property name, or null if no mapping exists.</returns>
     public string? GetPropertyName(Type modelType, string llmParamName)
     {
+        if (modelType == null) throw new ArgumentNullException(nameof(modelType));
+        if (string.IsNullOrWhiteSpace(llmParamName)) throw new ArgumentException("Parameter name cannot be null or empty.", nameof(llmParamName));
+
         var normalized = HyperparameterDefinition.NormalizeName(llmParamName);
 
         // Check model-specific definitions first (strip generic type args for matching)
@@ -62,6 +65,9 @@ internal class HyperparameterRegistry
     /// </summary>
     public HyperparameterDefinition? GetDefinition(Type modelType, string llmParamName)
     {
+        if (modelType == null) throw new ArgumentNullException(nameof(modelType));
+        if (string.IsNullOrWhiteSpace(llmParamName)) throw new ArgumentException("Parameter name cannot be null or empty.", nameof(llmParamName));
+
         var normalized = HyperparameterDefinition.NormalizeName(llmParamName);
 
         var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;

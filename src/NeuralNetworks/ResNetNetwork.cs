@@ -480,7 +480,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private static Tensor<T> AddBatchDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape.ToArray();
         int[] resultShape = new int[inputShape.Length + 1];
         resultShape[0] = 1;
         for (int i = 0; i < inputShape.Length; i++)
@@ -546,7 +546,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
 
         // Calculate output gradient
         var outputGradient = CalculateOutputGradient(prediction, expectedOutput);
-        var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         // Backpropagation
         var currentGradient = outputGradientTensor;

@@ -596,7 +596,7 @@ public class MTGNN<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -1019,7 +1019,7 @@ public class MTGNN<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape.ToArray())
         {
             totalSize *= dim;
         }
@@ -1106,7 +1106,7 @@ public class MTGNN<T> : ForecastingModelBase<T>
             (currentPower, previousPower) = (previousPower, currentPower);
         }
 
-        return new Tensor<T>(nodeFeatures.Shape, new Vector<T>(result));
+        return new Tensor<T>(nodeFeatures.Shape.ToArray(), new Vector<T>(result));
     }
 
     #endregion
@@ -1218,7 +1218,7 @@ public class MTGNN<T> : ForecastingModelBase<T>
             perturbed[i] = NumOps.FromDouble(val + noise);
         }
 
-        return new Tensor<T>(input.Shape, new Vector<T>(perturbed));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(perturbed));
     }
 
     #endregion

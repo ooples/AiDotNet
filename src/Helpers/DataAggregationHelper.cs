@@ -160,12 +160,12 @@ public static class DataAggregationHelper
     /// </summary>
     private static Tensor<T> AggregateTensors<T>(List<Tensor<T>> tensors)
     {
-        var referenceShape = tensors[0].Shape;
+        var referenceShape = tensors[0].Shape.ToArray();
 
         // Validate all tensors have compatible shapes (same dimensions except first)
         for (int i = 1; i < tensors.Count; i++)
         {
-            var currentShape = tensors[i].Shape;
+            var currentShape = tensors[i].Shape.ToArray();
             if (currentShape.Length != referenceShape.Length)
             {
                 throw new ArgumentException(

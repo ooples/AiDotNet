@@ -479,7 +479,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     private Tensor<T> ComputeGradient(Tensor<T> logits, Tensor<T> labels, int[] trainIndices, int numClasses)
     {
         // Initialize gradient tensor (zeros)
-        var gradient = new Tensor<T>(logits.Shape);
+        var gradient = new Tensor<T>(logits.Shape.ToArray());
         Engine.TensorFill(gradient, NumOps.Zero);
 
         if (trainIndices.Length == 0)
@@ -587,7 +587,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
 
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape);
+            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
         }
 
         Backward(gradOutput);

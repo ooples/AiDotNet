@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -37,6 +38,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.FeatureFusion)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class ConcatenateLayer<T> : LayerBase<T>
 {
     private readonly int _axis;
@@ -167,7 +171,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
         }
         else
         {
-            Array.Copy(inputs[0].Shape, permutedOutputShape, rank);
+            Array.Copy(inputs[0].Shape.ToArray(), permutedOutputShape, rank);
             permutedOutputShape[axis] = totalAxisDim;
         }
 

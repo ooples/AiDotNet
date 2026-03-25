@@ -32,8 +32,8 @@ public static class OnnxTensorConverter
     public static OnnxTensors.DenseTensor<float> ToOnnxFloat<T>(Tensor<T> tensor)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = tensor.Shape.Select(d => (long)d).ToArray();
-        var onnxTensor = new OnnxTensors.DenseTensor<float>(tensor.Shape);
+        var shape = tensor.Shape.ToArray().Select(d => (long)d).ToArray();
+        var onnxTensor = new OnnxTensors.DenseTensor<float>(tensor.Shape.ToArray());
 
         var sourceData = tensor.ToArray();
         var buffer = onnxTensor.Buffer.Span;
@@ -55,7 +55,7 @@ public static class OnnxTensorConverter
     public static OnnxTensors.DenseTensor<double> ToOnnxDouble<T>(Tensor<T> tensor)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var onnxTensor = new OnnxTensors.DenseTensor<double>(tensor.Shape);
+        var onnxTensor = new OnnxTensors.DenseTensor<double>(tensor.Shape.ToArray());
 
         var sourceData = tensor.ToArray();
         var buffer = onnxTensor.Buffer.Span;
@@ -77,7 +77,7 @@ public static class OnnxTensorConverter
     public static OnnxTensors.DenseTensor<long> ToOnnxLong<T>(Tensor<T> tensor)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var onnxTensor = new OnnxTensors.DenseTensor<long>(tensor.Shape);
+        var onnxTensor = new OnnxTensors.DenseTensor<long>(tensor.Shape.ToArray());
 
         var sourceData = tensor.ToArray();
         var buffer = onnxTensor.Buffer.Span;
@@ -99,7 +99,7 @@ public static class OnnxTensorConverter
     public static OnnxTensors.DenseTensor<int> ToOnnxInt<T>(Tensor<T> tensor)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var onnxTensor = new OnnxTensors.DenseTensor<int>(tensor.Shape);
+        var onnxTensor = new OnnxTensors.DenseTensor<int>(tensor.Shape.ToArray());
 
         var sourceData = tensor.ToArray();
         var buffer = onnxTensor.Buffer.Span;
@@ -215,7 +215,7 @@ public static class OnnxTensorConverter
         var numOps = MathHelper.GetNumericOperations<T>();
         var batchShape = new int[tensor.Shape.Length + 1];
         batchShape[0] = 1;
-        tensor.Shape.CopyTo(batchShape, 1);
+        Array.Copy(tensor.Shape.ToArray(), 0, batchShape, 1, tensor.Shape.Length);
 
         var onnxTensor = new OnnxTensors.DenseTensor<float>(batchShape);
         var sourceData = tensor.ToArray();

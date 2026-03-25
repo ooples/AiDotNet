@@ -77,7 +77,7 @@ public class ProvenanceDeepfakeDetector<T> : ImageSafetyModuleBase<T>
         var span = image.Data.Span;
         if (span.Length == 0) return findings;
 
-        var layout = DetermineLayout(image.Shape, span.Length);
+        var layout = DetermineLayout(image.Shape.ToArray(), span.Length);
         if (layout.Height < 16 || layout.Width < 16) return findings;
 
         // 1. Noise floor analysis

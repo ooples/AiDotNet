@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -28,6 +30,9 @@ namespace AiDotNet.ActivationFunctions;
 /// especially when dealing with high-dimensional data or when the input values can vary widely in magnitude.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Normalization)]
+[ActivationTask(ActivationTask.NormalizationOutput)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, IsVectorActivation = true, Cost = ComputeCost.High)]
 public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -9,21 +11,25 @@ namespace AiDotNet.LossFunctions;
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> Quantile loss helps predict specific percentiles of data rather than just the average.
-/// 
+///
 /// For example:
 /// - With quantile=0.5, it predicts the median value (50th percentile)
 /// - With quantile=0.9, it predicts the 90th percentile
 /// - With quantile=0.1, it predicts the 10th percentile
-/// 
+///
 /// This is useful when you care more about certain parts of the distribution, such as:
 /// - Predicting worst-case scenarios (high quantiles)
 /// - Ensuring predictions don't fall below a certain threshold (low quantiles)
 /// - Creating prediction intervals (by predicting multiple quantiles)
-/// 
+///
 /// The loss function applies different penalties for overestimation versus underestimation,
 /// which forces the model to learn the specific quantile rather than just the average.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regression)]
+[LossTask(LossTask.Regression)]
+[LossTask(LossTask.TimeSeriesForecasting)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, IsRobustToOutliers = true, ExpectedOutput = OutputType.Continuous)]
 public class QuantileLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -139,7 +145,7 @@ public class QuantileLoss<T> : LossFunctionBase<T>
         backend.QuantileBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size, quantile);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

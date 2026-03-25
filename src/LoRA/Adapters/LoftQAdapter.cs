@@ -836,7 +836,7 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
         // Sum outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);

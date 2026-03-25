@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -33,6 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Regularization)]
+[LayerTask(LayerTask.Regularization)]
+[LayerProperty(IsTrainable = true)]
 public class SpectralNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -216,9 +220,12 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
             NormalizeVector(ref u);
         }
 
-        // Save updated u and v for next iteration
-        _u = u;
-        _v = v;
+        // Only update u and v during training — inference should be deterministic
+        if (IsTrainingMode)
+        {
+            _u = u;
+            _v = v;
+        }
 
         // Compute spectral norm: u^T @ W @ v
         var vReshaped2 = v.Reshape(inputSize, 1);
@@ -469,8 +476,6 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         try
         {
             // Backpropagate through inner layer using normalized weights
-            // Note: For simplicity, we pass gradients directly through
-            // A more accurate implementation would compute the Jacobian of spectral normalization
             return _innerLayer.Backward(outputGradient);
         }
         finally
@@ -521,6 +526,50 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         _lastOutput = null;
         RestoreOriginalWeights();
         _innerLayer.ResetState();
+    }
+
+    public override void Serialize(BinaryWriter writer)
+    {
+        base.Serialize(writer);
+        // Serialize power iteration vectors for deterministic deserialization
+        bool hasU = _u != null;
+        writer.Write(hasU);
+        if (hasU)
+        {
+            writer.Write(_u!.Length);
+            for (int i = 0; i < _u.Length; i++)
+                writer.Write(NumOps.ToDouble(_u[i]));
+        }
+        bool hasV = _v != null;
+        writer.Write(hasV);
+        if (hasV)
+        {
+            writer.Write(_v!.Length);
+            for (int i = 0; i < _v.Length; i++)
+                writer.Write(NumOps.ToDouble(_v[i]));
+        }
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        base.Deserialize(reader);
+        // Restore power iteration vectors
+        bool hasU = reader.ReadBoolean();
+        if (hasU)
+        {
+            int uLen = reader.ReadInt32();
+            _u = new Tensor<T>([uLen]);
+            for (int i = 0; i < uLen; i++)
+                _u[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        bool hasV = reader.ReadBoolean();
+        if (hasV)
+        {
+            int vLen = reader.ReadInt32();
+            _v = new Tensor<T>([vLen]);
+            for (int i = 0; i < vLen; i++)
+                _v[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <summary>

@@ -851,6 +851,8 @@ public class FederatedLearningDeepMathIntegrationTests
 
         // ILossFunction default
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

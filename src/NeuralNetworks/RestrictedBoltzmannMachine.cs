@@ -509,7 +509,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             }
             else
             {
-                throw new ArgumentException($"Visible layer shape {string.Join(",", visibleLayer.Shape)} is incompatible with weights shape [{_weights.Rows},{_weights.Columns}]");
+                throw new ArgumentException($"Visible layer shape {string.Join(",", visibleLayer.Shape.ToArray())} is incompatible with weights shape [{_weights.Rows},{_weights.Columns}]");
             }
         }
         else
@@ -703,7 +703,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> SampleBinaryStates(Tensor<T> activations)
     {
-        var result = TensorAllocator.Rent<T>(activations.Shape);
+        var result = TensorAllocator.Rent<T>(activations.Shape.ToArray());
         var random = RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < activations.Length; i++)
@@ -775,7 +775,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             }
             else
             {
-                throw new ArgumentException($"Hidden layer shape {string.Join(",", hiddenLayer.Shape)} is incompatible with hidden size {hiddenSize}");
+                throw new ArgumentException($"Hidden layer shape {string.Join(",", hiddenLayer.Shape.ToArray())} is incompatible with hidden size {hiddenSize}");
             }
         }
         else

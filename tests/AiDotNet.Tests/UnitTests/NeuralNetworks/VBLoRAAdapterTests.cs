@@ -495,7 +495,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             }
 
             var output = adapter.Forward(input);
-            var gradient = new Tensor<double>(output.Shape);
+            var gradient = new Tensor<double>(output.Shape.ToArray());
             for (int i = 0; i < gradient.Length; i++)
             {
                 gradient[i] = 0.1;

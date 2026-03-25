@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -9,14 +11,14 @@ namespace AiDotNet.ActivationFunctions;
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> The Identity activation function is the simplest activation function - it returns exactly what you give it.
-/// 
+///
 /// When you pass a value through this function:
 /// - Input of 2 ? Output of 2
 /// - Input of -3.5 ? Output of -3.5
 /// - And so on...
-/// 
+///
 /// Think of it like a straight line on a graph where y = x.
-/// 
+///
 /// While most neural networks use non-linear activation functions (like ReLU or Sigmoid) to model complex patterns,
 /// the Identity function can be useful in:
 /// - The output layer of regression problems (when predicting continuous values)
@@ -24,6 +26,10 @@ namespace AiDotNet.ActivationFunctions;
 /// - Certain network architectures where you want values to pass through unchanged
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationTask(ActivationTask.OutputLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.Low)]
 public class IdentityActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

@@ -469,7 +469,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
             inputNodes.AddRange(teacherInputNodes);
 
             // Scale by weight
-            var weightTensor = new Tensor<T>((int[])teacherOutput.Value.Shape.Clone());
+            var weightTensor = new Tensor<T>((int[])teacherOutput.Value.Shape.ToArray().Clone());
             weightTensor.Fill(NumOps.FromDouble(jitWeights[i]));
             var weightNode = TensorOperations<T>.Constant(weightTensor, $"teacher_{i}_weight");
             var scaledOutput = TensorOperations<T>.ElementwiseMultiply(teacherOutput, weightNode);

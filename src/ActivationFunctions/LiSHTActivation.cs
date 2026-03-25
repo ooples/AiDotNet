@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -26,6 +28,9 @@ namespace AiDotNet.ActivationFunctions;
 /// allowing small values to pass through with minimal change.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.Medium)]
 public class LiSHTActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
@@ -51,6 +56,15 @@ public class LiSHTActivation<T> : ActivationFunctionBase<T>
     public override T Activate(T input)
     {
         // f(x) = x * tanh(x)
+        // For large |x|: tanh(x) → ±1, so LiSHT(x) → |x| (always non-negative)
+        // Guard against overflow in tanh computation for extreme values
+        double xVal = NumOps.ToDouble(input);
+        if (xVal > 20.0 || xVal < -20.0)
+        {
+            // tanh(x) ≈ sign(x), so x * tanh(x) ≈ |x|
+            return NumOps.FromDouble(Math.Abs(xVal));
+        }
+
         T tanhInput = MathHelper.Tanh(input);
         return NumOps.Multiply(input, tanhInput);
     }

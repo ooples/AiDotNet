@@ -1266,7 +1266,7 @@ public class PhysicsInformedIntegrationTests
         var input = new Tensor<double>(new[] { 2, 8, 16 });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 

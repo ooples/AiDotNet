@@ -1026,7 +1026,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
 
         // Donut uses different normalization than standard ImageNet
         double[] means = [0.5, 0.5, 0.5];

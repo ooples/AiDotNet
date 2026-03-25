@@ -309,6 +309,6 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         {
             gradData[i] = _numOps.Subtract(output[i], target[i]);
         }
-        return new Tensor<T>(output.Shape, gradData);
+        return new Tensor<T>(output.Shape.ToArray(), gradData);
     }
 }

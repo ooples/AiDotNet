@@ -137,15 +137,15 @@ public class InferenceKVCacheIntegrationTests
         var v1 = CreateKVTensor(1, 2, 1, 4, seed: 43);
         var (allKeys1, allValues1) = cache.Append(0, k1, v1);
 
-        Assert.Equal(new[] { 1, 2, 1, 4 }, allKeys1.Shape);
+        Assert.Equal(new[] { 1, 2, 1, 4 }, allKeys1.Shape.ToArray());
 
         // Append second token - should return both
         var k2 = CreateKVTensor(1, 2, 1, 4, seed: 44);
         var v2 = CreateKVTensor(1, 2, 1, 4, seed: 45);
         var (allKeys2, allValues2) = cache.Append(0, k2, v2);
 
-        Assert.Equal(new[] { 1, 2, 2, 4 }, allKeys2.Shape);
-        Assert.Equal(new[] { 1, 2, 2, 4 }, allValues2.Shape);
+        Assert.Equal(new[] { 1, 2, 2, 4 }, allKeys2.Shape.ToArray());
+        Assert.Equal(new[] { 1, 2, 2, 4 }, allValues2.Shape.ToArray());
     }
 
     [Fact]

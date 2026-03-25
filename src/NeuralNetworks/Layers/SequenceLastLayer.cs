@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -21,6 +22,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4")]
 public class SequenceLastLayer<T> : LayerBase<T>
 {
     private readonly int _featureSize;
@@ -68,7 +72,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
     /// <returns>Output tensor of shape [features] or [batch, features].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalShape = input.Shape;
+        _originalShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         if (rank == 1)
@@ -153,7 +157,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         int rank = shape.Length;
 
         _originalShape = shape;

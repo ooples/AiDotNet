@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -20,6 +23,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Reference: Liu et al., "Swin Transformer: Hierarchical Vision Transformer using Shifted Windows", ICCV 2021
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Transformer)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 16, 8", TestConstructorArgs = "8")]
 public class SwinPatchMergingLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;

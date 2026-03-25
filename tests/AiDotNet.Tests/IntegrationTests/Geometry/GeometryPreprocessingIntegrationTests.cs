@@ -517,7 +517,7 @@ public class GeometryPreprocessingIntegrationTests
 
         var grid = Voxelization<double>.VoxelizePointCloud(cloud, resolution: 4);
 
-        Assert.Equal(new[] { 4, 4, 4 }, grid.Voxels.Shape);
+        Assert.Equal(new[] { 4, 4, 4 }, grid.Voxels.Shape.ToArray());
 
         // At least some voxels should be occupied
         int occupied = 0;
@@ -536,7 +536,7 @@ public class GeometryPreprocessingIntegrationTests
 
         var grid = Voxelization<double>.VoxelizePointCloud(cloud, resolution: 4);
 
-        Assert.Equal(new[] { 4, 4, 4 }, grid.Voxels.Shape);
+        Assert.Equal(new[] { 4, 4, 4 }, grid.Voxels.Shape.ToArray());
     }
 
     [Fact]
@@ -757,7 +757,7 @@ public class GeometryPreprocessingIntegrationTests
 
         var normals = MeshOperations<double>.ComputeFaceNormals(mesh);
 
-        Assert.Equal(new[] { 1, 3 }, normals.Shape);
+        Assert.Equal(new[] { 1, 3 }, normals.Shape.ToArray());
         // Normal of XY plane triangle = (0, 0, 1) (right-hand rule)
         Assert.Equal(0.0, normals[0], Tolerance);
         Assert.Equal(0.0, normals[1], Tolerance);
@@ -805,7 +805,7 @@ public class GeometryPreprocessingIntegrationTests
 
         var normals = MeshOperations<double>.ComputeVertexNormals(mesh);
 
-        Assert.Equal(new[] { 4, 3 }, normals.Shape);
+        Assert.Equal(new[] { 4, 3 }, normals.Shape.ToArray());
 
         // Vertex 0 participates in both faces, normal should be averaged and normalized
         double nx = normals[0];

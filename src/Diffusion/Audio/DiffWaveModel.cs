@@ -498,7 +498,7 @@ public class DiffWaveNetwork<T>
         var x = ProjectAudio(audio);
 
         // Apply residual blocks
-        var skip = CreateZeroTensor(x.Shape);
+        var skip = CreateZeroTensor(x.Shape.ToArray());
         foreach (var block in _residualBlocks)
         {
             var (blockOut, skipOut) = block.Forward(x, diffEmbed, melCondition);
@@ -510,7 +510,7 @@ public class DiffWaveNetwork<T>
         var output = ApplyRelu(_outputProjection1.Forward(skip));
         output = _outputProjection2.Forward(output);
 
-        return ReshapeToAudio(output, audio.Shape);
+        return ReshapeToAudio(output, audio.Shape.ToArray());
     }
 
     private Tensor<T> ProjectAudio(Tensor<T> audio)
@@ -549,7 +549,7 @@ public class DiffWaveNetwork<T>
 
     private Tensor<T> ApplyRelu(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
         var span = x.AsSpan();
         var resultSpan = result.AsWritableSpan();
 
@@ -740,7 +740,7 @@ public class DiffWaveResidualBlock<T>
     {
         // Gated activation: tanh(x[:halfChannels]) * sigmoid(x[halfChannels:])
         // Input shape: [batch, channels, length] for 1D waveform, or [batch, channels] for embedding
-        var inputShape = x.Shape;
+        var inputShape = x.Shape.ToArray();
         var span = x.AsSpan();
 
         // Compute output shape: same as input but with half the channel dimension

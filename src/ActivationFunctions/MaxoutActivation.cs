@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -24,6 +26,9 @@ namespace AiDotNet.ActivationFunctions;
 /// making it very flexible. However, it requires more parameters in your neural network.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Parametric)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = false, HasLearnableParameters = true, IsDifferentiable = false, Cost = ComputeCost.Medium)]
 public class MaxoutActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

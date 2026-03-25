@@ -254,7 +254,7 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
         T maxVal = o[0];
         for (int i = 1; i < o.Length; i++)
             if (NumOps.GreaterThan(o[i], maxVal)) maxVal = o[i];
-        var result = new Tensor<T>(o.Shape);
+        var result = new Tensor<T>(o.Shape.ToArray());
         T sum = NumOps.Zero;
         for (int i = 0; i < o.Length; i++)
         {

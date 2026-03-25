@@ -158,7 +158,7 @@ public class DocumentReader<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape);
+        var result = new Tensor<T>(image.Shape.ToArray());
 
         // Detect pixel range by sampling a few values to determine if normalized [0,1] or [0,255]
         double maxVal = 0;

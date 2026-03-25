@@ -890,7 +890,7 @@ public class TensorIntegrationTests
         var floatTensor = tensor.Cast<float>();
 
         // Assert
-        Assert.Equal(tensor.Shape, floatTensor.Shape);
+        Assert.Equal(tensor.Shape.ToArray(), floatTensor.Shape.ToArray());
         Assert.Equal(24, floatTensor.Length);
     }
 
@@ -933,7 +933,7 @@ public class TensorIntegrationTests
         var subTensor = tensor.SubTensor(1);
 
         // Assert
-        Assert.Single(subTensor.Shape);
+        Assert.Single(subTensor.Shape.ToArray());
         Assert.Equal(4, subTensor.Shape[0]);
         Assert.Equal(5.0, subTensor[0], Tolerance);
         Assert.Equal(8.0, subTensor[3], Tolerance);

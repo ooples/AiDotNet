@@ -237,6 +237,8 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
 
         _parameters = vector;
     }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }
 
 internal class SecondOrderMatrixModel : LinearVectorModel, ISecondOrderGradientComputable<double, Matrix<double>, Vector<double>>
@@ -489,4 +491,6 @@ internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<
 
         _parameters = vector;
     }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }

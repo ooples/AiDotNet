@@ -636,7 +636,7 @@ public class InferenceSessionIntegrationTests
 
     private static void AssertTensorsEqual(Tensor<float> a, Tensor<float> b, float tolerance)
     {
-        Assert.Equal(a.Shape, b.Shape);
+        Assert.Equal(a.Shape.ToArray(), b.Shape.ToArray());
         for (int i = 0; i < a.Length; i++)
         {
             Assert.True(Math.Abs(a[i] - b[i]) <= tolerance, $"Index {i}: {a[i]} != {b[i]}");
@@ -645,7 +645,7 @@ public class InferenceSessionIntegrationTests
 
     private static void AssertTensorsNotEqual(Tensor<float> a, Tensor<float> b, float minAbsDiff)
     {
-        Assert.Equal(a.Shape, b.Shape);
+        Assert.Equal(a.Shape.ToArray(), b.Shape.ToArray());
 
         float maxAbs = 0f;
         for (int i = 0; i < a.Length; i++)

@@ -510,7 +510,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         // reshape the result to match the input shape
         if (input.Shape.Length > 1 || (input.Shape.Length == 1 && input.Shape[0] == recalledPattern.Length))
         {
-            result = result.Reshape(input.Shape);
+            result = result.Reshape(input.Shape.ToArray());
         }
 
         return result;
