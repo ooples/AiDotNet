@@ -34,6 +34,12 @@ public sealed class LayerPropertyAttribute : Attribute
     /// produce identical outputs regardless of the actual value. Default: false.</summary>
     public bool NormalizesInput { get; set; }
 
+    /// <summary>Whether the layer uses surrogate gradients (e.g., spiking neural networks use a smooth
+    /// approximation for the non-differentiable Heaviside step function). Layers with surrogate gradients
+    /// intentionally produce analytical gradients that differ from numerical finite differences, so
+    /// numerical gradient checks are skipped. Default: false.</summary>
+    public bool UsesSurrogateGradient { get; set; }
+
     /// <summary>Relative computational cost. Default: Medium.</summary>
     public ComputeCost Cost { get; set; } = ComputeCost.Medium;
 

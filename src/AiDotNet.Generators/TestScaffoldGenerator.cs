@@ -1799,7 +1799,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static LayerTestInfo? ExtractLayerInfo(INamedTypeSymbol symbol)
     {
         bool isTrainable = true, hasTrainingMode = false, changesShape = false, isStateful = false;
-        bool supportsBackprop = true, normalizesInput = false;
+        bool supportsBackprop = true, normalizesInput = false, usesSurrogateGradient = false;
         int apiShape = LayerApiShapeSingleTensor;
         string testInputShape = "";
         string testConstructorArgs = "";
@@ -1845,6 +1845,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     case "NormalizesInput":
                         normalizesInput = (bool)(named.Value.Value ?? false);
                         break;
+                    case "UsesSurrogateGradient":
+                        usesSurrogateGradient = (bool)(named.Value.Value ?? false);
+                        break;
                 }
             }
         }
@@ -1866,7 +1869,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestInputShape = testInputShape,
             TestConstructorArgs = testConstructorArgs,
             TestSetupCode = testSetupCode,
-            NormalizesInput = normalizesInput
+            NormalizesInput = normalizesInput,
+            UsesSurrogateGradient = usesSurrogateGradient
         };
     }
 
@@ -1961,7 +1965,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
 
         // Override ExpectsNonZeroGradients for non-backprop layers (Hebbian, HTM, etc.)
-        if (!layer.SupportsBackpropagation)
+        // and surrogate gradient layers (spiking neurons) where analytical gradients
+        // intentionally differ from numerical finite differences by design
+        if (!layer.SupportsBackpropagation || layer.UsesSurrogateGradient)
             sb.AppendLine("    protected override bool ExpectsNonZeroGradients => false;");
 
         // Override ExpectsDifferentOutputForConstantInputs for normalizing layers
@@ -2010,7 +2016,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
 
         // Override ExpectsNonZeroGradients for non-backprop layers (Hebbian, HTM, etc.)
-        if (!layer.SupportsBackpropagation)
+        // and surrogate gradient layers (spiking neurons) where analytical gradients
+        // intentionally differ from numerical finite differences by design
+        if (!layer.SupportsBackpropagation || layer.UsesSurrogateGradient)
             sb.AppendLine("    protected override bool ExpectsNonZeroGradients => false;");
 
         // Override ExpectsDifferentOutputForConstantInputs for normalizing layers
@@ -2129,6 +2137,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public string TestConstructorArgs { get; set; } = "";
         public string TestSetupCode { get; set; } = "";
         public bool NormalizesInput { get; set; }
+        public bool UsesSurrogateGradient { get; set; }
     }
 
     /// <summary>
