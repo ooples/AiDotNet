@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "2, 4, 8, 8", TestConstructorArgs = "4, 4, 8, 8")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4, 4, 4, 4")]
 internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
@@ -94,7 +94,7 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // BN/Conv expect [N, C, H, W] format. Add batch dim if 3D [C, H, W].
         var x = input.Shape.Length == 3 ? input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input;
 
-        // BN-ReLU-Conv1x1
+        // BN-ReLU-Conv1x1 (DenseNet paper: pre-activation bottleneck)
         _bn1Out = _bn1.Forward(x);
         _relu1Out = _relu.Activate(_bn1Out);
         _conv1Out = _conv1x1.Forward(_relu1Out);
