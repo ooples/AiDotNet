@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.StateSpaceModel)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "8, 8", TestConstructorArgs = "8, 8, 4")]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class S4DLayer<T> : LayerBase<T>
 {
     // Configuration
@@ -340,7 +340,8 @@ public class S4DLayer<T> : LayerBase<T>
         {
             // Use a moderate fixed delta for stable gradients
             // (random deltas can cause numerical instability in gradient check)
-            _logDelta[i] = NumOps.FromDouble(-2.0); // delta ≈ 0.135
+            double logVal = -6.9 + Random.NextDouble() * 4.6; // delta ~ [0.001, 0.1] per S4D paper
+            _logDelta[i] = NumOps.FromDouble(logVal);
         }
     }
 
@@ -718,8 +719,6 @@ public class S4DLayer<T> : LayerBase<T>
             // Recompute B_bar for this gradient step (simplified: use delta * B approximation for gradient)
             var x_t_3D = Engine.TensorExpandDims(x_t, 2);
 
-            // Debug: log to file for tracing
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "s4d_debug.txt"), $"t={t}: dhR[0,0,0]={NumOps.ToDouble(dhReal[0,0,0]):E6} hP[0,0,0]={NumOps.ToDouble(hReal_prev[0,0,0]):E6} x={NumOps.ToDouble(x_t[0,0]):E6}\n"); } catch { }
 
             // dB: dh * x (for each complex component)
             var dBr_t = Engine.ReduceSum(Engine.TensorBroadcastMultiply(dhReal, x_t_3D), new int[] { 0 });
@@ -830,15 +829,12 @@ public class S4DLayer<T> : LayerBase<T>
                         gradAi += dBbR * (-dBbardA_i) + dBbI * dBbardA_r;
                     }
 
-                    if (d == 0 && n == 0)
-                        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "s4d_debug.txt"), $"  chain: dAbR={dAbR:E4} gradAr={gradAr:E4} dBbR={dBbR:E4}\n"); } catch { }
 
                     _aRealGradient[d, n] = NumOps.Add(_aRealGradient[d, n], NumOps.FromDouble(gradAr));
                     _aImagGradient[d, n] = NumOps.Add(_aImagGradient[d, n], NumOps.FromDouble(gradAi));
                 }
             }
 
-            try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "s4d_debug.txt"), $"  AFTER chain: cumGradAr[0,0]={NumOps.ToDouble(_aRealGradient[0,0]):E6}\n"); } catch { }
             dX.SetSlice(1, t, dX_t);
         }
 
@@ -914,7 +910,6 @@ public class S4DLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_aRealGradient == null) return new Vector<T>(ParameterCount);
-        try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "s4d_debug.txt"), $"GetParamGrads: shape={string.Join(",",_aRealGradient.Shape.ToArray())} [0,0]={NumOps.ToDouble(_aRealGradient[0,0]):E6} arr[0]={NumOps.ToDouble(_aRealGradient.ToArray()[0]):E6} length={_aRealGradient.Length} ParameterCount={ParameterCount}\n"); } catch { }
         return Vector<T>.Concatenate(
             new Vector<T>(_aRealGradient!.ToArray()),
             new Vector<T>(_aImagGradient!.ToArray()),
