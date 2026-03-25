@@ -676,11 +676,16 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-
         int batchSize = _lastInput.Shape[0];
-        int outputHeight = activationGradient.Shape[1];
-        int outputWidth = activationGradient.Shape[2];
+        int outputHeight = _lastOutput.Shape[1];
+        int outputWidth = _lastOutput.Shape[2];
+
+        // Activation was applied on flattened 2D [totalCapsules, capsuleDim], so derivative needs same shape
+        int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
+        var flatOutput = _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
+        var flatGrad = outputGradient.Reshape([totalCapsules, _capsuleDimension]);
+        var activationGradient = ApplyActivationDerivativeFromOutput(flatOutput, flatGrad)
+            .Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
         int outputChannels = _capsuleChannels * _capsuleDimension;
 
         // Reshape activation gradient to NCHW [batch, outC, H, W]
