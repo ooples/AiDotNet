@@ -1164,9 +1164,9 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // attentionOutputGradient: [B, H, S, D], _lastAttentionScores: [B, H, S, S]
         // _lastProjectedQueries/Keys/Values: [B, H, S, D]
         T scaleVal = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-        var queriesGradient4D = new Tensor<T>(_lastProjectedQueries.Shape);
-        var keysGradient4D = new Tensor<T>(_lastProjectedKeys.Shape);
-        var valuesGradient4D = new Tensor<T>(_lastProjectedValues.Shape);
+        var queriesGradient4D = new Tensor<T>(_lastProjectedQueries.Shape._dims);
+        var keysGradient4D = new Tensor<T>(_lastProjectedKeys.Shape._dims);
+        var valuesGradient4D = new Tensor<T>(_lastProjectedValues.Shape._dims);
 
         for (int b = 0; b < batchSize; b++)
         {
