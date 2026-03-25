@@ -916,6 +916,16 @@ public class QuantumLayer<T> : LayerBase<T>
             _rotationAngles[i] = NumOps.FromDouble(Random.NextDouble() * 2 * Math.PI);
             ApplyRotation(i, _rotationAngles[i]);
         }
+
+        // Update circuit tensors to match the rotated _quantumCircuit
+        for (int i = 0; i < dimension; i++)
+        {
+            for (int j = 0; j < dimension; j++)
+            {
+                _circuitReal[i, j] = _quantumCircuit[i, j].Real;
+                _circuitImag[i, j] = _quantumCircuit[i, j].Imaginary;
+            }
+        }
     }
 
     /// <summary>
