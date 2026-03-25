@@ -62,7 +62,7 @@ public class AudioBenchmarkTests
             Assert.Equal(8, loader.Features.Shape[0]);
 
             // Verify label shape: [N, 50] (one-hot)
-            Assert.Equal(new[] { 8, 50 }, loader.Labels.Shape);
+            Assert.Equal(new[] { 8, 50 }, loader.Labels.Shape.ToArray());
         }
         finally
         {
@@ -110,7 +110,7 @@ public class AudioBenchmarkTests
             Assert.Equal(6, loader.TotalCount);
             Assert.Equal("UrbanSound8K", loader.Name);
             Assert.Equal(10, loader.OutputDimension);
-            Assert.Equal(new[] { 6, 10 }, loader.Labels.Shape);
+            Assert.Equal(new[] { 6, 10 }, loader.Labels.Shape.ToArray());
         }
         finally
         {
@@ -158,8 +158,8 @@ public class AudioBenchmarkTests
             Assert.Equal(segmentSamples * 4, loader.OutputDimension);
 
             // Verify shapes
-            Assert.Equal(new[] { 3, segmentSamples }, loader.Features.Shape);
-            Assert.Equal(new[] { 3, segmentSamples * 4 }, loader.Labels.Shape);
+            Assert.Equal(new[] { 3, segmentSamples }, loader.Features.Shape.ToArray());
+            Assert.Equal(new[] { 3, segmentSamples * 4 }, loader.Labels.Shape.ToArray());
         }
         finally
         {
@@ -213,7 +213,7 @@ public class AudioBenchmarkTests
             Assert.Equal(128, loader.OutputDimension);
 
             // Verify label shape: [2, 128]
-            Assert.Equal(new[] { 2, 128 }, loader.Labels.Shape);
+            Assert.Equal(new[] { 2, 128 }, loader.Labels.Shape.ToArray());
 
             // Check MIDI note was activated for first sample (note 60)
             double noteVal = loader.Labels[0, 60];
@@ -364,7 +364,7 @@ public class AudioBenchmarkTests
         var result = transform.Apply(input);
 
         // Output shape should match input
-        Assert.Equal(input.Shape, result.Shape);
+        Assert.Equal(input.Shape.ToArray(), result.Shape.ToArray());
 
         // Some values should be zeroed out (masked)
         int zeroCount = 0;

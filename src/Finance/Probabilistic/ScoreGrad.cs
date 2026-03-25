@@ -486,7 +486,7 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(predictedScore.ToVector(), trueScore.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictedScore.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictedScore.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -819,7 +819,7 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape.ToArray())
         {
             totalSize *= dim;
         }
@@ -943,7 +943,7 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
             resultVec[i] = NumOps.FromDouble(newX);
         }
 
-        return new Tensor<T>(current.Shape, new Vector<T>(resultVec));
+        return new Tensor<T>(current.Shape.ToArray(), new Vector<T>(resultVec));
     }
 
     /// <summary>
@@ -1045,8 +1045,8 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
             noisyVec[i] = NumOps.FromDouble(dataVal + noise);
         }
 
-        return (new Tensor<T>(data.Shape, new Vector<T>(noisyVec)),
-                new Tensor<T>(data.Shape, new Vector<T>(noiseVec)));
+        return (new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noisyVec)),
+                new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noiseVec)));
     }
 
     /// <summary>
@@ -1075,7 +1075,7 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
             scoreVec[i] = NumOps.FromDouble(-n / sigmaSq);
         }
 
-        return new Tensor<T>(noise.Shape, new Vector<T>(scoreVec));
+        return new Tensor<T>(noise.Shape.ToArray(), new Vector<T>(scoreVec));
     }
 
     /// <summary>

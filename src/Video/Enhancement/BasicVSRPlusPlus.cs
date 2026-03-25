@@ -804,7 +804,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         int height = hasBatch ? feature.Shape[2] : feature.Shape[1];
         int width = hasBatch ? feature.Shape[3] : feature.Shape[2];
 
-        var warped = new Tensor<T>(feature.Shape);
+        var warped = new Tensor<T>(feature.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -977,7 +977,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             inputData[i] = Convert.ToSingle(frames.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, frames.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, frames.Shape.ToArray());
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1005,7 +1005,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
     private Tensor<T> ComputeLossGradient(Tensor<T> output, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape.ToArray());
 
         for (int i = 0; i < output.Length; i++)
         {
@@ -1040,7 +1040,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         var featureGradients = new List<Tensor<T>>();
         for (int i = 0; i < numFrames; i++)
         {
-            featureGradients.Add(new Tensor<T>(_cachedInitialFeatures[0].Shape));
+            featureGradients.Add(new Tensor<T>(_cachedInitialFeatures[0].Shape.ToArray()));
         }
 
         // Process each frame's gradient through output conv, upsampling, and residual blocks
@@ -1101,7 +1101,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             var backwardPhaseGradients = new List<Tensor<T>>();
             for (int i = 0; i < numFrames; i++)
             {
-                backwardPhaseGradients.Add(new Tensor<T>(currentGradients[0].Shape));
+                backwardPhaseGradients.Add(new Tensor<T>(currentGradients[0].Shape.ToArray()));
             }
 
             // --- Backward through FORWARD propagation phase ---
@@ -1147,7 +1147,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             var inputGradients = new List<Tensor<T>>();
             for (int i = 0; i < numFrames; i++)
             {
-                inputGradients.Add(new Tensor<T>(currentGradients[0].Shape));
+                inputGradients.Add(new Tensor<T>(currentGradients[0].Shape.ToArray()));
             }
 
             // Backward propagation went from last to first (i = numFrames-2 to 0)
@@ -1265,8 +1265,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         int height = hasBatch ? outputGrad.Shape[2] : outputGrad.Shape[1];
         int width = hasBatch ? outputGrad.Shape[3] : outputGrad.Shape[2];
 
-        var featureGrad = new Tensor<T>(inputFeature.Shape);
-        var flowGrad = new Tensor<T>(flow.Shape);
+        var featureGrad = new Tensor<T>(inputFeature.Shape.ToArray());
+        var flowGrad = new Tensor<T>(flow.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {

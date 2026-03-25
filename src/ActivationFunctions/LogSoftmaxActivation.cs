@@ -1,6 +1,8 @@
 
 
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -27,6 +29,10 @@ namespace AiDotNet.ActivationFunctions;
 /// individual values, because it needs to consider all outputs together to calculate probabilities.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Normalization)]
+[ActivationTask(ActivationTask.OutputLayer)]
+[ActivationTask(ActivationTask.NormalizationOutput)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = false, IsVectorActivation = true, Cost = ComputeCost.High)]
 public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

@@ -137,7 +137,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
         var model = new MedSAM<double>(Arch(), modelSize: MedSAMModelSize.ViTBase);
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(predicted.Shape);
+        var expected = Rand(predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 

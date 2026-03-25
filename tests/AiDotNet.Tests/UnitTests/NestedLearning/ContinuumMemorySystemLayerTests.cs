@@ -226,7 +226,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             // Forward pass first
             var output = layer.Forward(input);
 
-            var outputGradient = new Tensor<double>(output.Shape);
+            var outputGradient = new Tensor<double>(output.Shape.ToArray());
             for (int i = 0; i < outputGradient.Length; i++)
             {
                 outputGradient[i] = 0.1;

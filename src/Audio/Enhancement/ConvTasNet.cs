@@ -344,7 +344,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             {
                 result[i] = _numOps.Multiply(modelOutput.Data.Span[i], strengthT);
             }
-            return new Tensor<T>(result, modelOutput.Shape);
+            return new Tensor<T>(result, modelOutput.Shape.ToArray());
         }
         return modelOutput;
     }

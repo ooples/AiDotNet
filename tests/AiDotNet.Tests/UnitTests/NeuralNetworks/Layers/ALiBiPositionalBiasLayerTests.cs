@@ -54,7 +54,7 @@ public class ALiBiPositionalBiasLayerTests
 
         var bias = layer.ComputeBias(queryLen, keyLen);
 
-        Assert.Equal(new[] { numHeads, queryLen, keyLen }, bias.Shape);
+        Assert.Equal(new[] { numHeads, queryLen, keyLen }, bias.Shape.ToArray());
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public class ALiBiPositionalBiasLayerTests
         var bias2 = layer.ComputeBias(16, 16);
 
         Assert.NotSame(bias1, bias2);
-        Assert.Equal(new[] { numHeads, 16, 16 }, bias2.Shape);
+        Assert.Equal(new[] { numHeads, 16, 16 }, bias2.Shape.ToArray());
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public class ALiBiPositionalBiasLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -173,7 +173,7 @@ public class ALiBiPositionalBiasLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -190,7 +190,7 @@ public class ALiBiPositionalBiasLayerTests
         var inputGrad = layer.Backward(grad);
 
         // Backward should pass gradient through unchanged (constant additive bias)
-        Assert.Equal(grad.Shape, inputGrad.Shape);
+        Assert.Equal(grad.Shape.ToArray(), inputGrad.Shape.ToArray());
         var gradArr = grad.ToArray();
         var inputGradArr = inputGrad.ToArray();
         for (int i = 0; i < gradArr.Length; i++)

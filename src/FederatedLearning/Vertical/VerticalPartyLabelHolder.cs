@@ -158,7 +158,7 @@ public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IV
 
         // MSE loss: L = (1/n) * sum((pred - label)^2)
         double lossSum = 0.0;
-        var gradient = new Tensor<T>(predictions.Shape);
+        var gradient = new Tensor<T>(predictions.Shape.ToArray());
 
         for (int i = 0; i < totalElements; i++)
         {

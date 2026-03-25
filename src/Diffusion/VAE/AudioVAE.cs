@@ -231,7 +231,7 @@ public class AudioVAE<T> : VAEModelBase<T>
         _lastInput = input;
 
         // Input shape: [batch, melChannels, timeFrames]
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         var batch = shape[0];
         var melChannels = shape[1];
         var timeFrames = shape[2];
@@ -292,7 +292,7 @@ public class AudioVAE<T> : VAEModelBase<T>
     public override Tensor<T> Decode(Tensor<T> latent)
     {
         // Latent shape: [batch, latentChannels, latentTimeFrames]
-        var shape = latent.Shape;
+        var shape = latent.Shape.ToArray();
         var batch = shape[0];
         var latentChannels = shape[1];
         var latentTimeFrames = shape[2];
@@ -336,7 +336,7 @@ public class AudioVAE<T> : VAEModelBase<T>
         _lastInput = input;
 
         // Input shape: [batch, melChannels, timeFrames]
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         var batch = shape[0];
         var melChannels = shape[1];
         var timeFrames = shape[2];
@@ -429,7 +429,7 @@ public class AudioVAE<T> : VAEModelBase<T>
                 logMel: true);
         }
 
-        var shape = waveform.Shape;
+        var shape = waveform.Shape.ToArray();
 
         // Handle 1D waveform input [samples] vs 2D input [batch, samples]
         if (shape.Length == 1)
@@ -561,7 +561,7 @@ public class AudioVAE<T> : VAEModelBase<T>
                 momentum: 0.99);
         }
 
-        var shape = melSpectrogram.Shape;
+        var shape = melSpectrogram.Shape.ToArray();
         var batch = shape[0];
         var melChannels = shape[1];
         var timeFrames = shape[2];

@@ -423,7 +423,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
         // Serialize FC weights tensor
         writer.Write(_fcWeights.Shape.Length);
-        foreach (int dim in _fcWeights.Shape)
+        foreach (int dim in _fcWeights.Shape.ToArray())
             writer.Write(dim);
         writer.Write(_fcWeights.Length);
         for (int i = 0; i < _fcWeights.Length; i++)
@@ -431,7 +431,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
         // Serialize FC bias tensor
         writer.Write(_fcBias.Shape.Length);
-        foreach (int dim in _fcBias.Shape)
+        foreach (int dim in _fcBias.Shape.ToArray())
             writer.Write(dim);
         writer.Write(_fcBias.Length);
         for (int i = 0; i < _fcBias.Length; i++)
@@ -678,8 +678,8 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             return new Tensor<T>(new[] { _kernelSize });
 
         int numPositions = _lastNumPositions;
-        _kernelGradients = new Tensor<T>(_kernels.Shape);
-        _biasGradients = new Tensor<T>(_biases.Shape);
+        _kernelGradients = new Tensor<T>(_kernels.Shape.ToArray());
+        _biasGradients = new Tensor<T>(_biases.Shape.ToArray());
         var inputGrad = new Tensor<T>(new[] { _lastInput.Length });
 
         for (int outChannel = 0; outChannel < _outputChannels; outChannel++)
@@ -744,11 +744,11 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         writer.Write(_outputChannels);
         writer.Write(_kernelSize);
         writer.Write(_kernels.Shape.Length);
-        foreach (int dim in _kernels.Shape) writer.Write(dim);
+        foreach (int dim in _kernels.Shape.ToArray()) writer.Write(dim);
         writer.Write(_kernels.Length);
         for (int i = 0; i < _kernels.Length; i++) writer.Write(NumOps.ToDouble(_kernels[i]));
         writer.Write(_biases.Shape.Length);
-        foreach (int dim in _biases.Shape) writer.Write(dim);
+        foreach (int dim in _biases.Shape.ToArray()) writer.Write(dim);
         writer.Write(_biases.Length);
         for (int i = 0; i < _biases.Length; i++) writer.Write(NumOps.ToDouble(_biases[i]));
     }

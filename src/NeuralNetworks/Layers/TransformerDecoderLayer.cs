@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -31,6 +32,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Transformer)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, ApiShape = LayerApiShape.DualTensor, TestInputShape = "4, 8", TestConstructorArgs = "8, 2, 16, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>

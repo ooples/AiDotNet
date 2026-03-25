@@ -400,7 +400,7 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
 
         // Add noise at starting timestep
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-        var noise = SampleNoiseTensor(latent.Shape, rng);
+        var noise = SampleNoiseTensor(latent.Shape.ToArray(), rng);
         latent = AddNoiseAtTimestep(latent, noise, startTimestep);
 
         // Denoising loop
@@ -422,7 +422,7 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
             var latentVector = latent.ToVector();
             var noiseVector = noisePrediction.ToVector();
             latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-            latent = new Tensor<T>(latent.Shape, latentVector);
+            latent = new Tensor<T>(latent.Shape.ToArray(), latentVector);
         }
 
         // Decode to audio
@@ -487,8 +487,8 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
             var rng = RandomHelper.CreateSeededRandom(variationSeed);
 
             // Add controlled noise
-            var noise = SampleNoiseTensor(baseLatent.Shape, rng);
-            var noisyLatent = new Tensor<T>(baseLatent.Shape);
+            var noise = SampleNoiseTensor(baseLatent.Shape.ToArray(), rng);
+            var noisyLatent = new Tensor<T>(baseLatent.Shape.ToArray());
             var noisySpan = noisyLatent.AsWritableSpan();
             var baseSpan = baseLatent.AsSpan();
             var noiseSpan = noise.AsSpan();

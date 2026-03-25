@@ -141,7 +141,7 @@ public class OnnxDeepMathIntegrationTests
     public void OnnxTensorInfo_Defaults_ShapeEmpty()
     {
         var info = new OnnxTensorInfo();
-        Assert.Empty(info.Shape);
+        Assert.Empty(info.Shape.ToArray());
     }
 
     [Fact]

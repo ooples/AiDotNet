@@ -30,7 +30,7 @@ public class RotaryPositionalEncodingLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -41,10 +41,10 @@ public class RotaryPositionalEncodingLayerTests
         var input = CreateRandomTensor(new[] { 1, 2, 8, 32 });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -60,8 +60,8 @@ public class RotaryPositionalEncodingLayerTests
 
         var (rotQ, rotK) = layer.ApplyRoPE(queries, keys, startPosition: 0);
 
-        Assert.Equal(queries.Shape, rotQ.Shape);
-        Assert.Equal(keys.Shape, rotK.Shape);
+        Assert.Equal(queries.Shape.ToArray(), rotQ.Shape.ToArray());
+        Assert.Equal(keys.Shape.ToArray(), rotK.Shape.ToArray());
         Assert.False(ContainsNaN(rotQ));
         Assert.False(ContainsNaN(rotK));
 
@@ -99,7 +99,7 @@ public class RotaryPositionalEncodingLayerTests
 
         var (rotQ, rotK) = layer.ApplyRoPE(queries, keys, startPosition: 0);
 
-        Assert.Equal(queries.Shape, rotQ.Shape);
+        Assert.Equal(queries.Shape.ToArray(), rotQ.Shape.ToArray());
         Assert.False(ContainsNaN(rotQ));
         Assert.False(ContainsNaN(rotK));
     }

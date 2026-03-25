@@ -22,7 +22,7 @@ public class RoPEInferenceIntegrationTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -61,7 +61,7 @@ public class RoPEInferenceIntegrationTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -78,7 +78,7 @@ public class RoPEInferenceIntegrationTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -95,7 +95,7 @@ public class RoPEInferenceIntegrationTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 

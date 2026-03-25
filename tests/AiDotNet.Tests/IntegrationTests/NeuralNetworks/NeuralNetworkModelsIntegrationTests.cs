@@ -443,7 +443,7 @@ public class NeuralNetworkModelsIntegrationTests
         var output2 = network.Predict(testInput);
 
         // Assert - same input should produce same output (inference mode)
-        Assert.Equal(output1.Shape, output2.Shape);
+        Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
         for (int i = 0; i < output1.Length; i++)
         {
             var diff = Math.Abs(output1[i] - output2[i]);

@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -19,6 +22,9 @@ namespace AiDotNet.LossFunctions;
 /// <b>Reference:</b> Eigen et al., "Depth Map Prediction from a Single Image using a Multi-Scale Deep Network"
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regression)]
+[LossTask(LossTask.DepthEstimation)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Continuous)]
 public class ScaleInvariantDepthLoss<T> : LossFunctionBase<T>
 {
     private readonly double _lambda;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -30,6 +32,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Residual)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, (AiDotNet.Interfaces.ILayer<double>?)null, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class ResidualLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -187,8 +192,7 @@ public class ResidualLayer<T> : LayerBase<T>
 
             var innerOutputGpu = new GpuTensor<T>(
                 backend,
-                innerOutputCpu.Data.ToArray(),
-                innerOutputCpu.Shape,
+                innerOutputCpu,
                 GpuTensorRole.Intermediate);
 
             result = gpuEngine.AddGpu(input, innerOutputGpu);

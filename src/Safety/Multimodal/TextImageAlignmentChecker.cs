@@ -129,7 +129,7 @@ public class TextImageAlignmentChecker<T> : ITextSafetyModule<T>
         var textCategories = ClassifyTextContent(lower);
 
         // Extract image visual signals
-        var imageFeatures = ExtractImageFeatures(span, image.Shape);
+        var imageFeatures = ExtractImageFeatures(span, image.Shape.ToArray());
 
         // Check for misalignment between text claims and image content
         // Text says "safe" but image has unsafe visual features

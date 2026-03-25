@@ -439,7 +439,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             }
 
             // Information loss gradient (shape matches generator output)
-            var infoGrad = new Tensor<T>(fakeRaw.Shape);
+            var infoGrad = new Tensor<T>(fakeRaw.Shape.ToArray());
             if (_realMean is not null && _options.InformationWeight > 0)
             {
                 for (int j = 0; j < _dataWidth && j < infoGrad.Length; j++)
@@ -451,7 +451,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             }
 
             // Classification loss gradient (shape matches generator output)
-            var classGrad = new Tensor<T>(fakeRaw.Shape);
+            var classGrad = new Tensor<T>(fakeRaw.Shape.ToArray());
             if (_classOutput is not null && _options.LabelColumnIndex >= 0 && _options.ClassificationWeight > 0)
             {
                 int rowIdx = _random.Next(transformedData.Rows);
@@ -460,7 +460,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             }
 
             // Combine gradients (shape matches generator output)
-            var totalGrad = new Tensor<T>(fakeRaw.Shape);
+            var totalGrad = new Tensor<T>(fakeRaw.Shape.ToArray());
             for (int j = 0; j < _dataWidth && j < totalGrad.Length; j++)
             {
                 double adv = j < discInputGrad.Length ? NumOps.ToDouble(discInputGrad[j]) : 0.0;
@@ -520,7 +520,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             0), classLogits.Length - 1);
 
         var softmax = ComputeSoftmax(classLogits);
-        int[] gradShape = _lastClassOutput is not null ? _lastClassOutput.Shape : [softmax.Length];
+        int[] gradShape = _lastClassOutput is not null ? _lastClassOutput.Shape.ToArray() : [softmax.Length];
         var classOutputGrad = new Tensor<T>(gradShape);
         for (int c = 0; c < softmax.Length && c < classOutputGrad.Length; c++)
         {
@@ -791,7 +791,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
             result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
         return result;
@@ -800,7 +800,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private Tensor<T> ApplyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
     {
         int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput.Shape);
+        var result = new Tensor<T>(gradOutput.Shape.ToArray());
         for (int i = 0; i < len; i++)
             result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
         return result;
@@ -808,7 +808,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         T slope = NumOps.FromDouble(0.2);
         for (int i = 0; i < input.Length; i++)
         {
@@ -821,7 +821,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
     {
         int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput.Shape);
+        var result = new Tensor<T>(gradOutput.Shape.ToArray());
         T slope = NumOps.FromDouble(0.2);
         for (int i = 0; i < len; i++)
         {
@@ -836,7 +836,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     {
         if (_transformer is null) return output;
 
-        var result = new Tensor<T>(output.Shape);
+        var result = new Tensor<T>(output.Shape.ToArray());
         int idx = 0;
 
         for (int col = 0; col < _columns.Count && idx < output.Length; col++)
@@ -879,7 +879,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
     {
-        var result = new Tensor<T>(grad.Shape);
+        var result = new Tensor<T>(grad.Shape.ToArray());
         double normSq = 0;
 
         for (int i = 0; i < grad.Length; i++)
@@ -946,7 +946,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     private static Tensor<T> CloneTensor(Tensor<T> source)
     {
-        var clone = new Tensor<T>(source.Shape);
+        var clone = new Tensor<T>(source.Shape.ToArray());
         for (int i = 0; i < source.Length; i++) clone[i] = source[i];
         return clone;
     }

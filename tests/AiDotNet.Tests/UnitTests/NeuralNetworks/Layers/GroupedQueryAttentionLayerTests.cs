@@ -77,7 +77,7 @@ public class GroupedQueryAttentionLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -95,7 +95,7 @@ public class GroupedQueryAttentionLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -110,10 +110,10 @@ public class GroupedQueryAttentionLayerTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class GroupedQueryAttentionLayerTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -201,7 +201,7 @@ public class GroupedQueryAttentionLayerTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -313,10 +313,10 @@ public class GroupedQueryAttentionLayerTests
         var kWeights = gqa.GetKeyWeights();
 
         // Q: [embDim, numHeads * headDim] = [64, 64]
-        Assert.Equal(new[] { embDim, numHeads * headDim }, qWeights.Shape);
+        Assert.Equal(new[] { embDim, numHeads * headDim }, qWeights.Shape.ToArray());
 
         // K: [embDim, numKVHeads * headDim] = [64, 16]
-        Assert.Equal(new[] { embDim, numKVHeads * headDim }, kWeights.Shape);
+        Assert.Equal(new[] { embDim, numKVHeads * headDim }, kWeights.Shape.ToArray());
     }
 
     #region Helpers

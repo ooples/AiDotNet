@@ -46,7 +46,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -88,7 +88,7 @@ public class NormalizationLayersIntegrationTests
         var gradients = layer.Backward(upstreamGradient);
 
         // Assert
-        Assert.Equal(input.Shape, gradients.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradients.Shape.ToArray());
         Assert.False(ContainsNaN(gradients));
     }
 
@@ -109,7 +109,7 @@ public class NormalizationLayersIntegrationTests
         Assert.NotSame(layer, clonedLayer);
         var output1 = layer.Forward(input);
         var output2 = clonedLayer.Forward(input);
-        Assert.Equal(output1.Shape, output2.Shape);
+        Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -162,7 +162,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -181,7 +181,7 @@ public class NormalizationLayersIntegrationTests
         var gradients = layer.Backward(upstreamGradient);
 
         // Assert
-        Assert.Equal(input.Shape, gradients.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradients.Shape.ToArray());
         Assert.False(ContainsNaN(gradients));
     }
 
@@ -202,7 +202,7 @@ public class NormalizationLayersIntegrationTests
         Assert.NotSame(layer, clonedLayer);
         var output1 = layer.Forward(input);
         var output2 = clonedLayer.Forward(input);
-        Assert.Equal(output1.Shape, output2.Shape);
+        Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -251,7 +251,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -273,7 +273,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -293,7 +293,7 @@ public class NormalizationLayersIntegrationTests
         var gradients = layer.Backward(upstreamGradient);
 
         // Assert
-        Assert.Equal(input.Shape, gradients.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradients.Shape.ToArray());
         Assert.False(ContainsNaN(gradients));
     }
 
@@ -315,7 +315,7 @@ public class NormalizationLayersIntegrationTests
         Assert.NotSame(layer, clonedLayer);
         var output1 = layer.Forward(input);
         var output2 = clonedLayer.Forward(input);
-        Assert.Equal(output1.Shape, output2.Shape);
+        Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
     }
 
     [Fact]
@@ -336,7 +336,7 @@ public class NormalizationLayersIntegrationTests
             var output = layer.Forward(input);
 
             // Assert
-            Assert.Equal(input.Shape, output.Shape);
+            Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
             Assert.False(ContainsNaN(output));
         }
     }
@@ -372,7 +372,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -393,7 +393,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -412,7 +412,7 @@ public class NormalizationLayersIntegrationTests
         var gradients = layer.Backward(upstreamGradient);
 
         // Assert
-        Assert.Equal(input.Shape, gradients.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradients.Shape.ToArray());
         Assert.False(ContainsNaN(gradients));
     }
 
@@ -433,7 +433,7 @@ public class NormalizationLayersIntegrationTests
         Assert.NotSame(layer, clonedLayer);
         var output1 = layer.Forward(input);
         var output2 = clonedLayer.Forward(input);
-        Assert.Equal(output1.Shape, output2.Shape);
+        Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
     }
 
     [Fact]
@@ -479,7 +479,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -501,7 +501,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal([4, outputSize], output.Shape);
+        Assert.Equal([4, outputSize], output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -521,7 +521,7 @@ public class NormalizationLayersIntegrationTests
         var gradients = layer.Backward(upstreamGradient);
 
         // Assert
-        Assert.Equal(input.Shape, gradients.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradients.Shape.ToArray());
         Assert.False(ContainsNaN(gradients));
     }
 
@@ -544,7 +544,7 @@ public class NormalizationLayersIntegrationTests
         Assert.NotSame(layer, clonedLayer);
         var output1 = layer.Forward(input);
         var output2 = clonedLayer.Forward(input);
-        Assert.Equal(output1.Shape, output2.Shape);
+        Assert.Equal(output1.Shape.ToArray(), output2.Shape.ToArray());
     }
 
     [Fact]
@@ -561,7 +561,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal([4, outputSize], output.Shape);
+        Assert.Equal([4, outputSize], output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -666,7 +666,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -683,7 +683,7 @@ public class NormalizationLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -700,7 +700,7 @@ public class NormalizationLayersIntegrationTests
         var output = groupNorm.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -717,7 +717,7 @@ public class NormalizationLayersIntegrationTests
         var output = groupNorm.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 

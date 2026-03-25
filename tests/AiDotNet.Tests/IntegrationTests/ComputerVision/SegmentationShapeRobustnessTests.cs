@@ -485,7 +485,7 @@ public class SegmentationShapeRobustnessTests
         var model = new SegFormer<double>(Arch(h, w, 3), numClasses: 5, modelSize: SegFormerModelSize.B0);
         var input = Rand(1, 3, h, w);
         var predicted = model.Predict(input);
-        var expected = Rand(predicted.Shape);
+        var expected = Rand(predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -497,7 +497,7 @@ public class SegmentationShapeRobustnessTests
         var model = new Mask2Former<double>(Arch(h, w, 3), numClasses: 5, modelSize: Mask2FormerModelSize.SwinTiny);
         var input = Rand(1, 3, h, w);
         var predicted = model.Predict(input);
-        var expected = Rand(predicted.Shape);
+        var expected = Rand(predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -509,7 +509,7 @@ public class SegmentationShapeRobustnessTests
         var model = new NnUNet<double>(Arch(h, w, 3), numClasses: 5, modelSize: NnUNetModelSize.UNet2D);
         var input = Rand(1, 3, h, w);
         var predicted = model.Predict(input);
-        var expected = Rand(predicted.Shape);
+        var expected = Rand(predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -521,7 +521,7 @@ public class SegmentationShapeRobustnessTests
         var model = new SAM<double>(Arch(h, w, 3), numClasses: 1, modelSize: SAMModelSize.ViTBase);
         var input = Rand(1, 3, h, w);
         var predicted = model.Predict(input);
-        var expected = Rand(predicted.Shape);
+        var expected = Rand(predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 

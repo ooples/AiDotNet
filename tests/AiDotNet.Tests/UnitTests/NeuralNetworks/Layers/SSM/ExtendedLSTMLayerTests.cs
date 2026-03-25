@@ -68,7 +68,7 @@ public class ExtendedLSTMLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -83,7 +83,7 @@ public class ExtendedLSTMLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -97,10 +97,10 @@ public class ExtendedLSTMLayerTests
         var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -114,10 +114,10 @@ public class ExtendedLSTMLayerTests
         var input = CreateRandomTensor(new[] { seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -242,7 +242,7 @@ public class ExtendedLSTMLayerTests
         var outputWeights = layer.GetOutputProjectionWeights();
 
         Assert.NotNull(outputWeights);
-        Assert.Equal(new[] { modelDim, modelDim }, outputWeights.Shape);
+        Assert.Equal(new[] { modelDim, modelDim }, outputWeights.Shape.ToArray());
     }
 
     [Fact]
@@ -256,7 +256,7 @@ public class ExtendedLSTMLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaNDouble(output));
     }
 
@@ -270,10 +270,10 @@ public class ExtendedLSTMLayerTests
         var input = CreateRandomDoubleTensor(new[] { 1, seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomDoubleTensor(output.Shape);
+        var grad = CreateRandomDoubleTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaNDouble(inputGrad));
     }
 

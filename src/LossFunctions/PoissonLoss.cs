@@ -1,5 +1,5 @@
-
-
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -12,26 +12,30 @@ namespace AiDotNet.LossFunctions;
 /// <para>
 /// <b>For Beginners:</b> Poisson loss is designed for modeling count data where the target values
 /// represent the number of occurrences of an event in a fixed interval.
-/// 
+///
 /// Examples include:
 /// - Number of customer arrivals per hour
 /// - Number of network failures per day
 /// - Number of disease cases per region
-/// 
+///
 /// The loss is derived from the Poisson probability distribution, which is ideal for modeling
 /// rare events where we know the average rate of occurrence.
-/// 
+///
 /// The formula is: predicted - actual * log(predicted) + log(actual!)
-/// 
+///
 /// Since log(actual!) is constant with respect to predictions, it can be omitted during optimization,
 /// so the loss is often implemented as just: predicted - actual * log(predicted)
-/// 
+///
 /// Poisson loss is appropriate when:
 /// - Your target values are non-negative counts
 /// - The variance of the data is approximately equal to the mean
 /// - You're modeling the rate or frequency of events
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regression)]
+[LossTask(LossTask.Regression)]
+[LossTask(LossTask.TimeSeriesForecasting)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ExpectedOutput = OutputType.Continuous)]
 public class PoissonLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -111,7 +115,7 @@ public class PoissonLoss<T> : LossFunctionBase<T>
         backend.PoissonBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

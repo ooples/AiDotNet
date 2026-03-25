@@ -127,12 +127,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchA, batchB, sequenceLength, numClasses });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 7);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 7);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -147,12 +147,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { 2, 3, inputSize });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { 2, 3, hiddenDim }, output.Shape);
+        Assert.Equal(new[] { 2, 3, hiddenDim }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 9);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 9);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -170,12 +170,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, inputChannels, height, width });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize, growthRate, height, width }, output.Shape);
+        Assert.Equal(new[] { batchSize, growthRate, height, width }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 5);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 5);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -198,7 +198,7 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, numVertices, inputChannels });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize, numVertices, outputChannels }, output.Shape);
+        Assert.Equal(new[] { batchSize, numVertices, outputChannels }, output.Shape.ToArray());
     }
 
     [Fact]
@@ -221,12 +221,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, inputCapsules, inputCapsuleDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize, numClasses * outputCapsuleDim }, output.Shape);
+        Assert.Equal(new[] { batchSize, numClasses * outputCapsuleDim }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 11);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 11);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -250,12 +250,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { numNodes, inputFeatures });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { numNodes, outputFeatures }, output.Shape);
+        Assert.Equal(new[] { numNodes, outputFeatures }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 13);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 13);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -272,12 +272,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, sequenceLength, embeddingDimension });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 15);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 15);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -293,12 +293,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, inputFeatures });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize, outputFeatures }, output.Shape);
+        Assert.Equal(new[] { batchSize, outputFeatures }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 17);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 17);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -311,12 +311,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, features });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize }, output.Shape);
+        Assert.Equal(new[] { batchSize }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 19);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 19);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -328,7 +328,7 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { size });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { size }, output.Shape);
+        Assert.Equal(new[] { size }, output.Shape.ToArray());
 
         float sum = 0.0f;
         for (int i = 0; i < output.Length; i++)
@@ -337,10 +337,10 @@ public class MissingLayersIntegrationTests
         }
         Assert.True(Math.Abs(sum - 1.0f) < Tolerance, $"Expected probabilities to sum to 1, got {sum}");
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 21);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 21);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -363,12 +363,12 @@ public class MissingLayersIntegrationTests
         var memory = CreateRandomTensor(new[] { memorySlots, memoryDim });
         var output = layer.Forward(input, memory);
 
-        Assert.Equal(new[] { batchSize, outputDim }, output.Shape);
+        Assert.Equal(new[] { batchSize, outputDim }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 23);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 23);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -389,12 +389,12 @@ public class MissingLayersIntegrationTests
         var memory = CreateRandomTensor(new[] { memorySlots, memoryDim });
         var output = layer.Forward(input, memory);
 
-        Assert.Equal(new[] { batchSize, memoryDim }, output.Shape);
+        Assert.Equal(new[] { batchSize, memoryDim }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 25);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 25);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -416,12 +416,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { numEdges, inputChannels });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { numEdges, outputChannels }, output.Shape);
+        Assert.Equal(new[] { numEdges, outputChannels }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 27);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 27);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -438,7 +438,7 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { numEdges, inputChannels });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { targetEdges, inputChannels }, output.Shape);
+        Assert.Equal(new[] { targetEdges, inputChannels }, output.Shape.ToArray());
         Assert.NotNull(layer.RemainingEdgeIndices);
         Assert.Equal(targetEdges, layer.RemainingEdgeIndices!.Length);
         Assert.NotNull(layer.UpdatedAdjacency);
@@ -474,12 +474,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, inputSize });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize, outputSize }, output.Shape);
+        Assert.Equal(new[] { batchSize, outputSize }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 29);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 29);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -495,12 +495,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, inputFeatures * 8 });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize, outputFeatures * 8 }, output.Shape);
+        Assert.Equal(new[] { batchSize, outputFeatures * 8 }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 31);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 31);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -527,12 +527,12 @@ public class MissingLayersIntegrationTests
 
         int outputHeight = (height - 3) / 1 + 1;
         int outputWidth = (width - 3) / 1 + 1;
-        Assert.Equal(new[] { batchSize, outputHeight, outputWidth, capsuleChannels, capsuleDim }, output.Shape);
+        Assert.Equal(new[] { batchSize, outputHeight, outputWidth, capsuleChannels, capsuleDim }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 33);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 33);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -550,12 +550,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, numNodes, inputFeatures });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize, numNodes, outputFeatures }, output.Shape);
+        Assert.Equal(new[] { batchSize, numNodes, outputFeatures }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 35);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 35);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -570,12 +570,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { inputSize });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { outputSize }, output.Shape);
+        Assert.Equal(new[] { outputSize }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 37);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 37);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -599,12 +599,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, inputDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize, outputDim }, output.Shape);
+        Assert.Equal(new[] { batchSize, outputDim }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 39);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 39);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -619,12 +619,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, latentSize * 2 });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize, latentSize }, output.Shape);
+        Assert.Equal(new[] { batchSize, latentSize }, output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 41);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 41);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -637,7 +637,7 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { inputSize });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { columnCount }, output.Shape);
+        Assert.Equal(new[] { columnCount }, output.Shape.ToArray());
     }
 
     [Fact]
@@ -661,7 +661,7 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, numVertices, inputChannels });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { batchSize, numVertices, outputChannels }, output.Shape);
+        Assert.Equal(new[] { batchSize, numVertices, outputChannels }, output.Shape.ToArray());
     }
 
     [Fact]
@@ -676,12 +676,12 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { batchSize, size });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
 
-        var gradient = CreateRandomTensor(output.Shape, seed: 43);
+        var gradient = CreateRandomTensor(output.Shape.ToArray(), seed: 43);
         var inputGradient = layer.Backward(gradient);
 
-        Assert.Equal(output.Shape, inputGradient.Shape);
+        Assert.Equal(output.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -694,6 +694,6 @@ public class MissingLayersIntegrationTests
         var input = CreateRandomTensor(new[] { columns });
         var output = layer.Forward(input);
 
-        Assert.Equal(new[] { columns * cellsPerColumn }, output.Shape);
+        Assert.Equal(new[] { columns * cellsPerColumn }, output.Shape.ToArray());
     }
 }

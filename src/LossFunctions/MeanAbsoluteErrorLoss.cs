@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -26,6 +28,9 @@ namespace AiDotNet.LossFunctions;
 /// - Outliers should not have a disproportionate influence on the model
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Regression)]
+[LossTask(LossTask.Regression)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsSymmetric = true, IsRobustToOutliers = true, ExpectedOutput = OutputType.Continuous)]
 public class MeanAbsoluteErrorLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -94,7 +99,7 @@ public class MeanAbsoluteErrorLoss<T> : LossFunctionBase<T>
         backend.MaeBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

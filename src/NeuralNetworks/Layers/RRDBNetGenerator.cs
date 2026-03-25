@@ -436,7 +436,7 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output.Data.Span[i] = _leakyReLU.Activate(input.Data.Span[i]);
@@ -449,7 +449,7 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
     {
-        var output = TensorAllocator.Rent<T>(gradient.Shape);
+        var output = TensorAllocator.Rent<T>(gradient.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             output.Data.Span[i] = NumOps.Multiply(

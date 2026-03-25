@@ -480,7 +480,7 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
         Tensor<T> output = input;
         Tensor<T>? encoderOutput = null;
-        Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input.Shape, NumOps.One); // Default to all ones if no mask is provided
+        Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input.Shape.ToArray(), NumOps.One); // Default to all ones if no mask is provided
 
         // Process all layers sequentially
         // The layer list structure: input projection, positional encoding, dropout, then encoder/decoder blocks

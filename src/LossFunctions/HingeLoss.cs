@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -25,6 +27,9 @@ namespace AiDotNet.LossFunctions;
 /// the margin between different classes, which often improves generalization to new data.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.BinaryClassification)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, TestInputFormat = LossTestInputFormat.SignedLabels, ExpectedOutput = OutputType.Logits)]
 public class HingeLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -110,7 +115,7 @@ public class HingeLoss<T> : LossFunctionBase<T>
         backend.HingeBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

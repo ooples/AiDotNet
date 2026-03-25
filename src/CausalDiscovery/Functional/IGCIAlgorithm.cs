@@ -95,21 +95,11 @@ public class IGCIAlgorithm<T> : FunctionalBase<T>
                 }
                 else
                 {
-                    // Fallback for linear relationships where IGCI score is zero:
-                    // use asymmetric covariance ratio (|cov/var_i| vs |cov/var_j|)
-                    var cov = ComputeCovarianceMatrix(data);
-                    double varI = NumOps.ToDouble(cov[i, i]);
-                    double varJ = NumOps.ToDouble(cov[j, j]);
-                    double covIJ = NumOps.ToDouble(cov[i, j]);
-                    if (varI > 1e-10 && varJ > 1e-10 && Math.Abs(covIJ) > 1e-10)
-                    {
-                        double wIJ = Math.Abs(covIJ / varI);
-                        double wJI = Math.Abs(covIJ / varJ);
-                        if (wIJ > wJI)
-                            W[i, j] = NumOps.FromDouble(wIJ);
-                        else
-                            W[j, i] = NumOps.FromDouble(wJI);
-                    }
+                    // IGCI score ≈ 0 means the relationship is linear or indeterminate.
+                    // Per the IGCI paper (Daniusis et al., 2012), the method has no power
+                    // to orient linear edges. Leave W[i,j] and W[j,i] as zero (undirected)
+                    // rather than using a scale-dependent fallback that can reverse edges
+                    // based on variable units instead of causal signal.
                 }
             }
         }

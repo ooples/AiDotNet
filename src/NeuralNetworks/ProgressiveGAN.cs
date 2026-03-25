@@ -385,7 +385,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
             var mean = sumAcrossChannels.Multiply(NumOps.Divide(NumOps.One, numChannels));
 
             // Add epsilon and compute sqrt
-            var meanPlusEps = mean.Add(new Tensor<T>(mean.Shape).Tap(t => t.Fill(epsilon)));
+            var meanPlusEps = mean.Add(new Tensor<T>(mean.Shape.ToArray()).Tap(t => t.Fill(epsilon)));
 
             // sqrt using Engine (need to expand back to 4D for division)
             // For now, use element-wise sqrt on the underlying data
@@ -394,11 +394,11 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
             {
                 normData[i] = NumOps.Sqrt(meanPlusEps.GetFlat(i));
             }
-            var norm = new Tensor<T>(meanPlusEps.Shape, normData);
+            var norm = new Tensor<T>(meanPlusEps.Shape.ToArray(), normData);
 
             // Broadcast norm back and divide
             // norm shape: [batch, height, width], need to broadcast to [batch, channels, height, width]
-            var result = TensorAllocator.Rent<T>(features.Shape);
+            var result = TensorAllocator.Rent<T>(features.Shape.ToArray());
             int batch = features.Shape[0];
             int channels = features.Shape[1];
             int height = features.Shape[2];
@@ -432,7 +432,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
             var numFeatures = NumOps.FromDouble(features.Shape[1]);
             var mean = sumAcrossFeatures.Multiply(NumOps.Divide(NumOps.One, numFeatures));
 
-            var meanPlusEps = mean.Add(new Tensor<T>(mean.Shape).Tap(t => t.Fill(epsilon)));
+            var meanPlusEps = mean.Add(new Tensor<T>(mean.Shape.ToArray()).Tap(t => t.Fill(epsilon)));
 
             var normData = new Vector<T>(meanPlusEps.Length);
             for (int i = 0; i < meanPlusEps.Length; i++)
@@ -441,7 +441,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
             }
 
             // Divide each row by its norm
-            var result = TensorAllocator.Rent<T>(features.Shape);
+            var result = TensorAllocator.Rent<T>(features.Shape.ToArray());
             int batchSize = features.Shape[0];
             int featureCount = features.Shape[1];
 
@@ -533,12 +533,12 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate discriminator with vectorized gradient fill
         var negativeScale = NumOps.Negate(NumOps.Divide(NumOps.One, batchSizeT));
-        var realGradient = CreateFilledTensor(realOutput.Shape, negativeScale);
+        var realGradient = CreateFilledTensor(realOutput.Shape.ToArray(), negativeScale);
         Discriminator.Predict(realImages); // Ensure correct activations are cached
         Discriminator.Backward(realGradient);
 
         var positiveScale = NumOps.Divide(NumOps.One, batchSizeT);
-        var fakeGradient = CreateFilledTensor(fakeOutput.Shape, positiveScale);
+        var fakeGradient = CreateFilledTensor(fakeOutput.Shape.ToArray(), positiveScale);
         Discriminator.Predict(fakeImages); // Ensure correct activations are cached
         Discriminator.Backward(fakeGradient);
 
@@ -566,7 +566,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         _generatorLosses.Add(generatorLoss);
 
         // Backpropagate generator with vectorized gradient
-        var genGradient = CreateFilledTensor(generatorOutput.Shape, negativeScale);
+        var genGradient = CreateFilledTensor(generatorOutput.Shape.ToArray(), negativeScale);
         var discInputGradient = Discriminator.BackwardWithInputGradient(genGradient);
         Generator.Backward(discInputGradient);
 
@@ -618,7 +618,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
         // Clamp to [0, 1] and create interpolated samples
         int sampleSize = realImages.Length / batchSize;
-        var interpolated = new Tensor<T>(realImages.Shape);
+        var interpolated = new Tensor<T>(realImages.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -642,7 +642,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         var interpolatedOutput = Discriminator.Predict(interpolated);
 
         // Create gradient tensor filled with ones using vectorized Fill
-        var ones = CreateFilledTensor(interpolatedOutput.Shape, NumOps.One);
+        var ones = CreateFilledTensor(interpolatedOutput.Shape.ToArray(), NumOps.One);
 
         // Backpropagate to get gradients w.r.t. interpolated input
         var inputGradients = Discriminator.BackwardWithInputGradient(ones);

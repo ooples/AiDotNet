@@ -871,7 +871,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (int dim in tensor.Shape)
+        foreach (int dim in tensor.Shape.ToArray())
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)

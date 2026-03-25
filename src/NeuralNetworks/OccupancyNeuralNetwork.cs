@@ -218,11 +218,11 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         var expectedShape = new[] { input.Shape[0], _historyWindowSize, Architecture.InputSize };
-        if (input.Shape.Length != 3 || !input.Shape.SequenceEqual(expectedShape))
+        if (input.Shape.Length != 3 || !input.Shape.ToArray().SequenceEqual(expectedShape))
         {
             throw new TensorShapeMismatchException(
                 expectedShape,
-                input.Shape,
+                input.Shape.ToArray(),
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(ForwardTemporal)
             );
@@ -357,7 +357,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 {
                     throw new TensorShapeMismatchException(
                         new[] { -1, _historyWindowSize, Architecture.InputSize },
-                        input.Shape,
+                        input.Shape.ToArray(),
                         nameof(OccupancyNeuralNetwork<T>),
                         nameof(Predict)
                     );
@@ -496,11 +496,11 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Validate input shape
         var expectedShape = new[] { input.Shape[0], _historyWindowSize, Architecture.InputSize };
-        if (input.Shape.Length != 3 || !input.Shape.SequenceEqual(expectedShape))
+        if (input.Shape.Length != 3 || !input.Shape.ToArray().SequenceEqual(expectedShape))
         {
             throw new TensorShapeMismatchException(
                 expectedShape,
-                input.Shape,
+                input.Shape.ToArray(),
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(TrainTemporal)
             );
@@ -580,18 +580,18 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> CalculateError(Tensor<T> predicted, Tensor<T> expected)
     {
         // Ensure tensors have the same shape
-        if (!predicted.Shape.SequenceEqual(expected.Shape))
+        if (!predicted.Shape.ToArray().SequenceEqual(expected.Shape.ToArray()))
         {
             throw new TensorShapeMismatchException(
-                expected.Shape,
-                predicted.Shape,
+                expected.Shape.ToArray(),
+                predicted.Shape.ToArray(),
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(CalculateError)
             );
         }
 
         // Calculate error (expected - predicted)
-        var error = new Tensor<T>(predicted.Shape);
+        var error = new Tensor<T>(predicted.Shape.ToArray());
 
         for (int i = 0; i < predicted.Length; i++)
         {

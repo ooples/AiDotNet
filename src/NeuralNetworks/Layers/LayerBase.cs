@@ -1701,7 +1701,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
 
         // Create the output shape
         int[] outputShape = new int[inputs[0].Rank];
-        Array.Copy(inputs[0].Shape, outputShape, inputs[0].Rank);
+        Array.Copy(inputs[0].Shape.ToArray(), outputShape, inputs[0].Rank);
         outputShape[channelDimension] = totalChannels;
 
         // Create the output tensor
@@ -1976,7 +1976,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     {
         if (activation == null)
         {
-            return Tensor<T>.CreateDefault(input.Shape, NumOps.One);
+            return Tensor<T>.CreateDefault(input.Shape.ToArray(), NumOps.One);
         }
 
         return activation.Derivative(input);
@@ -2079,7 +2079,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
                 }
             }
 
-            return flatInputGrad.Reshape(input.Shape);
+            return flatInputGrad.Reshape(input.Shape.ToArray());
         }
         else if (ScalarActivation != null)
         {
@@ -2092,6 +2092,22 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             // Identity activation: derivative is just the output gradient
             return outputGradient;
         }
+    }
+
+    /// <summary>
+    /// Applies activation derivative given the POST-activation output value.
+    /// Use this when you have the output (y = f(x)) instead of the pre-activation input (x).
+    /// For sigmoid: derivative = y * (1 - y). For tanh: derivative = 1 - y².
+    /// Falls back to standard Derivative(input) if activation doesn't implement IOutputDerivative.
+    /// </summary>
+    protected Tensor<T> ApplyActivationDerivativeFromOutput(Tensor<T> output, Tensor<T> outputGradient)
+    {
+        if (ScalarActivation is IOutputDerivative<T> outputDeriv)
+        {
+            return outputDeriv.DerivativeFromOutput(output).ElementwiseMultiply(outputGradient);
+        }
+        // Fallback: use standard derivative (may re-apply activation incorrectly for sigmoid/tanh)
+        return ApplyActivationDerivative(output, outputGradient);
     }
 
     /// <summary>
@@ -3132,7 +3148,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         }
 
         // Validate shape
-        var actualShape = value.Shape;
+        var actualShape = value.Shape.ToArray();
         if (actualShape.Length != expectedShape.Length)
         {
             throw new ArgumentException(
@@ -3174,13 +3190,13 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         if (string.Equals(name, WeightParameterName, StringComparison.OrdinalIgnoreCase))
         {
             var weights = GetWeights();
-            return weights?.Shape;
+            return weights?.Shape.ToArray() ?? Array.Empty<int>();
         }
 
         if (string.Equals(name, BiasParameterName, StringComparison.OrdinalIgnoreCase))
         {
             var biases = GetBiases();
-            return biases?.Shape;
+            return biases?.Shape.ToArray() ?? Array.Empty<int>();
         }
 
         return null;

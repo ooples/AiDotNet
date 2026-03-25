@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -40,6 +43,9 @@ namespace AiDotNet.LossFunctions;
 /// Reference: Arjovsky et al., "Wasserstein GAN" (2017)
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Adversarial)]
+[LossTask(LossTask.ImageGeneration)]
+[LossProperty(IsNonNegative = false, ZeroForIdentical = false, TestInputFormat = LossTestInputFormat.CriticScores, ExpectedOutput = OutputType.Logits)]
 public class WassersteinLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

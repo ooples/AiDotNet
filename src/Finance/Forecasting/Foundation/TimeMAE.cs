@@ -271,7 +271,7 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -426,11 +426,11 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         if (input.Length == 0)
-            return new Tensor<T>(input.Shape);
+            return new Tensor<T>(input.Shape.ToArray());
 
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

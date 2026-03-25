@@ -421,7 +421,7 @@ public class MaskVisualizer<T>
 
     private Tensor<T> CloneImage(Tensor<T> image)
     {
-        var clone = new Tensor<T>(image.Shape);
+        var clone = new Tensor<T>(image.Shape.ToArray());
         for (int i = 0; i < image.Length; i++)
         {
             clone[i] = image[i];

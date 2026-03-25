@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -22,6 +24,9 @@ namespace AiDotNet.ActivationFunctions;
 /// keeps your data in a "sweet spot" range as it passes through the network.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.Medium)]
 public class SELUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

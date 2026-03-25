@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -27,6 +29,9 @@ namespace AiDotNet.ActivationFunctions;
 /// represents important features, and the length represents the probability that those features exist.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.CapsuleSquash)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = true, IsVectorActivation = true, Cost = ComputeCost.Medium)]
 public class SquashActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
@@ -196,7 +201,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape);
+        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
 
         if (input.Shape.Length == 2)
         {
@@ -257,7 +262,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
 
             var flat = input.Reshape([totalVectors, vectorLength]);
             var flatOutput = Activate(flat);
-            output = flatOutput.Reshape(input.Shape);
+            output = flatOutput.Reshape(input.Shape.ToArray());
         }
 
         return output;

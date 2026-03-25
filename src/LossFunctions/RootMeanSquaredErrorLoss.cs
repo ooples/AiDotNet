@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -17,6 +20,9 @@ namespace AiDotNet.LossFunctions;
 /// This implementation leverages the existing StatisticsHelper.CalculateRootMeanSquaredError() method
 /// for efficient and consistent calculation across the library.
 /// </remarks>
+[LossCategory(LossCategory.Regression)]
+[LossTask(LossTask.Regression)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Continuous)]
 public class RootMeanSquaredErrorLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

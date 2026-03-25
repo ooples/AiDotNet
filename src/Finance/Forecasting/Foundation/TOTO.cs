@@ -268,7 +268,7 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -427,7 +427,7 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         // For rank-1 inputs, treat as single sequence (batch=1, seqLen=input.Length)
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -32,6 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Other)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
 public class SpikingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -715,7 +720,7 @@ public class SpikingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Store the input for backward pass
@@ -802,7 +807,7 @@ public class SpikingLayer<T> : LayerBase<T>
         int inputSize = InputShape[0];
 
         // Convert to float array to Tensor<T>
-        var inputTensor = new Tensor<T>(input.Shape);
+        var inputTensor = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < inputData.Length; i++)
         {
             inputTensor[i] = NumOps.FromDouble(inputData[i]);
@@ -810,7 +815,7 @@ public class SpikingLayer<T> : LayerBase<T>
 
         // Store for backward pass
         _lastInput = inputTensor;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         // Flatten input for processing
         Tensor<T> inputFlat;
@@ -852,7 +857,7 @@ public class SpikingLayer<T> : LayerBase<T>
         }
 
         var outputBuffer = backend.AllocateBuffer(outputData);
-        var outputShape = output.Shape;
+        var outputShape = output.Shape.ToArray();
 
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
@@ -1376,10 +1381,10 @@ public class SpikingLayer<T> : LayerBase<T>
         _spikes = Engine.TensorWhere(belowReset, spikesZeroTensor, newSpikes);
 
         // Update state variables (reshape back if needed)
-        _membranePotential = vNew.Reshape(_membranePotential.Shape);
-        _nGate = nNew.Reshape(_nGate.Shape);
-        _mGate = mNew.Reshape(_mGate.Shape);
-        _hGate = hNew.Reshape(_hGate.Shape);
+        _membranePotential = vNew.Reshape(_membranePotential.Shape.ToArray());
+        _nGate = nNew.Reshape(_nGate.Shape.ToArray());
+        _mGate = mNew.Reshape(_mGate.Shape.ToArray());
+        _hGate = hNew.Reshape(_hGate.Shape.ToArray());
 
         return _spikes;
     }
@@ -1853,7 +1858,7 @@ public class SpikingLayer<T> : LayerBase<T>
         // Reshape to match input shape if needed
         if (_lastInput.Shape.Length > 1)
         {
-            inputGradient = inputGradient.Reshape(_lastInput.Shape);
+            inputGradient = inputGradient.Reshape(_lastInput.Shape.ToArray());
         }
 
         return inputGradient;
@@ -1966,10 +1971,10 @@ public class SpikingLayer<T> : LayerBase<T>
         }
 
         // Return input gradient, reshaping if necessary
-        var inputGradient = inputNode.Gradient ?? new Tensor<T>(inputFlat.Shape);
+        var inputGradient = inputNode.Gradient ?? new Tensor<T>(inputFlat.Shape.ToArray());
         if (_lastInput.Shape.Length > 1)
         {
-            inputGradient = inputGradient.Reshape(_lastInput.Shape);
+            inputGradient = inputGradient.Reshape(_lastInput.Shape.ToArray());
         }
 
         return inputGradient;

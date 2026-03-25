@@ -1,4 +1,5 @@
-
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -41,6 +42,9 @@ namespace AiDotNet.LossFunctions;
 /// These features are very useful for actual classification tasks!
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Contrastive)]
+[LossTask(LossTask.MultiClass)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ApiShape = LossApiShape.SelfSupervised, ExpectedOutput = OutputType.Probabilities)]
 public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -65,7 +69,7 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
         {
             throw new ArgumentException(
                 $"Input tensor must have at least 3 dimensions [N, H, W] or [N, H, W, C], " +
-                $"but got shape [{string.Join(", ", tensorInput.Shape)}]");
+                $"but got shape [{string.Join(", ", tensorInput.Shape.ToArray())}]");
         }
 
         int numImages = tensorInput.Shape[0];

@@ -450,7 +450,7 @@ public class RAFT<T> : OpticalFlowBase<T>
         var r = Engine.Sigmoid(gruConvR.Forward(gruInput));
         var hNew = ApplyTanh(gruConvH.Forward(gruInput));
 
-        var ones = Tensor<T>.CreateDefault(z.Shape, NumOps.One);
+        var ones = Tensor<T>.CreateDefault(z.Shape.ToArray(), NumOps.One);
         var oneMinusZ = Engine.TensorSubtract(ones, z);
         var term1 = Engine.TensorMultiply(oneMinusZ, hiddenState);
         var term2 = Engine.TensorMultiply(z, hNew);

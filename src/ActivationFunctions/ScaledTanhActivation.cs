@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -27,6 +29,9 @@ namespace AiDotNet.ActivationFunctions;
 /// - When you want to control the steepness of the activation function
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, Cost = ComputeCost.Medium)]
 public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
@@ -83,6 +88,15 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     public override T Activate(T input)
     {
         // f(x) = (1 - exp(-ßx)) / (1 + exp(-ßx))
+        // This is equivalent to tanh(ßx/2), with the same saturation behavior.
+        // For large positive ßx: exp(-ßx) → 0, result → 1
+        // For large negative ßx: exp(-ßx) → ∞, result → -1
+        double betaX = NumOps.ToDouble(NumOps.Multiply(_beta, input));
+        if (betaX > 20.0)
+            return NumOps.One;
+        if (betaX < -20.0)
+            return NumOps.Negate(NumOps.One);
+
         T negBetaX = NumOps.Negate(NumOps.Multiply(_beta, input));
         T expNegBetaX = NumOps.Exp(negBetaX);
         T numerator = NumOps.Subtract(NumOps.One, expNegBetaX);

@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -71,6 +73,11 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class RetNetLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -266,7 +273,7 @@ public class RetNetLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -432,7 +439,7 @@ public class RetNetLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> GroupNormForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
 
         // Store mean and variance for backward pass: [batchSize, seqLen, numHeads]
@@ -700,7 +707,7 @@ public class RetNetLayer<T> : LayerBase<T>
         Tensor<T> dNormed, Tensor<T> retentionInput,
         int batchSize, int seqLen)
     {
-        var dInput = TensorAllocator.Rent<T>(retentionInput.Shape);
+        var dInput = TensorAllocator.Rent<T>(retentionInput.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -773,7 +780,7 @@ public class RetNetLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape);
+        var ones = new Tensor<T>(x.Shape.ToArray());
         ones.Fill(NumOps.One);
         var oneMinusSig = Engine.TensorSubtract(ones, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);

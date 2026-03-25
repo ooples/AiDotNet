@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -47,6 +48,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[LayerCategory(LayerCategory.Residual)]
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 3, 8, 8")]
 public class DenseBlock<T> : LayerBase<T>
 {
     private readonly List<DenseBlockLayer<T>> _layers;

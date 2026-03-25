@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -32,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "new[] { 2, 4 }, 0")]
 public class MeanLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -247,7 +251,7 @@ public class MeanLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        int[] shape = input.Shape;
+        int[] shape = input.Shape.ToArray();
         int inputRank = shape.Length;
 
         // Calculate output shape by removing the axis dimension
@@ -337,7 +341,7 @@ public class MeanLayer<T> : LayerBase<T>
         var gradData = backend.DownloadBuffer(outputGradient.Buffer);
 
         // Compute strides for broadcast
-        int[] outputShape = outputGradient.Shape;
+        int[] outputShape = outputGradient.Shape.ToArray();
         int[] inputStrides = new int[inputShape.Length];
         int[] outputStrides = new int[outputShape.Length];
         inputStrides[inputShape.Length - 1] = 1;
@@ -425,7 +429,7 @@ public class MeanLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         // Use Engine operation for GPU/CPU acceleration
-        return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape, [Axis]);
+        return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape.ToArray(), [Axis]);
     }
 
     /// <summary>

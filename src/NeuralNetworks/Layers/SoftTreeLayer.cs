@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
@@ -23,6 +25,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[LayerCategory(LayerCategory.Other)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 2")]
 public class SoftTreeLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
@@ -239,9 +244,9 @@ public class SoftTreeLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
 
         // Initialize gradients
-        _splitWeightsGrad = new Tensor<T>(_splitWeights.Shape);
-        _splitBiasesGrad = new Tensor<T>(_splitBiases.Shape);
-        _leafValuesGrad = new Tensor<T>(_leafValues.Shape);
+        _splitWeightsGrad = new Tensor<T>(_splitWeights.Shape.ToArray());
+        _splitBiasesGrad = new Tensor<T>(_splitBiases.Shape.ToArray());
+        _leafValuesGrad = new Tensor<T>(_leafValues.Shape.ToArray());
 
         // Gradient w.r.t. leaf values: pathProbs^T @ outputGradient
         // pathProbs: [batchSize, numLeaves], outputGradient: [batchSize, outputDim]
@@ -257,7 +262,7 @@ public class SoftTreeLayer<T> : LayerBase<T>
         //   left child: nodeProb * (1-r_n), right child: nodeProb * r_n
         // Gradient: dL/d(r_n) = sum over descendants of (dL/d(leafProb) * d(leafProb)/d(r_n))
         var dRightProbs = new Tensor<T>([batchSize, _numInternalNodes]);
-        var dNodeProbs = new Tensor<T>(_cachedNodeProbs!.Shape);
+        var dNodeProbs = new Tensor<T>(_cachedNodeProbs!.Shape.ToArray());
 
         // Seed leaf gradients from pathProbsGrad
         for (int b = 0; b < batchSize; b++)
@@ -533,7 +538,7 @@ public class SoftTreeLayer<T> : LayerBase<T>
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
         {
             writer.Write(dim);
         }

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -24,6 +26,12 @@ namespace AiDotNet.ActivationFunctions;
 /// it normalizes them relative to each other.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Normalization)]
+[ActivationCategory(ActivationCategory.Output)]
+[ActivationTask(ActivationTask.OutputLayer)]
+[ActivationTask(ActivationTask.AttentionGating)]
+[ActivationTask(ActivationTask.NormalizationOutput)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, IsVectorActivation = true, Cost = ComputeCost.High)]
 public class SoftmaxActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

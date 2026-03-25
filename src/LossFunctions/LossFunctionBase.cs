@@ -58,7 +58,7 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
         var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
         var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
 
-        var gradientTensor = new Tensor<T>(predictedCpu.Shape);
+        var gradientTensor = new Tensor<T>(predictedCpu.Shape.ToArray());
         Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
 
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;

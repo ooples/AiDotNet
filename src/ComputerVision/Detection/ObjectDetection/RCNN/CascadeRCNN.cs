@@ -561,7 +561,7 @@ internal class CascadeStage<T>
 
     private Tensor<T> ApplyReLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);

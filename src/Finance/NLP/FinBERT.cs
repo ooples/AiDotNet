@@ -461,7 +461,7 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 

@@ -1,6 +1,8 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
+using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -47,6 +49,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// ECCV 2018 Workshops. https://arxiv.org/abs/1809.00219
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Residual)]
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 3")]
 public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     #region Fields
@@ -347,7 +353,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var originalShape = input.Shape;
+        var originalShape = input.Shape.ToArray();
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         if (originalShape.Length < 3)
@@ -636,7 +642,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Scale outputGradient by residualScale for x5 gradient
         var x5GradBuffer = backend.AllocateBuffer(outputSize);
         backend.Scale(outputGradient.Buffer, x5GradBuffer, (float)_residualScale, outputSize);
-        var x5Grad = new GpuTensor<T>(backend, x5GradBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+        var x5Grad = new GpuTensor<T>(backend, x5GradBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
 
         // Keep original outputGradient as x0GradFromResidual (will be accumulated later)
 
@@ -777,7 +783,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output.Data.Span[i] = _activation.Activate(input.Data.Span[i]);
@@ -790,7 +796,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     private Tensor<T> BackwardActivation(Tensor<T> activationOutput, Tensor<T> gradient)
     {
-        var output = TensorAllocator.Rent<T>(gradient.Shape);
+        var output = TensorAllocator.Rent<T>(gradient.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             output.Data.Span[i] = NumOps.Multiply(
@@ -853,6 +859,20 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             }
         }
         return new Vector<T>([.. allParams]);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradVectors = _convLayers
+            .Select(c => c.GetParameterGradients())
+            .ToArray();
+        return Vector<T>.Concatenate(gradVectors);
+    }
+
+    public override void ClearGradients()
+    {
+        foreach (var conv in _convLayers)
+            conv.ClearGradients();
     }
 
     /// <inheritdoc />
@@ -974,7 +994,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var scaleValue = numOps.FromDouble(scale);
 
         // Create a constant tensor filled with the scale value matching the input shape
-        var scaleTensor = new Tensor<T>(node.Value.Shape);
+        var scaleTensor = new Tensor<T>(node.Value.Shape.ToArray());
         for (int i = 0; i < scaleTensor.Length; i++)
         {
             scaleTensor.Data.Span[i] = scaleValue;

@@ -62,7 +62,7 @@ public class MaskFromSegmentation<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>A binary mask where selected labels are 1 and others are 0.</returns>
     public Tensor<T> Apply(Tensor<T> segmentationMap)
     {
-        var shape = segmentationMap.Shape;
+        var shape = segmentationMap.Shape.ToArray();
         var result = new Tensor<T>(shape);
         int height = shape[0];
         int width = shape.Length > 1 ? shape[1] : 1;

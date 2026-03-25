@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -26,6 +28,9 @@ namespace AiDotNet.ActivationFunctions;
 /// during training, which can be an advantage in some neural network architectures.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, Cost = ComputeCost.Low)]
 public class SoftSignActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

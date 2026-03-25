@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -37,6 +39,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.FeedForward)]
+[LayerTask(LayerTask.Projection)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class FeedForwardLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -421,7 +427,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
             // Cache GPU tensors for GPU-resident backward pass
             _gpuInput = input;
             _gpuOutput = output;
-            _gpuInputShape = input.Shape;
+            _gpuInputShape = input.Shape.ToArray();
 
             // Also cache CPU tensors for fallback backward pass
             Input = input.ToTensor();
@@ -614,7 +620,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
 
             var weightsT = Engine.TensorTranspose(Weights);
             var inputGradient2D = Engine.TensorMatMul(grad2D, weightsT);
-            var inputGradient = inputGradient2D.Reshape(Input.Shape);
+            var inputGradient = inputGradient2D.Reshape(Input.Shape.ToArray());
 
             var inputT = Engine.TensorTranspose(input2D);
             WeightsGradient = Engine.TensorMatMul(inputT, grad2D);
@@ -641,7 +647,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
-        if (Input == null || Input.Shape == null || Input.Shape.Length == 0)
+        if (Input == null || Input.Shape.ToArray() == null || Input.Shape.Length == 0)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = Input.Shape[0];

@@ -503,7 +503,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         double[] means = [123.68, 116.78, 103.94];
 
         for (int b = 0; b < batchSize; b++)
@@ -620,7 +620,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new ArgumentException($"Tensor 'b' must be 4-D, got {b.Shape.Length}-D.", nameof(b));
         if (a.Shape[0] != b.Shape[0] || a.Shape[2] != b.Shape[2] || a.Shape[3] != b.Shape[3])
             throw new ArgumentException(
-                $"Tensor shapes must match on batch/height/width: a=[{string.Join(",", a.Shape)}], b=[{string.Join(",", b.Shape)}].");
+                $"Tensor shapes must match on batch/height/width: a=[{string.Join(",", a.Shape.ToArray())}], b=[{string.Join(",", b.Shape.ToArray())}].");
 
         // Concatenate along dimension 1 (channels)
         int batch = a.Shape[0];
@@ -684,7 +684,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        var result = new Tensor<T>(a.Shape);
+        var result = new Tensor<T>(a.Shape.ToArray());
         for (int i = 0; i < a.Data.Length; i++)
             result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
         return result;

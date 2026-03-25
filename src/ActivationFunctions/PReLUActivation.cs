@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -23,6 +25,9 @@ namespace AiDotNet.ActivationFunctions;
 /// PReLU can be thought of as a sloped line for negative inputs rather than a flat line at zero.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Parametric)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, HasLearnableParameters = true, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class PReLUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

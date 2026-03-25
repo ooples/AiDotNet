@@ -1,6 +1,8 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
+using AiDotNet.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -43,6 +45,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 4, 128, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var lap = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { lap[i, i] = 2.0; if (i > 0) { lap[i, i-1] = -1.0; lap[i-1, i] = -1.0; } } ((AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<double>)layer).SetLaplacian(lap);")]
 public class DiffusionConvLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -424,10 +430,10 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape, NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape.ToArray(), NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape);
+        _biases = new Tensor<T>(_biases.Shape.ToArray());
         Engine.TensorFill(_biases, NumOps.Zero);
     }
 
@@ -849,7 +855,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        int[] shape = input.Shape;
+        int[] shape = input.Shape.ToArray();
 
         // Handle batched vs non-batched input
         int batchSize;
@@ -1413,18 +1419,18 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             var weightGradData = backend.DownloadBuffer(weightGradBuffer);
             _weightsGradient = new Tensor<T>(
                 DirectGpuEngine.FromFloatArray<T>(weightGradData),
-                _weights.Shape);
+                _weights.Shape.ToArray());
 
             var biasGradData = backend.DownloadBuffer(biasGradBuffer);
             _biasesGradient = new Tensor<T>(
                 DirectGpuEngine.FromFloatArray<T>(biasGradData),
-                _biases.Shape);
+                _biases.Shape.ToArray());
 
             _gpuWeightsGradient?.Dispose();
             _gpuWeightsGradient = new GpuTensor<T>(
                 backend,
                 weightGradBuffer,
-                _weights.Shape,
+                _weights.Shape.ToArray(),
                 GpuTensorRole.Gradient,
                 ownsBuffer: true);
             weightGradBuffer = null;
@@ -1433,7 +1439,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             _gpuBiasesGradient = new GpuTensor<T>(
                 backend,
                 biasGradBuffer,
-                _biases.Shape,
+                _biases.Shape.ToArray(),
                 GpuTensorRole.Gradient,
                 ownsBuffer: true);
             biasGradBuffer = null;
@@ -1627,7 +1633,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastPreActivation == null || _lastOutput == null || _diffusedFeatures == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         bool hasBatch = _lastInput.Rank == 3;
         int numVertices = hasBatch ? _lastInput.Shape[1] : _lastInput.Shape[0];
@@ -2055,9 +2061,9 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
 
         int idx = 0;
-        _weights = new Tensor<T>(_weights.Shape, parameters.Slice(idx, _weights.Length));
+        _weights = new Tensor<T>(_weights.Shape.ToArray(), parameters.Slice(idx, _weights.Length));
         idx += _weights.Length;
-        _biases = new Tensor<T>(_biases.Shape, parameters.Slice(idx, _biases.Length));
+        _biases = new Tensor<T>(_biases.Shape.ToArray(), parameters.Slice(idx, _biases.Length));
         idx += _biases.Length;
 
         for (int i = 0; i < DiffusionTimes.Length; i++)
@@ -2264,7 +2270,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         {
             weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _weights = new Tensor<T>(weightArray, _weights.Shape);
+        _weights = new Tensor<T>(weightArray, _weights.Shape.ToArray());
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[_biases.Length];
@@ -2272,7 +2278,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         {
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _biases = new Tensor<T>(biasArray, _biases.Shape);
+        _biases = new Tensor<T>(biasArray, _biases.Shape.ToArray());
 
         DiffusionTimes = new T[NumTimeScales];
         for (int i = 0; i < NumTimeScales; i++)
