@@ -177,6 +177,13 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastOutput;
 
     /// <summary>
+    /// Cached pre-activation output (before activation function) for computing
+    /// activation derivative correctly. GELU and other activations need the
+    /// pre-activation input to compute derivatives, not the post-activation output.
+    /// </summary>
+    private Tensor<T>? _lastPreActivationOutput;
+
+    /// <summary>
     /// Cached attention context (pre-projection input) for computing output weights gradient.
     /// </summary>
     private Tensor<T>? _lastAttentionContext;
@@ -826,6 +833,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (IsTrainingMode)
         {
             _lastOutput = result;
+            _lastPreActivationOutput = outputWithBias;
         }
 
         // Reshape output back to original batch dimensions
@@ -1132,7 +1140,11 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_lastProjectedQueries == null || _lastProjectedKeys == null || _lastProjectedValues == null)
             throw new InvalidOperationException("Projected Q, K, V must be cached from forward pass.");
 
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
+        // Use pre-activation value for derivative computation.
+        // GELU and other activations need the PRE-activation input for correct derivatives.
+        // ApplyActivationDerivativeFromOutput would compute GELU'(GELU(x)) instead of GELU'(x).
+        var preAct = _lastPreActivationOutput ?? _lastOutput;
+        var activationGradient = ApplyActivationDerivative(preAct, outputGradient);
 
         int batchSize = _lastInput.Shape[0];
         int sequenceLength = _lastInput.Shape[1];
@@ -1551,6 +1563,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _lastPreActivationOutput = null;
         _lastAttentionContext = null;
         _lastAttentionScores = null;
         _lastHeadOutputs = null;  // Clear per-head output cache

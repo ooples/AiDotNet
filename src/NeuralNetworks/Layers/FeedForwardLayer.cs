@@ -140,6 +140,13 @@ public class FeedForwardLayer<T> : LayerBase<T>
     private Tensor<T> Output { get; set; }
 
     /// <summary>
+    /// Cached pre-activation output (after linear transform, before activation function).
+    /// Required for correct activation derivative computation — GELU and other activations
+    /// need the pre-activation input, not the post-activation output.
+    /// </summary>
+    private Tensor<T>? PreActivationOutput { get; set; }
+
+    /// <summary>
     /// The gradients for the weights, computed during backpropagation.
     /// </summary>
     /// <remarks>
@@ -376,6 +383,7 @@ public class FeedForwardLayer<T> : LayerBase<T>
         var biasBroadcast = Biases.Reshape([1, Weights.Shape[1]]);
         var linearOutput = Engine.TensorBroadcastAdd(matmul, biasBroadcast);
 
+        PreActivationOutput = linearOutput;
         Output = ApplyActivation(linearOutput);
 
         return Output;
@@ -550,18 +558,19 @@ public class FeedForwardLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        // Apply activation derivative
+        // Apply activation derivative using PRE-activation values.
+        // GELU and other activations need the pre-activation input for correct derivatives.
+        // Using the post-activation Output would compute GELU'(GELU(x)) instead of GELU'(x).
+        var preAct = PreActivationOutput ?? Output;
         Tensor<T> activationGradient;
         if (ScalarActivation != null)
         {
-            // Use optimized Engine operation
-            var derivatives = ScalarActivation.Derivative(Output);
+            var derivatives = ScalarActivation.Derivative(preAct);
             activationGradient = Engine.TensorMultiply(derivatives, outputGradient);
         }
         else
         {
-            // Fallback or Vector activation
-            activationGradient = ApplyActivationDerivative(Output, outputGradient);
+            activationGradient = ApplyActivationDerivative(preAct, outputGradient);
         }
 
         int rank = Input.Shape.Length;
