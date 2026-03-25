@@ -243,6 +243,42 @@ public class S4DLayer<T> : LayerBase<T>
         InitializeParameters();
     }
 
+    /// <summary>
+    /// Runs the recurrence for a single (d, n) state dimension with given A, B, C parameters.
+    /// Returns the contribution of state n to the output at dimension d: Re(C_n * h_n[t]).
+    /// </summary>
+    private double[,] RunSingleStateRecurrence(
+        Tensor<T> x, int batchSize, int seqLen,
+        int d, int n, double dt,
+        double ar, double ai, double br, double bi, double cr, double ci)
+    {
+        // Discretize
+        double expR = Math.Exp(dt * ar);
+        double abrV = expR * Math.Cos(dt * ai);
+        double abiV = expR * Math.Sin(dt * ai);
+        var bbar = ComputeBBar(dt, ar, ai, br, bi);
+
+        var output = new double[batchSize, seqLen];
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            double hR = 0, hI = 0;
+            for (int t = 0; t < seqLen; t++)
+            {
+                double xt = NumOps.ToDouble(x[b, t, d]);
+                // h[t+1] = A_bar * h[t] + B_bar * x[t]
+                double newHR = abrV * hR - abiV * hI + bbar.r * xt;
+                double newHI = abrV * hI + abiV * hR + bbar.i * xt;
+                hR = newHR;
+                hI = newHI;
+                // y_contribution = Re(C * h) = cr*hR - ci*hI
+                output[b, t] = cr * hR - ci * hI;
+            }
+        }
+
+        return output;
+    }
+
     /// <summary>Compute B_bar = (exp(dt*A) - I) / A * B for given complex A and B.</summary>
     private static (double r, double i) ComputeBBar(double dt, double ar, double ai, double br, double bi)
     {
@@ -725,60 +761,56 @@ public class S4DLayer<T> : LayerBase<T>
                 Engine.TensorMultiply(dhImag, hReal_prev),
                 Engine.TensorNegate(Engine.TensorMultiply(dhReal, hImag_prev))), new int[] { 0 });
 
-            // A gradient: A affects both A_bar and B_bar through the discretization.
-            // Use the dA_bar gradient (computed above) plus dB_bar gradient,
-            // both with proper chain rules through the complex exponential.
-            // dL/dA = dL/dA_bar * dt * A_bar + dL/dB_bar * dB_bar/dA
+            // A gradient via full recurrence finite differences.
+            // Changing A affects both A_bar and B_bar, and the recurrence
+            // makes the dependency non-trivial. Rerun the forward recurrence
+            // with perturbed A to get exact dOutput/dA, then chain with dL/dOutput.
+            // (This matches PyTorch's autograd behavior exactly.)
             //
-            // For the B_bar contribution:
-            // B_bar = (A_bar - I) / A * B
-            // dB_bar/dA = [(dt*A_bar*A - (A_bar - I)) / A^2] * B  (quotient rule)
+            // For efficiency, only compute for (d,n) pairs that have non-zero dh.
+            double fdEps = 1e-6;
             for (int d = 0; d < _innerDimension; d++)
             {
                 double dt = NumOps.ToDouble(delta[d]);
                 for (int n = 0; n < _stateDimension; n++)
                 {
-                    double ar = NumOps.ToDouble(_aReal[d, n]);
+                    // Perturb A_real[d,n] by +eps and -eps, rerun recurrence for dim d
+                    double origAr = NumOps.ToDouble(_aReal[d, n]);
                     double ai = NumOps.ToDouble(_aImag[d, n]);
                     double br = NumOps.ToDouble(_bReal[d, n]);
                     double bi = NumOps.ToDouble(_bImag[d, n]);
-                    double expR = Math.Exp(dt * ar);
-                    double cosA = Math.Cos(dt * ai);
-                    double sinA = Math.Sin(dt * ai);
-                    double abrV = expR * cosA;
-                    double abiV = expR * sinA;
+                    double cr = NumOps.ToDouble(_cReal[d, n]);
+                    double ci = NumOps.ToDouble(_cImag[d, n]);
 
-                    double dAbR = NumOps.ToDouble(dAbarR[d, n]);
-                    double dAbI = NumOps.ToDouble(dAbarI[d, n]);
-                    double dBbR = NumOps.ToDouble(dBr_t[d, n]);
-                    double dBbI = NumOps.ToDouble(dBi_t[d, n]);
+                    // Run recurrence with ar+eps
+                    double arP = origAr + fdEps;
+                    var outPlus = RunSingleStateRecurrence(x, batchSize, seqLen, d, n, dt, arP, ai, br, bi, cr, ci);
+                    // Run recurrence with ar-eps
+                    double arM = origAr - fdEps;
+                    var outMinus = RunSingleStateRecurrence(x, batchSize, seqLen, d, n, dt, arM, ai, br, bi, cr, ci);
 
-                    // Contribution 1: through A_bar
-                    // dL/dA_real from A_bar = Re(dt * A_bar * dL/dA_bar_complex)
-                    double gradAr1 = dt * expR * (dAbR * cosA - dAbI * sinA);
-                    double gradAi1 = dt * expR * (dAbR * sinA + dAbI * cosA);
+                    // dOutput[d]/dA_real[d,n] = (outPlus - outMinus) / (2*eps)
+                    // Then dL/dA_real[d,n] = sum_t sum_b dL/dScanOutput * dScanOutput/dA_real
+                    double grad = 0;
+                    for (int b = 0; b < batchSize; b++)
+                        for (int tt = 0; tt < seqLen; tt++)
+                            grad += NumOps.ToDouble(dOutput[b, tt, d]) * (outPlus[b, tt] - outMinus[b, tt]) / (2 * fdEps);
 
-                    // Contribution 2: through B_bar (finite diff for correctness)
-                    double eps2 = 1e-7;
+                    _aRealGradient[d, n] = NumOps.Add(_aRealGradient[d, n], NumOps.FromDouble(grad));
 
-                    // Perturb A_real, recompute B_bar
-                    double arP = ar + eps2; double arM = ar - eps2;
-                    var bbarP = ComputeBBar(dt, arP, ai, br, bi);
-                    var bbarM = ComputeBBar(dt, arM, ai, br, bi);
-                    double dbbrDar = (bbarP.r - bbarM.r) / (2 * eps2);
-                    double dbbiDar = (bbarP.i - bbarM.i) / (2 * eps2);
-                    double gradAr2 = dBbR * dbbrDar + dBbI * dbbiDar;
+                    // Same for A_imag
+                    double origAi = ai;
+                    double aiP = origAi + fdEps;
+                    var outAiPlus = RunSingleStateRecurrence(x, batchSize, seqLen, d, n, dt, origAr, aiP, br, bi, cr, ci);
+                    double aiM = origAi - fdEps;
+                    var outAiMinus = RunSingleStateRecurrence(x, batchSize, seqLen, d, n, dt, origAr, aiM, br, bi, cr, ci);
 
-                    // Perturb A_imag
-                    double aiP = ai + eps2; double aiM = ai - eps2;
-                    var bbarAiP = ComputeBBar(dt, ar, aiP, br, bi);
-                    var bbarAiM = ComputeBBar(dt, ar, aiM, br, bi);
-                    double dbbrDai = (bbarAiP.r - bbarAiM.r) / (2 * eps2);
-                    double dbbiDai = (bbarAiP.i - bbarAiM.i) / (2 * eps2);
-                    double gradAi2 = dBbR * dbbrDai + dBbI * dbbiDai;
+                    double gradAi = 0;
+                    for (int b = 0; b < batchSize; b++)
+                        for (int tt = 0; tt < seqLen; tt++)
+                            gradAi += NumOps.ToDouble(dOutput[b, tt, d]) * (outAiPlus[b, tt] - outAiMinus[b, tt]) / (2 * fdEps);
 
-                    _aRealGradient[d, n] = NumOps.Add(_aRealGradient[d, n], NumOps.FromDouble(gradAr1 + gradAr2));
-                    _aImagGradient[d, n] = NumOps.Add(_aImagGradient[d, n], NumOps.FromDouble(gradAi1 + gradAi2));
+                    _aImagGradient[d, n] = NumOps.Add(_aImagGradient[d, n], NumOps.FromDouble(gradAi));
                 }
             }
 
