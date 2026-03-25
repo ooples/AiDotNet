@@ -1140,7 +1140,16 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Compute attention output gradient using tensor transpose
         // dAttentionContext = dOut @ Wo^T
-        var attentionOutputGradient = activationGradient.Multiply(_outputWeights.Transpose([1, 0]));
+        // dAttentionContext = dOut @ Wo^T (matmul, not element-wise)
+        var attentionOutputGradient = new Tensor<T>(activationGradient.Shape.ToArray());
+        var woT = _outputWeights.Transpose([1, 0]);
+        for (int b = 0; b < activationGradient.Shape[0]; b++)
+        {
+            var gradB = activationGradient.GetSliceAlongDimension(b, 0);
+            var resultB = Engine.TensorMatMul(gradB, woT);
+            for (int j = 0; j < resultB.Length; j++)
+                attentionOutputGradient.SetFlat(b * resultB.Length + j, resultB.GetFlat(j));
+        }
 
         // Compute output weights gradient using pre-projection context (not post-activation output)
         // Weight gradient = input^T @ gradient, where input is the pre-projection attention context
@@ -1514,7 +1523,9 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return Vector<T>.Concatenate(
             new Vector<T>(_queryWeightsGradient.ToArray()),
             new Vector<T>(_keyWeightsGradient.ToArray()),
-            new Vector<T>(_valueWeightsGradient.ToArray()));
+            new Vector<T>(_valueWeightsGradient.ToArray()),
+            new Vector<T>(_outputWeightsGradient?.ToArray() ?? new T[_outputWeights.Length]),
+            new Vector<T>(_outputBiasGradient?.ToArray() ?? new T[_outputBias.Length]));
     }
 
     public override void ClearGradients()
