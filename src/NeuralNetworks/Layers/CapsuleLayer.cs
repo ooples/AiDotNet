@@ -708,15 +708,32 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int inputCapsules = _lastInput.Shape[1];
         int inputDimension = _lastInput.Shape[2];
 
-        // Squash activation produces a Jacobian for tensor Derivative — compute element-wise instead
+        // Squash activation is a vector function — need Jacobian per capsule, not scalar derivative.
+        // Output shape: [batch, numCapsules, capsuleDim]
+        // Flatten to [batch*numCapsules, capsuleDim] for per-capsule Jacobian computation.
         Tensor<T> activationGradient;
         if (ScalarActivation != null)
         {
-            // Apply scalar derivative element-by-element to avoid Jacobian shape mismatch
-            var deriv = new Tensor<T>(_lastOutput.Shape.ToArray());
-            for (int i = 0; i < _lastOutput.Length; i++)
-                deriv[i] = ScalarActivation.Derivative(_lastOutput[i]);
-            activationGradient = Engine.TensorMultiply(deriv, outputGradient);
+            int totalCapsules = batchSize * _numCapsules;
+            var flatOutput = _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
+            var flatGrad = outputGradient.Reshape([totalCapsules, _capsuleDimension]);
+
+            // Get Jacobian: [totalCapsules, capsuleDim, capsuleDim]
+            var jacobians = ScalarActivation.Derivative(flatOutput);
+
+            if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _capsuleDimension && jacobians.Shape[2] == _capsuleDimension)
+            {
+                // Jacobian @ gradient per capsule via BatchMatMul
+                var gradCol = flatGrad.Reshape([totalCapsules, _capsuleDimension, 1]);
+                var resultCol = Engine.BatchMatMul(jacobians, gradCol);
+                activationGradient = resultCol.Reshape([batchSize, _numCapsules, _capsuleDimension]);
+            }
+            else
+            {
+                // Fallback: element-wise (shouldn't happen for Squash)
+                activationGradient = Engine.TensorMultiply(jacobians, flatGrad)
+                    .Reshape([batchSize, _numCapsules, _capsuleDimension]);
+            }
         }
         else
         {
@@ -741,21 +758,40 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // _lastCouplingCoefficients: [batchSize, inputCapsules, numCapsules]
         // outputGradient: [batchSize, numCapsules, capsuleDimension]
 
-        // Expand dimensions for broadcasting:
-        // input: [batchSize, inputCapsules, inputDimension, 1, 1]
-        // coef: [batchSize, inputCapsules, 1, numCapsules, 1]
-        // grad: [batchSize, 1, 1, numCapsules, capsuleDimension]
+        // Transformation matrix gradient:
+        // W[i, k, j, d] maps input capsule i dimension k to output capsule j dimension d
+        // Forward: u_hat[b,i,j,d] = sum_k(W[i,k,j,d] * input[b,i,k])
+        // output[b,j,d] = squash(sum_i(coupling[b,i,j] * u_hat[b,i,j,d]))
+        // dW[i,k,j,d] = sum_b(coupling[b,i,j] * dOutput[b,j,d] * input[b,i,k])
+        // Note: uses activationGradient which already includes Squash derivative
+        var grad3D = activationGradient.Shape.Length == 3
+            ? activationGradient
+            : activationGradient.Reshape([batchSize, _numCapsules, _capsuleDimension]);
 
-        var inputExpanded = _lastInput.Reshape([batchSize, inputCapsules, inputDimension, 1, 1]);
-        var coefExpanded = _lastCouplingCoefficients.Reshape([batchSize, inputCapsules, 1, _numCapsules, 1]);
-        var gradExpanded = outputGradient.Reshape([batchSize, 1, 1, _numCapsules, _capsuleDimension]);
+        _transformationMatrixGradient = new Tensor<T>([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
 
-        // Element-wise multiply all together
-        var inputCoef = Engine.TensorMultiply(inputExpanded, coefExpanded);
-        var gradProduct = Engine.TensorMultiply(inputCoef, gradExpanded);
-
-        // Sum over batch dimension to get transformation gradient: [inputCapsules, inputDimension, numCapsules, capsuleDimension]
-        _transformationMatrixGradient = Engine.ReduceSum(gradProduct, new[] { 0 }, keepDims: false);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < inputCapsules; i++)
+            {
+                for (int j = 0; j < _numCapsules; j++)
+                {
+                    T coupling = _lastCouplingCoefficients[b, i, j];
+                    for (int k = 0; k < inputDimension; k++)
+                    {
+                        T inputVal = _lastInput[b, i, k];
+                        T coupledInput = NumOps.Multiply(coupling, inputVal);
+                        for (int d = 0; d < _capsuleDimension; d++)
+                        {
+                            T gradVal = grad3D[b, j, d];
+                            _transformationMatrixGradient[i, k, j, d] = NumOps.Add(
+                                _transformationMatrixGradient[i, k, j, d],
+                                NumOps.Multiply(coupledInput, gradVal));
+                        }
+                    }
+                }
+            }
+        }
 
         // Input gradient:
         // grad_input[b, i, k] = sum_j,d(coupling[b, i, j] * outputGrad[b, j, d] * W[i, k, j, d])
