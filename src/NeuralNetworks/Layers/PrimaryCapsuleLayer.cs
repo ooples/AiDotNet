@@ -103,6 +103,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// during the backward pass for gradient calculation.
     /// </remarks>
     private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastPreSquash;
 
     /// <summary>
     /// The number of input channels.
@@ -454,6 +455,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         // SquashActivation expects 2D input [numCapsules, capsuleDim], so reshape and apply
         int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
         var flatOutput = output.Reshape([totalCapsules, _capsuleDimension]);
+        _lastPreSquash = flatOutput;
         var activatedFlat = ApplyActivation(flatOutput);
         _lastOutput = activatedFlat.Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
 
@@ -680,11 +682,35 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         int outputHeight = _lastOutput.Shape[1];
         int outputWidth = _lastOutput.Shape[2];
 
-        // Activation was applied on flattened 2D [totalCapsules, capsuleDim], so derivative needs same shape
+        // Squash activation produces a Jacobian [totalCapsules, capsuleDim, capsuleDim],
+        // not a scalar derivative. Apply via matrix-vector multiply per capsule.
         int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
-        var flatOutput = _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
+        var flatPreact = new Tensor<T>([totalCapsules, _capsuleDimension]);
+        // Reconstruct pre-activation from Forward (pre-squash output)
+        // Since we don't cache pre-activation, recompute from _lastOutput by inverting squash
+        // Simpler: compute derivative from pre-activation input to squash
         var flatGrad = outputGradient.Reshape([totalCapsules, _capsuleDimension]);
-        var activationGradient = ApplyActivationDerivativeFromOutput(flatOutput, flatGrad)
+
+        // Get the Jacobian of squash at the PRE-activation point (not post-activation)
+        var preSquash = _lastPreSquash ?? _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
+        var jacobians = ScalarActivation is not null ? ScalarActivation.Derivative(preSquash) : preSquash;
+        var activationGradientFlat = new Tensor<T>([totalCapsules, _capsuleDimension]);
+
+        if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _capsuleDimension && jacobians.Shape[2] == _capsuleDimension)
+        {
+            // Jacobian case: Jacobian @ gradient per capsule via BatchMatMul
+            // jacobians: [totalCapsules, D, D], flatGrad: [totalCapsules, D] → [totalCapsules, D, 1]
+            var gradCol = flatGrad.Reshape([totalCapsules, _capsuleDimension, 1]);
+            var resultCol = Engine.BatchMatMul(jacobians, gradCol); // [totalCapsules, D, 1]
+            activationGradientFlat = resultCol.Reshape([totalCapsules, _capsuleDimension]);
+        }
+        else
+        {
+            // Scalar derivative case: element-wise multiply
+            activationGradientFlat = Engine.TensorMultiply(jacobians, flatGrad);
+        }
+
+        var activationGradient = activationGradientFlat
             .Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
         int outputChannels = _capsuleChannels * _capsuleDimension;
 
