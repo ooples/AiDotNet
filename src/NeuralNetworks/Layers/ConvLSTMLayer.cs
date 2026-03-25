@@ -1855,12 +1855,27 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     {
         var (f, i, c, o, newC, newH) = ForwardStep(xt, prevH, prevC);
 
-        var do_ = Engine.TensorMultiply(dh, ApplyActivation(newC));
+        // Gate gradients with proper derivatives:
+        // h = o * tanh(c), so dL/do = dL/dh * tanh(c)
+        var do_raw = Engine.TensorMultiply(dh, ApplyActivation(newC));
+        // dL/dc from output: dL/dh * o * tanh'(c) + dc (from next timestep)
         var dNewC = Engine.TensorAdd(Engine.TensorMultiply(Engine.TensorMultiply(dh, o), ApplyActivationDerivative(newC)), dc);
-        var df = Engine.TensorMultiply(dNewC, prevC);
-        var di = Engine.TensorMultiply(dNewC, c);
-        var dc_ = Engine.TensorMultiply(dNewC, i);
+        // c = f*prevC + i*candidate, so gradients flow to gates
+        var df_raw = Engine.TensorMultiply(dNewC, prevC);
+        var di_raw = Engine.TensorMultiply(dNewC, c);
+        var dc_ = Engine.TensorMultiply(dNewC, i); // candidate gate needs tanh'
         var dprevC = Engine.TensorMultiply(dNewC, f);
+
+        // Apply gate activation derivatives:
+        // f, i, o use sigmoid: sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
+        // candidate uses tanh: tanh'(x) = 1 - tanh(x)^2
+        var ones = new Tensor<T>(f.Shape.ToArray());
+        ones.Fill(NumOps.One);
+
+        var df = Engine.TensorMultiply(df_raw, Engine.TensorMultiply(f, Engine.TensorSubtract(ones, f)));
+        var di = Engine.TensorMultiply(di_raw, Engine.TensorMultiply(i, Engine.TensorSubtract(ones, i)));
+        var do_ = Engine.TensorMultiply(do_raw, Engine.TensorMultiply(o, Engine.TensorSubtract(ones, o)));
+        dc_ = Engine.TensorMultiply(dc_, Engine.TensorSubtract(ones, Engine.TensorMultiply(c, c))); // tanh'
 
         // Convert NHWC to NCHW for engine conv backward operations
         var stride = new int[] { _strides, _strides };
