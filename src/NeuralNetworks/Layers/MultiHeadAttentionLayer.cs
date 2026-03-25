@@ -1196,8 +1196,8 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var keysGradient = keysGradient4D.Transpose([0, 2, 1, 3]).Reshape([batchSize, sequenceLength, embeddingDimension]);
         var valuesGradient = valuesGradient4D.Transpose([0, 2, 1, 3]).Reshape([batchSize, sequenceLength, embeddingDimension]);
 
-        // Compute weight gradients: per-batch matmul (3D Tensor.Multiply uses broken BatchMatMul)
-        // For Q = input @ Wq^T: dWq = dQ^T @ input = [embed, batch*seq] @ [batch*seq, embed]
+        // Compute weight gradients: per-batch matmul
+        // Forward: Q = input @ Wq, so dWq = input^T @ dQ
         _queryWeightsGradient = new Tensor<T>([embeddingDimension, embeddingDimension]);
         _keyWeightsGradient = new Tensor<T>([embeddingDimension, embeddingDimension]);
         _valueWeightsGradient = new Tensor<T>([embeddingDimension, embeddingDimension]);
@@ -1208,18 +1208,30 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             var dKB = keysGradient.GetSliceAlongDimension(b, 0);
             var dVB = valuesGradient.GetSliceAlongDimension(b, 0);
             _queryWeightsGradient = _queryWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(dQB), inputB));
+                Engine.TensorMatMul(Engine.TensorTranspose(inputB), dQB));
             _keyWeightsGradient = _keyWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(dKB), inputB));
+                Engine.TensorMatMul(Engine.TensorTranspose(inputB), dKB));
             _valueWeightsGradient = _valueWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(dVB), inputB));
+                Engine.TensorMatMul(Engine.TensorTranspose(inputB), dVB));
         }
 
-        // Compute input gradient using tensor transpose
-        // dInput = dQ @ Wq^T + dK @ Wk^T + dV @ Wv^T
-        var inputGradient = queriesGradient.Multiply(_queryWeights.Transpose([1, 0]))
-                            .Add(keysGradient.Multiply(_keyWeights.Transpose([1, 0])))
-                            .Add(valuesGradient.Multiply(_valueWeights.Transpose([1, 0])));
+        // Compute input gradient: dInput = dQ @ Wq^T + dK @ Wk^T + dV @ Wv^T
+        // Forward: Q = input @ Wq, so dInput_from_Q = dQ @ Wq^T
+        var wqT = _queryWeights.Transpose([1, 0]);
+        var wkT = _keyWeights.Transpose([1, 0]);
+        var wvT = _valueWeights.Transpose([1, 0]);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
+        for (int b = 0; b < batchSize; b++)
+        {
+            var dQB = queriesGradient.GetSliceAlongDimension(b, 0);
+            var dKB = keysGradient.GetSliceAlongDimension(b, 0);
+            var dVB = valuesGradient.GetSliceAlongDimension(b, 0);
+            var diB = Engine.TensorMatMul(dQB, wqT)
+                .Add(Engine.TensorMatMul(dKB, wkT))
+                .Add(Engine.TensorMatMul(dVB, wvT));
+            for (int j = 0; j < diB.Length; j++)
+                inputGradient.SetFlat(b * diB.Length + j, diB.GetFlat(j));
+        }
 
         return inputGradient;
     }
