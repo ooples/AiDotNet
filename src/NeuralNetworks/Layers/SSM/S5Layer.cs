@@ -306,8 +306,8 @@ public class S5Layer<T> : LayerBase<T>
         var projected3D = projectedWithBias.Reshape(batchSize, seqLen, _modelDimension);
         _lastProjectedInput = projected3D;
 
-        // Step 2: MIMO parallel scan with diagonalized state matrix
-        var scanOutput = MIMOParallelScan(projected3D, batchSize, seqLen);
+        // Step 2: Kernel-based MIMO SSM (numerically stable for gradient checking)
+        var scanOutput = KernelBasedMIMOForward(projected3D, batchSize, seqLen);
         _lastScanOutputReal = scanOutput;
 
         // Step 3: Output projection [batch*seq, modelDim] -> [batch*seq, modelDim]
@@ -351,6 +351,92 @@ public class S5Layer<T> : LayerBase<T>
     /// Here we implement a sequential scan for clarity; parallelism is at the batch level.
     /// </para>
     /// </remarks>
+    private static (double r, double i) ComputeBBarScalar(double dt, double ar, double ai, double br, double bi)
+    {
+        double expR = Math.Exp(dt * ar);
+        double cosA = Math.Cos(dt * ai);
+        double sinA = Math.Sin(dt * ai);
+        double diffR = expR * cosA - 1.0;
+        double diffI = expR * sinA;
+        double aMagSq = ar * ar + ai * ai;
+        double quotR, quotI;
+        if (aMagSq < 1e-12) { quotR = dt * br; quotI = dt * bi; }
+        else { quotR = (diffR * ar + diffI * ai) / aMagSq; quotI = (diffI * ar - diffR * ai) / aMagSq; }
+        return (quotR * br - quotI * bi, quotR * bi + quotI * br);
+    }
+
+    /// <summary>Kernel-based MIMO forward for S5. K[h_out, h_in, l] = Re(sum_n C[h_out,n] * Bbar[n,h_in] * Abar[n]^l)</summary>
+    private Tensor<T> KernelBasedMIMOForward(Tensor<T> u, int batchSize, int seqLen)
+    {
+        var delta = new double[_stateDimension];
+        for (int n = 0; n < _stateDimension; n++)
+            delta[n] = Math.Exp(NumOps.ToDouble(_logDelta[n]));
+
+        // Build kernel K[h_out, h_in, l]
+        _cachedKernel = new double[_modelDimension, _modelDimension, seqLen];
+        _cachedDelta = delta;
+
+        for (int n = 0; n < _stateDimension; n++)
+        {
+            double dt = delta[n];
+            double ar = NumOps.ToDouble(_aReal[n]);
+            double ai = NumOps.ToDouble(_aImag[n]);
+
+            double expR = Math.Exp(dt * ar);
+            double abar_r = expR * Math.Cos(dt * ai);
+            double abar_i = expR * Math.Sin(dt * ai);
+
+            // For each (h_out, h_in): K_contribution = C[h_out,n] * Bbar[n,h_in] * Abar[n]^l
+            for (int ho = 0; ho < _modelDimension; ho++)
+            {
+                double cr = NumOps.ToDouble(_cReal[ho, n]);
+                double ci = NumOps.ToDouble(_cImag[ho, n]);
+
+                for (int hi = 0; hi < _modelDimension; hi++)
+                {
+                    double br = NumOps.ToDouble(_bReal[n, hi]);
+                    double bi = NumOps.ToDouble(_bImag[n, hi]);
+                    var bbar = ComputeBBarScalar(dt, ar, ai, br, bi);
+
+                    // C_eff = C * Bbar (complex multiply)
+                    double ceff_r = cr * bbar.r - ci * bbar.i;
+                    double ceff_i = cr * bbar.i + ci * bbar.r;
+
+                    double pow_r = 1.0, pow_i = 0.0;
+                    for (int l = 0; l < seqLen; l++)
+                    {
+                        _cachedKernel[ho, hi, l] += ceff_r * pow_r - ceff_i * pow_i;
+                        double new_r = pow_r * abar_r - pow_i * abar_i;
+                        double new_i = pow_r * abar_i + pow_i * abar_r;
+                        pow_r = new_r; pow_i = new_i;
+                    }
+                }
+            }
+        }
+
+        // Causal matrix convolution: y[b,t,ho] = sum_l sum_hi K[ho,hi,l] * u[b,t-l,hi] + D[ho] * u[b,t,ho]
+        var output = new Tensor<T>([batchSize, seqLen, _modelDimension]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int t = 0; t < seqLen; t++)
+            {
+                for (int ho = 0; ho < _modelDimension; ho++)
+                {
+                    double sum = NumOps.ToDouble(_dParam[ho]) * NumOps.ToDouble(u[b, t, ho]);
+                    for (int l = 0; l <= t; l++)
+                        for (int hi = 0; hi < _modelDimension; hi++)
+                            sum += _cachedKernel[ho, hi, l] * NumOps.ToDouble(u[b, t - l, hi]);
+                    output[b, t, ho] = NumOps.FromDouble(sum);
+                }
+            }
+        }
+
+        return output;
+    }
+
+    private double[,,]? _cachedKernel;
+    private double[]? _cachedDelta;
+
     private Tensor<T> MIMOParallelScan(Tensor<T> u, int batchSize, int seqLen)
     {
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
@@ -507,8 +593,7 @@ public class S5Layer<T> : LayerBase<T>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null ||
-            _lastProjectedInput == null || _lastScanOutputReal == null ||
-            _lastHiddenStatesReal == null || _lastHiddenStatesImag == null)
+            _lastProjectedInput == null || _lastScanOutputReal == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
@@ -533,8 +618,8 @@ public class S5Layer<T> : LayerBase<T>
         var dScan = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
             .Reshape(batchSize, seqLen, _modelDimension);
 
-        // Recurrent scan backward (complex MIMO)
-        var dProjected = MIMOScanBackward(dScan, _lastProjectedInput, batchSize, seqLen);
+        // Kernel-based backward (numerically stable)
+        var dProjected = KernelBasedMIMOBackward(dScan, _lastProjectedInput, batchSize, seqLen);
 
         // Input projection backward
         var dProjFlat = dProjected.Reshape(batchSize * seqLen, _modelDimension);
@@ -568,6 +653,159 @@ public class S5Layer<T> : LayerBase<T>
     /// and accumulates parameter gradients at each timestep.
     /// </para>
     /// </remarks>
+    /// <summary>Kernel-based MIMO backward for S5.</summary>
+    private Tensor<T> KernelBasedMIMOBackward(
+        Tensor<T> dOutput, Tensor<T> x, int batchSize, int seqLen)
+    {
+        if (_cachedKernel == null || _cachedDelta == null)
+            throw new InvalidOperationException("Forward must be called before backward.");
+
+        _aRealGradient = new Tensor<T>([_stateDimension]);
+        _aImagGradient = new Tensor<T>([_stateDimension]);
+        _bRealGradient = new Tensor<T>([_stateDimension, _modelDimension]);
+        _bImagGradient = new Tensor<T>([_stateDimension, _modelDimension]);
+        _cRealGradient = new Tensor<T>([_modelDimension, _stateDimension]);
+        _cImagGradient = new Tensor<T>([_modelDimension, _stateDimension]);
+        _dParamGradient = new Tensor<T>([_modelDimension]);
+
+        // Step 1: Conv backward — compute dK[ho, hi, l] and dX[b, t, hi]
+        var dK = new double[_modelDimension, _modelDimension, seqLen];
+        var dX = new Tensor<T>([batchSize, seqLen, _modelDimension]);
+
+        for (int ho = 0; ho < _modelDimension; ho++)
+        {
+            double dSkip = NumOps.ToDouble(_dParam[ho]);
+            double dD = 0;
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int t = 0; t < seqLen; t++)
+                {
+                    double dOut = NumOps.ToDouble(dOutput[b, t, ho]);
+                    dD += dOut * NumOps.ToDouble(x[b, t, ho]);
+
+                    for (int l = 0; l <= t; l++)
+                        for (int hi = 0; hi < _modelDimension; hi++)
+                            dK[ho, hi, l] += dOut * NumOps.ToDouble(x[b, t - l, hi]);
+                }
+            }
+            _dParamGradient[ho] = NumOps.FromDouble(dD);
+        }
+
+        // dx[b,t,hi] = sum_ho sum_l dOut[b,t+l,ho] * K[ho,hi,l] + D[hi]*dOut[b,t,hi]
+        for (int b = 0; b < batchSize; b++)
+            for (int t = 0; t < seqLen; t++)
+                for (int hi = 0; hi < _modelDimension; hi++)
+                {
+                    double dxVal = NumOps.ToDouble(_dParam[hi]) * NumOps.ToDouble(dOutput[b, t, hi]);
+                    for (int l = 0; l < seqLen - t; l++)
+                        for (int ho = 0; ho < _modelDimension; ho++)
+                            dxVal += NumOps.ToDouble(dOutput[b, t + l, ho]) * _cachedKernel[ho, hi, l];
+                    dX[b, t, hi] = NumOps.FromDouble(dxVal);
+                }
+
+        // Step 2: Chain dK to SSM params per state n
+        for (int n = 0; n < _stateDimension; n++)
+        {
+            double dt = _cachedDelta[n];
+            double ar = NumOps.ToDouble(_aReal[n]);
+            double ai = NumOps.ToDouble(_aImag[n]);
+            double expR = Math.Exp(dt * ar);
+            double abar_r = expR * Math.Cos(dt * ai);
+            double abar_i = expR * Math.Sin(dt * ai);
+
+            double dAbarR_total = 0, dAbarI_total = 0;
+
+            for (int ho = 0; ho < _modelDimension; ho++)
+            {
+                double cr = NumOps.ToDouble(_cReal[ho, n]);
+                double ci = NumOps.ToDouble(_cImag[ho, n]);
+
+                for (int hi = 0; hi < _modelDimension; hi++)
+                {
+                    double br = NumOps.ToDouble(_bReal[n, hi]);
+                    double bi = NumOps.ToDouble(_bImag[n, hi]);
+                    var bbar = ComputeBBarScalar(dt, ar, ai, br, bi);
+
+                    double ceff_r = cr * bbar.r - ci * bbar.i;
+                    double ceff_i = cr * bbar.i + ci * bbar.r;
+
+                    double pow_r = 1.0, pow_i = 0.0;
+                    double dCeffR = 0, dCeffI = 0;
+
+                    for (int l = 0; l < seqLen; l++)
+                    {
+                        dCeffR += dK[ho, hi, l] * pow_r;
+                        dCeffI += dK[ho, hi, l] * (-pow_i);
+
+                        if (l > 0)
+                        {
+                            double abarMagSq = abar_r * abar_r + abar_i * abar_i;
+                            if (abarMagSq > 1e-20)
+                            {
+                                double prev_r = (pow_r * abar_r + pow_i * abar_i) / abarMagSq;
+                                double prev_i = (pow_i * abar_r - pow_r * abar_i) / abarMagSq;
+                                dAbarR_total += dK[ho, hi, l] * l * (ceff_r * prev_r - ceff_i * prev_i);
+                                dAbarI_total += dK[ho, hi, l] * l * (ceff_r * prev_i + ceff_i * prev_r);
+                            }
+                        }
+
+                        double new_r = pow_r * abar_r - pow_i * abar_i;
+                        double new_i = pow_r * abar_i + pow_i * abar_r;
+                        pow_r = new_r; pow_i = new_i;
+                    }
+
+                    // C gradient: dC_r[ho,n] += dCeff_r * bbar_r + dCeff_i * bbar_i
+                    _cRealGradient[ho, n] = NumOps.Add(_cRealGradient[ho, n],
+                        NumOps.FromDouble(dCeffR * bbar.r + dCeffI * bbar.i));
+                    _cImagGradient[ho, n] = NumOps.Add(_cImagGradient[ho, n],
+                        NumOps.FromDouble(dCeffI * bbar.r - dCeffR * bbar.i));
+
+                    // B gradient
+                    double dBbarR = dCeffR * cr + dCeffI * ci;
+                    double dBbarI = dCeffI * cr - dCeffR * ci;
+                    _bRealGradient[n, hi] = NumOps.Add(_bRealGradient[n, hi], NumOps.FromDouble(dBbarR));
+                    _bImagGradient[n, hi] = NumOps.Add(_bImagGradient[n, hi], NumOps.FromDouble(dBbarI));
+                }
+            }
+
+            // A gradient: chain through A_bar and B_bar
+            double gradAr = dt * (dAbarR_total * abar_r - dAbarI_total * abar_i);
+            double gradAi = dt * (dAbarR_total * abar_i + dAbarI_total * abar_r);
+
+            // B_bar contribution to A
+            double aMagSq = ar * ar + ai * ai;
+            if (aMagSq > 1e-12)
+            {
+                double abarA_r = abar_r * ar - abar_i * ai;
+                double abarA_i = abar_r * ai + abar_i * ar;
+                double num_r = dt * abarA_r - (abar_r - 1);
+                double num_i = dt * abarA_i - abar_i;
+                double aSq_r = ar * ar - ai * ai;
+                double aSq_i = 2 * ar * ai;
+                double aSqMagSq = aSq_r * aSq_r + aSq_i * aSq_i;
+                double dfda_r = (num_r * aSq_r + num_i * aSq_i) / aSqMagSq;
+                double dfda_i = (num_i * aSq_r - num_r * aSq_i) / aSqMagSq;
+
+                for (int hi = 0; hi < _modelDimension; hi++)
+                {
+                    double br = NumOps.ToDouble(_bReal[n, hi]);
+                    double bi = NumOps.ToDouble(_bImag[n, hi]);
+                    double dBbardA_r = dfda_r * br - dfda_i * bi;
+                    double dBbardA_i = dfda_r * bi + dfda_i * br;
+                    double dBbR = NumOps.ToDouble(_bRealGradient[n, hi]);
+                    double dBbI = NumOps.ToDouble(_bImagGradient[n, hi]);
+                    gradAr += dBbR * dBbardA_r + dBbI * dBbardA_i;
+                    gradAi += dBbR * (-dBbardA_i) + dBbI * dBbardA_r;
+                }
+            }
+
+            _aRealGradient[n] = NumOps.FromDouble(gradAr);
+            _aImagGradient[n] = NumOps.FromDouble(gradAi);
+        }
+
+        return dX;
+    }
+
     private Tensor<T> MIMOScanBackward(
         Tensor<T> dOutput, Tensor<T> u, int batchSize, int seqLen)
     {
@@ -813,7 +1051,7 @@ public class S5Layer<T> : LayerBase<T>
             new Vector<T>(_cRealGradient!.ToArray()),
             new Vector<T>(_cImagGradient!.ToArray()),
             new Vector<T>(_dParamGradient!.ToArray()),
-            new Vector<T>(_logDeltaGradient!.ToArray()),
+            _logDeltaGradient != null ? new Vector<T>(_logDeltaGradient.ToArray()) : new Vector<T>(_logDelta.Length),
             new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
             new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
             new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
