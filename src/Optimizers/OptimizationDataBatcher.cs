@@ -249,7 +249,7 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
         if (data is Tensor<T> tensor)
         {
             // Clone shape but change first dimension
-            var newShape = (int[])tensor.Shape.Clone();
+            var newShape = (int[])tensor.Shape.ToArray().Clone();
             newShape[0] = indices.Length;
             var result = new Tensor<T>(newShape);
 

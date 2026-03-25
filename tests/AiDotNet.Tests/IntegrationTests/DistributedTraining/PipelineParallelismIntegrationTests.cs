@@ -1405,6 +1405,8 @@ public class PipelineParallelismIntegrationTests
             inputNodes.Add(node);
             return node;
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     /// <summary>
@@ -1573,6 +1575,8 @@ public class PipelineParallelismIntegrationTests
             inputNodes.Add(node);
             return node;
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

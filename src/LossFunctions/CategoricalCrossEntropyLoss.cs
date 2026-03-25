@@ -1,5 +1,7 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -31,6 +33,9 @@ namespace AiDotNet.LossFunctions;
 /// This loss function is ideal when your model needs to choose one option from multiple possibilities.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.MultiClass)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, RequiresProbabilityInputs = true, SupportsClassWeights = true, TestInputFormat = LossTestInputFormat.ProbabilityDistribution, ExpectedOutput = OutputType.Probabilities)]
 public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -70,9 +75,17 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        // When used with softmax, the derivative simplifies to (predicted - actual)
-        // Note: Not averaged since the loss is a sum over classes
-        return predicted.Subtract(actual);
+        // Derivative of -Σ actual_i * log(predicted_i) with respect to predicted_i = -actual_i / predicted_i
+        // Note: When composed with softmax, this simplifies to (predicted - actual),
+        // but the standalone derivative must use the correct formula.
+        Vector<T> derivative = new Vector<T>(predicted.Length);
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            derivative[i] = NumOps.Negate(
+                NumericalStabilityHelper.SafeDiv(actual[i], predicted[i], NumericalStabilityHelper.SmallEpsilon));
+        }
+
+        return derivative;
     }
 
     /// <summary>
@@ -101,7 +114,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         backend.CategoricalCrossEntropyBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

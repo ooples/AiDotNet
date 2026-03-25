@@ -465,7 +465,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     private T CalculateReconstructionError(Tensor<T> original, Tensor<T> reconstruction)
     {
         // Check that shapes match
-        if (!Enumerable.SequenceEqual(original.Shape, reconstruction.Shape))
+        if (!Enumerable.SequenceEqual(original.Shape.ToArray(), reconstruction.Shape.ToArray()))
         {
             throw new ArgumentException("Original and reconstruction tensors must have the same shape.");
         }
@@ -600,7 +600,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
         var gradTensor = Tensor<T>.FromVector(lossGrad);
         if (gradTensor.Rank < output.Rank)
-            gradTensor = gradTensor.Reshape(output.Shape);
+            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
 
         Backpropagate(gradTensor);
 

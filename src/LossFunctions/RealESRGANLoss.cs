@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.LossFunctions;
@@ -43,6 +45,11 @@ namespace AiDotNet.LossFunctions;
 /// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Generation)]
+[LossCategory(LossCategory.Adversarial)]
+[LossTask(LossTask.SuperResolution)]
+[LossTask(LossTask.ImageGeneration)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Continuous)]
 public class RealESRGANLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

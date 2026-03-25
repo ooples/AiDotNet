@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -32,6 +34,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// since only a subset of experts are activated for each input.
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.MixtureOfExperts)]
+[LayerTask(LayerTask.Routing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High)]
 public class ExpertLayer<T> : LayerBase<T>
 {
     /// <summary>

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -33,6 +35,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 3, 8, 8, 2, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class DilatedConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -532,7 +538,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Support any rank >= 3: last 3 dims are interpreted as [C, H, W]
@@ -649,7 +655,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
                 $"DilatedConv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        var originalInputShape = input.Shape;
+        var originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
         bool addedBatchDimension = false;
 
@@ -811,10 +817,10 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         _biasGradients = Engine.ReduceSum(delta, new[] { 0, 2, 3 }, keepDims: false);
 
         // Calculate input gradient using Engine (NCHW format)
-        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape, strideArr, paddingArr, dilationArr);
+        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape.ToArray(), strideArr, paddingArr, dilationArr);
 
         // Calculate kernel gradient using Engine
-        _kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape, strideArr, paddingArr, dilationArr);
+        _kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape.ToArray(), strideArr, paddingArr, dilationArr);
 
         // Restore original input shape for higher-rank tensors
         if (_originalInputShape != null && _originalInputShape.Length > 4)
@@ -1001,7 +1007,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         var kernelGradGpu = gpuEngine.Conv2DBackwardKernelGpu<T>(
             activationGrad,
             _gpuInput,
-            _kernels.Shape,
+            _kernels.Shape.ToArray(),
             new[] { _stride, _stride },
             new[] { _padding, _padding },
             new[] { _dilation, _dilation });
@@ -1011,7 +1017,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         var inputGrad = gpuEngine.Conv2DBackwardInputGpu<T>(
             activationGrad,
             _kernels,
-            _gpuInput.Shape,
+            _gpuInput.Shape.ToArray(),
             new[] { _stride, _stride },
             new[] { _padding, _padding },
             new[] { _dilation, _dilation });

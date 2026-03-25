@@ -62,7 +62,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML
 
             // Assert
             Assert.NotNull(output);
-            Assert.Equal(input.Shape, output.Shape);
+            Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         }
 
         [Fact]

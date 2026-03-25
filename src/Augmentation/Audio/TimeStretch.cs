@@ -84,7 +84,7 @@ public class TimeStretch<T> : AudioAugmenterBase<T>
         if (newLength < 1) newLength = 1;
 
         // Create new shape with modified time dimension
-        var newShape = (int[])waveform.Shape.Clone();
+        var newShape = (int[])waveform.Shape.ToArray().Clone();
         newShape[waveform.Rank - 1] = newLength;
         var result = new Tensor<T>(newShape);
 

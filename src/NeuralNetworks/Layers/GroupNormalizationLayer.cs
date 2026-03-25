@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -34,6 +35,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Normalization)]
+[LayerTask(LayerTask.ActivationNormalization)]
+[LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "2, 4")]
 public class GroupNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
@@ -139,9 +143,9 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         // Support any rank >= 2. Last 3 dims are [C, H, W] for 3D+, or [N, C] for 2D.
         if (shape.Length < 2)
@@ -235,7 +239,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         // Support any rank >= 2
         if (shape.Length < 2)

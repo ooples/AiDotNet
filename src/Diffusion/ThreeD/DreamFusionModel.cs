@@ -387,7 +387,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> GenerateNoise(Tensor<T> template)
     {
-        var noise = new Tensor<T>(template.Shape);
+        var noise = new Tensor<T>(template.Shape.ToArray());
         var noiseSpan = noise.AsWritableSpan();
 
         for (int i = 0; i < noiseSpan.Length; i++)

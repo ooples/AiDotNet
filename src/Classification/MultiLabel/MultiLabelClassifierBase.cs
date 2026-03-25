@@ -497,7 +497,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
 
             var loss = CalculateLoss(predictedVector, actualVector);
             var gradientVector = CalculateDerivative(predictedVector, actualVector);
-            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape, gradientVector);
+            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape.ToArray(), gradientVector);
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
             var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");

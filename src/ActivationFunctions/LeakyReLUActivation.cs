@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -24,6 +26,9 @@ namespace AiDotNet.ActivationFunctions;
 /// - Allows a small "leak" when the input is negative (controlled by the alpha parameter)
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
@@ -189,7 +194,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <returns>A new tensor containing the derivatives of the Leaky ReLU function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape);
+        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = Derivative(input[i]);

@@ -172,7 +172,7 @@ public class MambularClassifier<T> : MambularBase<T>
 
         int batchSize = _probabilitiesCache.Shape[0];
 
-        var logitsGrad = new Tensor<T>(_logitsCache.Shape);
+        var logitsGrad = new Tensor<T>(_logitsCache.Shape.ToArray());
         var scale = NumOps.FromDouble(1.0 / batchSize);
 
         for (int b = 0; b < batchSize; b++)

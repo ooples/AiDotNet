@@ -69,14 +69,14 @@ public class ConvolutionalLayersIntegrationTests
 
         var input = Tensor<double>.CreateRandom(3, 8, 8);
         var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         AssertNoNaNOrInf(inputGradient);
     }
 
@@ -96,7 +96,7 @@ public class ConvolutionalLayersIntegrationTests
 
         // Assert
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
         for (int i = 0; i < originalOutput.Length; i++)
         {
             Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
@@ -162,14 +162,14 @@ public class ConvolutionalLayersIntegrationTests
 
         var input = Tensor<double>.CreateRandom(1, 4, 4, 4);
         var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         AssertNoNaNOrInf(inputGradient);
     }
 
@@ -211,14 +211,14 @@ public class ConvolutionalLayersIntegrationTests
 
         var input = Tensor<double>.CreateRandom(2, 8, 8);
         var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         AssertNoNaNOrInf(inputGradient);
     }
 
@@ -280,14 +280,14 @@ public class ConvolutionalLayersIntegrationTests
 
         var input = Tensor<double>.CreateRandom(4, 8, 8);
         var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         AssertNoNaNOrInf(inputGradient);
     }
 
@@ -327,14 +327,14 @@ public class ConvolutionalLayersIntegrationTests
 
         var input = Tensor<double>.CreateRandom(1, 8, 8, 2);
         var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         AssertNoNaNOrInf(inputGradient);
     }
 
@@ -377,14 +377,14 @@ public class ConvolutionalLayersIntegrationTests
 
         var input = Tensor<double>.CreateRandom(1, 4, 4);
         var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
         Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         AssertNoNaNOrInf(inputGradient);
     }
 

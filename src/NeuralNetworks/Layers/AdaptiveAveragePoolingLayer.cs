@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Engines;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -29,6 +31,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Pooling)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "1, 4, 4, 2, 2")]
 public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
 {
     private readonly int _outputHeight;
@@ -120,7 +126,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
             throw new ArgumentException("Input must have at least 3 dimensions (channels, height, width).");
 
         _lastInput = input;
-        _lastInputShape = input.Shape;
+        _lastInputShape = input.Shape.ToArray();
 
         // Handle any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         int rank = input.Shape.Length;
@@ -202,7 +208,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         var backend = gpuEngine.GetBackend();
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");

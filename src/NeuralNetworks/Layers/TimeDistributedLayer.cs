@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -29,6 +31,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true)]
 public class TimeDistributedLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -146,7 +152,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
 
         int batch = input.Shape[0];
         int time = input.Shape[1];
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape.ToArray();
 
         int[] flattenedShape = new int[inputShape.Length - 1];
         flattenedShape[0] = batch * time;
@@ -156,7 +162,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         var reshapedInput = gpuEngine.ReshapeGpu(input, flattenedShape);
         var innerOutput = _innerLayer.ForwardGpu(reshapedInput);
 
-        int[] innerOutputShape = innerOutput.Shape;
+        int[] innerOutputShape = innerOutput.Shape.ToArray();
         int[] outputShape = new int[innerOutputShape.Length + 1];
         outputShape[0] = batch;
         outputShape[1] = time;
@@ -174,7 +180,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         {
             _lastInput = input.ToTensor();
             _lastOutput = output.ToTensor();
-            _originalInputShape = input.Shape;
+            _originalInputShape = input.Shape.ToArray();
         }
 
         return output;
@@ -215,7 +221,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         }
 
         // Flatten time dimension for inner layer backward
-        int[] gradShape = gradAfterActivation.Shape;
+        int[] gradShape = gradAfterActivation.Shape.ToArray();
         int[] flattenedGradShape = new int[gradShape.Length - 1];
         flattenedGradShape[0] = batch * time;
         Array.Copy(gradShape, 2, flattenedGradShape, 1, gradShape.Length - 2);
@@ -425,7 +431,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         if (rank < 2)
@@ -523,7 +529,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
         int timeSteps = _lastInput.Shape[1];
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         Tensor<T> outputGrad = outputGradient;
         Tensor<T> lastOutput = _lastOutput;
@@ -617,7 +623,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
         int timeSteps = _lastInput.Shape[1];
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         Tensor<T> outputGrad = outputGradient;
         Tensor<T> lastOutput = _lastOutput;

@@ -204,7 +204,7 @@ public class InputGradientHelper<T>
                 flatInput[idx++] = val;
             }
             var grad = ComputeNumericalGradient(new Vector<T>(flatInput), outputIndex);
-            var gradTensor = new Tensor<T>(input.Shape);
+            var gradTensor = new Tensor<T>(input.Shape.ToArray());
             for (int i = 0; i < total; i++)
             {
                 gradTensor[i] = grad[i];
@@ -282,7 +282,7 @@ public class InputGradientHelper<T>
         var output = _neuralNetwork.ForwardWithMemory(input);
 
         // Create one-hot gradient for the target output
-        var outputGradient = new Tensor<T>(output.Shape);
+        var outputGradient = new Tensor<T>(output.Shape.ToArray());
         if (outputIndex < output.Length)
         {
             outputGradient[outputIndex] = NumOps.One;
@@ -371,15 +371,15 @@ public class InputGradientHelper<T>
         if (_tensorPredictFunction == null)
             throw new InvalidOperationException("Tensor predict function not configured.");
 
-        var gradient = new Tensor<T>(input.Shape);
+        var gradient = new Tensor<T>(input.Shape.ToArray());
         var inputArray = input.ToArray();
         int total = input.Length;
 
         for (int i = 0; i < total; i++)
         {
             // Create perturbed inputs
-            var inputPlus = new Tensor<T>(input.Shape);
-            var inputMinus = new Tensor<T>(input.Shape);
+            var inputPlus = new Tensor<T>(input.Shape.ToArray());
+            var inputMinus = new Tensor<T>(input.Shape.ToArray());
 
             for (int j = 0; j < total; j++)
             {

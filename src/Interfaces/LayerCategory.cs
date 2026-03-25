@@ -55,6 +55,30 @@ public enum LayerCategory
     /// <summary>Input layers.</summary>
     Input,
 
+    /// <summary>State Space Model layers (Mamba, S4, S5, RWKV, RetNet).</summary>
+    StateSpaceModel,
+
+    /// <summary>Capsule network layers (PrimaryCapsule, DigitCapsule, routing).</summary>
+    Capsule,
+
+    /// <summary>Positional encoding layers (sinusoidal, ALiBi, RoPE, learned).</summary>
+    Positional,
+
+    /// <summary>Transformer building blocks (EncoderLayer, DecoderLayer).</summary>
+    Transformer,
+
+    /// <summary>Deconvolution/upsampling layers (TransposedConv, PixelShuffle).</summary>
+    Upsampling,
+
+    /// <summary>Gating mechanisms (GLU, SwiGLU, GEGLU).</summary>
+    Gating,
+
+    /// <summary>Memory/external memory layers (NTM read/write heads).</summary>
+    Memory,
+
+    /// <summary>Mixture of experts layers (MoE, Switch, Top-K routing).</summary>
+    MixtureOfExperts,
+
     /// <summary>Custom, specialized, or unclassified layers.</summary>
     Other
 }

@@ -35,10 +35,10 @@ namespace AiDotNetTestConsole
 
             // Forward
             var output = layer.Forward(input);
-            Console.WriteLine($"Output Shape: {string.Join(", ", output.Shape)}");
+            Console.WriteLine($"Output Shape: {string.Join(", ", output.Shape.ToArray())}");
 
             // Backward
-            var gradOutput = Tensor<double>.CreateRandom(output.Shape);
+            var gradOutput = Tensor<double>.CreateRandom(output.Shape.ToArray());
             var gradInput = layer.Backward(gradOutput);
             Console.WriteLine($"GradInput Shape: {string.Join(", ", gradInput.Shape)}");
 

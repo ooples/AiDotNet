@@ -26,7 +26,7 @@ public class QuantizedAttentionTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = quantized.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -44,7 +44,7 @@ public class QuantizedAttentionTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = quantized.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -81,7 +81,7 @@ public class QuantizedAttentionTests
         var input = CreateRandomTensor(new[] { seqLen, embDim });
         var output = quantized.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -273,7 +273,7 @@ public class QuantizedAttentionTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = quantized.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
         Assert.Equal(InferenceQuantizationMode.WeightOnlyFP8, quantized.QuantizationFormat);
     }
@@ -312,7 +312,7 @@ public class QuantizedAttentionTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = quantized.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
         Assert.Equal(InferenceQuantizationMode.WeightOnlyNF4, quantized.QuantizationFormat);
     }
@@ -351,7 +351,7 @@ public class QuantizedAttentionTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = quantized.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -369,7 +369,7 @@ public class QuantizedAttentionTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = quantized.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 

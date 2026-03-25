@@ -149,8 +149,8 @@ public class CelebADataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Labels not loaded.");
-        var nfs = (int[])features.Shape.Clone(); nfs[0] = indices.Length;
-        var nls = (int[])labels.Shape.Clone(); nls[0] = indices.Length;
+        var nfs = (int[])features.Shape.ToArray().Clone(); nfs[0] = indices.Length;
+        var nls = (int[])labels.Shape.ToArray().Clone(); nls[0] = indices.Length;
         var bf = new Tensor<T>(nfs);
         var bl = new Tensor<T>(nls);
         for (int i = 0; i < indices.Length; i++)

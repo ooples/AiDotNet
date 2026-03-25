@@ -206,7 +206,7 @@ public class GradientClippingHelperIntegrationTests
         // norm = sqrt(9+16+36+64) = sqrt(125) = ~11.18
         var clipped = GradientClippingHelper.ClipByNorm(grads, 1.0);
         Assert.NotNull(clipped);
-        Assert.Equal(new[] { 2, 2 }, clipped.Shape);
+        Assert.Equal(new[] { 2, 2 }, clipped.Shape.ToArray());
 
         // Check norm of clipped tensor is 1.0
         double normSq = 0;

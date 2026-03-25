@@ -476,7 +476,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         if (_patchEmbed == null || _finalNorm == null || _outputProj == null || _adaln_modulation == null)
             throw new InvalidOperationException("Layers not initialized.");
 
-        var shape = x.Shape;
+        var shape = x.Shape.ToArray();
         var batch = shape[0];
         var height = shape[2];
         var width = shape[3];
@@ -514,7 +514,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> Patchify(Tensor<T> x)
     {
-        var shape = x.Shape;
+        var shape = x.Shape.ToArray();
         var batch = shape[0];
         var channels = shape[1];
         var height = shape[2];
@@ -572,7 +572,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         if (_patchEmbed == null)
             throw new InvalidOperationException("Patch embed not initialized.");
 
-        var shape = patches.Shape;
+        var shape = patches.Shape.ToArray();
         var batch = shape[0];
         var numPatches = shape[1];
         var patchDim = shape[2];
@@ -705,7 +705,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ApplyAdaLN(Tensor<T> x, T[] scale, T[] shift)
     {
-        var shape = x.Shape;
+        var shape = x.Shape.ToArray();
         var hidden = shape[^1];
 
         // Create broadcastable tensors for scale and shift: [1, 1, hidden]
@@ -750,12 +750,12 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             return x;
         }
 
-        var shape = x.Shape;
+        var shape = x.Shape.ToArray();
         var batch = shape[0];
         var seqLen = shape[1];
         var hidden = shape[2];
 
-        var condShape = conditioning.Shape;
+        var condShape = conditioning.Shape.ToArray();
         var condSeqLen = condShape.Length > 1 ? condShape[1] : 1;
 
         // Normalize x
@@ -888,7 +888,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         normed = ApplyAdaLN(normed, scale, shift);
 
         // Project to output dimension using batched forward pass
-        var shape = normed.Shape;
+        var shape = normed.Shape.ToArray();
         var batch = shape[0];
         var numPatches = shape[1];
         var patchDim = _inputChannels * _patchSize * _patchSize;
@@ -912,7 +912,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> Unpatchify(Tensor<T> patches, int height, int width)
     {
-        var shape = patches.Shape;
+        var shape = patches.Shape.ToArray();
         var batch = shape[0];
         var patchDim = shape[2];
 

@@ -237,7 +237,7 @@ public abstract class PointCloudDatasetLoaderBase<T> : InputOutputDataLoaderBase
             throw new ArgumentException("Source tensor must have at least one dimension.", nameof(source));
         }
 
-        var newShape = (int[])source.Shape.Clone();
+        var newShape = (int[])source.Shape.ToArray().Clone();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -33,6 +35,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 2", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj }); var ef = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 10, 2 }); ef.Fill(1.0); var m2 = layer.GetType().GetMethod(\"SetEdgeFeatures\"); if (m2 != null) m2.Invoke(layer, new object[] { ef });")]
 public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
@@ -193,10 +199,10 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape);
+        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -247,7 +253,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Graph layer expects 3D: [batchSize, numNodes, features]
@@ -431,7 +437,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         var input = inputs[0];
 
         // Get input dimensions - expect [batchSize, numNodes, inputFeatures]
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape.ToArray();
         int batchSize = inputShape.Length >= 3 ? inputShape[0] : 1;
         int numNodes = inputShape.Length >= 3 ? inputShape[1] : inputShape[0];
         int inputFeatures = inputShape.Length >= 3 ? inputShape[2] : inputShape[1];
@@ -700,7 +706,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
             adj3D = adjacency;
         }
 
-        var normalized = new Tensor<T>(adj3D.Shape);
+        var normalized = new Tensor<T>(adj3D.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
         {
             for (int i = 0; i < numNodes; i++)
@@ -796,7 +802,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     /// </summary>
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             T val = input.GetFlat(i);
@@ -874,7 +880,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         _selfWeightsGradient.Fill(NumOps.Zero);
         _biasGradient.Fill(NumOps.Zero);
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
         inputGradient.Fill(NumOps.Zero);
 
         // Step 1: Bias gradient (sum over batch and nodes)
@@ -983,7 +989,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         var hiddenGrad = BatchedMatMul3Dx2D(flatWeightsGrad, weights2T, batchSize, numEdges, _inputFeatures * _outputFeatures, _edgeNetworkHiddenDim);
 
         // Apply ReLU derivative
-        var reluGrad = new Tensor<T>(hiddenGrad.Shape);
+        var reluGrad = new Tensor<T>(hiddenGrad.Shape.ToArray());
         for (int i = 0; i < hiddenGrad.Length; i++)
         {
             T hiddenVal = _lastHidden.GetFlat(i);
@@ -1144,12 +1150,12 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
 
         // Set edge network weights 1
         var w1Params = parameters.SubVector(index, w1Size);
-        _edgeNetworkWeights1 = Tensor<T>.FromVector(w1Params).Reshape(_edgeNetworkWeights1.Shape);
+        _edgeNetworkWeights1 = Tensor<T>.FromVector(w1Params).Reshape(_edgeNetworkWeights1.Shape.ToArray());
         index += w1Size;
 
         // Set edge network weights 2
         var w2Params = parameters.SubVector(index, w2Size);
-        _edgeNetworkWeights2 = Tensor<T>.FromVector(w2Params).Reshape(_edgeNetworkWeights2.Shape);
+        _edgeNetworkWeights2 = Tensor<T>.FromVector(w2Params).Reshape(_edgeNetworkWeights2.Shape.ToArray());
         index += w2Size;
 
         // Set edge network bias 1
@@ -1164,7 +1170,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
 
         // Set self weights
         var selfParams = parameters.SubVector(index, selfSize);
-        _selfWeights = Tensor<T>.FromVector(selfParams).Reshape(_selfWeights.Shape);
+        _selfWeights = Tensor<T>.FromVector(selfParams).Reshape(_selfWeights.Shape.ToArray());
         index += selfSize;
 
         // Set bias

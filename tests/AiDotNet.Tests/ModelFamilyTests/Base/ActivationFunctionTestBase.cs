@@ -35,6 +35,44 @@ public abstract class ActivationFunctionTestBase
     /// </summary>
     protected virtual bool IsBounded => false;
 
+    /// <summary>
+    /// Lower bound of the output range when IsBounded is true.
+    /// Default: -1.0 (for tanh-like activations). Override for activations like
+    /// Sigmoid (0.0) or ReLU6 (0.0).
+    /// </summary>
+    protected virtual double BoundLower => -1.0;
+
+    /// <summary>
+    /// Upper bound of the output range when IsBounded is true.
+    /// Default: 1.0 (for tanh-like activations). Override for activations like
+    /// ReLU6 (6.0).
+    /// </summary>
+    protected virtual double BoundUpper => 1.0;
+
+    /// <summary>
+    /// Whether the activation uses randomness during training (e.g., RReLU).
+    /// When true, the test helper sets the activation to inference mode (deterministic)
+    /// before running invariant tests. If the activation doesn't support inference mode,
+    /// determinism and gradient tests are skipped.
+    /// </summary>
+    protected virtual bool IsStochastic => false;
+
+    /// <summary>
+    /// Creates an activation and sets it to inference mode if it's stochastic.
+    /// This ensures deterministic behavior for gradient checks and consistency tests.
+    /// </summary>
+    protected IActivationFunction<double> CreateTestActivation()
+    {
+        var fn = CreateActivation();
+        if (IsStochastic)
+        {
+            // Use reflection to call SetTrainingMode(false) if available
+            var method = fn.GetType().GetMethod("SetTrainingMode", new[] { typeof(bool) });
+            method?.Invoke(fn, new object[] { false });
+        }
+        return fn;
+    }
+
     // =========================================================================
     // INVARIANT 1: Scalar Activate produces finite output for normal inputs
     // =========================================================================
@@ -89,7 +127,7 @@ public abstract class ActivationFunctionTestBase
     [InlineData(-1.5)]
     public void Derivative_ShouldMatchNumericalGradient(double input)
     {
-        var fn = CreateActivation();
+        var fn = CreateTestActivation();
         double epsilon = 1e-5;
 
         double analyticalDeriv = fn.Derivative(input);
@@ -128,7 +166,7 @@ public abstract class ActivationFunctionTestBase
     {
         if (!IsMonotonic) return;
 
-        var fn = CreateActivation();
+        var fn = CreateTestActivation();
         double prev = fn.Activate(-10.0);
         for (double x = -9.0; x <= 10.0; x += 0.5)
         {
@@ -148,12 +186,14 @@ public abstract class ActivationFunctionTestBase
     {
         if (!IsBounded) return;
 
-        var fn = CreateActivation();
+        var fn = CreateTestActivation();
+        double margin = 0.1; // small margin for numerical precision
         for (double x = -20.0; x <= 20.0; x += 0.5)
         {
             double y = fn.Activate(x);
-            Assert.True(y >= -1.1 && y <= 1.1,
-                $"Bounded activation produced out-of-range value: f({x})={y}.");
+            Assert.True(y >= BoundLower - margin && y <= BoundUpper + margin,
+                $"Bounded activation produced out-of-range value: f({x})={y}, " +
+                $"expected [{BoundLower}, {BoundUpper}].");
         }
     }
 
@@ -182,7 +222,7 @@ public abstract class ActivationFunctionTestBase
     [Fact]
     public void TensorActivate_ShouldMatchScalarActivate()
     {
-        var fn = CreateActivation();
+        var fn = CreateTestActivation();
         var input = new Tensor<double>([5]);
         var rng = new Random(42);
         for (int i = 0; i < 5; i++)

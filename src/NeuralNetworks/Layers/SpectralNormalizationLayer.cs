@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -33,6 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Regularization)]
+[LayerTask(LayerTask.Regularization)]
+[LayerProperty(IsTrainable = true)]
 public class SpectralNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>

@@ -135,7 +135,7 @@ public static class TapeLayerBridge<T>
         }
 
         // Fallback: return zero gradient
-        return new Tensor<T>(input.Shape);
+        return new Tensor<T>(input.Shape.ToArray());
     }
 
     /// <summary>
@@ -331,7 +331,7 @@ public static class TapeLayerBridge<T>
                 else
                 {
                     var numOps = MathHelper.GetNumericOperations<T>();
-                    var accumulated = new Tensor<T>(input.Gradient.Shape);
+                    var accumulated = new Tensor<T>(input.Gradient.Shape.ToArray());
                     for (int i = 0; i < accumulated.Length && i < input.Gradient.Length && i < inputGrad.Length; i++)
                     {
                         accumulated[i] = numOps.Add(input.Gradient[i], inputGrad[i]);

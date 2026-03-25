@@ -539,7 +539,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var loss = TensorOperations<T>.Mean(squared);
 
         // 7. Backward pass to compute gradients
-        loss.Gradient = new Tensor<T>(loss.Value.Shape);
+        loss.Gradient = new Tensor<T>(loss.Value.Shape.ToArray());
         loss.Gradient[0] = _numOps.One;
 
         // Topological sort for backward pass
@@ -604,7 +604,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
     private ComputationNode<T> ComputeMovingAverageNode(ComputationNode<T> input, int kernelSize)
     {
-        var shape = input.Value.Shape;
+        var shape = input.Value.Shape.ToArray();
         int seqLen = shape[0];
         int embDim = shape.Length > 1 ? shape[1] : 1;
 
@@ -643,7 +643,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
             if (input.RequiresGradient)
             {
                 if (input.Gradient == null)
-                    input.Gradient = new Tensor<T>(input.Value.Shape);
+                    input.Gradient = new Tensor<T>(input.Value.Shape.ToArray());
 
                 for (int t = 0; t < seqLen; t++)
                 {
@@ -1172,7 +1172,7 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
         {
             writer.Write(dim);
         }
@@ -1295,7 +1295,7 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // For single input, treat as trend with zero seasonal
-        var seasonal = new Tensor<T>(input.Shape);
+        var seasonal = new Tensor<T>(input.Shape.ToArray());
         var (outTrend, outSeasonal) = Forward(input, seasonal, _topK);
         // Concatenate trend + seasonal into single output
         var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
@@ -1434,7 +1434,7 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
         // Ensure topK doesn't exceed sequence length
         topK = Math.Min(topK, seqLen);
 
-        var output = new Tensor<T>(x.Shape);
+        var output = new Tensor<T>(x.Shape.ToArray());
 
         // Process each embedding dimension independently
         for (int d = 0; d < embDim; d++)
@@ -1550,7 +1550,7 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
         int embDim = x.Shape[1];
         int ffDim = _ff1Weight.Shape[0];
 
-        var output = new Tensor<T>(x.Shape);
+        var output = new Tensor<T>(x.Shape.ToArray());
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -1585,18 +1585,18 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     public void InitializeGradientAccumulators(Dictionary<string, Tensor<T>> accumulators, int layerIndex)
     {
         string prefix = $"encoder_{layerIndex}_";
-        accumulators[$"{prefix}queryProj"] = new Tensor<T>(_queryProj.Shape);
-        accumulators[$"{prefix}keyProj"] = new Tensor<T>(_keyProj.Shape);
-        accumulators[$"{prefix}valueProj"] = new Tensor<T>(_valueProj.Shape);
-        accumulators[$"{prefix}outputProj"] = new Tensor<T>(_outputProj.Shape);
-        accumulators[$"{prefix}ff1Weight"] = new Tensor<T>(_ff1Weight.Shape);
-        accumulators[$"{prefix}ff1Bias"] = new Tensor<T>(_ff1Bias.Shape);
-        accumulators[$"{prefix}ff2Weight"] = new Tensor<T>(_ff2Weight.Shape);
-        accumulators[$"{prefix}ff2Bias"] = new Tensor<T>(_ff2Bias.Shape);
-        accumulators[$"{prefix}ln1Gamma"] = new Tensor<T>(_layerNorm1Gamma.Shape);
-        accumulators[$"{prefix}ln1Beta"] = new Tensor<T>(_layerNorm1Beta.Shape);
-        accumulators[$"{prefix}ln2Gamma"] = new Tensor<T>(_layerNorm2Gamma.Shape);
-        accumulators[$"{prefix}ln2Beta"] = new Tensor<T>(_layerNorm2Beta.Shape);
+        accumulators[$"{prefix}queryProj"] = new Tensor<T>(_queryProj.Shape.ToArray());
+        accumulators[$"{prefix}keyProj"] = new Tensor<T>(_keyProj.Shape.ToArray());
+        accumulators[$"{prefix}valueProj"] = new Tensor<T>(_valueProj.Shape.ToArray());
+        accumulators[$"{prefix}outputProj"] = new Tensor<T>(_outputProj.Shape.ToArray());
+        accumulators[$"{prefix}ff1Weight"] = new Tensor<T>(_ff1Weight.Shape.ToArray());
+        accumulators[$"{prefix}ff1Bias"] = new Tensor<T>(_ff1Bias.Shape.ToArray());
+        accumulators[$"{prefix}ff2Weight"] = new Tensor<T>(_ff2Weight.Shape.ToArray());
+        accumulators[$"{prefix}ff2Bias"] = new Tensor<T>(_ff2Bias.Shape.ToArray());
+        accumulators[$"{prefix}ln1Gamma"] = new Tensor<T>(_layerNorm1Gamma.Shape.ToArray());
+        accumulators[$"{prefix}ln1Beta"] = new Tensor<T>(_layerNorm1Beta.Shape.ToArray());
+        accumulators[$"{prefix}ln2Gamma"] = new Tensor<T>(_layerNorm2Gamma.Shape.ToArray());
+        accumulators[$"{prefix}ln2Beta"] = new Tensor<T>(_layerNorm2Beta.Shape.ToArray());
     }
 
     // Getters for autodiff integration
@@ -1690,7 +1690,7 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
         {
             writer.Write(dim);
         }
@@ -1782,9 +1782,9 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        var seasonal = new Tensor<T>(input.Shape);
+        var seasonal = new Tensor<T>(input.Shape.ToArray());
         var encTrend = _lastEncoderOutput ?? input;
-        var encSeasonal = new Tensor<T>(input.Shape);
+        var encSeasonal = new Tensor<T>(input.Shape.ToArray());
         var (outTrend, outSeasonal) = Forward(input, seasonal, encTrend, encSeasonal, _topK);
         var output = new Tensor<T>(new[] { outTrend.Length + outSeasonal.Length });
         for (int i = 0; i < outTrend.Length; i++) output[i] = outTrend[i];
@@ -1934,7 +1934,7 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
                 var larger = a.Shape[0] < b.Shape[0] ? b : a;
                 if (smaller.Shape[0] == 1)
                 {
-                    var expanded = new Tensor<T>(larger.Shape);
+                    var expanded = new Tensor<T>(larger.Shape.ToArray());
                     int cols = larger.Shape[1];
                     for (int i = 0; i < larger.Shape[0]; i++)
                         for (int j = 0; j < cols; j++)
@@ -2182,7 +2182,7 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     {
         int seqLen = x.Shape[0];
         int embDim = x.Shape[1];
-        var output = new Tensor<T>(x.Shape);
+        var output = new Tensor<T>(x.Shape.ToArray());
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -2218,7 +2218,7 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
         int embDim = x.Shape[1];
         int ffDim = _ff1Weight.Shape[0];
 
-        var output = new Tensor<T>(x.Shape);
+        var output = new Tensor<T>(x.Shape.ToArray());
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -2250,24 +2250,24 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     public void InitializeGradientAccumulators(Dictionary<string, Tensor<T>> accumulators, int layerIndex)
     {
         string prefix = $"decoder_{layerIndex}_";
-        accumulators[$"{prefix}selfQueryProj"] = new Tensor<T>(_selfQueryProj.Shape);
-        accumulators[$"{prefix}selfKeyProj"] = new Tensor<T>(_selfKeyProj.Shape);
-        accumulators[$"{prefix}selfValueProj"] = new Tensor<T>(_selfValueProj.Shape);
-        accumulators[$"{prefix}selfOutputProj"] = new Tensor<T>(_selfOutputProj.Shape);
-        accumulators[$"{prefix}crossQueryProj"] = new Tensor<T>(_crossQueryProj.Shape);
-        accumulators[$"{prefix}crossKeyProj"] = new Tensor<T>(_crossKeyProj.Shape);
-        accumulators[$"{prefix}crossValueProj"] = new Tensor<T>(_crossValueProj.Shape);
-        accumulators[$"{prefix}crossOutputProj"] = new Tensor<T>(_crossOutputProj.Shape);
-        accumulators[$"{prefix}ff1Weight"] = new Tensor<T>(_ff1Weight.Shape);
-        accumulators[$"{prefix}ff1Bias"] = new Tensor<T>(_ff1Bias.Shape);
-        accumulators[$"{prefix}ff2Weight"] = new Tensor<T>(_ff2Weight.Shape);
-        accumulators[$"{prefix}ff2Bias"] = new Tensor<T>(_ff2Bias.Shape);
-        accumulators[$"{prefix}ln1Gamma"] = new Tensor<T>(_layerNorm1Gamma.Shape);
-        accumulators[$"{prefix}ln1Beta"] = new Tensor<T>(_layerNorm1Beta.Shape);
-        accumulators[$"{prefix}ln2Gamma"] = new Tensor<T>(_layerNorm2Gamma.Shape);
-        accumulators[$"{prefix}ln2Beta"] = new Tensor<T>(_layerNorm2Beta.Shape);
-        accumulators[$"{prefix}ln3Gamma"] = new Tensor<T>(_layerNorm3Gamma.Shape);
-        accumulators[$"{prefix}ln3Beta"] = new Tensor<T>(_layerNorm3Beta.Shape);
+        accumulators[$"{prefix}selfQueryProj"] = new Tensor<T>(_selfQueryProj.Shape.ToArray());
+        accumulators[$"{prefix}selfKeyProj"] = new Tensor<T>(_selfKeyProj.Shape.ToArray());
+        accumulators[$"{prefix}selfValueProj"] = new Tensor<T>(_selfValueProj.Shape.ToArray());
+        accumulators[$"{prefix}selfOutputProj"] = new Tensor<T>(_selfOutputProj.Shape.ToArray());
+        accumulators[$"{prefix}crossQueryProj"] = new Tensor<T>(_crossQueryProj.Shape.ToArray());
+        accumulators[$"{prefix}crossKeyProj"] = new Tensor<T>(_crossKeyProj.Shape.ToArray());
+        accumulators[$"{prefix}crossValueProj"] = new Tensor<T>(_crossValueProj.Shape.ToArray());
+        accumulators[$"{prefix}crossOutputProj"] = new Tensor<T>(_crossOutputProj.Shape.ToArray());
+        accumulators[$"{prefix}ff1Weight"] = new Tensor<T>(_ff1Weight.Shape.ToArray());
+        accumulators[$"{prefix}ff1Bias"] = new Tensor<T>(_ff1Bias.Shape.ToArray());
+        accumulators[$"{prefix}ff2Weight"] = new Tensor<T>(_ff2Weight.Shape.ToArray());
+        accumulators[$"{prefix}ff2Bias"] = new Tensor<T>(_ff2Bias.Shape.ToArray());
+        accumulators[$"{prefix}ln1Gamma"] = new Tensor<T>(_layerNorm1Gamma.Shape.ToArray());
+        accumulators[$"{prefix}ln1Beta"] = new Tensor<T>(_layerNorm1Beta.Shape.ToArray());
+        accumulators[$"{prefix}ln2Gamma"] = new Tensor<T>(_layerNorm2Gamma.Shape.ToArray());
+        accumulators[$"{prefix}ln2Beta"] = new Tensor<T>(_layerNorm2Beta.Shape.ToArray());
+        accumulators[$"{prefix}ln3Gamma"] = new Tensor<T>(_layerNorm3Gamma.Shape.ToArray());
+        accumulators[$"{prefix}ln3Beta"] = new Tensor<T>(_layerNorm3Beta.Shape.ToArray());
     }
 
     // Getters for autodiff integration
@@ -2385,7 +2385,7 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
         {
             writer.Write(dim);
         }

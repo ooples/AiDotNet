@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -31,6 +32,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, TestInputShape = "4, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IChainableComputationGraph<T>
 {
     /// <summary>
@@ -673,7 +678,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         Tensor<T> squeezed;
@@ -800,7 +805,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         int rank = shape.Length;
         var backend = gpuEngine.GetBackend();
         if (backend == null)
@@ -844,7 +849,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private IGpuTensor<T> ForwardGpu2D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         int batchSize = shape[0];
 
         // FC1 + activation
@@ -876,7 +881,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private IGpuTensor<T> ForwardGpu4D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         int batchSize = shape[0];
         int height = shape[1];
         int width = shape[2];
@@ -933,7 +938,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private IGpuTensor<T> ForwardGpu3D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         int batchSize = shape[0];
         int seqLen = shape[1];
         int channels = shape[2];
@@ -989,7 +994,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private IGpuTensor<T> ForwardGpu1D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         int channels = shape[0];
 
         // Treat as [1, C] batch
@@ -1006,7 +1011,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private IGpuTensor<T> ForwardGpuND(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         int batchSize = shape[0];
         int channels = shape[shape.Length - 1];
         int spatialSize = 1;
@@ -1123,7 +1128,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         int rows = input.Shape[0];
         int cols = input.Shape[1];
-        var result = TensorAllocator.Rent<T>(input.Shape);
+        var result = TensorAllocator.Rent<T>(input.Shape.ToArray());
 
         if (isFirstActivation)
         {
@@ -1474,7 +1479,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var squeezedGradient = Engine.TensorMatMul(fc1Gradient, Engine.TensorTranspose(_weights1));
 
         Tensor<T> squeezeBackprop = spatialAxes.Length > 0
-            ? Engine.ReduceMeanBackward(squeezedGradient, _lastInput.Shape, spatialAxes)
+            ? Engine.ReduceMeanBackward(squeezedGradient, _lastInput.Shape.ToArray(), spatialAxes)
             : (rank == 1
                 ? squeezedGradient.Reshape([_channels])
                 : squeezedGradient);
@@ -1937,7 +1942,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var large = a.Length >= b.Length ? a : b;
         var small = a.Length >= b.Length ? b : a;
 
-        var result = new Tensor<T>(large.Shape);
+        var result = new Tensor<T>(large.Shape.ToArray());
         var largeSpan = large.Data.Span;
         var smallSpan = small.Data.Span;
         var resultSpan = result.Data.Span;

@@ -357,7 +357,7 @@ public class AutoencoderKL<T> : VAEModelBase<T>
 
         // Backward pass (simplified - actual implementation would propagate gradients)
         var reconstructionGrad = LossFunction.CalculateDerivative(reconstruction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = new Tensor<T>(reconstruction.Shape);
+        var gradTensor = new Tensor<T>(reconstruction.Shape.ToArray());
         var gradSpan = gradTensor.AsWritableSpan();
         for (int i = 0; i < gradSpan.Length && i < reconstructionGrad.Length; i++)
         {

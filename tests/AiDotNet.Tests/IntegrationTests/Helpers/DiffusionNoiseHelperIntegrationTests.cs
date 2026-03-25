@@ -19,7 +19,7 @@ public class DiffusionNoiseHelperIntegrationTests
     public void SampleGaussian_CorrectShape()
     {
         var noise = DiffusionNoiseHelper<double>.SampleGaussian(new[] { 2, 3 }, seed: 42);
-        Assert.Equal(new[] { 2, 3 }, noise.Shape);
+        Assert.Equal(new[] { 2, 3 }, noise.Shape.ToArray());
         Assert.Equal(6, noise.Length);
     }
 
@@ -152,7 +152,7 @@ public class DiffusionNoiseHelperIntegrationTests
     public void ComputeTimestepEmbeddings_CorrectShape()
     {
         var embeddings = DiffusionNoiseHelper<double>.ComputeTimestepEmbeddings(new[] { 0, 100, 500 }, 16);
-        Assert.Equal(new[] { 3, 16 }, embeddings.Shape);
+        Assert.Equal(new[] { 3, 16 }, embeddings.Shape.ToArray());
     }
 
     [Fact]

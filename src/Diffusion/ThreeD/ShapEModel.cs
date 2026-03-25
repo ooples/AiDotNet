@@ -852,7 +852,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> FlattenToCondition(Tensor<T> imageLatent)
     {
-        var flatSize = imageLatent.Shape.Aggregate(1, (a, b) => a * b);
+        var flatSize = imageLatent.Length;
         return new Tensor<T>(new[] { 1, 1, flatSize }, imageLatent.ToVector());
     }
 

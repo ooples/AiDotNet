@@ -210,7 +210,7 @@ public class HTDemucs<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         var sources = new Dictionary<string, Tensor<T>>();
         for (int si = 0; si < _options.NumStems && si < _options.Sources.Length; si++)
         {
-            var maskedMag = new Tensor<T>(magnitude.Shape);
+            var maskedMag = new Tensor<T>(magnitude.Shape.ToArray());
             for (int f = 0; f < nf; f++)
                 for (int b = 0; b < numBins; b++)
                 {

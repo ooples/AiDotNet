@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -33,6 +35,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 2", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
 public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
@@ -219,8 +226,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Initialize attention weights
         T attentionScale = NumOps.Sqrt(NumOps.FromDouble(1.0 / _outputFeatures));
-        var randomAttn = Tensor<T>.CreateRandom(_attentionWeights.Shape);
-        var halfTensor = new Tensor<T>(_attentionWeights.Shape);
+        var randomAttn = Tensor<T>.CreateRandom(_attentionWeights.Shape.ToArray());
+        var halfTensor = new Tensor<T>(_attentionWeights.Shape.ToArray());
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shiftedAttn = Engine.TensorSubtract(randomAttn, halfTensor);
         var scaledAttn = Engine.TensorMultiplyScalar(shiftedAttn, attentionScale);
@@ -304,7 +311,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: ensure 3D [batch, numNodes, inputFeatures]
@@ -847,7 +854,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _attentionWeightsGradient.Fill(NumOps.Zero);
         _biasGradient.Fill(NumOps.Zero);
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
         inputGradient.Fill(NumOps.Zero);
 
         // Bias gradient: sum over batch and nodes
@@ -956,7 +963,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Reshape gradient back to original input shape
-        if (_originalInputShape != null && !_originalInputShape.SequenceEqual(inputGradient.Shape))
+        if (_originalInputShape != null && !_originalInputShape.SequenceEqual(inputGradient.Shape.ToArray()))
         {
             return inputGradient.Reshape(_originalInputShape);
         }
@@ -1135,7 +1142,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Extract gradients from input node
-        var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape);
+        var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape.ToArray());
 
         // Extract weight gradients from weightsNode if available
         if (weightsNode.Gradient != null)
@@ -1392,11 +1399,11 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         int index = 0;
 
-        _weights = Tensor<T>.FromVector(parameters.SubVector(index, weightsCount)).Reshape(_weights.Shape);
+        _weights = Tensor<T>.FromVector(parameters.SubVector(index, weightsCount)).Reshape(_weights.Shape.ToArray());
         index += weightsCount;
 
         _attentionWeights = Tensor<T>.FromVector(parameters.SubVector(index, attnCount))
-            .Reshape(_attentionWeights.Shape);
+            .Reshape(_attentionWeights.Shape.ToArray());
         index += attnCount;
 
         _bias = Tensor<T>.FromVector(parameters.SubVector(index, biasCount));
@@ -1497,7 +1504,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
-        if (input.Shape == null || input.Shape.Length < 2)
+        if (input.Shape.ToArray() == null || input.Shape.Length < 2)
             throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
 
         // Check that either adjacency matrix or edge indices are set

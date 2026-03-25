@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -30,6 +32,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (float or double).</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4")]
 public class HyperbolicLinearLayer<T> : LayerBase<T>
 {
     private readonly IHyperbolicManifoldEngine _engine;
@@ -198,7 +203,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int batchSize;
         int inputLen;
@@ -373,7 +378,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _gpuInput = input;
-            _gpuInputShape = input.Shape.ToArray();
+            _gpuInputShape = input.Shape.ToArray().ToArray();
         }
 
         // Cache weights to GPU: flatten [OutputFeatures, InputFeatures] for the kernel
@@ -432,7 +437,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             else
             {
                 var newShape = new int[input.Shape.Length];
-                Array.Copy(input.Shape, newShape, input.Shape.Length - 1);
+                Array.Copy(input.Shape.ToArray(), newShape, input.Shape.Length - 1);
                 newShape[^1] = OutputFeatures;
                 outputShape = newShape;
             }
@@ -646,7 +651,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         // Initialize gradients
         _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);
         _biasesGradient = new Matrix<T>(OutputFeatures, InputFeatures);
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         // Compute gradients using proper Riemannian gradient descent for Poincaré ball geometry.
         // For the Poincaré ball with curvature c, the conformal factor is:

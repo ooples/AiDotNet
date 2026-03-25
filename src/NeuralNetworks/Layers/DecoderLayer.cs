@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -25,6 +26,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+[LayerCategory(LayerCategory.Transformer)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class DecoderLayer<T> : LayerBase<T>
 {
 
@@ -210,7 +214,7 @@ public class DecoderLayer<T> : LayerBase<T>
         // Handle any rank >= 2: last 2 dims are [seq, features], earlier dims are batch-like
         int rank = decoderInput.Shape.Length;
         _inputWas2D = rank == 2;
-        _originalInputShape = decoderInput.Shape;
+        _originalInputShape = decoderInput.Shape.ToArray();
         Tensor<T> input3D, encoderOutput3D;
 
         if (_inputWas2D)

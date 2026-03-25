@@ -140,4 +140,6 @@ public class MockNeuralNetwork<T, TInput, TOutput> : IFullModel<T, TInput, TOutp
     {
         throw new NotSupportedException("JIT compilation not supported in mock model");
     }
+
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 }

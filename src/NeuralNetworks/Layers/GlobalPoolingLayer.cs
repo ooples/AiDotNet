@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -39,6 +40,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Pooling)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, AiDotNet.Enums.PoolingType.Max")]
 public class GlobalPoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -454,7 +458,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         if (_poolingType == PoolingType.Average)
         {
             // Use GPU-accelerated ReduceMeanBackward
-            return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape, axes);
+            return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape.ToArray(), axes);
         }
         else // Max pooling
         {
@@ -462,7 +466,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
                 throw new InvalidOperationException("Max indices not available for backward pass.");
 
             // Use GPU-accelerated ReduceMaxBackward
-            return Engine.ReduceMaxBackward(outputGradient, _maxIndices, _lastInput.Shape);
+            return Engine.ReduceMaxBackward(outputGradient, _maxIndices, _lastInput.Shape.ToArray());
         }
     }
 
@@ -638,7 +642,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
             _lastInput = input.ToTensor();
             _lastOutput = output.ToTensor();
             _lastOutputGpu = output;
-            _lastInputGpuShape = input.Shape.ToArray();
+            _lastInputGpuShape = input.Shape.ToArray().ToArray();
         }
 
         return output;

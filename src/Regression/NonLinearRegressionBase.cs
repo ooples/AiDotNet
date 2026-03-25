@@ -1490,7 +1490,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
 
     private static Tensor<T> CreateFilledTensorLike(ComputationNode<T> referenceNode, T value)
     {
-        var tensor = new Tensor<T>((int[])referenceNode.Value.Shape.Clone());
+        var tensor = new Tensor<T>((int[])referenceNode.Value.Shape.ToArray().Clone());
         tensor.Fill(value);
         return tensor;
     }

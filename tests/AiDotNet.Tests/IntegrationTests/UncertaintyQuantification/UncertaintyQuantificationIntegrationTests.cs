@@ -249,7 +249,7 @@ public class UncertaintyQuantificationIntegrationTests
         var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }));
         layer.SetTrainingMode(true);
         var output = layer.Forward(input);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]

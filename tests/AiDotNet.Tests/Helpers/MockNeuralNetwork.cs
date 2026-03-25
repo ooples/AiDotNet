@@ -119,7 +119,7 @@ public class MockNeuralNetwork : INeuralNetwork<double>
         // Return input gradients (same shape as last input)
         if (_lastInput != null)
         {
-            var inputGradients = new Tensor<double>(_lastInput.Shape);
+            var inputGradients = new Tensor<double>(_lastInput.Shape.ToArray());
             for (int i = 0; i < inputGradients.Length; i++)
             {
                 inputGradients[i] = gradSum / inputGradients.Length;
@@ -321,4 +321,6 @@ public class MockNeuralNetwork : INeuralNetwork<double>
         }
         _parameterGradients = gradients.Clone();
     }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }

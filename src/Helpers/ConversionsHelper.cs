@@ -433,7 +433,7 @@ public static class ConversionsHelper
                     $"Vector length {vector.Length} doesn't match reference tensor size {refTensor.Length}");
             }
 
-            return (TInput)(object)Tensor<T>.FromVector(vector, refTensor.Shape);
+            return (TInput)(object)Tensor<T>.FromVector(vector, refTensor.Shape.ToArray());
         }
         else
         {

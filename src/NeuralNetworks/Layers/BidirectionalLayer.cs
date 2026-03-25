@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -32,6 +33,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.RecurrentLayer<double>(4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null), true, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class BidirectionalLayer<T> : LayerBase<T>
 {
     private readonly LayerBase<T> _forwardLayer;
@@ -317,7 +322,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         // Expected input shape: [batch, timeSteps, features] or [timeSteps, features]
         int batchSize, timeSteps, features;
@@ -403,7 +408,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
             backend.Copy2DStrided(srcView.Buffer, outputBuffer, 1, sliceSize, totalSize, dstOffset);
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -425,7 +430,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
         if (backend is null)
             throw new InvalidOperationException("GPU backend unavailable.");
 
-        var shape = outputGradient.Shape;
+        var shape = outputGradient.Shape.ToArray();
         int batchSize, timeSteps, features;
 
         // Determine input dimensions
@@ -518,7 +523,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
         {
             // CPU fallback: download, compute, upload
             var gradData = backend.DownloadBuffer(forwardGradient.Buffer);
-            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), forwardGradient.Shape);
+            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), forwardGradient.Shape.ToArray());
             var cpuResult = _forwardLayer.Backward(cpuGrad);
             forwardInputGradient = gpuEngine.UploadToGpu(cpuResult, GpuTensorRole.Gradient);
         }
@@ -540,7 +545,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
         {
             // CPU fallback
             var gradData = backend.DownloadBuffer(reversedBackwardGradient.Buffer);
-            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), reversedBackwardGradient.Shape);
+            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), reversedBackwardGradient.Shape.ToArray());
             var cpuResult = _backwardLayer.Backward(cpuGrad);
             backwardInputGradient = gpuEngine.UploadToGpu(cpuResult, GpuTensorRole.Gradient);
         }
@@ -561,7 +566,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
 
         // Sum the gradients from both directions
         int elementCount = forwardInputGradient.ElementCount;
-        int[] resultShape = (int[])forwardInputGradient.Shape.Clone();
+        int[] resultShape = (int[])forwardInputGradient.Shape.ToArray().Clone();
         var resultBuffer = backend.AllocateBuffer(elementCount);
         backend.Add(forwardInputGradient.Buffer, reversedBackwardInputGradient.Buffer, resultBuffer, elementCount);
 
@@ -601,7 +606,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
             forward.Dispose();
             backward.Dispose();
 
-            return new GpuTensor<T>(backend, outputBuffer, forward.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+            return new GpuTensor<T>(backend, outputBuffer, forward.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
         else
         {
@@ -779,7 +784,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// </remarks>
     private static Tensor<T> ReverseSequence(Tensor<T> input)
     {
-        var reversed = new Tensor<T>(input.Shape);
+        var reversed = new Tensor<T>(input.Shape.ToArray());
         int timeSteps = input.Shape[1];
 
         for (int i = 0; i < timeSteps; i++)

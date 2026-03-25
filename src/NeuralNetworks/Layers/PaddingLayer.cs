@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -33,6 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 1, 4, 4, 1 }, new[] { 0, 1, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class PaddingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -152,7 +156,7 @@ public class PaddingLayer<T> : LayerBase<T>
             backend.Copy2DStrided(permutedInput.Buffer, outputBuffer, (int)outerSize, dimSize, newDimSize, pad);
 
             // Create padded tensor
-            int[] newShape = permutedInput.Shape.ToArray();
+            int[] newShape = permutedInput.Shape.ToArray().ToArray();
             newShape[rank - 1] = newDimSize;
             var paddedPermuted = new GpuTensor<T>(backend, outputBuffer, newShape, GpuTensorRole.Activation, ownsBuffer: true);
 
@@ -193,7 +197,7 @@ public class PaddingLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _lastInput = input.ToTensor();
-            _gpuCachedInputShape = (int[])input.Shape.Clone();
+            _gpuCachedInputShape = (int[])input.Shape.ToArray().Clone();
         }
 
         return currentTensor;
@@ -432,7 +436,7 @@ public class PaddingLayer<T> : LayerBase<T>
         if (_padding.Length != _lastInput.Shape.Length)
             throw new ArgumentException("Padding array length must match input dimensions.");
 
-        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape);
+        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape.ToArray());
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
 
@@ -457,7 +461,7 @@ public class PaddingLayer<T> : LayerBase<T>
         if (_padding.Length != _lastInput.Shape.Length)
             throw new ArgumentException("Padding array length must match input dimensions.");
 
-        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape);
+        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape.ToArray());
         return ApplyActivationDerivative(_lastInput, inputGradient);
     }
 

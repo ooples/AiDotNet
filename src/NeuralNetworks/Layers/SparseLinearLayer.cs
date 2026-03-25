@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -32,6 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (float or double).</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 0.5")]
 public class SparseLinearLayer<T> : LayerBase<T>
 {
     private readonly ISparseEngine _engine;
@@ -338,7 +343,7 @@ public class SparseLinearLayer<T> : LayerBase<T>
 
         // Compute input gradient using transpose of weights
         var transposedWeights = _engine.SparseTranspose(_weights);
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -601,18 +606,10 @@ public class SparseLinearLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Transposes a matrix.
+    /// Transposes a matrix using O(1) stride-based view.
     /// </summary>
     private Matrix<T> TransposeMatrix(Matrix<T> matrix)
     {
-        var result = new Matrix<T>(matrix.Columns, matrix.Rows);
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[j, i] = matrix[i, j];
-            }
-        }
-        return result;
+        return matrix.Transpose();
     }
 }

@@ -34,7 +34,7 @@ public class TensorOperationsIntegrationTests
         Func<Tensor<double>, double> scalarFunction,
         double eps = NumericalEpsilon)
     {
-        var gradient = new Tensor<double>(input.Shape);
+        var gradient = new Tensor<double>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             var plusH = input.Clone();

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -40,6 +41,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
 public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -776,7 +781,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         EnsureInitialized();
 
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         // Industry standard: Support any-rank input tensors [..., inputSize]
         // Transformation is applied to the last dimension
@@ -905,7 +910,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var input = inputs[0];
 
         // Store for potential backward pass
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int actualInputSize = input.Shape[^1]; // Last dimension is always features
         int expectedInputSize = _weights.Shape[0];
@@ -971,7 +976,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             // Store GPU-resident tensors for BackwardGpu (no CPU roundtrip)
             _lastInputGpu = input2D;
-            _gpuOriginalInputShape = input.Shape.ToArray();
+            _gpuOriginalInputShape = input.Shape.ToArray().ToArray();
 
             // For fused activations, we need pre-activation for gradient computation
             if (fusedActivation != FusedActivationType.None)
@@ -1211,7 +1216,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             if (outputGradient.Length == _lastOutput.Length)
             {
-                outputGradient = outputGradient.Reshape(_lastOutput.Shape);
+                outputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
             }
             else
             {
@@ -1219,7 +1224,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 var gradData = new T[_lastOutput.Length];
                 int copyLen = Math.Min(outputGradient.Length, gradData.Length);
                 outputGradient.Data.Span.Slice(0, copyLen).CopyTo(gradData.AsSpan());
-                outputGradient = new Tensor<T>(_lastOutput.Shape, new Vector<T>(gradData));
+                outputGradient = new Tensor<T>(_lastOutput.Shape.ToArray(), new Vector<T>(gradData));
             }
         }
 
@@ -1537,13 +1542,13 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Initialize velocity tensors if needed (lazily)
             if (_weightsVelocity == null)
             {
-                _weightsVelocity = new Tensor<T>(_weights.Shape);
+                _weightsVelocity = new Tensor<T>(_weights.Shape.ToArray());
                 _weightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_weightsVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_biasesVelocity == null)
             {
-                _biasesVelocity = new Tensor<T>(_biases.Shape);
+                _biasesVelocity = new Tensor<T>(_biases.Shape.ToArray());
                 _biasesVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
             }

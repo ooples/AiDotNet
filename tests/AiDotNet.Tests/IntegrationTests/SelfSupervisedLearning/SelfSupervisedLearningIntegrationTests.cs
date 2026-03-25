@@ -1026,7 +1026,7 @@ public class SelfSupervisedLearningIntegrationTests
 
     private static Tensor<double> CopyTensor(Tensor<double> source)
     {
-        var target = new Tensor<double>(source.Shape);
+        var target = new Tensor<double>(source.Shape.ToArray());
         for (int i = 0; i < source.Length; i++)
         {
             target[i] = source[i];

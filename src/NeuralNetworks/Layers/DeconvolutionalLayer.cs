@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -34,6 +36,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Upsampling)]
+[LayerTask(LayerTask.UpSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "new[] { 1, 1, 4, 4 }, 2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class DeconvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -565,7 +571,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
                 $"ConvTranspose2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        var originalInputShape = input.Shape;
+        var originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
         bool addedBatchDimension = false;
 
@@ -621,7 +627,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
             _gpuOutput?.Dispose();
             _gpuInput = input4D;
             _gpuOutput = result;
-            _gpuInputShape4D = input4D.Shape;
+            _gpuInputShape4D = input4D.Shape.ToArray();
             _gpuAddedBatchDimension = addedBatchDimension;
         }
 
@@ -700,10 +706,10 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         var padding = new int[] { Padding, Padding };
 
         // Calculate input gradient
-        var inputGradient = Engine.ConvTranspose2DBackwardInput(activationGradient, _kernels, _lastInput.Shape, stride, padding);
+        var inputGradient = Engine.ConvTranspose2DBackwardInput(activationGradient, _kernels, _lastInput.Shape.ToArray(), stride, padding);
 
         // Calculate kernel gradient
-        _kernelsGradient = Engine.ConvTranspose2DBackwardKernel(activationGradient, _lastInput, _kernels.Shape, stride, padding);
+        _kernelsGradient = Engine.ConvTranspose2DBackwardKernel(activationGradient, _lastInput, _kernels.Shape.ToArray(), stride, padding);
 
         return inputGradient;
     }
@@ -872,7 +878,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         var gradInput = gpuEngine.ConvTranspose2DBackwardInputGpu(
             activationGradient,
             _kernels,
-            _gpuInputShape4D ?? _gpuInput.Shape,
+            _gpuInputShape4D ?? _gpuInput.Shape.ToArray(),
             stride,
             padding,
             outputPadding);
@@ -881,7 +887,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
         var gradKernel = gpuEngine.ConvTranspose2DBackwardKernelGpu(
             activationGradient,
             _gpuInput,
-            _kernels.Shape,
+            _kernels.Shape.ToArray(),
             stride,
             padding,
             outputPadding);

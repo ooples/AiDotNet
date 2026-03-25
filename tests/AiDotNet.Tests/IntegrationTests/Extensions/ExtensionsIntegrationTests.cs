@@ -85,7 +85,7 @@ public class ExtensionsIntegrationTests
         var tensor = new Tensor<double>(new[] { 2, 3 });
         var flat = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 });
         var result = tensor.Unflatten(flat);
-        Assert.Equal(new[] { 2, 3 }, result.Shape);
+        Assert.Equal(new[] { 2, 3 }, result.Shape.ToArray());
         Assert.Equal(1.0, result[0, 0], Tolerance);
         Assert.Equal(6.0, result[1, 2], Tolerance);
     }
@@ -136,7 +136,7 @@ public class ExtensionsIntegrationTests
         var a = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new double[] { 1, 2, 3, 4 }));
         var b = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 5, 6, 7, 8, 9, 10 }));
         var result = a.ConcatenateTensors(b);
-        Assert.Equal(new[] { 2, 5 }, result.Shape);
+        Assert.Equal(new[] { 2, 5 }, result.Shape.ToArray());
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public class ExtensionsIntegrationTests
     {
         var random = RandomHelper.CreateSeededRandom(42);
         var tensor = TensorExtensions.CreateXavierInitializedTensor<double>(new[] { 3, 4 }, 0.1, random);
-        Assert.Equal(new[] { 3, 4 }, tensor.Shape);
+        Assert.Equal(new[] { 3, 4 }, tensor.Shape.ToArray());
         Assert.Equal(12, tensor.Length);
     }
 

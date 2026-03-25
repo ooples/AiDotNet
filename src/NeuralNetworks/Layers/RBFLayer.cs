@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -31,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true)]
 public class RBFLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -266,7 +271,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ComputeEpsilonsFromWidths()
     {
-        var epsilons = new Tensor<T>(_widths.Shape);
+        var epsilons = new Tensor<T>(_widths.Shape.ToArray());
         var two = NumOps.FromDouble(2.0);
         for (int i = 0; i < _numCenters; i++)
         {
@@ -347,7 +352,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ConvertEpsilonGradientsToWidthGradients(Tensor<T> gradEpsilons)
     {
-        var gradWidths = new Tensor<T>(_widths.Shape);
+        var gradWidths = new Tensor<T>(_widths.Shape.ToArray());
         for (int i = 0; i < _numCenters; i++)
         {
             // depsilon/dwidth = -1/width³

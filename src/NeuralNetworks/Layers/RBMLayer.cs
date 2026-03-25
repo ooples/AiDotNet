@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -26,6 +28,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class RBMLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -374,7 +379,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
         if (rank < 1)
             throw new ArgumentException("Input must have at least one dimension.", nameof(input));
@@ -421,7 +426,7 @@ public class RBMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         if (rank < 1)
@@ -692,12 +697,12 @@ public class RBMLayer<T> : LayerBase<T>
             var preAct = Engine.TensorAdd(
                 Engine.TensorMatMul(input2D, Engine.TensorTranspose(_weights)),
                 Engine.TensorRepeatElements(_hiddenBiases.Reshape([1, _hiddenUnits]), flatBatch, axis: 0));
-            var hidden = new Tensor<T>(preAct.Shape);
+            var hidden = new Tensor<T>(preAct.Shape.ToArray());
             for (int i = 0; i < hidden.Length; i++)
                 hidden[i] = MathHelper.Sigmoid(preAct[i]);
 
             // sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
-            var ones = new Tensor<T>(hidden.Shape);
+            var ones = new Tensor<T>(hidden.Shape.ToArray());
             ones.Fill(NumOps.One);
             var sigmoidDeriv = Engine.TensorMultiply(hidden, Engine.TensorSubtract(ones, hidden));
             var dPreAct = Engine.TensorMultiply(outGrad2D, sigmoidDeriv);
@@ -705,7 +710,7 @@ public class RBMLayer<T> : LayerBase<T>
             // Weight gradients: dW = input^T @ dPreAct (note: W is [hidden, visible] so transpose)
             _weightsGradient = Engine.TensorTranspose(Engine.TensorMatMul(Engine.TensorTranspose(input2D), dPreAct));
             _hiddenBiasesGradient = Engine.ReduceSum(dPreAct, [0], keepDims: false);
-            _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape); // visible biases don't affect forward
+            _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape.ToArray()); // visible biases don't affect forward
 
             // Input gradient: dInput = dPreAct @ W
             var inputGrad = Engine.TensorMatMul(dPreAct, _weights);
@@ -815,7 +820,7 @@ public class RBMLayer<T> : LayerBase<T>
 
         _weightsGradient = weightsNode.Gradient;
         _hiddenBiasesGradient = biasNode.Gradient;
-        _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape);
+        _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape.ToArray());
         _visibleBiasesGradient.Fill(NumOps.Zero);
 
         var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
@@ -891,7 +896,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> SampleBinaryStatesTensor(Tensor<T> probabilities)
     {
-        var randomTensor = Tensor<T>.CreateRandom(probabilities.Shape);
+        var randomTensor = Tensor<T>.CreateRandom(probabilities.Shape.ToArray());
         return Engine.TensorGreaterThan(probabilities, randomTensor);
     }
 

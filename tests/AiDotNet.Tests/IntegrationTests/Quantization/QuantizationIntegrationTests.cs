@@ -1711,6 +1711,8 @@ public class QuantizationIntegrationTests
         }
 
         public bool SupportsJitCompilation => false;
+
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
     }
 
     #endregion

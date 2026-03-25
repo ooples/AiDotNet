@@ -121,7 +121,7 @@ public class MCDropoutLayer<T> : LayerBase<T>
         _dropoutMask.Value = mask;
 
         var outputTensor = Tensor<T>.FromVector(outputVector);
-        return input.Shape.Length > 1 ? outputTensor.Reshape(input.Shape) : outputTensor;
+        return input.Shape.Length > 1 ? outputTensor.Reshape(input.Shape.ToArray()) : outputTensor;
     }
 
     /// <summary>
@@ -146,7 +146,7 @@ public class MCDropoutLayer<T> : LayerBase<T>
         }
 
         var inputGradientTensor = Tensor<T>.FromVector(inputGradientVector);
-        return _lastInput.Value.Shape.Length > 1 ? inputGradientTensor.Reshape(_lastInput.Value.Shape) : inputGradientTensor;
+        return _lastInput.Value.Shape.Length > 1 ? inputGradientTensor.Reshape(_lastInput.Value.Shape.ToArray()) : inputGradientTensor;
     }
 
     /// <summary>

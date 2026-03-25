@@ -449,7 +449,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         }
 
         // Create ONNX input tensor
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
 
         // Get input name from model
         var inputMeta = OnnxSession.InputMetadata;
