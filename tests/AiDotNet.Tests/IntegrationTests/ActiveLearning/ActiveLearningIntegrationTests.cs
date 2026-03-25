@@ -1028,6 +1028,8 @@ public class ActiveLearningIntegrationTests
 
         // IFullModel specific
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     /// <summary>

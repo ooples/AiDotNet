@@ -450,7 +450,7 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                 var hfPrediction = Forward(batchInput);
 
                 // Combined prediction: hf_corrected = lf + hf_correction
-                var correctedPrediction = new Tensor<T>(hfPrediction.Shape);
+                var correctedPrediction = new Tensor<T>(hfPrediction.Shape.ToArray());
                 for (int i = 0; i < batchCount; i++)
                 {
                     for (int j = 0; j < outputDim; j++)
@@ -465,7 +465,7 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                 hfLoss = NumOps.Add(hfLoss, weightedHfLoss);
 
                 // Correlation loss: correction should be small where LF is good
-                var corrMse = ComputeMSE(hfPrediction, new Tensor<T>(hfPrediction.Shape)); // Target is zero
+                var corrMse = ComputeMSE(hfPrediction, new Tensor<T>(hfPrediction.Shape.ToArray())); // Target is zero
                 T weightedCorrLoss = NumOps.Multiply(NumOps.FromDouble(_correlationWeight * 0.1), corrMse);
                 corrLoss = NumOps.Add(corrLoss, weightedCorrLoss);
 
@@ -515,7 +515,7 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
 
     private Tensor<T> ComputeMSEGradient(Tensor<T> prediction, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(prediction.Shape);
+        var gradient = new Tensor<T>(prediction.Shape.ToArray());
         int count = prediction.Shape[0] * prediction.Shape[1];
         T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(count));
 

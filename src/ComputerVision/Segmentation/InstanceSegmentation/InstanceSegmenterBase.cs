@@ -290,7 +290,7 @@ public abstract class InstanceSegmenterBase<T>
     /// </summary>
     protected Tensor<T> BinarizeMask(Tensor<T> mask, T threshold)
     {
-        var binarized = new Tensor<T>(mask.Shape);
+        var binarized = new Tensor<T>(mask.Shape.ToArray());
         double threshVal = NumOps.ToDouble(threshold);
 
         for (int i = 0; i < mask.Length; i++)

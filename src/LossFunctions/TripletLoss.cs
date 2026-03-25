@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -30,6 +32,11 @@ namespace AiDotNet.LossFunctions;
 /// similar items cluster together and dissimilar items are pushed apart.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Ranking)]
+[LossCategory(LossCategory.Contrastive)]
+[LossTask(LossTask.Embedding)]
+[LossTask(LossTask.Ranking)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ApiShape = LossApiShape.TripletMatrix, ExpectedOutput = OutputType.Distances)]
 public class TripletLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -238,9 +245,9 @@ public class TripletLoss<T> : LossFunctionBase<T>
             batchSize, embeddingSize, margin);
 
         // Create gradient tensors
-        var anchorGradTensor = new GpuTensor<T>(backend, anchorGradBuffer, anchor.Shape, GpuTensorRole.Gradient);
-        var positiveGradTensor = new GpuTensor<T>(backend, positiveGradBuffer, positive.Shape, GpuTensorRole.Gradient);
-        var negativeGradTensor = new GpuTensor<T>(backend, negativeGradBuffer, negative.Shape, GpuTensorRole.Gradient);
+        var anchorGradTensor = new GpuTensor<T>(backend, anchorGradBuffer, anchor.Shape.ToArray(), GpuTensorRole.Gradient);
+        var positiveGradTensor = new GpuTensor<T>(backend, positiveGradBuffer, positive.Shape.ToArray(), GpuTensorRole.Gradient);
+        var negativeGradTensor = new GpuTensor<T>(backend, negativeGradBuffer, negative.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), anchorGradTensor, positiveGradTensor, negativeGradTensor);
     }

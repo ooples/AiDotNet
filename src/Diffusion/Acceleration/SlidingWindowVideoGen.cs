@@ -140,7 +140,7 @@ internal class SlidingWindowVideoGen<T>
         int elementsPerFrame = currentWindow.Data.Length / Math.Max(1, currentWindow.Shape[0]);
         int accFrames = accumulated.Shape[0];
 
-        var result = new Tensor<T>(accumulated.Shape);
+        var result = new Tensor<T>(accumulated.Shape.ToArray());
         accumulated.Data.Span.CopyTo(result.Data.Span);
 
         for (int f = 0; f < overlapElements && f < currentWindow.Shape[0]; f++)

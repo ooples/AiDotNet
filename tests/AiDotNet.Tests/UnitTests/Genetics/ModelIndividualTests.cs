@@ -201,6 +201,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
                 var outputNode = TensorOperations<double>.Sum(mulNode);
                 return outputNode;
             }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
         }
 
         private class ModelParameterGene : ICloneable

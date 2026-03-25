@@ -165,9 +165,9 @@ public class FlashAttentionTests
             gradOutput, query, key, value, output);
 
         // Assert - Gradient shapes match input shapes
-        Assert.Equal(query.Shape, gradQuery.Shape);
-        Assert.Equal(key.Shape, gradKey.Shape);
-        Assert.Equal(value.Shape, gradValue.Shape);
+        Assert.Equal(query.Shape.ToArray(), gradQuery.Shape.ToArray());
+        Assert.Equal(key.Shape.ToArray(), gradKey.Shape.ToArray());
+        Assert.Equal(value.Shape.ToArray(), gradValue.Shape.ToArray());
     }
 
     [Fact]
@@ -237,7 +237,7 @@ public class FlashAttentionTests
         var gradInput = layer.Backward(gradOutput);
 
         // Assert
-        Assert.Equal(input.Shape, gradInput.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradInput.Shape.ToArray());
     }
 
     [Fact]
@@ -369,7 +369,7 @@ public class FlashAttentionTests
         }
 
         int totalElements = 1;
-        foreach (var dim in expected.Shape) totalElements *= dim;
+        foreach (var dim in expected.Shape.ToArray()) totalElements *= dim;
 
         for (int i = 0; i < totalElements; i++)
         {
@@ -390,7 +390,7 @@ public class FlashAttentionTests
         int headDim = query.Shape[2];
 
         float scale = 1.0f / (float)Math.Sqrt(headDim);
-        var output = new Tensor<float>(query.Shape);
+        var output = new Tensor<float>(query.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

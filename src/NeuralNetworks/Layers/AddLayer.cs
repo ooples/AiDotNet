@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -32,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (like float, double, etc.)</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.FeatureFusion)]
+[LayerProperty(IsTrainable = false, ApiShape = LayerApiShape.MultiInput, TestInputShape = "1, 4", TestConstructorArgs = "new[] { new[] { 1, 4 }, new[] { 1, 4 } }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class AddLayer<T> : LayerBase<T>
 {
     /// <summary>

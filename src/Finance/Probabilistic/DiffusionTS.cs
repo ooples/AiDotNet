@@ -572,7 +572,7 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
         {
             fullGradient[i] = gradient[i];
         }
-        Backward(Tensor<T>.FromVector(new Vector<T>(fullGradient), output.Shape));
+        Backward(Tensor<T>.FromVector(new Vector<T>(fullGradient), output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -914,7 +914,7 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape.ToArray())
         {
             totalSize *= dim;
         }
@@ -1037,9 +1037,9 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
             residualVec[i] = NumOps.FromDouble(original - trend - seasonal);
         }
 
-        return (new Tensor<T>(timeSeries.Shape, new Vector<T>(trendVec)),
-                new Tensor<T>(timeSeries.Shape, new Vector<T>(seasonalVec)),
-                new Tensor<T>(timeSeries.Shape, new Vector<T>(residualVec)));
+        return (new Tensor<T>(timeSeries.Shape.ToArray(), new Vector<T>(trendVec)),
+                new Tensor<T>(timeSeries.Shape.ToArray(), new Vector<T>(seasonalVec)),
+                new Tensor<T>(timeSeries.Shape.ToArray(), new Vector<T>(residualVec)));
     }
 
     /// <summary>
@@ -1271,8 +1271,8 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
             noisyVec[i] = NumOps.FromDouble(noisyVal);
         }
 
-        return (new Tensor<T>(data.Shape, new Vector<T>(noisyVec)),
-                new Tensor<T>(data.Shape, new Vector<T>(noiseVec)));
+        return (new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noisyVec)),
+                new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noiseVec)));
     }
 
     /// <summary>
@@ -1319,7 +1319,7 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
             resultVec[i] = NumOps.FromDouble(mean + sigma * z);
         }
 
-        return new Tensor<T>(current.Shape, new Vector<T>(resultVec));
+        return new Tensor<T>(current.Shape.ToArray(), new Vector<T>(resultVec));
     }
 
     /// <summary>
@@ -1349,7 +1349,7 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
             smoothed[i] = NumOps.FromDouble(alpha * curr + (1 - alpha) * prev);
         }
 
-        return new Tensor<T>(trend.Shape, new Vector<T>(smoothed));
+        return new Tensor<T>(trend.Shape.ToArray(), new Vector<T>(smoothed));
     }
 
     /// <summary>

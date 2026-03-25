@@ -59,7 +59,7 @@ public class DDPMModelTests
         Func<Tensor<double>, int, Tensor<double>> predictor = (input, timestep) =>
         {
             predictorCalled = true;
-            return new Tensor<double>(input.Shape, new Vector<double>(input.ToVector().Length));
+            return new Tensor<double>(input.Shape.ToArray(), new Vector<double>(input.ToVector().Length));
         };
 
         // Act
@@ -144,7 +144,7 @@ public class DDPMModelTests
             var result = new Vector<double>(vec.Length);
             for (int i = 0; i < vec.Length; i++)
                 result[i] = vec[i] * 0.5;
-            return new Tensor<double>(input.Shape, result);
+            return new Tensor<double>(input.Shape.ToArray(), result);
         });
 
         var sample = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }));
@@ -178,7 +178,7 @@ public class DDPMModelTests
         var result = model.Generate(shape, numInferenceSteps: 10);
 
         // Assert
-        Assert.Equal(shape, result.Shape);
+        Assert.Equal(shape, result.Shape.ToArray());
     }
 
     [Fact]
@@ -248,7 +248,7 @@ public class DDPMModelTests
         var result = model.Generate(shape, numInferenceSteps: steps, seed: 123);
 
         // Assert
-        Assert.Equal(shape, result.Shape);
+        Assert.Equal(shape, result.Shape.ToArray());
         var vec = result.ToVector();
         foreach (var v in vec)
         {
@@ -535,7 +535,7 @@ public class DDPMModelTests
         Func<Tensor<double>, int, Tensor<double>> predictor = (input, timestep) =>
         {
             predictorCalled = true;
-            return new Tensor<double>(input.Shape, new Vector<double>(input.ToVector().Length));
+            return new Tensor<double>(input.Shape.ToArray(), new Vector<double>(input.ToVector().Length));
         };
 
         // Act
@@ -563,7 +563,7 @@ public class DDPMModelTests
         var result = model.Generate(shape, numInferenceSteps: 10, seed: 42);
 
         // Assert
-        Assert.Equal(shape, result.Shape);
+        Assert.Equal(shape, result.Shape.ToArray());
     }
 
     [Fact]
@@ -578,7 +578,7 @@ public class DDPMModelTests
         var result = model.Generate(shape, numInferenceSteps: 20, seed: 42);
 
         // Assert
-        Assert.Equal(shape, result.Shape);
+        Assert.Equal(shape, result.Shape.ToArray());
     }
 
     #endregion

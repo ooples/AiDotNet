@@ -238,13 +238,13 @@ public static class OptimizerHelper<T, TInput, TOutput>
         }
 
         // Create a new shape with the updated feature dimension
-        var newShape = X.Shape.ToArray();
+        var newShape = X.Shape.ToArray().ToArray();
         newShape[1] = selectedFeatures.Count;
 
         var selectedX = new Tensor<T>(newShape);
 
         // Calculate the total number of elements to process
-        int totalElements = X.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int totalElements = X.Length;
         int featuresCount = X.Shape[1];
         int elementsPerSample = totalElements / X.Shape[0];
 

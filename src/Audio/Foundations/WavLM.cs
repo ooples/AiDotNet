@@ -146,7 +146,7 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         var c = audio;
         foreach (var l in Layers) { c = l.Forward(c); if (l is MultiHeadAttentionLayer<T>) layerOutputs.Add(c); }
         if (layerOutputs.Count == 0) return c;
-        var result = new Tensor<T>(layerOutputs[0].Shape);
+        var result = new Tensor<T>(layerOutputs[0].Shape.ToArray());
         int count = layerOutputs.Count;
         for (int li = 0; li < count; li++)
         {

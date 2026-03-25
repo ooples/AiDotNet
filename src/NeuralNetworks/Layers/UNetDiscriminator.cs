@@ -1,6 +1,8 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -48,6 +50,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 8, 3, 8, 2")]
 public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     #region Fields
@@ -322,7 +328,7 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output.Data.Span[i] = _leakyReLU.Activate(input.Data.Span[i]);
@@ -332,7 +338,7 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
     {
-        var output = TensorAllocator.Rent<T>(gradient.Shape);
+        var output = TensorAllocator.Rent<T>(gradient.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             output.Data.Span[i] = NumOps.Multiply(
@@ -586,7 +592,7 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output.Data.Span[i] = _leakyReLU.Activate(input.Data.Span[i]);
@@ -596,7 +602,7 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
     {
-        var output = TensorAllocator.Rent<T>(gradient.Shape);
+        var output = TensorAllocator.Rent<T>(gradient.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             output.Data.Span[i] = NumOps.Multiply(
@@ -803,7 +809,7 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         else
         {
             upsampleGrad = grad;
-            skipGrad = new Tensor<T>(_lastSkip?.Shape ?? [1]);
+            skipGrad = new Tensor<T>(_lastSkip?.Shape.ToArray() ?? new[] { 1 });
         }
 
         // Backward through upsample
@@ -867,7 +873,7 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output.Data.Span[i] = _leakyReLU.Activate(input.Data.Span[i]);
@@ -877,7 +883,7 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
     {
-        var output = TensorAllocator.Rent<T>(gradient.Shape);
+        var output = TensorAllocator.Rent<T>(gradient.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             output.Data.Span[i] = NumOps.Multiply(

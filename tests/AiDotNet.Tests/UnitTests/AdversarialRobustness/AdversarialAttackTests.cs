@@ -90,6 +90,8 @@ public class AdversarialAttackTests
         public Dictionary<string, double> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0 / _inputDim);
         public bool SupportsJitCompilation => false;
         public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

@@ -402,11 +402,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 
             // Copy the trained weights and biases to our DBM
             _layerWeights[layer] = new Tensor<T>(
-                _layerWeights[layer].Shape,
+                _layerWeights[layer].Shape.ToArray(),
                 tmpRBM.GetParameters().GetSubVector(0, _layerSizes[layer] * _layerSizes[layer + 1]));
 
             _layerBiases[layer] = new Tensor<T>(
-                _layerBiases[layer].Shape,
+                _layerBiases[layer].Shape.ToArray(),
                 tmpRBM.GetParameters().GetSubVector(
                     _layerSizes[layer] * _layerSizes[layer + 1],
                     _layerSizes[layer]));
@@ -611,7 +611,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> Reconstruct(Tensor<T> input)
     {
         // Remember original shape
-        var originalShape = input.Shape;
+        var originalShape = input.Shape.ToArray();
         var was1D = originalShape.Length == 1;
 
         var hidden = PropagateUp(input);
@@ -679,13 +679,8 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         var visible = hidden;
         for (int layer = _layerSizes.Count - 2; layer >= 0; layer--)
         {
-            // Transpose weights manually for the down pass
-            int rows = _layerWeights[layer].Shape[0];
-            int cols = _layerWeights[layer].Shape[1];
-            var transposed = new Tensor<T>([cols, rows]);
-            for (int r = 0; r < rows; r++)
-                for (int c = 0; c < cols; c++)
-                    transposed[c, r] = _layerWeights[layer][r, c];
+            // O(1) view-based transpose — no data copy unless MatMul needs contiguous
+            var transposed = _layerWeights[layer].Transpose([1, 0]);
             var product = MatMul2D(visible, transposed);
             var biasDown = _layerBiases[layer];
             var bias = biasDown.Rank < product.Rank
@@ -956,12 +951,12 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         {
             int weightCount = _layerWeights[i].Length;
             var weightVector = parameters.GetSubVector(index, weightCount);
-            _layerWeights[i] = new Tensor<T>(_layerWeights[i].Shape, weightVector);
+            _layerWeights[i] = new Tensor<T>(_layerWeights[i].Shape.ToArray(), weightVector);
             index += weightCount;
 
             int biasCount = _layerBiases[i].Length;
             var biasVector = parameters.GetSubVector(index, biasCount);
-            _layerBiases[i] = new Tensor<T>(_layerBiases[i].Shape, biasVector);
+            _layerBiases[i] = new Tensor<T>(_layerBiases[i].Shape.ToArray(), biasVector);
             index += biasCount;
         }
     }

@@ -135,15 +135,26 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         double rssUnrestricted = ComputeOLSResidualVariance(fullPast, yFuture, effectiveN, fullDim);
 
         // TE = 0.5 * log(var_restricted / var_unrestricted)
-        if (rssUnrestricted < 1e-15)
+        if (rssRestricted < 1e-15 && rssUnrestricted < 1e-15)
         {
-            // Both models fit perfectly — no meaningful residual variance to compare.
-            // Transfer entropy is undefined in this case. Return 0 (no evidence of
-            // information transfer beyond what both models already explain).
+            // Both models fit perfectly — no meaningful difference in explanatory power.
             return 0;
         }
 
-        if (rssRestricted < 1e-15) return 0;
+        if (rssRestricted < 1e-15)
+        {
+            // Restricted model already fits perfectly — source adds no information.
+            return 0;
+        }
+
+        if (rssUnrestricted < 1e-15)
+        {
+            // Unrestricted model fits perfectly but restricted does not.
+            // This is the strongest possible TE signal: source perfectly predicts target
+            // beyond what target's own history can explain. Cap at a large finite value
+            // (log ratio is +infinity when denominator → 0).
+            return 0.5 * Math.Log(rssRestricted / 1e-15);
+        }
 
         double te = 0.5 * Math.Log(rssRestricted / rssUnrestricted);
         return Math.Max(te, 0);

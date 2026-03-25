@@ -115,7 +115,7 @@ public class DatasetMixer<T>
 
         // Build per-sample shape (all dims except first)
         int[] sampleShape = new int[features.Shape.Length - 1];
-        Array.Copy(features.Shape, 1, sampleShape, 0, sampleShape.Length);
+        Array.Copy(features.Shape.ToArray(), 1, sampleShape, 0, sampleShape.Length);
 
         int elementsPerSample = 1;
         for (int d = 0; d < sampleShape.Length; d++)
@@ -128,7 +128,7 @@ public class DatasetMixer<T>
         if (labels is not null && labels.Shape.Length >= 2)
         {
             labelShape = new int[labels.Shape.Length - 1];
-            Array.Copy(labels.Shape, 1, labelShape, 0, labelShape.Length);
+            Array.Copy(labels.Shape.ToArray(), 1, labelShape, 0, labelShape.Length);
             labelsPerSample = 1;
             for (int d = 0; d < labelShape.Length; d++)
             {

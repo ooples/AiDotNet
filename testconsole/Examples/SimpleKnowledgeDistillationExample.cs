@@ -186,6 +186,8 @@ public static class SimpleKnowledgeDistillationExample
             var outputNode = TensorOperations<double>.Mean(inputNode);
             return outputNode;
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 }
 

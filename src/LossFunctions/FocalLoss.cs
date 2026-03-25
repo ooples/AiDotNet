@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -32,6 +34,11 @@ namespace AiDotNet.LossFunctions;
 /// - Any classification task where easy negatives dominate training
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.BinaryClassification)]
+[LossTask(LossTask.MultiClass)]
+[LossTask(LossTask.ObjectDetection)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, RequiresProbabilityInputs = true, HandlesImbalancedData = true, TestInputFormat = LossTestInputFormat.ProbabilityDistribution, ExpectedOutput = OutputType.Probabilities)]
 public class FocalLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -157,7 +164,7 @@ public class FocalLoss<T> : LossFunctionBase<T>
         backend.FocalBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size, alpha, gamma);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

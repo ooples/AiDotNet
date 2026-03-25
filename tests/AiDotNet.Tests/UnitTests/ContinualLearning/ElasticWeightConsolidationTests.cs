@@ -224,5 +224,7 @@ public class ElasticWeightConsolidationTests
         {
             throw new NotSupportedException("MockModel does not support JIT compilation.");
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 }

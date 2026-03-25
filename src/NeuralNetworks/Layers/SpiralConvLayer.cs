@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu; // For IGpuBuffer
 using AiDotNet.Tensors.Engines.Gpu;
@@ -37,6 +39,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
 public class SpiralConvLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -521,10 +526,10 @@ public class SpiralConvLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape, NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape.ToArray(), NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape);
+        _biases = new Tensor<T>(_biases.Shape.ToArray());
         Engine.TensorFill(_biases, NumOps.Zero);
     }
 
@@ -796,7 +801,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
             neighborFeatures = Engine.TensorMultiply(neighborFeatures, Engine.TensorTile(mask, [1, InputChannels]));
 
             // Set the gathered features into the result at the appropriate offset
-            Engine.TensorSetSlice(gathered, neighborFeatures, [0, featureOffset]);
+            gathered = Engine.TensorSetSlice(gathered, neighborFeatures, [0, featureOffset]);
         }
 
         return gathered;
@@ -844,7 +849,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
         if (_spiralIndices == null)
             throw new InvalidOperationException("Spiral indices not set.");
 
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         bool hasBatch = _lastInput.Rank == 3;
         int numVertices = hasBatch ? _lastInput.Shape[1] : _lastInput.Shape[0];
@@ -987,9 +992,9 @@ public class SpiralConvLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
 
         int idx = 0;
-        _weights = new Tensor<T>(_weights.Shape, parameters.Slice(idx, _weights.Length));
+        _weights = new Tensor<T>(_weights.Shape.ToArray(), parameters.Slice(idx, _weights.Length));
         idx += _weights.Length;
-        _biases = new Tensor<T>(_biases.Shape, parameters.Slice(idx, _biases.Length));
+        _biases = new Tensor<T>(_biases.Shape.ToArray(), parameters.Slice(idx, _biases.Length));
     }
 
     /// <summary>
@@ -1129,7 +1134,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
         {
             weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _weights = new Tensor<T>(weightArray, _weights.Shape);
+        _weights = new Tensor<T>(weightArray, _weights.Shape.ToArray());
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[_biases.Length];
@@ -1137,7 +1142,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
         {
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _biases = new Tensor<T>(biasArray, _biases.Shape);
+        _biases = new Tensor<T>(biasArray, _biases.Shape.ToArray());
 
         // Deserialize spiral indices if present
         bool hasIndices = reader.ReadBoolean();

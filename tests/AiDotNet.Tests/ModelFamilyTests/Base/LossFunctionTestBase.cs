@@ -22,9 +22,60 @@ public abstract class LossFunctionTestBase
 
     /// <summary>
     /// Whether identical predicted/actual should give exactly zero loss.
-    /// True for: MSE, MAE, Huber. False for: some regularized losses.
+    /// True for: MSE, MAE, Huber. False for: CrossEntropy, Dice, ElasticNet.
     /// </summary>
     protected virtual bool ZeroLossForIdentical => true;
+
+    /// <summary>
+    /// Whether derivative is zero for identical inputs.
+    /// True for most losses where ZeroLossForIdentical is true.
+    /// False for: MeanBiasError (constant derivative -1/n), QuantileLoss.
+    /// </summary>
+    protected virtual bool ZeroDerivativeForIdentical => ZeroLossForIdentical;
+
+    /// <summary>
+    /// Whether the gradient sign follows the standard convention: positive when predicted > actual.
+    /// True for: MSE, MAE, Huber, LogCosh (regression losses).
+    /// False for: CrossEntropy, Focal, Dice, Hinge, Wasserstein, MeanBiasError.
+    /// The numerical gradient check (invariant 7) still validates correctness regardless.
+    /// </summary>
+    protected virtual bool HasStandardGradientSign => true;
+
+    /// <summary>
+    /// Standard test predicted values. Override for losses that need specific input formats.
+    /// Default: continuous values in [0,1] range.
+    /// </summary>
+    protected virtual double[] TestPredicted => [0.2, 0.5, 0.8];
+
+    /// <summary>
+    /// Standard test actual values. Override for losses that need specific input formats.
+    /// </summary>
+    protected virtual double[] TestActual => [0.3, 0.6, 0.7];
+
+    /// <summary>
+    /// Small-error predicted values for the "larger error produces larger loss" test.
+    /// </summary>
+    protected virtual double[] SmallErrorPredicted => [0.6, 0.6, 0.6];
+
+    /// <summary>
+    /// Large-error predicted values for the "larger error produces larger loss" test.
+    /// </summary>
+    protected virtual double[] LargeErrorPredicted => [0.9, 0.9, 0.9];
+
+    /// <summary>
+    /// Actual values for the error magnitude comparison test.
+    /// </summary>
+    protected virtual double[] ErrorTestActual => [0.5, 0.5, 0.5];
+
+    /// <summary>
+    /// Predicted value for the gradient sign direction test (should be > SignTestActual).
+    /// </summary>
+    protected virtual double[] SignTestPredicted => [0.9];
+
+    /// <summary>
+    /// Actual value for the gradient sign direction test.
+    /// </summary>
+    protected virtual double[] SignTestActual => [0.1];
 
     // =========================================================================
     // INVARIANT 1: Loss is finite for normal inputs
@@ -34,8 +85,8 @@ public abstract class LossFunctionTestBase
     public void CalculateLoss_ShouldBeFinite()
     {
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.2, 0.5, 0.8 });
-        var actual = new Vector<double>(new[] { 0.3, 0.6, 0.7 });
+        var predicted = new Vector<double>(TestPredicted);
+        var actual = new Vector<double>(TestActual);
 
         double value = loss.CalculateLoss(predicted, actual);
 
@@ -53,8 +104,8 @@ public abstract class LossFunctionTestBase
         if (!IsNonNegative) return;
 
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.1, 0.9, 0.5 });
-        var actual = new Vector<double>(new[] { 0.8, 0.2, 0.5 });
+        var predicted = new Vector<double>(TestPredicted);
+        var actual = new Vector<double>(TestActual);
 
         double value = loss.CalculateLoss(predicted, actual);
         Assert.True(value >= -1e-10, $"Loss should be non-negative but got {value}.");
@@ -84,10 +135,14 @@ public abstract class LossFunctionTestBase
     [Fact]
     public void CalculateLoss_LargerError_ShouldProduceLargerLoss()
     {
+        // Skip for losses that can go negative (MBE, Wasserstein) — larger error
+        // doesn't necessarily mean larger loss value when loss can be negative
+        if (!IsNonNegative) return;
+
         var loss = CreateLoss();
-        var actual = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
-        var smallError = new Vector<double>(new[] { 0.6, 0.6, 0.6 });
-        var largeError = new Vector<double>(new[] { 0.9, 0.9, 0.9 });
+        var actual = new Vector<double>(ErrorTestActual);
+        var smallError = new Vector<double>(SmallErrorPredicted);
+        var largeError = new Vector<double>(LargeErrorPredicted);
 
         double smallLoss = loss.CalculateLoss(smallError, actual);
         double largeLoss = loss.CalculateLoss(largeError, actual);
@@ -104,8 +159,8 @@ public abstract class LossFunctionTestBase
     public void CalculateDerivative_ShouldBeFinite()
     {
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.2, 0.5, 0.8 });
-        var actual = new Vector<double>(new[] { 0.3, 0.6, 0.7 });
+        var predicted = new Vector<double>(TestPredicted);
+        var actual = new Vector<double>(TestActual);
 
         var derivative = loss.CalculateDerivative(predicted, actual);
 
@@ -126,7 +181,7 @@ public abstract class LossFunctionTestBase
     [Fact]
     public void CalculateDerivative_IdenticalInputs_ShouldBeZero()
     {
-        if (!ZeroLossForIdentical) return;
+        if (!ZeroDerivativeForIdentical) return;
 
         var loss = CreateLoss();
         var values = new Vector<double>(new[] { 0.3, 0.5, 0.7 });
@@ -150,8 +205,8 @@ public abstract class LossFunctionTestBase
     public void CalculateDerivative_ShouldMatchNumericalGradient()
     {
         var loss = CreateLoss();
-        var predicted = new Vector<double>(new[] { 0.3, 0.6, 0.4 });
-        var actual = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
+        var predicted = new Vector<double>(TestPredicted);
+        var actual = new Vector<double>(TestActual);
         double epsilon = 1e-5;
 
         var analyticalGrad = loss.CalculateDerivative(predicted, actual);
@@ -187,16 +242,17 @@ public abstract class LossFunctionTestBase
     [Fact]
     public void CalculateDerivative_SignShouldMatchErrorDirection()
     {
+        if (!HasStandardGradientSign) return;
+
         var loss = CreateLoss();
-        // predicted is clearly above actual
-        var predicted = new Vector<double>(new[] { 0.9 });
-        var actual = new Vector<double>(new[] { 0.1 });
+        var predicted = new Vector<double>(SignTestPredicted);
+        var actual = new Vector<double>(SignTestActual);
 
         var derivative = loss.CalculateDerivative(predicted, actual);
 
-        // For most losses, positive error → positive gradient
+        // For standard regression losses, positive error → positive gradient
         Assert.True(derivative[0] > -1e-10,
-            $"When predicted > actual, derivative should be ≥ 0 but got {derivative[0]}.");
+            $"When predicted > actual, derivative should be >= 0 but got {derivative[0]}.");
     }
 
     // =========================================================================
@@ -207,6 +263,11 @@ public abstract class LossFunctionTestBase
     [Fact]
     public void CalculateLoss_ShouldBeSymmetricInErrorMagnitude()
     {
+        // Only test symmetry for standard regression-style losses.
+        // Classification losses (Focal, CE) and signed-label losses (Hinge) are
+        // intentionally asymmetric by design.
+        if (!HasStandardGradientSign) return;
+
         var loss = CreateLoss();
         var actual = new Vector<double>(new[] { 0.5 });
         var overPredict = new Vector<double>(new[] { 0.8 });

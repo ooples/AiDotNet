@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -40,6 +42,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = false, IsStateful = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 16")]
 public class ReservoirLayer<T> : LayerBase<T>
 {
     /// <summary>

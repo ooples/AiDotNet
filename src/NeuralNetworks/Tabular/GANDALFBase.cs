@@ -390,15 +390,15 @@ public abstract class GANDALFBase<T>
         // Initialize gradients
         for (int t = 0; t < Options.NumTrees; t++)
         {
-            var splitWeightsGrad = new Tensor<T>(_treeSplitWeights[t].Shape);
+            var splitWeightsGrad = new Tensor<T>(_treeSplitWeights[t].Shape.ToArray());
             splitWeightsGrad.Fill(NumOps.Zero);
             _treeSplitWeightsGrad[t] = splitWeightsGrad;
 
-            var splitBiasesGrad = new Tensor<T>(_treeSplitBiases[t].Shape);
+            var splitBiasesGrad = new Tensor<T>(_treeSplitBiases[t].Shape.ToArray());
             splitBiasesGrad.Fill(NumOps.Zero);
             _treeSplitBiasesGrad[t] = splitBiasesGrad;
 
-            var leafValuesGrad = new Tensor<T>(_treeLeafValues[t].Shape);
+            var leafValuesGrad = new Tensor<T>(_treeLeafValues[t].Shape.ToArray());
             leafValuesGrad.Fill(NumOps.Zero);
             _treeLeafValuesGrad[t] = leafValuesGrad;
         }

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -32,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 8, 8", TestConstructorArgs = "new[] { 1, 8, 8 }, new[] { 0, 1, 1 }, new[] { 0, 1, 1 }, new[] { 0, 1, 1 }, new[] { 0, 1, 1 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class CroppingLayer<T> : LayerBase<T>
 {
 
@@ -156,7 +160,7 @@ public class CroppingLayer<T> : LayerBase<T>
 
         var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
 
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape.ToArray();
         int[] outputShape = CalculateOutputShape(inputShape, _cropTop, _cropBottom, _cropLeft, _cropRight);
         int outputSize = 1;
         foreach (var dim in outputShape) outputSize *= dim;
@@ -236,7 +240,7 @@ public class CroppingLayer<T> : LayerBase<T>
         var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
 
         int[] inputShape = _gpuCachedInputShape;
-        int[] outputShape = outputGradient.Shape;
+        int[] outputShape = outputGradient.Shape.ToArray();
 
         int inputSize = 1;
         foreach (var dim in inputShape) inputSize *= dim;
@@ -444,7 +448,7 @@ public class CroppingLayer<T> : LayerBase<T>
                 nameof(input));
         }
 
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Rank;
 
         Tensor<T> input4D;
@@ -566,7 +570,7 @@ public class CroppingLayer<T> : LayerBase<T>
         var outputGradientNCHW = gradient4D.Transpose([0, 3, 1, 2]);
 
         // Convert input shape from NHWC to NCHW for CropBackward
-        var inputShape4D = _lastInput.Shape;
+        var inputShape4D = _lastInput.Shape.ToArray();
         var inputShapeNCHW = new int[] { inputShape4D[0], inputShape4D[3], inputShape4D[1], inputShape4D[2] };
 
         var inputGradientNCHW = Engine.CropBackward(outputGradientNCHW, inputShapeNCHW, _cropTop[1], _cropLeft[2]);

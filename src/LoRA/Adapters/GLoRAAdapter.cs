@@ -185,7 +185,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> activationAdaptationOutput = _activationAdaptation.Forward(input);
 
         // Sum all outputs: base + weight_adaptation + activation_adaptation
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
         for (int i = 0; i < baseOutput.Length; i++)
         {
             T sum = NumOps.Add(baseOutput[i], weightAdaptationOutput[i]);
@@ -228,7 +228,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
 
         // Sum all input gradients
-        Tensor<T> inputGrad = new Tensor<T>(weightLoraInputGrad.Shape);
+        Tensor<T> inputGrad = new Tensor<T>(weightLoraInputGrad.Shape.ToArray());
         for (int i = 0; i < weightLoraInputGrad.Length; i++)
         {
             T sum = NumOps.Add(weightLoraInputGrad[i], activationLoraInputGrad[i]);

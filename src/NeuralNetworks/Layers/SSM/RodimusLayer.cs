@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -65,6 +67,10 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class RodimusLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -277,7 +283,7 @@ public class RodimusLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -718,7 +724,7 @@ public class RodimusLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape);
+        var ones = new Tensor<T>(x.Shape.ToArray());
         ones.Fill(NumOps.One);
         var oneMinusSig = Engine.TensorSubtract(ones, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
@@ -728,7 +734,7 @@ public class RodimusLayer<T> : LayerBase<T>
 
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var ones = new Tensor<T>(template.Shape);
+        var ones = new Tensor<T>(template.Shape.ToArray());
         ones.Fill(NumOps.One);
         return ones;
     }

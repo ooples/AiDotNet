@@ -1,5 +1,8 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -27,6 +30,10 @@ namespace AiDotNet.LossFunctions;
 /// - Any model with a very large output space
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Contrastive)]
+[LossTask(LossTask.Embedding)]
+[LossTask(LossTask.TextGeneration)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, ApiShape = LossApiShape.TargetNoiseMatrix, ExpectedOutput = OutputType.Logits)]
 public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

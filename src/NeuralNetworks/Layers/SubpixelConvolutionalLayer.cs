@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -32,6 +34,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Upsampling)]
+[LayerTask(LayerTask.UpSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 1, 2, 3, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class SubpixelConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -524,7 +530,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         // Vectorized random init in [-0.5, 0.5], scaled by Xavier factor
         var randVec = Vector<T>.CreateRandom(_kernels.Length, -0.5, 0.5);
-        var randTensor = new Tensor<T>(_kernels.Shape, randVec);
+        var randTensor = new Tensor<T>(_kernels.Shape.ToArray(), randVec);
         _kernels = Engine.TensorMultiplyScalar(randTensor, scale);
 
         _biases.Fill(NumOps.Zero);
@@ -567,7 +573,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Support any rank >= 3: last 3 dims are interpreted as [C, H, W]
@@ -662,7 +668,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         // Ensure 4D [B, C, H, W] format
         IGpuTensor<T> input4D;
@@ -805,7 +811,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         var kernelGradGpuTemp = gpuEngine.Conv2DBackwardKernelGpu<T>(
             convOutputGrad,
             _gpuInput,
-            _kernels.Shape,
+            _kernels.Shape.ToArray(),
             new[] { 1, 1 },  // stride
             new[] { padSize, padSize },  // padding
             new[] { 1, 1 }); // dilation
@@ -820,7 +826,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         var inputGrad = gpuEngine.Conv2DBackwardInputGpu<T>(
             convOutputGrad,
             _kernels,
-            _gpuInput.Shape,
+            _gpuInput.Shape.ToArray(),
             new[] { 1, 1 },  // stride
             new[] { padSize, padSize },  // padding
             new[] { 1, 1 }); // dilation
@@ -907,7 +913,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Apply activation derivative (both _lastOutput and gradient4D are in NCHW format)
-        var delta = ApplyActivationDerivative(_lastOutput, gradient4D);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, gradient4D);
 
         int padSize = _kernelSize / 2;
         var strideArr = new int[] { 1, 1 };
@@ -923,10 +929,10 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _biasGradients = Engine.ReduceSum(convOutputGradientNCHW, new[] { 0, 2, 3 }, keepDims: false);
 
         // Calculate kernel gradient using Engine
-        _kernelGradients = Engine.Conv2DBackwardKernel(convOutputGradientNCHW, _lastInput, _kernels.Shape, strideArr, paddingArr, dilationArr);
+        _kernelGradients = Engine.Conv2DBackwardKernel(convOutputGradientNCHW, _lastInput, _kernels.Shape.ToArray(), strideArr, paddingArr, dilationArr);
 
         // Calculate input gradient using Engine (NCHW format)
-        var inputGradient = Engine.Conv2DBackwardInput(convOutputGradientNCHW, _kernels, _lastInput.Shape, strideArr, paddingArr, dilationArr);
+        var inputGradient = Engine.Conv2DBackwardInput(convOutputGradientNCHW, _kernels, _lastInput.Shape.ToArray(), strideArr, paddingArr, dilationArr);
 
         // Restore original input shape for higher-rank tensors
         if (_originalInputShape != null && _originalInputShape.Length > 4)
@@ -1052,7 +1058,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         else
         {
             var scalarAct = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
-            var result = TensorAllocator.Rent<T>(outputGradient.Shape);
+            var result = TensorAllocator.Rent<T>(outputGradient.Shape.ToArray());
             for (int i = 0; i < outputGradient.Length; i++)
             {
                 result[i] = NumOps.Multiply(scalarAct.Derivative(lastOutput[i]), outputGradient[i]);
@@ -1158,7 +1164,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         // Initialize momentum if not already done
         int numOutChannels = _outputDepth * _upscaleFactor * _upscaleFactor;
-        _kernelMomentum ??= new Tensor<T>(_kernels.Shape);
+        _kernelMomentum ??= new Tensor<T>(_kernels.Shape.ToArray());
         _biasMomentum ??= new Tensor<T>([numOutChannels]);
 
         T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentumFactor);
@@ -1217,6 +1223,19 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        var kGrad = _kernelGradients != null ? new Vector<T>(_kernelGradients.ToArray()) : new Vector<T>(_kernels.Length);
+        var bGrad = _biasGradients != null ? new Vector<T>(_biasGradients.ToArray()) : new Vector<T>(_biases.Length);
+        return Vector<T>.Concatenate(kGrad, bGrad);
+    }
+
+    public override void ClearGradients()
+    {
+        _kernelGradients = null;
+        _biasGradients = null;
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -1445,7 +1464,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _gpuWidth = 0;
         _gpuActivationType = FusedActivationType.None;
 
-        // Reinitialize weights
-        InitializeWeights();
+        // Note: Do NOT reinitialize weights in ResetState.
+        // ResetState clears cached state, not learned parameters.
     }
 }

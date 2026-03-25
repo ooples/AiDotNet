@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -31,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Positional)]
+[LayerTask(LayerTask.PositionalEncoding)]
+[LayerProperty(IsTrainable = false, TestInputShape = "4, 8", TestConstructorArgs = "16, 8")]
 internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
 {
     private int _maxSequenceLength;
@@ -224,7 +229,7 @@ internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> RotateTensor(Tensor<T> input, int startPosition)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         int rank = input.Shape.Length;
         int seqLen = input.Shape[rank - 2];
         int headDim = input.Shape[rank - 1];
@@ -277,7 +282,7 @@ internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> InverseRotateTensor(Tensor<T> input, int startPosition)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         int rank = input.Shape.Length;
         int seqLen = input.Shape[rank - 2];
         int headDim = input.Shape[rank - 1];

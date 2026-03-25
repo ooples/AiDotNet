@@ -24,7 +24,7 @@ public class GQAInferenceIntegrationTests
         var input = CreateRandomTensor(new[] { 2, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -92,7 +92,7 @@ public class GQAInferenceIntegrationTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -110,7 +110,7 @@ public class GQAInferenceIntegrationTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -126,10 +126,10 @@ public class GQAInferenceIntegrationTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]

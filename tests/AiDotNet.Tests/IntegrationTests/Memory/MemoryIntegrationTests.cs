@@ -178,7 +178,7 @@ public class MemoryIntegrationTests
         using var context = new InferenceContext<double>();
         var template = context.Rent(new[] { 3, 4, 5 });
         var similar = context.RentLike(template);
-        Assert.Equal(template.Shape, similar.Shape);
+        Assert.Equal(template.Shape.ToArray(), similar.Shape.ToArray());
     }
 
     [Fact]

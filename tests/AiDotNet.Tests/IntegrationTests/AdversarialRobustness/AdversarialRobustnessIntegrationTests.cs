@@ -1952,6 +1952,8 @@ public class AdversarialRobustnessIntegrationTests
         {
             throw new NotImplementedException();
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

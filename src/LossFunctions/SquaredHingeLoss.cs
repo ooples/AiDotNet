@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -30,6 +32,9 @@ namespace AiDotNet.LossFunctions;
 /// Compared to regular Hinge Loss, it penalizes violations more severely due to the squaring operation.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.BinaryClassification)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, TestInputFormat = LossTestInputFormat.SignedLabels, ExpectedOutput = OutputType.Logits)]
 public class SquaredHingeLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -119,7 +124,7 @@ public class SquaredHingeLoss<T> : LossFunctionBase<T>
         backend.SquaredHingeBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

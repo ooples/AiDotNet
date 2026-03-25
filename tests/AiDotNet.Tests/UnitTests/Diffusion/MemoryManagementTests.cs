@@ -354,7 +354,7 @@ public class MemoryManagementTests
         var output = shard.Forward(input);
 
         // Now do backward
-        var gradient = new Tensor<float>(output.Shape);
+        var gradient = new Tensor<float>(output.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             gradient[i] = 1.0f;

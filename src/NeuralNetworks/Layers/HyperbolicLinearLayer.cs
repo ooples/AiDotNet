@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -30,6 +32,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (float or double).</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4")]
 public class HyperbolicLinearLayer<T> : LayerBase<T>
 {
     private readonly IHyperbolicManifoldEngine _engine;
@@ -198,7 +203,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int batchSize;
         int inputLen;
@@ -373,7 +378,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _gpuInput = input;
-            _gpuInputShape = input.Shape.ToArray();
+            _gpuInputShape = input.Shape.ToArray().ToArray();
         }
 
         // Cache weights to GPU: flatten [OutputFeatures, InputFeatures] for the kernel
@@ -432,7 +437,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             else
             {
                 var newShape = new int[input.Shape.Length];
-                Array.Copy(input.Shape, newShape, input.Shape.Length - 1);
+                Array.Copy(input.Shape.ToArray(), newShape, input.Shape.Length - 1);
                 newShape[^1] = OutputFeatures;
                 outputShape = newShape;
             }
@@ -646,7 +651,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         // Initialize gradients
         _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);
         _biasesGradient = new Matrix<T>(OutputFeatures, InputFeatures);
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         // Compute gradients using proper Riemannian gradient descent for Poincaré ball geometry.
         // For the Poincaré ball with curvature c, the conformal factor is:
@@ -682,29 +687,28 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
                 _numOps.Multiply(oneMinusCNorm, oneMinusCNorm),
                 _numOps.FromDouble(4.0));
 
+            // Backward computes Euclidean gradients with exp_map Jacobian correction
+            // The exponential map at origin has Jacobian = 2*I, so gradients need 2x scaling
+            var expMapJacobian = _numOps.FromDouble(2.0);
             for (int o = 0; o < OutputFeatures; o++)
             {
-                T gradOutput = gradTensor[b, o];
-
-                // Scale the output gradient by the conformal factor for Riemannian geometry
-                var riemannianGrad = _numOps.Multiply(gradOutput, conformalFactor);
+                T gradOutput = _numOps.Multiply(gradTensor[b, o], expMapJacobian);
 
                 for (int i = 0; i < InputFeatures; i++)
                 {
-                    // Weight gradient: Riemannian gradient scaled by input direction
+                    // Weight gradient with exp_map Jacobian correction
                     var existingWGrad = _weightsGradient[o, i];
-                    var inputContrib = _numOps.Multiply(riemannianGrad, projectedInput[i]);
+                    var inputContrib = _numOps.Multiply(gradOutput, projectedInput[i]);
                     _weightsGradient[o, i] = _numOps.Add(existingWGrad, inputContrib);
 
-                    // Bias gradient: Riemannian gradient (conformal factor already applied)
-                    // Distributed across input features for the bias point
+                    // Bias gradient
                     var existingBGrad = _biasesGradient[o, i];
-                    var biasContrib = _numOps.Divide(riemannianGrad, _numOps.FromDouble(InputFeatures));
+                    var biasContrib = _numOps.Divide(gradOutput, _numOps.FromDouble(InputFeatures));
                     _biasesGradient[o, i] = _numOps.Add(existingBGrad, biasContrib);
 
-                    // Input gradient: Riemannian gradient scaled by weight direction
+                    // Input gradient
                     var existingIGrad = inputGradient[b, i];
-                    var weightContrib = _numOps.Multiply(riemannianGrad, _weights[o, i]);
+                    var weightContrib = _numOps.Multiply(gradOutput, _weights[o, i]);
                     inputGradient[b, i] = _numOps.Add(existingIGrad, weightContrib);
                 }
             }

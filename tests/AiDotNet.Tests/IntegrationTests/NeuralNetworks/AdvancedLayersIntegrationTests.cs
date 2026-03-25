@@ -74,14 +74,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, embeddingSize]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -222,14 +222,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, inputSize]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -306,7 +306,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -325,7 +325,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -339,14 +339,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, size]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -409,7 +409,7 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([1, 4, 8, 8]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
@@ -471,7 +471,7 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([1, 4, 8, 8]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
@@ -536,7 +536,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(output);
         // Output should have same shape as single input
-        Assert.Equal(input1.Shape, output.Shape);
+        Assert.Equal(input1.Shape.ToArray(), output.Shape.ToArray());
         // Values should be sum of inputs (1.0 + 2.0 = 3.0)
         Assert.Equal(3.0f, output[0, 0, 0], 1e-5f);
     }
@@ -706,7 +706,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -752,7 +752,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     #endregion
@@ -854,7 +854,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -896,7 +896,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -932,7 +932,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -950,7 +950,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -1011,7 +1011,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -1034,7 +1034,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input1.Shape, output.Shape);
+        Assert.Equal(input1.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -1078,7 +1078,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -1099,7 +1099,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -1118,7 +1118,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -1140,7 +1140,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(new[] { 2, numSplits, 8 }, output.Shape);
+        Assert.Equal(new[] { 2, numSplits, 8 }, output.Shape.ToArray());
 
         var reconstructed = output.Reshape([2, 32]);
         for (int i = 0; i < input.Length; i++)
@@ -1165,7 +1165,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -1228,7 +1228,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -1277,7 +1277,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -1341,7 +1341,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -1364,7 +1364,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -1397,14 +1397,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, sequenceLength, embeddingSize]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -1425,7 +1425,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -1464,7 +1464,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -1496,14 +1496,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, sequenceLength, embeddingSize]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -1524,7 +1524,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -1577,14 +1577,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, inputSize]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -1604,7 +1604,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -1699,14 +1699,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, sequenceLength, inputSize]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -1728,7 +1728,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -1767,7 +1767,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
 
         // Some values should be zeroed out in training mode
         int zeroCount = output.ToArray().Count(v => v == 0f);
@@ -1790,7 +1790,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
 
         // In inference mode, output should match input (no dropout applied)
         for (int i = 0; i < output.Length; i++)
@@ -1815,7 +1815,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -1869,14 +1869,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, 4, 4, 3]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -1895,7 +1895,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -1975,14 +1975,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, 16]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2001,7 +2001,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -2022,7 +2022,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         // InputLayer should pass through without modification
         for (int i = 0; i < input.Length; i++)
         {
@@ -2039,14 +2039,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([4, inputSize]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(upstreamGradient.Shape, gradient.Shape);
+        Assert.Equal(upstreamGradient.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2065,7 +2065,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -2101,14 +2101,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, 4, 4, 2]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2128,7 +2128,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -2151,7 +2151,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
 
         // In training mode, output should differ from input due to noise
         bool hasDifference = false;
@@ -2182,7 +2182,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
 
         // In inference mode, no noise should be added
         for (int i = 0; i < output.Length; i++)
@@ -2208,7 +2208,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -2233,7 +2233,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(query.Shape, output.Shape); // output shape matches query shape
+        Assert.Equal(query.Shape.ToArray(), output.Shape.ToArray()); // output shape matches query shape
     }
 
     [Fact]
@@ -2249,14 +2249,14 @@ public class AdvancedLayersIntegrationTests
         var query = Tensor<float>.CreateRandom([2, sequenceLength, queryDim]);
         var context = Tensor<float>.CreateRandom([2, 8, contextDim]);
         var output = layer.Forward(query, context);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(query.Shape, gradient.Shape);
+        Assert.Equal(query.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2279,7 +2279,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -2337,14 +2337,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, inputDepth, inputHeight, inputWidth]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2367,7 +2367,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -2406,7 +2406,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -2419,14 +2419,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([4, numFeatures]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2445,7 +2445,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -2503,14 +2503,14 @@ public class AdvancedLayersIntegrationTests
         // Input tensor = [B, C, H, W] format
         var input = Tensor<float>.CreateRandom([2, 2, 16, 16]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2533,7 +2533,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -2577,14 +2577,14 @@ public class AdvancedLayersIntegrationTests
         // Input tensor = [B, C, H, W] format
         var input = Tensor<float>.CreateRandom([2, 2, 8, 8]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2607,7 +2607,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -2662,7 +2662,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -2699,7 +2699,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -2711,14 +2711,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([4, featureSize]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2737,7 +2737,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     [Fact]
@@ -2812,7 +2812,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -2835,7 +2835,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -2848,14 +2848,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, 8, 4, 4]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2875,7 +2875,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -2897,7 +2897,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -2909,14 +2909,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, 8, 4, 4]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2935,7 +2935,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -2958,7 +2958,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -2971,14 +2971,14 @@ public class AdvancedLayersIntegrationTests
 
         var input = Tensor<float>.CreateRandom([2, maxSequenceLength, embeddingSize]);
         var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape);
+        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
 
         // Act
         var gradient = layer.Backward(upstreamGradient);
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
     }
 
     [Fact]
@@ -2998,7 +2998,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3052,7 +3052,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3108,7 +3108,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3165,7 +3165,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3215,7 +3215,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3258,7 +3258,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3299,7 +3299,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3324,7 +3324,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -3346,7 +3346,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3402,7 +3402,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3443,7 +3443,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3497,7 +3497,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3551,7 +3551,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3603,7 +3603,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3648,7 +3648,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3693,7 +3693,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3745,7 +3745,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3792,7 +3792,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3833,7 +3833,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3877,7 +3877,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -3938,7 +3938,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4000,7 +4000,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4045,7 +4045,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4092,7 +4092,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4137,7 +4137,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4180,7 +4180,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4223,7 +4223,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4272,7 +4272,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4321,7 +4321,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4368,7 +4368,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4415,7 +4415,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4462,7 +4462,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4511,7 +4511,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4560,7 +4560,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4614,7 +4614,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4670,7 +4670,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4719,7 +4719,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4773,7 +4773,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4818,7 +4818,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4863,7 +4863,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4906,7 +4906,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -4951,7 +4951,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -5004,7 +5004,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
     #endregion
@@ -5025,7 +5025,7 @@ public class AdvancedLayersIntegrationTests
 
         // Assert
         Assert.NotNull(output);
-        Assert.Equal([3, outputFeatures], output.Shape);
+        Assert.Equal([3, outputFeatures], output.Shape.ToArray());
     }
 
     [Fact]
@@ -5041,7 +5041,7 @@ public class AdvancedLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal([2, 4, outputFeatures], output.Shape);
+        Assert.Equal([2, 4, outputFeatures], output.Shape.ToArray());
     }
 
     [Fact]
@@ -5055,11 +5055,11 @@ public class AdvancedLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = Tensor<float>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     #endregion
@@ -5079,7 +5079,7 @@ public class AdvancedLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal([4, outputFeatures * 8], output.Shape);
+        Assert.Equal([4, outputFeatures * 8], output.Shape.ToArray());
     }
 
     [Fact]
@@ -5095,7 +5095,7 @@ public class AdvancedLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal([2, 3, outputFeatures * 8], output.Shape);
+        Assert.Equal([2, 3, outputFeatures * 8], output.Shape.ToArray());
     }
 
     [Fact]
@@ -5109,11 +5109,11 @@ public class AdvancedLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = Tensor<float>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     #endregion
@@ -5133,7 +5133,7 @@ public class AdvancedLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal([3, outputSize], output.Shape);
+        Assert.Equal([3, outputSize], output.Shape.ToArray());
     }
 
     [Fact]
@@ -5149,7 +5149,7 @@ public class AdvancedLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal([2, 3, outputSize], output.Shape);
+        Assert.Equal([2, 3, outputSize], output.Shape.ToArray());
     }
 
     [Fact]
@@ -5163,11 +5163,11 @@ public class AdvancedLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = Tensor<float>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     #endregion
@@ -5186,7 +5186,7 @@ public class AdvancedLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -5201,7 +5201,7 @@ public class AdvancedLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
     [Fact]
@@ -5214,11 +5214,11 @@ public class AdvancedLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = Tensor<float>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     #endregion
@@ -5245,7 +5245,7 @@ public class AdvancedLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal([2, 3, outputSize], output.Shape);
+        Assert.Equal([2, 3, outputSize], output.Shape.ToArray());
     }
 
     [Fact]
@@ -5267,11 +5267,11 @@ public class AdvancedLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = Tensor<float>.CreateRandom(output.Shape);
+        var outputGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -5295,7 +5295,7 @@ public class AdvancedLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal([3, outputSize], output.Shape);
+        Assert.Equal([3, outputSize], output.Shape.ToArray());
     }
 
     #endregion

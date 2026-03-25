@@ -1,5 +1,8 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -31,6 +34,9 @@ namespace AiDotNet.LossFunctions;
 /// It's often preferred over Euclidean distance when working with high-dimensional sparse vectors.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Contrastive)]
+[LossTask(LossTask.Embedding)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsSymmetric = true, ExpectedOutput = OutputType.Continuous)]
 public class CosineSimilarityLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

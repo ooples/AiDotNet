@@ -342,7 +342,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
 
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape);
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape.ToArray());
 
             Backward(outputGradientTensor);
             _optimizer.UpdateParameters(Layers);

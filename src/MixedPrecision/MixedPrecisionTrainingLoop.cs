@@ -181,7 +181,7 @@ public class MixedPrecisionTrainingLoop<T>
             scaledError[i] = (T)(object)((float)(object)errorVector[i]! * scale);
         }
 
-        var errorTensor = Tensor<T>.FromVector(scaledError, output.Shape);
+        var errorTensor = Tensor<T>.FromVector(scaledError, output.Shape.ToArray());
 
         // Backpropagate with scaled gradients
         _network.Backpropagate(errorTensor);

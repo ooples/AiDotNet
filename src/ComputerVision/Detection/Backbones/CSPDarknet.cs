@@ -194,7 +194,7 @@ public class CSPDarknet<T> : BackboneBase<T>
     /// </summary>
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);
@@ -348,7 +348,7 @@ internal class CSPBlock<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);
@@ -438,7 +438,7 @@ internal class BottleneckBlock<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);

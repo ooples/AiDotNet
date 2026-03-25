@@ -77,7 +77,7 @@ public class OutpaintingMaskGenerator<T> : IDataTransformer<T, Tensor<T>, Tensor
     /// <inheritdoc />
     public Tensor<T> Transform(Tensor<T> data)
     {
-        var shape = data.Shape;
+        var shape = data.Shape.ToArray();
         int imageHeight = shape[0];
         int imageWidth = shape.Length > 1 ? shape[1] : 1;
         return Generate(

@@ -512,7 +512,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     private (Tensor<T> Mean, Tensor<T> LogVar) SplitEncoderOutput(Tensor<T> encoderOutput)
     {
         int latentDim = _options.LatentDimension;
-        int[] halfShape = DeriveShapeWithLastDim(encoderOutput.Shape, latentDim);
+        int[] halfShape = DeriveShapeWithLastDim(encoderOutput.Shape.ToArray(), latentDim);
         var mean = new Tensor<T>(halfShape);
         var logVar = new Tensor<T>(halfShape);
 
@@ -534,8 +534,8 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     /// </summary>
     private Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
     {
-        var z = new Tensor<T>(mean.Shape);
-        _lastEpsilon = new Tensor<T>(mean.Shape);
+        var z = new Tensor<T>(mean.Shape.ToArray());
+        _lastEpsilon = new Tensor<T>(mean.Shape.ToArray());
 
         for (int i = 0; i < mean.Length; i++)
         {
@@ -617,7 +617,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     /// </remarks>
     private Tensor<T> ComputeOutputGradient(Tensor<T> input, Tensor<T> activated)
     {
-        var grad = new Tensor<T>(activated.Shape);
+        var grad = new Tensor<T>(activated.Shape.ToArray());
 
         if (_transformer is null) return grad;
 
@@ -700,8 +700,8 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
         //   dKL/d(mean)   = mean
         //   dKL/d(logvar) = 0.5 * (exp(logvar) - 1)
 
-        var meanGrad = new Tensor<T>(mean.Shape);
-        var logVarGrad = new Tensor<T>(logVar.Shape);
+        var meanGrad = new Tensor<T>(mean.Shape.ToArray());
+        var logVarGrad = new Tensor<T>(logVar.Shape.ToArray());
 
         for (int i = 0; i < mean.Length; i++)
         {
@@ -729,7 +729,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
             Tensor<T> gradFromLogVar = _logVarLayer is not null ? _logVarLayer.Backward(logVarGrad) : logVarGrad;
 
             // Sum gradients from both paths
-            var encoderOutGrad = new Tensor<T>(gradFromMean.Shape);
+            var encoderOutGrad = new Tensor<T>(gradFromMean.Shape.ToArray());
             for (int i = 0; i < encoderOutGrad.Length; i++)
             {
                 double gm = i < gradFromMean.Length ? NumOps.ToDouble(gradFromMean[i]) : 0;
@@ -749,8 +749,8 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
             // Default layers: combine mean and logvar gradients into 2*latentDim gradient
             int latentDim = _options.LatentDimension;
             int[] encGradShape = _lastEncoderOutput is not null
-                ? (int[])_lastEncoderOutput.Shape.Clone()
-                : DeriveShapeWithLastDim(mean.Shape, 2 * latentDim);
+                ? (int[])_lastEncoderOutput.Shape.ToArray().Clone()
+                : DeriveShapeWithLastDim(mean.Shape.ToArray(), 2 * latentDim);
             var combinedGrad = new Tensor<T>(encGradShape);
             for (int i = 0; i < latentDim; i++)
             {
@@ -797,7 +797,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     {
         if (_transformer is null) return output;
 
-        var result = new Tensor<T>(output.Shape);
+        var result = new Tensor<T>(output.Shape.ToArray());
         int idx = 0;
 
         for (int col = 0; col < _columns.Count && idx < output.Length; col++)
@@ -849,7 +849,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     /// </summary>
     private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
     {
-        var result = new Tensor<T>(grad.Shape);
+        var result = new Tensor<T>(grad.Shape.ToArray());
         double sumSq = 0;
 
         for (int i = 0; i < grad.Length; i++)

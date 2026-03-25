@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -52,6 +54,10 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class RWKV7Block<T> : LayerBase<T>
 {
     // Configuration
@@ -305,7 +311,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -591,7 +597,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplyGroupNorm(Tensor<T> input, int batchSize)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
 
         for (int bi = 0; bi < batchSize; bi++)
@@ -777,7 +783,7 @@ public class RWKV7Block<T> : LayerBase<T>
             var dRGate = Engine.TensorMultiply(vProj_t, dOut_t);
 
             // sigmoid derivative: sigmoid(x) * (1 - sigmoid(x)) = rGate * (1 - rGate)
-            var sigmoidDeriv = new Tensor<T>(rGate_t.Shape);
+            var sigmoidDeriv = new Tensor<T>(rGate_t.Shape.ToArray());
             for (int bi = 0; bi < batchSize; bi++)
                 for (int d = 0; d < _modelDimension; d++)
                 {
@@ -836,6 +842,61 @@ public class RWKV7Block<T> : LayerBase<T>
                 parameters[index++] = tensor[i];
         }
         return parameters;
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameterGradients()
+    {
+        var allParams = GetAllParameterTensors();
+        var allGrads = GetAllGradientTensors();
+        var result = new Vector<T>(ParameterCount);
+        int index = 0;
+
+        for (int i = 0; i < allParams.Length; i++)
+        {
+            var grad = allGrads[i];
+            if (grad != null)
+            {
+                for (int j = 0; j < grad.Length; j++)
+                    result[index++] = grad[j];
+            }
+            else
+            {
+                index += allParams[i].Length;
+            }
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _timeMixRGrad = null;
+        _timeMixKGrad = null;
+        _timeMixVGrad = null;
+        _timeMixAGrad = null;
+        _timeMixBGrad = null;
+        _receptanceWeightsGrad = null;
+        _keyWeightsGrad = null;
+        _valueWeightsGrad = null;
+        _outputWeightsGrad = null;
+        _aWeightsGrad = null;
+        _aBiasGrad = null;
+        _bWeightsGrad = null;
+        _bBiasGrad = null;
+        _groupNormGammaGrad = null;
+        _groupNormBetaGrad = null;
+        _channelMixRGrad = null;
+        _channelMixKGrad = null;
+        _channelKeyWeightsGrad = null;
+        _channelValueWeightsGrad = null;
+        _channelReceptanceWeightsGrad = null;
+        _normGamma1Grad = null;
+        _normBeta1Grad = null;
+        _normGamma2Grad = null;
+        _normBeta2Grad = null;
     }
 
     /// <inheritdoc />

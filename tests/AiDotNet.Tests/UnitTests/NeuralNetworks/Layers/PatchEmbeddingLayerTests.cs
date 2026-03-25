@@ -117,7 +117,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             }
 
             var output = layer.Forward(input);
-            var outputGradient = new Tensor<double>(output.Shape);
+            var outputGradient = new Tensor<double>(output.Shape.ToArray());
             for (int i = 0; i < outputGradient.Length; i++)
             {
                 outputGradient[i] = random.NextDouble();
@@ -127,7 +127,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             var inputGradient = layer.Backward(outputGradient);
 
             // Assert
-            Assert.Equal(input.Shape, inputGradient.Shape);
+            Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         }
 
         [Fact]
@@ -151,7 +151,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             }
 
             var output = layer.Forward(input);
-            var outputGradient = new Tensor<double>(output.Shape);
+            var outputGradient = new Tensor<double>(output.Shape.ToArray());
             for (int i = 0; i < outputGradient.Length; i++)
             {
                 outputGradient[i] = random.NextDouble();

@@ -378,5 +378,7 @@ public class TeacherModelFactoryTests
             var sumNode = TensorOperations<double>.Sum(inputNode);
             return sumNode;
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 }

@@ -398,7 +398,7 @@ internal class SPPFBlock<T>
         int height = x.Shape[2];
         int width = x.Shape[3];
 
-        var output = new Tensor<T>(x.Shape);
+        var output = new Tensor<T>(x.Shape.ToArray());
 
         for (int n = 0; n < batch; n++)
         {
@@ -438,7 +438,7 @@ internal class SPPFBlock<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);
@@ -489,7 +489,7 @@ internal class AttentionBlock<T>
 
         // Reshape and compute attention
         // For simplicity, compute spatial attention per batch
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
 
         for (int n = 0; n < batch; n++)
         {

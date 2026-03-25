@@ -67,7 +67,7 @@ public class RecurrentLayersIntegrationTests
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
         var output = layer.Forward(input);
 
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         upstreamGradient.Fill(1.0);
 
         // Act
@@ -93,7 +93,7 @@ public class RecurrentLayersIntegrationTests
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
         var output = layer.Forward(input);
 
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         upstreamGradient.Fill(1.0);
 
         // Act
@@ -101,7 +101,7 @@ public class RecurrentLayersIntegrationTests
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
         AssertNoNaNOrInf(gradient);
     }
 
@@ -176,7 +176,7 @@ public class RecurrentLayersIntegrationTests
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
         var output = layer.Forward(input);
 
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         upstreamGradient.Fill(1.0);
 
         // Act
@@ -282,7 +282,7 @@ public class RecurrentLayersIntegrationTests
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
         var output = layer.Forward(input);
 
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         upstreamGradient.Fill(1.0);
 
         // Act
@@ -290,7 +290,7 @@ public class RecurrentLayersIntegrationTests
 
         // Assert
         Assert.NotNull(gradient);
-        Assert.Equal(input.Shape, gradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
         AssertNoNaNOrInf(gradient);
     }
 
@@ -327,7 +327,7 @@ public class RecurrentLayersIntegrationTests
         var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
         var output = layer.Forward(input);
 
-        var upstreamGradient = new Tensor<double>(output.Shape);
+        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
         upstreamGradient.Fill(1.0);
 
         // Act
@@ -451,7 +451,7 @@ public class RecurrentLayersIntegrationTests
         var cloneOutput = clone.Forward(input);
 
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
         for (int i = 0; i < originalOutput.Length; i++)
         {
             Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
@@ -471,7 +471,7 @@ public class RecurrentLayersIntegrationTests
         var cloneOutput = clone.Forward(input);
 
         Assert.NotSame(original, clone);
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
         for (int i = 0; i < originalOutput.Length; i++)
         {
             Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);

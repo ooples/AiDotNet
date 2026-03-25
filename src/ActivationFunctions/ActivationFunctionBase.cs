@@ -118,7 +118,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     public virtual Tensor<T> Activate(Tensor<T> input)
     {
         // Use TensorAllocator.RentUninitialized — all elements are immediately overwritten below
-        Tensor<T> output = TensorAllocator.RentUninitialized<T>(input.Shape);
+        Tensor<T> output = TensorAllocator.RentUninitialized<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = Activate(input[i]);
@@ -134,7 +134,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     /// <returns>A new tensor containing derivatives for each input element.</returns>
     public virtual Tensor<T> Derivative(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape);
+        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = Derivative(input[i]);

@@ -58,8 +58,8 @@ public class PointCloudDatasetLoaderIntegrationTests
             Assert.Equal(4, loader.FeatureCount);
             Assert.Equal(6, loader.FeatureDimension);
             Assert.Equal(2, loader.OutputDimension);
-            Assert.Equal(new[] { 2, 4, 6 }, loader.Features.Shape);
-            Assert.Equal(new[] { 2, 2 }, loader.Labels.Shape);
+            Assert.Equal(new[] { 2, 4, 6 }, loader.Features.Shape.ToArray());
+            Assert.Equal(new[] { 2, 2 }, loader.Labels.Shape.ToArray());
             Assert.Equal(1.0, loader.Labels[0, 0], 6);
             Assert.Equal(1.0, loader.Labels[1, 1], 6);
         }
@@ -127,8 +127,8 @@ public class PointCloudDatasetLoaderIntegrationTests
             Assert.Equal(4, loader.FeatureCount);
             Assert.Equal(3, loader.FeatureDimension);
             Assert.Equal(4, loader.OutputDimension);
-            Assert.Equal(new[] { 1, 4, 3 }, loader.Features.Shape);
-            Assert.Equal(new[] { 1, 4 }, loader.Labels.Shape);
+            Assert.Equal(new[] { 1, 4, 3 }, loader.Features.Shape.ToArray());
+            Assert.Equal(new[] { 1, 4 }, loader.Labels.Shape.ToArray());
             Assert.Equal(3.0, loader.Labels[0, 3], 6);
         }
         finally
@@ -179,8 +179,8 @@ public class PointCloudDatasetLoaderIntegrationTests
             Assert.Equal(4, loader.FeatureCount);
             Assert.Equal(6, loader.FeatureDimension);
             Assert.Equal(4, loader.OutputDimension);
-            Assert.Equal(new[] { 1, 4, 6 }, loader.Features.Shape);
-            Assert.Equal(new[] { 1, 4 }, loader.Labels.Shape);
+            Assert.Equal(new[] { 1, 4, 6 }, loader.Features.Shape.ToArray());
+            Assert.Equal(new[] { 1, 4 }, loader.Labels.Shape.ToArray());
             Assert.Equal(4.0, loader.Labels[0, 3], 6);
         }
         finally

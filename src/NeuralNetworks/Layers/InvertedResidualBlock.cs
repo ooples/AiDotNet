@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -40,6 +41,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Residual)]
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 8, 1, 8, 8")]
 public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly ConvolutionalLayer<T>? _expandConv;

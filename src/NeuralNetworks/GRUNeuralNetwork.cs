@@ -279,7 +279,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
         var gradTensor = Tensor<T>.FromVector(lossGradient);
         if (gradTensor.Rank < output.Rank)
         {
-            gradTensor = gradTensor.Reshape(output.Shape);
+            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
         }
         Backpropagate(gradTensor);
 

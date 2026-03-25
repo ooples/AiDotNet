@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -71,6 +73,11 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class LinearRecurrentUnitLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -273,7 +280,7 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;

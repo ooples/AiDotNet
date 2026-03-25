@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -32,6 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High)]
 public class LambdaLayer<T> : LayerBase<T>
 {
     /// <summary>

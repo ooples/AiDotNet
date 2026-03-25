@@ -51,7 +51,7 @@ public class SemanticSegmentationIntegrationTests
         var model = new SegNeXt<double>(Arch(), modelSize: SegNeXtModelSize.Tiny);
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(predicted.Shape);
+        var expected = Rand(predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 

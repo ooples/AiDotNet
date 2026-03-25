@@ -84,7 +84,7 @@ public class CoreLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Single(output.Shape);
+        Assert.Single(output.Shape.ToArray());
         Assert.Equal(outputSize, output.Shape[0]);
     }
 
@@ -122,7 +122,7 @@ public class CoreLayersIntegrationTests
         var inputGrad = layer.Backward(outputGrad);
 
         // Assert
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public class CoreLayersIntegrationTests
         var cloneOutput = clone.Forward(input);
 
         // Assert - outputs should be identical
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
         for (int i = 0; i < originalOutput.Length; i++)
         {
             Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
@@ -198,7 +198,7 @@ public class CoreLayersIntegrationTests
         var retrievedWeights = layer.GetWeights();
 
         // Assert
-        Assert.Equal(newWeights.Shape, retrievedWeights.Shape);
+        Assert.Equal(newWeights.Shape.ToArray(), retrievedWeights.Shape.ToArray());
         for (int i = 0; i < newWeights.Length; i++)
         {
             Assert.Equal(newWeights[i], retrievedWeights[i], Tolerance);
@@ -326,11 +326,11 @@ public class CoreLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape, 123);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
         var inputGrad = layer.Backward(outputGrad);
 
         // Assert
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -376,7 +376,7 @@ public class CoreLayersIntegrationTests
         var cloneOutput = clone.Forward(input);
 
         // Assert
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
         for (int i = 0; i < originalOutput.Length; i++)
         {
             Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
@@ -470,11 +470,11 @@ public class CoreLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape, 123);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
         var inputGrad = layer.Backward(outputGrad);
 
         // Assert
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -490,7 +490,7 @@ public class CoreLayersIntegrationTests
         var cloneOutput = clone.Forward(input);
 
         // Assert
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
         for (int i = 0; i < originalOutput.Length; i++)
         {
             Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
@@ -565,11 +565,11 @@ public class CoreLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape, 123);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
         var inputGrad = layer.Backward(outputGrad);
 
         // Assert
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     #endregion
@@ -636,7 +636,7 @@ public class CoreLayersIntegrationTests
         var inputGrad = layer.Backward(outputGrad);
 
         // Assert
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -655,7 +655,7 @@ public class CoreLayersIntegrationTests
         var cloneOutput = clone.Forward(input);
 
         // Assert - in inference mode, outputs should match
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
         for (int i = 0; i < originalOutput.Length; i++)
         {
             Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
@@ -715,11 +715,11 @@ public class CoreLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape, 123);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
         var inputGrad = layer.Backward(outputGrad);
 
         // Assert
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -736,7 +736,7 @@ public class CoreLayersIntegrationTests
         var cloneOutput = clone.Forward(input);
 
         // Assert
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
         for (int i = 0; i < originalOutput.Length; i++)
         {
             Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
@@ -800,11 +800,11 @@ public class CoreLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape, 123);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
         var inputGrad = layer.Backward(outputGrad);
 
         // Assert
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -822,7 +822,7 @@ public class CoreLayersIntegrationTests
         var cloneOutput = clone.Forward(input);
 
         // Assert
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
         for (int i = 0; i < originalOutput.Length; i++)
         {
             Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
@@ -913,11 +913,11 @@ public class CoreLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape, 123);
+        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), 123);
         var inputGrad = layer.Backward(outputGrad);
 
         // Assert
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -934,7 +934,7 @@ public class CoreLayersIntegrationTests
         var cloneOutput = clone.Forward(input);
 
         // Assert
-        Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
         for (int i = 0; i < originalOutput.Length; i++)
         {
             Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
@@ -967,9 +967,9 @@ public class CoreLayersIntegrationTests
         var grad1 = layer1.Backward(grad2);
 
         // Assert
-        Assert.Equal(input.Shape, grad1.Shape);
-        Assert.Equal(out1.Shape, grad2.Shape);
-        Assert.Equal(out2.Shape, grad3.Shape);
+        Assert.Equal(input.Shape.ToArray(), grad1.Shape.ToArray());
+        Assert.Equal(out1.Shape.ToArray(), grad2.Shape.ToArray());
+        Assert.Equal(out2.Shape.ToArray(), grad3.Shape.ToArray());
     }
 
     [Fact]
@@ -995,8 +995,8 @@ public class CoreLayersIntegrationTests
         var convGrad = convLayer.Backward(flatGrad);
 
         // Assert
-        Assert.Equal([2, 10], denseOut.Shape);
-        Assert.Equal(input.Shape, convGrad.Shape);
+        Assert.Equal([2, 10], denseOut.Shape.ToArray());
+        Assert.Equal(input.Shape.ToArray(), convGrad.Shape.ToArray());
     }
 
     [Fact]
@@ -1025,8 +1025,8 @@ public class CoreLayersIntegrationTests
         var c1Grad = conv1.Backward(p1Grad);
 
         // Assert
-        Assert.Equal([2, 16, 4, 4], p2Out.Shape);
-        Assert.Equal(input.Shape, c1Grad.Shape);
+        Assert.Equal([2, 16, 4, 4], p2Out.Shape.ToArray());
+        Assert.Equal(input.Shape.ToArray(), c1Grad.Shape.ToArray());
     }
 
     [Fact]

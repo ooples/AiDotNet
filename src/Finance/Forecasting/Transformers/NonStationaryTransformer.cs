@@ -621,7 +621,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         var predictions = Forward(input);
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -1090,7 +1090,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplySeriesStationarization(Tensor<T> input, bool normalize)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         var eps = NumOps.FromDouble(1e-5);
 
         if (normalize)
@@ -1165,7 +1165,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftAndAppend(Tensor<T> input, Tensor<T> prediction)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         int seqLen = _sequenceLength;
         int predLen = Math.Min(_predictionHorizon, seqLen);
 

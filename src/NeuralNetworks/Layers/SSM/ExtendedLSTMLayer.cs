@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -60,6 +62,11 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class ExtendedLSTMLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -220,7 +227,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -573,7 +580,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
             var dIGateRaw = Engine.TensorMultiply(dIGate, iGate);
 
             // Sigmoid derivative: sig(x) * (1 - sig(x))
-            var ones = new Tensor<T>(fGate.Shape);
+            var ones = new Tensor<T>(fGate.Shape.ToArray());
             for (int idx = 0; idx < ones.Length; idx++) ones[idx] = NumOps.One;
             var fSigDeriv = Engine.TensorMultiply(fGate, Engine.TensorSubtract(ones, fGate));
             var dFGateRaw = Engine.TensorMultiply(dFGate, fSigDeriv);
@@ -680,19 +687,33 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_forgetGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_inputGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+
+        Vector<T> G(Tensor<T>? grad, Tensor<T> param) =>
+            grad != null ? new Vector<T>(grad.ToArray()) : new Vector<T>(param.Length);
+
         return Vector<T>.Concatenate(
-            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
-            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()));
+            G(_inputGateWeightsGradient, _inputGateWeights),
+            G(_inputGateBiasGradient, _inputGateBias),
+            G(_forgetGateWeightsGradient, _forgetGateWeights),
+            G(_forgetGateBiasGradient, _forgetGateBias),
+            G(_outputGateWeightsGradient, _outputGateWeights),
+            G(_outputGateBiasGradient, _outputGateBias),
+            G(_queryWeightsGradient, _queryWeights),
+            G(_keyWeightsGradient, _keyWeights),
+            G(_valueWeightsGradient, _valueWeights),
+            G(_outputProjectionWeightsGradient, _outputProjectionWeights),
+            G(_outputProjectionBiasGradient, _outputProjectionBias));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null; _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _inputGateWeightsGradient = null; _inputGateBiasGradient = null;
+        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null;
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

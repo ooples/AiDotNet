@@ -1288,7 +1288,7 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         {
             data[i] = source[i];
         }
-        return new Tensor<double>(data, source.Shape);
+        return new Tensor<double>(data, source.Shape.ToArray());
     }
 
     private static Tensor<double> CopyTensor3D(Tensor<double> source)
@@ -1298,7 +1298,7 @@ public class SelfSupervisedLearningExtendedIntegrationTests
         {
             data[i] = source[i];
         }
-        return new Tensor<double>(data, source.Shape);
+        return new Tensor<double>(data, source.Shape.ToArray());
     }
 
     #endregion

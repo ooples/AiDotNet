@@ -215,7 +215,7 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
     {
         SetTrainingMode(true);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(grad, output.Shape));
+        Backward(Tensor<T>.FromVector(grad, output.Shape.ToArray()));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }

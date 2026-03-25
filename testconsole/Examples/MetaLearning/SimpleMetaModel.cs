@@ -165,4 +165,6 @@ internal class SimpleMetaModel : IFullModel<double, Matrix<double>, Vector<doubl
 
     public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
         => throw new NotSupportedException();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }

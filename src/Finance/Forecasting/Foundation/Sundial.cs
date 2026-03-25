@@ -270,7 +270,7 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -428,7 +428,7 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

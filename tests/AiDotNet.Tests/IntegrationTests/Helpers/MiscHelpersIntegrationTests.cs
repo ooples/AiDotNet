@@ -259,7 +259,7 @@ public class MiscHelpersIntegrationTests
         var list = new List<Tensor<double>> { t1, t2 };
 
         var result = DataAggregationHelper.Aggregate<double, Tensor<double>>(list, "test");
-        Assert.Equal(new[] { 3, 3 }, result.Shape);
+        Assert.Equal(new[] { 3, 3 }, result.Shape.ToArray());
     }
 
     [Fact]

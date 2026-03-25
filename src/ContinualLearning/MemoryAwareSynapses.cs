@@ -233,7 +233,7 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
             gradData[i] = _numOps.Multiply(two, output[i]);
         }
 
-        return new Tensor<T>(output.Shape, gradData);
+        return new Tensor<T>(output.Shape.ToArray(), gradData);
     }
 
     /// <summary>

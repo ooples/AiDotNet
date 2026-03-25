@@ -231,7 +231,7 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var result = new Tensor<T>(modelOutput.Shape);
+        var result = new Tensor<T>(modelOutput.Shape.ToArray());
         for (int i = 0; i < modelOutput.Length; i++) { double l = NumOps.ToDouble(modelOutput[i]); result[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-l))); }
         return result;
     }

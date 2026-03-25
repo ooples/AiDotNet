@@ -1,4 +1,6 @@
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -30,6 +32,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerCategory(LayerCategory.Gating)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -595,7 +601,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Apply default tanh
             var tanhBuffer = backend.AllocateBuffer(size);
             backend.Tanh(transformPreActivation.Buffer, tanhBuffer, size);
-            transformOutput = new GpuTensor<T>(backend, tanhBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+            transformOutput = new GpuTensor<T>(backend, tanhBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Gate path: gateLinear = input @ gateWeights + gateBias
@@ -618,7 +624,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Apply default sigmoid
             var sigmoidBuffer = backend.AllocateBuffer(size);
             backend.Sigmoid(gatePreActivation.Buffer, sigmoidBuffer, size);
-            gateOutput = new GpuTensor<T>(backend, sigmoidBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+            gateOutput = new GpuTensor<T>(backend, sigmoidBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Highway output: output = gate * (transform - input) + input
@@ -647,7 +653,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuGateOutput = gateOutput;
             _gpuTransformPreActivation = transformPreActivation;
             _gpuGatePreActivation = gatePreActivation;
-            _gpuInputShape = input.Shape;
+            _gpuInputShape = input.Shape.ToArray();
 
             // Also cache CPU tensors for CPU backward compatibility
             _lastInput = input.ToTensor();
@@ -657,7 +663,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _lastGatePreActivation = gatePreActivation.ToTensor();
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -1040,7 +1046,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var inputGradFromTransform = transformGradient.MatrixMultiply(transformWeightsT);
 
         // (1 - gate) contribution
-        var ones = Tensor<T>.CreateDefault(_lastGateOutput.Shape, NumOps.One);
+        var ones = Tensor<T>.CreateDefault(_lastGateOutput.Shape.ToArray(), NumOps.One);
         var oneMinusGate = Engine.TensorSubtract(ones, _lastGateOutput);
         var bypassGradient = Engine.TensorMultiply(outputGradient, oneMinusGate);
 
@@ -1210,16 +1216,16 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int index = 0;
 
-        _transformWeights = new Tensor<T>(_transformWeights.Shape, parameters.Slice(index, transformWeightsSize));
+        _transformWeights = new Tensor<T>(_transformWeights.Shape.ToArray(), parameters.Slice(index, transformWeightsSize));
         index += transformWeightsSize;
 
-        _transformBias = new Tensor<T>(_transformBias.Shape, parameters.Slice(index, _transformBias.Length));
+        _transformBias = new Tensor<T>(_transformBias.Shape.ToArray(), parameters.Slice(index, _transformBias.Length));
         index += _transformBias.Length;
 
-        _gateWeights = new Tensor<T>(_gateWeights.Shape, parameters.Slice(index, gateWeightsSize));
+        _gateWeights = new Tensor<T>(_gateWeights.Shape.ToArray(), parameters.Slice(index, gateWeightsSize));
         index += gateWeightsSize;
 
-        _gateBias = new Tensor<T>(_gateBias.Shape, parameters.Slice(index, _gateBias.Length));
+        _gateBias = new Tensor<T>(_gateBias.Shape.ToArray(), parameters.Slice(index, _gateBias.Length));
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_transformWeights);

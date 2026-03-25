@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -25,6 +27,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// - Output: Spatial features modified to match the text description
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.CrossModalAttention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
 public class CrossAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _queryDim;
@@ -192,9 +198,9 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     private Tensor<T> ForwardCrossAttention(Tensor<T> query, Tensor<T> context)
     {
         // Store original shape for any-rank tensor support
-        _originalQueryShape = query.Shape;
-        var queryShape = query.Shape;
-        var contextShape = context.Shape;
+        _originalQueryShape = query.Shape.ToArray();
+        var queryShape = query.Shape.ToArray();
+        var contextShape = context.Shape.ToArray();
         int queryRank = queryShape.Length;
 
         // Handle any-rank query input
@@ -378,7 +384,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     {
         // [B, C, H, W] -> [B, L, C] where L = H*W
         // Use IEngine for GPU-accelerated permute and reshape
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         int batch = shape[0];
         int channels = shape[1];
         int height = shape[2];
@@ -421,7 +427,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         // weights: [inputDim, outputDim]
         // output: [B, seqLen, outputDim]
         // Use IEngine for GPU-accelerated batched matrix multiplication
-        var inputShape = input.Shape;
+        var inputShape = input.Shape.ToArray();
         int batch = inputShape[0];
         int seqLen = inputShape[1];
         int inputDim = inputShape[2];
@@ -509,20 +515,58 @@ public class CrossAttentionLayer<T> : LayerBase<T>
             outGrad3D = outputGradient.Reshape(new[] { flatBatch, seqLenHigh, _queryDim });
         }
 
-        // Compute weight gradients (simplified)
-        var queryShape = _lastQuery.Shape;
+        // Compute weight gradients
+        var queryShape = _lastQuery.Shape.ToArray();
         int batch = queryShape[0];
         int seqLen = queryShape[1];
 
-        // Approximate gradients
-        _queryWeightsGradient = new Tensor<T>(_queryWeights.Shape);
-        _keyWeightsGradient = new Tensor<T>(_keyWeights.Shape);
-        _valueWeightsGradient = new Tensor<T>(_valueWeights.Shape);
-        _outputWeightsGradient = new Tensor<T>(_outputWeights.Shape);
-        _outputBiasGradient = new Tensor<T>(_outputBias.Shape);
+        // Output projection backward: output = attended @ Wo + bo
+        // dL/d(attended) = outGrad3D @ Wo^T
+        var dAttended = ProjectTensor(outGrad3D, TransposeWeights(_outputWeights));
 
-        // Return input gradient (backprop through output projection)
-        var inputGradient = ProjectTensor(outGrad3D, TransposeWeights(_outputWeights));
+        // dL/d(Wo) = sum_b(attended_b^T @ grad_b)
+        // dL/d(bo) = sum(grad, dims=[0,1])
+        _outputWeightsGradient = new Tensor<T>(_outputWeights.Shape.ToArray());
+        _outputBiasGradient = new Tensor<T>(_outputBias.Shape.ToArray());
+        for (int b = 0; b < batch; b++)
+        {
+            var attendedB = _lastOutput != null
+                ? _lastOutput.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim])
+                : new Tensor<T>([seqLen, _queryDim]);
+            var gradB = outGrad3D.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
+            _outputWeightsGradient = _outputWeightsGradient.Add(
+                Engine.TensorMatMul(Engine.TensorTranspose(attendedB), gradB));
+            _outputBiasGradient = _outputBiasGradient.Add(
+                Engine.ReduceSum(gradB, [0], keepDims: false));
+        }
+
+        // Q/K/V weight gradients: approximate via chain rule through projection
+        // dL/d(Wq) ≈ query^T @ dL/d(Q), where dL/d(Q) ≈ dAttended (simplified)
+        _queryWeightsGradient = new Tensor<T>(_queryWeights.Shape.ToArray());
+        _keyWeightsGradient = new Tensor<T>(_keyWeights.Shape.ToArray());
+        _valueWeightsGradient = new Tensor<T>(_valueWeights.Shape.ToArray());
+        for (int b = 0; b < batch; b++)
+        {
+            var queryB = _lastQuery.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
+            var dAttB = dAttended.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
+            _queryWeightsGradient = _queryWeightsGradient.Add(
+                Engine.TensorMatMul(Engine.TensorTranspose(queryB), dAttB));
+
+            if (_lastContext != null)
+            {
+                var ctxB = _lastContext.GetSliceAlongDimension(b, 0);
+                int ctxLen = ctxB.Shape[0];
+                ctxB = ctxB.Reshape([ctxLen, _queryDim]);
+                // K and V gradients approximate: context^T @ dAttended (summed over batch)
+                _keyWeightsGradient = _keyWeightsGradient.Add(
+                    Engine.TensorMatMul(Engine.TensorTranspose(ctxB), dAttB));
+                _valueWeightsGradient = _valueWeightsGradient.Add(
+                    Engine.TensorMatMul(Engine.TensorTranspose(ctxB), dAttB));
+            }
+        }
+
+        // Return input gradient
+        var inputGradient = dAttended;
 
         // Restore higher-rank gradients to their original shape
         if (_originalQueryShape != null && origRank != 3)
@@ -757,8 +801,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         IGpuTensor<T> query = inputs[0];
         IGpuTensor<T> context = inputs.Length >= 2 ? inputs[1] : inputs[0];
 
-        int[] queryShape = query.Shape;
-        int[] contextShape = context.Shape;
+        int[] queryShape = query.Shape.ToArray();
+        int[] contextShape = context.Shape.ToArray();
         int queryRank = queryShape.Length;
 
         // Store original shape for output
@@ -935,7 +979,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
     private static IGpuTensor<T> ReshapeNCHWToNLCGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> input)
     {
-        int[] shape = input.Shape;
+        int[] shape = input.Shape.ToArray();
         int batch = shape[0];
         int channels = shape[1];
         int height = shape[2];
@@ -1004,18 +1048,23 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
-            return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient.ToArray()),
-            new Vector<T>(_keyWeightsGradient.ToArray()),
-            new Vector<T>(_valueWeightsGradient.ToArray()));
+            _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient.ToArray()) : new Vector<T>(_queryWeights.Length),
+            _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient.ToArray()) : new Vector<T>(_keyWeights.Length),
+            _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient.ToArray()) : new Vector<T>(_valueWeights.Length),
+            _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient.ToArray()) : new Vector<T>(_outputWeights.Length),
+            _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient.ToArray()) : new Vector<T>(_outputBias.Length)
+        );
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputWeightsGradient = null;
+        _outputBiasGradient = null;
     }
 
     /// <inheritdoc/>

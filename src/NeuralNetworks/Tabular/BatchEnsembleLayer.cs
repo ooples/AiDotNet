@@ -281,19 +281,19 @@ public class BatchEnsembleLayer<T> : LayerBase<T>
         int batchSize = expandedBatchSize / _numMembers;
 
         // Initialize gradients
-        _weightsGrad = new Tensor<T>(_weights.Shape);
+        _weightsGrad = new Tensor<T>(_weights.Shape.ToArray());
         _weightsGrad.Fill(NumOps.Zero);
 
         if (_bias != null)
         {
-            _biasGrad = new Tensor<T>(_bias.Shape);
+            _biasGrad = new Tensor<T>(_bias.Shape.ToArray());
             _biasGrad.Fill(NumOps.Zero);
         }
 
-        _rVectorsGrad = new Tensor<T>(_rVectors.Shape);
+        _rVectorsGrad = new Tensor<T>(_rVectors.Shape.ToArray());
         _rVectorsGrad.Fill(NumOps.Zero);
 
-        _sVectorsGrad = new Tensor<T>(_sVectors.Shape);
+        _sVectorsGrad = new Tensor<T>(_sVectors.Shape.ToArray());
         _sVectorsGrad.Fill(NumOps.Zero);
 
         // Input gradient (accumulated across members)
