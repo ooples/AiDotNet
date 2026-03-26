@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -7,6 +9,8 @@ namespace AiDotNet.AnomalyDetection;
 
 /// <summary>
 /// Base class for algorithmic anomaly detectors providing common functionality.
+/// Extends <see cref="ModelBase{T, TInput, TOutput}"/> to participate in the unified
+/// model framework (serialization, gradient computation, test generation).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
@@ -22,17 +26,8 @@ namespace AiDotNet.AnomalyDetection;
 /// - Random Seed: 42 - for reproducibility
 /// </para>
 /// </remarks>
-public abstract class AnomalyDetectorBase<T> : IAnomalyDetector<T>
+public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>>, IAnomalyDetector<T>
 {
-    /// <summary>
-    /// Provides numeric operations for the generic type T.
-    /// </summary>
-    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    /// <summary>
-    /// Provides hardware-accelerated tensor/vector operations (SIMD, GPU when available).
-    /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// The contamination parameter representing the expected proportion of anomalies in the data.
@@ -112,7 +107,7 @@ public abstract class AnomalyDetectorBase<T> : IAnomalyDetector<T>
     public abstract Vector<T> ScoreAnomalies(Matrix<T> X);
 
     /// <inheritdoc/>
-    public virtual Vector<T> Predict(Matrix<T> X)
+    public override Vector<T> Predict(Matrix<T> X)
     {
         EnsureFitted();
 
@@ -196,4 +191,39 @@ public abstract class AnomalyDetectorBase<T> : IAnomalyDetector<T>
         _threshold = sortedScores[thresholdIndex];
     }
 
+    // === ModelBase abstract implementations ===
+
+    /// <summary>
+    /// Trains the anomaly detector. For anomaly detection, this delegates to <see cref="Fit"/>.
+    /// The expectedOutput parameter is ignored since anomaly detection is unsupervised.
+    /// </summary>
+    public override void Train(Matrix<T> input, Vector<T> expectedOutput)
+    {
+        Fit(input);
+    }
+
+    /// <inheritdoc/>
+    public override ILossFunction<T> DefaultLossFunction =>
+        new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters() => new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters) { }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    {
+        throw new NotSupportedException(
+            $"DeepCopy is not implemented for {GetType().Name}. Override to provide an implementation.");
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    {
+        var clone = DeepCopy();
+        clone.SetParameters(parameters);
+        return clone;
+    }
 }
