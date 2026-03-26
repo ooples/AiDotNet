@@ -46,7 +46,6 @@ namespace AiDotNet.Safety.Text;
     Authors = "Liyan Tang, Philippe Laban, Greg Durrett")]
 public class EntailmentHallucinationDetector<T> : TextSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _entailmentThreshold;
     private readonly string[] _referenceDocuments;

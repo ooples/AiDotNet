@@ -42,7 +42,6 @@ namespace AiDotNet.Safety.Audio;
     Authors = "Robin San Roman, Pierre Fernandez, et al.")]
 public class WatermarkVoiceProtector<T> : AudioSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _watermarkStrength;
     private readonly int _watermarkKey;

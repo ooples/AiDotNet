@@ -1,7 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Safety;
-using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Audio;
@@ -21,20 +20,11 @@ namespace AiDotNet.Safety.Audio;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class AudioSafetyModuleBase<T> : IAudioSafetyModule<T>
+public abstract class AudioSafetyModuleBase<T> : SafetyModuleBase<T>, IAudioSafetyModule<T>
 {
-    /// <summary>
-    /// Gets the hardware-accelerated computation engine for vectorized operations.
-    /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
+    // Engine, NumOps, ModuleName, IsReady inherited from SafetyModuleBase
 
     private readonly int _defaultSampleRate;
-
-    /// <inheritdoc />
-    public abstract string ModuleName { get; }
-
-    /// <inheritdoc />
-    public virtual bool IsReady => true;
 
     /// <summary>
     /// Initializes a new audio safety module base with the specified default sample rate.
@@ -59,7 +49,7 @@ public abstract class AudioSafetyModuleBase<T> : IAudioSafetyModule<T>
     /// The base implementation delegates to <see cref="EvaluateAudio(Vector{T}, int)"/>
     /// using the configured default sample rate.
     /// </remarks>
-    public virtual IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         return EvaluateAudio(content, _defaultSampleRate);
     }

@@ -35,7 +35,6 @@ namespace AiDotNet.Safety.Watermarking;
     Authors = "Yuxin Wen, John Kirchenbauer, Jonas Geiping, Tom Goldstein")]
 public class FrequencyImageWatermarker<T> : ImageWatermarkerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <inheritdoc />
     public override string ModuleName => "FrequencyImageWatermarker";

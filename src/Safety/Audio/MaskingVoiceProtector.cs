@@ -42,7 +42,6 @@ namespace AiDotNet.Safety.Audio;
     Authors = "Various")]
 public class MaskingVoiceProtector<T> : AudioSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _maskingStrength;
     private readonly FastFourierTransform<T> _fft;

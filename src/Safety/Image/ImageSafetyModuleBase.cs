@@ -20,13 +20,9 @@ namespace AiDotNet.Safety.Image;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class ImageSafetyModuleBase<T> : IImageSafetyModule<T>
+public abstract class ImageSafetyModuleBase<T> : SafetyModuleBase<T>, IImageSafetyModule<T>
 {
-    /// <inheritdoc />
-    public abstract string ModuleName { get; }
-
-    /// <inheritdoc />
-    public virtual bool IsReady => true;
+    // ModuleName, IsReady, Engine, NumOps inherited from SafetyModuleBase
 
     /// <inheritdoc />
     public abstract IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image);
@@ -37,7 +33,7 @@ public abstract class ImageSafetyModuleBase<T> : IImageSafetyModule<T>
     /// <see cref="EvaluateImage(Tensor{T})"/>. Subclasses that expect specific
     /// tensor shapes (e.g., [C,H,W]) should validate accordingly.
     /// </remarks>
-    public virtual IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         // Wrap the flat vector as a 1D tensor
         var tensor = new Tensor<T>(content.ToArray(), new[] { content.Length });
