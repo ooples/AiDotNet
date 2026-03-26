@@ -458,16 +458,7 @@ internal class MambaBlock<T> : LayerBase<T>
 
         // Step 8 backward: output projection
         var gradFlat = activationGrad.Reshape(batchSize * seqLength, _modelDimension);
-        // Bias gradient: sum over batch and seq dimensions → [modelDim]
-        // Use explicit loop — Engine.ReduceSum with multi-axis [0,1] on 3D tensor
-        // produces identical values for all features (multi-axis reduction bug)
-        _outputProjectionBiasGradient = new Tensor<T>(new[] { _modelDimension });
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int t = 0; t < seqLength; t++)
-                for (int d = 0; d < _modelDimension; d++)
-                    _outputProjectionBiasGradient[d] = NumOps.Add(
-                        _outputProjectionBiasGradient[d],
-                        activationGrad[new[] { bi, t, d }]);
+        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
 
         var gatedFlat = _lastGatedOutput.Reshape(batchSize * seqLength, _innerDimension);
         _outputProjectionWeightsGradient = Engine.TensorMatMul(
@@ -494,14 +485,7 @@ internal class MambaBlock<T> : LayerBase<T>
         var dDeltaSoftplus = Engine.TensorMultiply(dDelta, softplusDerivative);
 
         var dDeltaFlat = dDeltaSoftplus.Reshape(batchSize * seqLength, _innerDimension);
-        // Explicit loop for multi-axis reduction (ReduceSum [0,1] on 3D has a bug)
-        _dtProjectionBiasGradient = new Tensor<T>(new[] { _innerDimension });
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int t = 0; t < seqLength; t++)
-                for (int d = 0; d < _innerDimension; d++)
-                    _dtProjectionBiasGradient[d] = NumOps.Add(
-                        _dtProjectionBiasGradient[d],
-                        dDeltaSoftplus[new[] { bi, t, d }]);
+        _dtProjectionBiasGradient = Engine.ReduceSum(dDeltaSoftplus, new int[] { 0, 1 });
         var dDeltaLowRankFlat = Engine.TensorMatMul(dDeltaFlat, _dtProjectionWeights.Transpose([1, 0]));
 
         var deltaLowRankFlat = SliceTensor(
@@ -538,14 +522,7 @@ internal class MambaBlock<T> : LayerBase<T>
         var dProjected = ConcatenateTensors(dXBranch, dZBranch, 2);
         var dProjectedFlat = dProjected.Reshape(batchSize * seqLength, _innerDimension * 2);
 
-        // Explicit loop for multi-axis reduction
-        _inputProjectionBiasGradient = new Tensor<T>(new[] { _innerDimension * 2 });
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int t = 0; t < seqLength; t++)
-                for (int d = 0; d < _innerDimension * 2; d++)
-                    _inputProjectionBiasGradient[d] = NumOps.Add(
-                        _inputProjectionBiasGradient[d],
-                        dProjected[new[] { bi, t, d }]);
+        _inputProjectionBiasGradient = Engine.ReduceSum(dProjected, new int[] { 0, 1 });
 
         var input2D = _lastInput.Reshape(batchSize * seqLength, _modelDimension);
         _inputProjectionWeightsGradient = Engine.TensorMatMul(

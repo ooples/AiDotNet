@@ -601,13 +601,7 @@ public class Mamba2Block<T> : LayerBase<T>
 
         // Step 8 backward: output projection
         var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        // Explicit loop — Engine.ReduceSum with multi-axis [0,1] on 3D has a bug
-        _outputProjectionBiasGradient = new Tensor<T>(new[] { _modelDimension });
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int t = 0; t < seqLen; t++)
-                for (int d = 0; d < _modelDimension; d++)
-                    _outputProjectionBiasGradient[d] = NumOps.Add(
-                        _outputProjectionBiasGradient[d], activationGrad[new[] { bi, t, d }]);
+        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
 
         var gatedFlat = _lastGatedOutput.Reshape(batchSize * seqLen, _innerDimension);
         _outputProjectionWeightsGradient = Engine.TensorMatMul(
@@ -689,12 +683,7 @@ public class Mamba2Block<T> : LayerBase<T>
         var dDeltaSoftplus = Engine.TensorMultiply(dDelta, softplusDerivative);
 
         var dDeltaFlat = dDeltaSoftplus.Reshape(batchSize * seqLen, _numHeads);
-        _dtProjectionBiasGradient = new Tensor<T>(new[] { _numHeads });
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int t = 0; t < seqLen; t++)
-                for (int d = 0; d < _numHeads; d++)
-                    _dtProjectionBiasGradient[d] = NumOps.Add(
-                        _dtProjectionBiasGradient[d], dDeltaSoftplus[new[] { bi, t, d }]);
+        _dtProjectionBiasGradient = Engine.ReduceSum(dDeltaSoftplus, new int[] { 0, 1 });
 
         var siluFlat = _lastSiluOutput.Reshape(batchSize * seqLen, _innerDimension);
         _dtProjectionWeightsGradient = Engine.TensorMatMul(
@@ -728,12 +717,7 @@ public class Mamba2Block<T> : LayerBase<T>
         var dProjected = ConcatenateTensors(dXBranch, dZBranch, 2);
         var dProjectedFlat = dProjected.Reshape(batchSize * seqLen, _innerDimension * 2);
 
-        _inputProjectionBiasGradient = new Tensor<T>(new[] { _innerDimension * 2 });
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int t = 0; t < seqLen; t++)
-                for (int d = 0; d < _innerDimension * 2; d++)
-                    _inputProjectionBiasGradient[d] = NumOps.Add(
-                        _inputProjectionBiasGradient[d], dProjected[new[] { bi, t, d }]);
+        _inputProjectionBiasGradient = Engine.ReduceSum(dProjected, new int[] { 0, 1 });
 
         var input2D = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
         _inputProjectionWeightsGradient = Engine.TensorMatMul(
