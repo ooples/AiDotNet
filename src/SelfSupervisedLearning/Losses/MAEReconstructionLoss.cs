@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.SelfSupervisedLearning.Losses;
 
@@ -34,7 +35,7 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Masked Autoencoders Are Scalable Vision Learners", "https://arxiv.org/abs/2111.06377", Year = 2022, Authors = "Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Dollár, Ross Girshick")]
-public class MAEReconstructionLoss<T>
+public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -307,5 +308,15 @@ public class MAEReconstructionLoss<T>
         {
             patch[i] = NumOps.Divide(NumOps.Subtract(patch[i], mean), std);
         }
+    }
+
+    /// <summary>
+    /// IContrastiveLoss implementation — computes reconstruction loss with all-ones mask
+    /// (all patches contribute equally).
+    /// </summary>
+    T IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    {
+        var mask = Tensor<T>.CreateDefault(view1.Shape.ToArray(), NumOps.One);
+        return ComputeLoss(view1, view2, mask);
     }
 }
