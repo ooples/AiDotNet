@@ -1,8 +1,8 @@
-using Xunit;
-using Newtonsoft.Json;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Serialization;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.Serialization;
+using Newtonsoft.Json;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Serialization;
 

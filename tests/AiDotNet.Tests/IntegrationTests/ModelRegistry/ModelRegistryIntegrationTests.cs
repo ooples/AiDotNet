@@ -4,8 +4,8 @@ using System.IO;
 using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
-using AiDotNet.Models;
 using AiDotNet.ModelRegistry;
+using AiDotNet.Models;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.ModelRegistry;
