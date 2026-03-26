@@ -930,6 +930,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// Checks whether a type has a [ModelDomain] attribute.
+    /// This enables discovery of algorithms and utilities that don't implement IFullModel
+    /// but still need mathematical invariant testing (e.g., causal discovery, decomposition methods).
+    /// </summary>
+    private static bool HasModelDomainAttribute(INamedTypeSymbol type, INamedTypeSymbol? domainAttrSymbol)
+    {
+        if (domainAttrSymbol is null) return false;
+
+        foreach (var attr in type.GetAttributes())
+        {
+            if (attr.AttributeClass is not null &&
+                SymbolEqualityComparer.Default.Equals(attr.AttributeClass, domainAttrSymbol))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Checks whether a type implements IFullModel anywhere in its interface hierarchy.
     /// </summary>
     private static bool ImplementsIFullModel(INamedTypeSymbol type)
