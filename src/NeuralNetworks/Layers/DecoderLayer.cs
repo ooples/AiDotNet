@@ -28,7 +28,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class DecoderLayer<T> : LayerBase<T>
 {
 
@@ -151,7 +151,7 @@ public class DecoderLayer<T> : LayerBase<T>
     public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null)
         : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
     {
-        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
+        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, (IVectorActivationFunction<T>?)null);
         _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
 
         // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
@@ -176,7 +176,7 @@ public class DecoderLayer<T> : LayerBase<T>
     public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IVectorActivationFunction<T>? activation = null)
         : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
     {
-        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
+        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, (IVectorActivationFunction<T>?)null);
         _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
 
         // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)

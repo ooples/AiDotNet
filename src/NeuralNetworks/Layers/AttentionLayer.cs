@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IVectorActivationFunction<double>?)null")]
 public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -1168,6 +1168,11 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var dAttnOutputFlat = Engine.TensorMatMul(dOutputFlat, _Wo);
         var dAttnOutput = dAttnOutputFlat.Reshape(_lastAttentionOutput.Shape.ToArray());
 
+        // Compute V shape info from stored input
+        var input3D = _lastQueryInput ?? _lastInput;
+        int batchSize = input3D.Shape[0];
+        int seqLen = input3D.Shape.Length >= 2 ? input3D.Shape[1] : 1;
+
         // Now backprop through the attention computation using dAttnOutput
         // Build permutation to transpose last two dimensions for any-rank tensors
         int attnRank = _lastAttentionWeights.Rank;
@@ -1176,13 +1181,17 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             (attnPerm[attnRank - 2], attnPerm[attnRank - 1]) = (attnPerm[attnRank - 1], attnPerm[attnRank - 2]);
         }
-        var dV = _lastAttentionWeights.Transpose(attnPerm).Multiply(dAttnOutput);
-
-        // Compute V with same shape as in forward pass - should be 3D [B, S, A]
-        // Use _lastQueryInput which is always 3D (Forward normalizes 2D→3D)
-        var input3D = _lastQueryInput ?? _lastInput;
-        int batchSize = input3D.Shape[0];
-        int seqLen = input3D.Shape.Length >= 2 ? input3D.Shape[1] : 1;
+        // dV = A^T @ dAttnOutput (per batch: [S,S]^T @ [S,A] = [S,A])
+        var AT = _lastAttentionWeights.Transpose(attnPerm);
+        var dV = new Tensor<T>(dAttnOutput.Shape.ToArray());
+        for (int b = 0; b < batchSize; b++)
+        {
+            var atB = AT.GetSliceAlongDimension(b, 0);
+            var dAoB = dAttnOutput.GetSliceAlongDimension(b, 0);
+            var dvB = Engine.TensorMatMul(atB, dAoB);
+            for (int j = 0; j < dvB.Length; j++)
+                dV.SetFlat(b * dvB.Length + j, dvB.GetFlat(j));
+        }
         var inputFlat = input3D.Reshape([batchSize * seqLen, _inputSize]);
         var wvTransposed = Engine.TensorTranspose(_Wv);
         var vProjected = Engine.TensorMatMul(inputFlat, wvTransposed);

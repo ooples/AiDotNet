@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+[LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
 public class SynapticPlasticityLayer<T> : LayerBase<T>
 {
     /// <summary>

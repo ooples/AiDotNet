@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, IsStateful = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 16")]
+[LayerProperty(NormalizesInput = true, IsTrainable = false, IsStateful = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 16")]
 public class ReservoirLayer<T> : LayerBase<T>
 {
     /// <summary>

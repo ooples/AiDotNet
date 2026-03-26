@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4, 0.02")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, SupportsBackpropagation = false, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4, 0.02")]
 public class SpatialPoolerLayer<T> : LayerBase<T>
 {
     /// <summary>

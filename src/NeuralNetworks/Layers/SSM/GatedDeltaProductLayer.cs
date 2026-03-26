@@ -928,13 +928,18 @@ public class GatedDeltaProductLayer<T> : LayerBase<T>
             new Vector<T>(_betaBiasGradient!.ToArray()),
             new Vector<T>(_alphaWeightsGradient!.ToArray()),
             new Vector<T>(_alphaBiasGradient!.ToArray()),
-            new Vector<T>(_householderWeightsGradient!.ToArray()));
+            new Vector<T>(_householderWeightsGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _betaWeightsGradient = null; _betaBiasGradient = null; _alphaWeightsGradient = null; _alphaBiasGradient = null; _householderWeightsGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

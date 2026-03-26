@@ -799,13 +799,18 @@ public class MEGALayer<T> : LayerBase<T>
             new Vector<T>(_keyWeightsGradient!.ToArray()),
             new Vector<T>(_keyBiasGradient!.ToArray()),
             new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_valueBiasGradient!.ToArray()));
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _emaAlphaLogitGradient = null; _emaProjectInWeightsGradient = null; _emaProjectInBiasGradient = null; _emaProjectOutWeightsGradient = null; _emaProjectOutBiasGradient = null; _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

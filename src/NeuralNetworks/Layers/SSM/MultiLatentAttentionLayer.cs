@@ -614,13 +614,18 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
             new Vector<T>(_compressBiasGradient!.ToArray()),
             new Vector<T>(_keyUpWeightsGradient!.ToArray()),
             new Vector<T>(_valueUpWeightsGradient!.ToArray()),
-            new Vector<T>(_queryWeightsGradient!.ToArray()));
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _compressWeightsGradient = null; _compressBiasGradient = null; _keyUpWeightsGradient = null; _valueUpWeightsGradient = null; _queryWeightsGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

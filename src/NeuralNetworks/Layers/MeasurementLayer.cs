@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+[LayerProperty(NormalizesInput = true, IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
 public class MeasurementLayer<T> : LayerBase<T>
 {
     /// <summary>

@@ -1725,12 +1725,23 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     }
 
     /// <summary>
-    /// Applies the activation function to a tensor.
+    /// Cached pre-activation input from the most recent ApplyActivation call.
+    /// Used by ApplyActivationDerivativeFromOutput when the activation doesn't implement
+    /// IOutputDerivative (e.g., GELU, SiLU, ELU). Without this, the fallback computes
+    /// f'(f(x)) instead of the correct f'(x).
+    /// </summary>
+    private Tensor<T>? _cachedPreActivationInput;
+
+    /// <summary>
+    /// Applies the activation function to a tensor and caches the pre-activation input
+    /// for correct derivative computation in the backward pass.
     /// </summary>
     /// <param name="input">The input tensor to activate.</param>
     /// <returns>The activated tensor.</returns>
     protected Tensor<T> ApplyActivation(Tensor<T> input)
     {
+        _cachedPreActivationInput = input;
+
         if (VectorActivation != null)
         {
             return VectorActivation.Activate(input);
@@ -2097,8 +2108,9 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <summary>
     /// Applies activation derivative given the POST-activation output value.
     /// Use this when you have the output (y = f(x)) instead of the pre-activation input (x).
-    /// For sigmoid: derivative = y * (1 - y). For tanh: derivative = 1 - y².
-    /// Falls back to standard Derivative(input) if activation doesn't implement IOutputDerivative.
+    /// For sigmoid: derivative = y * (1 - y). For tanh: derivative = 1 - y^2.
+    /// Falls back to using the cached pre-activation input if the activation doesn't implement
+    /// IOutputDerivative (e.g., GELU, SiLU, ELU, CELU).
     /// </summary>
     protected Tensor<T> ApplyActivationDerivativeFromOutput(Tensor<T> output, Tensor<T> outputGradient)
     {
@@ -2106,8 +2118,11 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         {
             return outputDeriv.DerivativeFromOutput(output).ElementwiseMultiply(outputGradient);
         }
-        // Fallback: use standard derivative (may re-apply activation incorrectly for sigmoid/tanh)
-        return ApplyActivationDerivative(output, outputGradient);
+        // Use cached pre-activation input if available, otherwise fall back to output.
+        // This prevents computing f'(f(x)) instead of f'(x) for activations like GELU
+        // that don't implement IOutputDerivative.
+        var preActivationInput = _cachedPreActivationInput ?? output;
+        return ApplyActivationDerivative(preActivationInput, outputGradient);
     }
 
     /// <summary>

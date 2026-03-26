@@ -60,7 +60,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+[LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class RWKVLayer<T> : LayerBase<T>
 {
     // Configuration
@@ -688,6 +688,7 @@ public class RWKVLayer<T> : LayerBase<T>
             new Vector<T>(_receptanceWeightsGradient!.ToArray()),
             new Vector<T>(_keyWeightsGradient!.ToArray()),
             new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_outputWeightsGradient?.ToArray() ?? new T[_outputWeights.Length]),
             new Vector<T>(_decayWeightsGradient!.ToArray()),
             new Vector<T>(_decayBiasGradient!.ToArray()),
             new Vector<T>(_bonusGradient!.ToArray()),
@@ -705,7 +706,7 @@ public class RWKVLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _timeMixRGradient = null; _timeMixKGradient = null; _timeMixVGradient = null; _receptanceWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _decayWeightsGradient = null; _decayBiasGradient = null; _bonusGradient = null; _channelMixRGradient = null; _channelMixKGradient = null; _channelKeyWeightsGradient = null; _channelValueWeightsGradient = null; _channelReceptanceWeightsGradient = null; _normGamma1Gradient = null; _normBeta1Gradient = null; _normGamma2Gradient = null; _normBeta2Gradient = null;
+        _timeMixRGradient = null; _timeMixKGradient = null; _timeMixVGradient = null; _receptanceWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _outputWeightsGradient = null; _decayWeightsGradient = null; _decayBiasGradient = null; _bonusGradient = null; _channelMixRGradient = null; _channelMixKGradient = null; _channelKeyWeightsGradient = null; _channelValueWeightsGradient = null; _channelReceptanceWeightsGradient = null; _normGamma1Gradient = null; _normBeta1Gradient = null; _normGamma2Gradient = null; _normBeta2Gradient = null;
     }
 
     /// <inheritdoc />
