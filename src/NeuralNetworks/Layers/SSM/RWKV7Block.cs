@@ -750,14 +750,30 @@ public class RWKV7Block<T> : LayerBase<T>
                 // dKInput = dKProj @ W_k^T
                 var dKInput = Engine.TensorMatMul(dKProj, _channelKeyWeights.Transpose(new[] { 1, 0 }));
 
-                // dNormed2[t] = dRInput * channelMixR + dKInput * channelMixK
+                // Token shift: rInput = mixR * x[t] + (1-mixR) * x[t-1]
+                // d(x[t]) += dRInput * mixR + dKInput * mixK  (current token contribution)
+                // d(x[t-1]) += dRInput * (1-mixR) + dKInput * (1-mixK)  (previous token contribution)
                 for (int bi = 0; bi < batchSize; bi++)
                 {
                     for (int d = 0; d < _modelDimension; d++)
                     {
-                        T fromR = NumOps.Multiply(dRInput[new[] { bi, d }], _channelMixR[d]);
-                        T fromK = NumOps.Multiply(dKInput[new[] { bi, d }], _channelMixK[d]);
-                        dNormed2[new[] { bi, t, d }] = NumOps.Add(fromR, fromK);
+                        T fromR_curr = NumOps.Multiply(dRInput[new[] { bi, d }], _channelMixR[d]);
+                        T fromK_curr = NumOps.Multiply(dKInput[new[] { bi, d }], _channelMixK[d]);
+                        dNormed2[new[] { bi, t, d }] = NumOps.Add(
+                            dNormed2[new[] { bi, t, d }],
+                            NumOps.Add(fromR_curr, fromK_curr));
+
+                        // Propagate to previous timestep via token shift
+                        if (t > 0)
+                        {
+                            T fromR_prev = NumOps.Multiply(dRInput[new[] { bi, d }],
+                                NumOps.Subtract(NumOps.One, _channelMixR[d]));
+                            T fromK_prev = NumOps.Multiply(dKInput[new[] { bi, d }],
+                                NumOps.Subtract(NumOps.One, _channelMixK[d]));
+                            dNormed2[new[] { bi, t - 1, d }] = NumOps.Add(
+                                dNormed2[new[] { bi, t - 1, d }],
+                                NumOps.Add(fromR_prev, fromK_prev));
+                        }
                     }
                 }
             }
