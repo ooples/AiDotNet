@@ -458,7 +458,7 @@ internal class MambaBlock<T> : LayerBase<T>
 
         // Step 8 backward: output projection
         var gradFlat = activationGrad.Reshape(batchSize * seqLength, _modelDimension);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
+        _outputProjectionBiasGradient = ReduceSumAxes01(activationGrad, batchSize, seqLength, _modelDimension);
 
         var gatedFlat = _lastGatedOutput.Reshape(batchSize * seqLength, _innerDimension);
         _outputProjectionWeightsGradient = Engine.TensorMatMul(
@@ -485,7 +485,7 @@ internal class MambaBlock<T> : LayerBase<T>
         var dDeltaSoftplus = Engine.TensorMultiply(dDelta, softplusDerivative);
 
         var dDeltaFlat = dDeltaSoftplus.Reshape(batchSize * seqLength, _innerDimension);
-        _dtProjectionBiasGradient = Engine.ReduceSum(dDeltaSoftplus, new int[] { 0, 1 });
+        _dtProjectionBiasGradient = ReduceSumAxes01(dDeltaSoftplus, batchSize, seqLength, _innerDimension);
         var dDeltaLowRankFlat = Engine.TensorMatMul(dDeltaFlat, _dtProjectionWeights.Transpose([1, 0]));
 
         var deltaLowRankFlat = SliceTensor(
@@ -522,7 +522,7 @@ internal class MambaBlock<T> : LayerBase<T>
         var dProjected = ConcatenateTensors(dXBranch, dZBranch, 2);
         var dProjectedFlat = dProjected.Reshape(batchSize * seqLength, _innerDimension * 2);
 
-        _inputProjectionBiasGradient = Engine.ReduceSum(dProjected, new int[] { 0, 1 });
+        _inputProjectionBiasGradient = ReduceSumAxes01(dProjected, batchSize, seqLength, _innerDimension * 2);
 
         var input2D = _lastInput.Reshape(batchSize * seqLength, _modelDimension);
         _inputProjectionWeightsGradient = Engine.TensorMatMul(
@@ -643,6 +643,20 @@ internal class MambaBlock<T> : LayerBase<T>
     #endregion
 
     #region Engine-Accelerated Helpers
+
+    /// <summary>
+    /// Workaround for Engine.ReduceSum multi-axis [0,1] bug (AiDotNet.Tensors PR #62).
+    /// Sums a [batch, seq, features] tensor over batch and seq → [features].
+    /// </summary>
+    private Tensor<T> ReduceSumAxes01(Tensor<T> tensor, int batch, int seq, int features)
+    {
+        var result = new Tensor<T>(new[] { features });
+        for (int bi = 0; bi < batch; bi++)
+            for (int t = 0; t < seq; t++)
+                for (int d = 0; d < features; d++)
+                    result[d] = NumOps.Add(result[d], tensor[new[] { bi, t, d }]);
+        return result;
+    }
 
     /// <summary>
     /// Computes SiLU derivative using Engine operations: sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x)).
