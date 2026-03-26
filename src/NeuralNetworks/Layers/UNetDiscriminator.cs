@@ -308,11 +308,13 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
 
         // Backward through encoder (combine with skip gradients)
+        // Skip gradients are at the encoder INPUT resolution (stored before encoder processes),
+        // so we must first backward through the encoder (giving gradient at input resolution),
+        // then add the skip gradient (both now at the same resolution).
         for (int i = _numBlocks - 1; i >= 0; i--)
         {
-            // Add skip gradient
-            grad = AddTensors(grad, skipGrads[i]);
             grad = _encoderBlocks[i].Backward(grad);
+            grad = AddTensors(grad, skipGrads[i]);
         }
 
         // Backward through initial conv activation and conv

@@ -719,13 +719,16 @@ public class DeltaNetLayer<T> : LayerBase<T>
             new Vector<T>(_valueWeightsGradient!.ToArray()),
             new Vector<T>(_valueBiasGradient!.ToArray()),
             new Vector<T>(_betaWeightsGradient!.ToArray()),
-            new Vector<T>(_betaBiasGradient!.ToArray()));
+            new Vector<T>(_betaBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null; _betaWeightsGradient = null; _betaBiasGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

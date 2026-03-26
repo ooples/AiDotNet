@@ -26,7 +26,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 16, 8", TestConstructorArgs = "8")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 16, 8", TestConstructorArgs = "8")]
 public class SwinPatchMergingLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
@@ -138,27 +138,11 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         // Apply layer normalization
         var normalized = _norm.Forward(merged);
 
-        // Apply linear reduction: [batch, newSeqLen, 4*dim] -> [batch, newSeqLen, 2*dim]
-        var output = TensorAllocator.Rent<T>([batch, newSeqLen, _outputDim]);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < newSeqLen; s++)
-            {
-                var tokenIn = new Tensor<T>([1, dim * 4]);
-                for (int d = 0; d < dim * 4; d++)
-                {
-                    tokenIn[0, d] = normalized[b, s, d];
-                }
-
-                var tokenOut = _reduction.Forward(tokenIn);
-
-                for (int d = 0; d < _outputDim; d++)
-                {
-                    output[b, s, d] = tokenOut[0, d];
-                }
-            }
-        }
+        // Apply linear reduction: [batch*newSeqLen, 4*dim] -> [batch*newSeqLen, 2*dim]
+        // Batch all tokens into a single matmul for correctness (single _lastInput for backward)
+        var flatNorm = normalized.Reshape([batch * newSeqLen, dim * 4]);
+        var flatOut = _reduction.Forward(flatNorm);
+        var output = flatOut.Reshape([batch, newSeqLen, _outputDim]);
 
         return output;
     }
@@ -175,27 +159,10 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         int newH = _cachedH / 2;
         int newW = _cachedW / 2;
 
-        // Backward through reduction layer
-        var reductionGrad = new Tensor<T>([batch, newSeqLen, _inputDim * 4]);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < newSeqLen; s++)
-            {
-                var tokenGrad = new Tensor<T>([1, _outputDim]);
-                for (int d = 0; d < _outputDim; d++)
-                {
-                    tokenGrad[0, d] = outputGradient[b, s, d];
-                }
-
-                var tokenInputGrad = _reduction.Backward(tokenGrad);
-
-                for (int d = 0; d < _inputDim * 4; d++)
-                {
-                    reductionGrad[b, s, d] = tokenInputGrad[0, d];
-                }
-            }
-        }
+        // Backward through reduction layer (batched, matching Forward)
+        var flatGrad = outputGradient.Reshape([batch * newSeqLen, _outputDim]);
+        var flatReductionGrad = _reduction.Backward(flatGrad);
+        var reductionGrad = flatReductionGrad.Reshape([batch, newSeqLen, _inputDim * 4]);
 
         // Backward through layer normalization
         var normGrad = _norm.Backward(reductionGrad);

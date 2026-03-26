@@ -569,10 +569,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         // === GPU-Accelerated LocallyConnectedConv2D ===
         // The layer uses NHWC format but Engine expects NCHW, so we transpose
         // Input NHWC [batch, height, width, channels] -> NCHW [batch, channels, height, width]
-        var inputNCHW = processInput.Transpose([0, 3, 1, 2]).Contiguous();
+        var inputNCHW = processInput.Transpose([0, 3, 1, 2]);
 
         // Weights need to be permuted from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw]
-        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]).Contiguous();
+        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
 
         // Pass bias as 1D tensor [outChannels] to ensure consistent behavior across
         // CPU fallback, GPU, and JIT paths. The engine handles per-channel bias internally.
@@ -580,7 +580,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         var outputNCHW = Engine.LocallyConnectedConv2D(inputNCHW, weightsPermuted, _biases, strideArr);
 
         // Transpose output back from NCHW [batch, channels, height, width] to NHWC [batch, height, width, channels]
-        var preActivation = outputNCHW.Transpose([0, 2, 3, 1]).Contiguous();
+        var preActivation = outputNCHW.Transpose([0, 2, 3, 1]);
 
         // Apply activation function
         var result = ApplyActivation(preActivation);

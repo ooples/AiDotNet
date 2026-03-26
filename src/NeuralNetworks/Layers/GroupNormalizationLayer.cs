@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
-[LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "2, 4")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "2, 4")]
 public class GroupNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;

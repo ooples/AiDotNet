@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for computations (e.g., float, double).</typeparam>
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
-[LayerProperty(IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
 public class BatchNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -694,8 +694,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
                 permuteOrder[d - 1] = d; // spatial dims
             permuteOrder[_lastInput.Shape.Length - 1] = 1; // C goes last
 
-            adjustedGradient = outputGradient.Transpose(permuteOrder).Reshape(batchSize, numFeatures);
-            adjustedInput = _lastInput.Transpose(permuteOrder).Reshape(batchSize, numFeatures);
+            // Clone after transpose to ensure contiguous memory layout before reshape.
+            // Transpose may return a non-contiguous view, and Reshape on non-contiguous
+            // data produces incorrect results (data elements are read in wrong order).
+            adjustedGradient = outputGradient.Transpose(permuteOrder).Clone().Reshape(batchSize, numFeatures);
+            adjustedInput = _lastInput.Transpose(permuteOrder).Clone().Reshape(batchSize, numFeatures);
         }
         else
         {
@@ -807,7 +810,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             inverseOrder[1] = originalInputShape.Length - 1; // C was last, goes to dim 1
             for (int d = 2; d < originalInputShape.Length; d++)
                 inverseOrder[d] = d - 1; // spatial dims shift right
-            inputGradient = inputGradient.Transpose(inverseOrder);
+            inputGradient = inputGradient.Transpose(inverseOrder).Clone();
         }
         else if (_inputWas1D && inputGradient.Shape.Length > 1)
         {

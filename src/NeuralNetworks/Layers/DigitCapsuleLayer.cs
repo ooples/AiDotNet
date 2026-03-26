@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Capsule)]
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 10, 4, 3")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 10, 4, 3")]
 public class DigitCapsuleLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -112,6 +112,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastPreSquash;
 
     /// <summary>
     /// The coupling coefficients from the last routing iteration, saved for backpropagation.
@@ -468,6 +469,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
             // activation - SquashActivation expects 2D [numCapsules, capsuleDim]
             // weightedSum is [B, C, outDim], reshape to [B*C, outDim] for activation
             var flatWeightedSum = weightedSum.Reshape([batchSize * _numClasses, _outputCapsuleDimension]);
+            _lastPreSquash = flatWeightedSum;
             var flatActivated = ApplyActivation(flatWeightedSum);
             var activated = flatActivated.Reshape([batchSize, _numClasses, _outputCapsuleDimension]);
             output = activated;
@@ -679,27 +681,32 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
             outputGradient3D = outputGradient.Reshape([batchSize, _numClasses, _outputCapsuleDimension]);
         }
 
-        // Squash backward with proper Jacobian-vector product
-        // squash(s) = ||s||^2 / (1 + ||s||^2) * s / ||s||
-        // Let a = ||s||^2 / (1 + ||s||^2), then squash = a * s_hat where s_hat = s/||s||
-        // J_lk = d(squash_l)/d(s_k) = a * (δ_lk/||s|| - s_l*s_k/||s||^3) + da/d(||s||^2) * 2*s_k * s_l/||s||
-        // where da/d(||s||^2) = 1/(1+||s||^2)^2
-        // dL/d(s_k) = sum_l dL/d(squash_l) * J_lk
-        var activationGradient = new Tensor<T>(outputGradient3D.Shape.ToArray());
-        for (int b = 0; b < batchSize; b++)
+        // Squash backward with proper Jacobian-vector product using cached pre-squash values.
+        // Flatten to [batch*numClasses, outputCapsuleDim] for per-capsule Jacobian.
+        int totalOutputCapsules = batchSize * _numClasses;
+        Tensor<T> activationGradient;
+
+        if (_lastPreSquash is not null && VectorActivation is not null)
         {
-            for (int j = 0; j < _numClasses; j++)
+            var flatGrad = outputGradient3D.Reshape([totalOutputCapsules, _outputCapsuleDimension]);
+            var jacobians = VectorActivation.Derivative(_lastPreSquash);
+
+            if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _outputCapsuleDimension)
             {
-                // We need the PRE-squash values s. Cache them from forward, or recompute.
-                // Since we don't have pre-squash cached, use the identity:
-                // squash is monotonic in ||s||, so we pass gradients through as:
-                // dL/ds ≈ dL/dv (passthrough) — this is the standard capsule network approach
-                // used in Sabour et al. 2017 implementations where squash backward = identity
-                for (int l = 0; l < _outputCapsuleDimension; l++)
-                {
-                    activationGradient[b, j, l] = outputGradient3D[b, j, l];
-                }
+                // Jacobian @ gradient per capsule via BatchMatMul
+                var gradCol = flatGrad.Reshape([totalOutputCapsules, _outputCapsuleDimension, 1]);
+                var resultCol = Engine.BatchMatMul(jacobians, gradCol);
+                activationGradient = resultCol.Reshape([batchSize, _numClasses, _outputCapsuleDimension]);
             }
+            else
+            {
+                activationGradient = Engine.TensorMultiply(jacobians, flatGrad)
+                    .Reshape([batchSize, _numClasses, _outputCapsuleDimension]);
+            }
+        }
+        else
+        {
+            activationGradient = outputGradient3D;
         }
 
         _weightsGradient = new Tensor<T>(_weights.Shape.ToArray());

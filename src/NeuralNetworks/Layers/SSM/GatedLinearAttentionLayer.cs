@@ -547,13 +547,16 @@ internal class GatedLinearAttentionLayer<T> : LayerBase<T>
             new Vector<T>(_keyWeightsGradient!.ToArray()),
             new Vector<T>(_valueWeightsGradient!.ToArray()),
             new Vector<T>(_gateWeightsGradient!.ToArray()),
-            new Vector<T>(_gateBiasGradient!.ToArray()));
+            new Vector<T>(_gateBiasGradient!.ToArray()),
+            new Vector<T>(_outputWeightsGradient?.ToArray() ?? new T[_outputWeights.Length]),
+            new Vector<T>(_outputBiasGradient?.ToArray() ?? new T[_outputBias.Length]));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _gateWeightsGradient = null; _gateBiasGradient = null;
+        _outputWeightsGradient = null; _outputBiasGradient = null;
     }
 
     /// <inheritdoc />

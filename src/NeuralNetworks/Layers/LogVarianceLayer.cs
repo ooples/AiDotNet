@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "new[] { 2, 4 }, 0")]
+[LayerProperty(NormalizesInput = true, IsTrainable = false, ChangesShape = true, TestInputShape = "2, 4", TestConstructorArgs = "new[] { 2, 4 }, 0")]
 public class LogVarianceLayer<T> : LayerBase<T>
 {
     /// <summary>
