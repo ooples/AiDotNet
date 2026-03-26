@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -34,9 +36,9 @@ namespace AiDotNet.MetaLearning.Modules;
     "https://arxiv.org/abs/1711.06025",
     Year = 2018,
     Authors = "Sung, F., Yang, Y., Zhang, L., Xiang, T., Torr, P. H. S., & Hospedales, T. M.")]
-public class RelationModule<T>
+public class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    // NumOps inherited from ModelBase
 
     private readonly int _hiddenDimension;
     private Vector<T> _weights;
@@ -106,7 +108,7 @@ public class RelationModule<T>
     /// Gets the learnable parameters of the relation module.
     /// </summary>
     /// <returns>Vector of learnable weights.</returns>
-    public Vector<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         return _weights;
     }
@@ -120,7 +122,7 @@ public class RelationModule<T>
     /// with new values, typically after gradient-based updates during training.
     /// </para>
     /// </remarks>
-    public void SetParameters(Vector<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         if (parameters == null)
         {
@@ -153,7 +155,7 @@ public class RelationModule<T>
     /// Creates a deep copy of the relation module.
     /// </summary>
     /// <returns>A new RelationModule with copied weights.</returns>
-    public RelationModule<T> Clone()
+    public new RelationModule<T> Clone()
     {
         var cloned = new RelationModule<T>(_hiddenDimension);
         for (int i = 0; i < _weights.Length; i++)
@@ -162,4 +164,32 @@ public class RelationModule<T>
         }
         return cloned;
     }
+
+    #region ModelBase Overrides
+
+    /// <inheritdoc />
+    public override Tensor<T> Predict(Tensor<T> input) => input;
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var cloned = Clone();
+        return cloned;
+    }
+
+    #endregion
 }
