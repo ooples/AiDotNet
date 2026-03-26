@@ -45,7 +45,6 @@ namespace AiDotNet.Safety.Image;
     Authors = "Various")]
 public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly int _patchSize;
     private readonly int _featureDim;

@@ -38,7 +38,6 @@ namespace AiDotNet.Safety.Text;
 [ModelPaper("Challenges in Automated Debiasing for Toxic Language Detection", "https://arxiv.org/abs/2102.00086", Year = 2021, Authors = "Xuhui Zhou, Maarten Sap, Swabha Swayamdipta, Yejin Choi, Noah A. Smith")]
 public class ClassifierToxicityDetector<T> : TextSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _threshold;
     private readonly int _featureDim;

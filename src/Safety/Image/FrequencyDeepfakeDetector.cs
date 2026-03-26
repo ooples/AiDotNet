@@ -44,7 +44,6 @@ namespace AiDotNet.Safety.Image;
     Authors = "Ricard Durall, Margret Keuper, Janis Keuper")]
 public class FrequencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _threshold;
     private readonly FastFourierTransform<T> _fft;

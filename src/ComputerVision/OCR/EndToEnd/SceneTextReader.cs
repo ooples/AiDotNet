@@ -3,6 +3,8 @@ using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.TextDetection;
 using AiDotNet.ComputerVision.OCR.Recognition;
 using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.OCR.EndToEnd;
@@ -30,9 +32,8 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class SceneTextReader<T>
+public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly TextDetectorBase<T> _detector;
     private readonly OCRBase<T> _recognizer;
     private readonly OCROptions<T> _options;
@@ -47,7 +48,6 @@ public class SceneTextReader<T>
     /// </summary>
     public SceneTextReader(OCROptions<T> options)
     {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _options = options;
 
         // Initialize detector based on options
@@ -107,7 +107,7 @@ public class SceneTextReader<T>
             var (text, confidence) = _recognizer.RecognizeText(crop);
 
             if (!string.IsNullOrWhiteSpace(text) &&
-                _numOps.ToDouble(confidence) >= _numOps.ToDouble(_options.ConfidenceThreshold))
+                NumOps.ToDouble(confidence) >= NumOps.ToDouble(_options.ConfidenceThreshold))
             {
                 var recognized = new RecognizedText<T>(text, confidence)
                 {
@@ -154,10 +154,10 @@ public class SceneTextReader<T>
         int width = image.Shape[3];
 
         // Get bounding box
-        double x1 = _numOps.ToDouble(region.Box.X1);
-        double y1 = _numOps.ToDouble(region.Box.Y1);
-        double x2 = _numOps.ToDouble(region.Box.X2);
-        double y2 = _numOps.ToDouble(region.Box.Y2);
+        double x1 = NumOps.ToDouble(region.Box.X1);
+        double y1 = NumOps.ToDouble(region.Box.Y1);
+        double x2 = NumOps.ToDouble(region.Box.X2);
+        double y2 = NumOps.ToDouble(region.Box.Y2);
 
         // Clamp to image bounds
         int cropX1 = Math.Max(0, (int)x1);
@@ -246,17 +246,17 @@ public class SceneTextReader<T>
         // Group into lines based on Y-coordinate overlap
         var lines = new List<List<RecognizedText<T>>>();
 
-        foreach (var text in texts.OrderBy(t => t.Box != null ? _numOps.ToDouble(t.Box.Y1) : 0))
+        foreach (var text in texts.OrderBy(t => t.Box != null ? NumOps.ToDouble(t.Box.Y1) : 0))
         {
             bool addedToLine = false;
 
             foreach (var line in lines)
             {
                 // Check if this text overlaps vertically with the line
-                var lineTop = line.Min(t => t.Box != null ? _numOps.ToDouble(t.Box.Y1) : 0);
-                var lineBottom = line.Max(t => t.Box != null ? _numOps.ToDouble(t.Box.Y2) : 0);
-                var textTop = text.Box != null ? _numOps.ToDouble(text.Box.Y1) : 0;
-                var textBottom = text.Box != null ? _numOps.ToDouble(text.Box.Y2) : 0;
+                var lineTop = line.Min(t => t.Box != null ? NumOps.ToDouble(t.Box.Y1) : 0);
+                var lineBottom = line.Max(t => t.Box != null ? NumOps.ToDouble(t.Box.Y2) : 0);
+                var textTop = text.Box != null ? NumOps.ToDouble(text.Box.Y1) : 0;
+                var textBottom = text.Box != null ? NumOps.ToDouble(text.Box.Y2) : 0;
 
                 double overlapThreshold = (lineBottom - lineTop) * 0.5;
 
@@ -278,9 +278,9 @@ public class SceneTextReader<T>
         // Sort each line left-to-right, then concatenate lines
         var result = new List<RecognizedText<T>>();
 
-        foreach (var line in lines.OrderBy(l => l.Min(t => t.Box != null ? _numOps.ToDouble(t.Box.Y1) : 0)))
+        foreach (var line in lines.OrderBy(l => l.Min(t => t.Box != null ? NumOps.ToDouble(t.Box.Y1) : 0)))
         {
-            var sortedLine = line.OrderBy(t => t.Box != null ? _numOps.ToDouble(t.Box.X1) : 0);
+            var sortedLine = line.OrderBy(t => t.Box != null ? NumOps.ToDouble(t.Box.X1) : 0);
             result.AddRange(sortedLine);
         }
 
@@ -303,4 +303,35 @@ public class SceneTextReader<T>
         await _detector.LoadWeightsAsync(detectorPath, cancellationToken);
         await _recognizer.LoadWeightsAsync(recognizerPath, cancellationToken);
     }
+
+    #region ModelBase Overrides
+
+    /// <inheritdoc />
+    public override Tensor<T> Predict(Tensor<T> input) => input;
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => new Vector<T>(0);
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters) { }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+        => (SceneTextReader<T>)MemberwiseClone();
+
+    #endregion
 }

@@ -2,6 +2,8 @@ using System;
 using System.Numerics;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -46,8 +48,9 @@ namespace AiDotNet.Audio.Features;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("An Efficient Algorithm for the Calculation of a Constant Q Transform", "https://doi.org/10.1121/1.404385", Year = 1992, Authors = "Judith C. Brown, Miller S. Puckette")]
-public class ConstantQTransform<T>
+public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
+    // NumOps inherited from ModelBase
     private readonly INumericOperations<T> _numOps;
     private readonly int _sampleRate;
     private readonly double _fMin;
@@ -341,4 +344,35 @@ public class ConstantQTransform<T>
         int octave = (midiNote / 12) - 1;
         return $"{noteNames[noteIndex]}{octave}";
     }
+
+    #region ModelBase Overrides
+
+    /// <inheritdoc />
+    public override Tensor<T> Predict(Tensor<T> input) => Transform(input);
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Tensors.LinearAlgebra.Vector<T> GetParameters() => new Tensors.LinearAlgebra.Vector<T>(0);
+
+    /// <inheritdoc />
+    public override void SetParameters(Tensors.LinearAlgebra.Vector<T> parameters) { }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Tensors.LinearAlgebra.Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+        => (ConstantQTransform<T>)MemberwiseClone();
+
+    #endregion
 }

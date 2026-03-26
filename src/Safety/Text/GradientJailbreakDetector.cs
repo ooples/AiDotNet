@@ -52,7 +52,6 @@ namespace AiDotNet.Safety.Text;
     Authors = "Yueqi Xie, Minghong Fang, Renjie Pi, Neil Gong")]
 public class GradientJailbreakDetector<T> : TextSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _anomalyThreshold;
     private readonly int _minSuffixLength;
