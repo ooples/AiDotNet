@@ -41,7 +41,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Variational Learning of Inducing Variables in Sparse Gaussian Processes", "https://doi.org/10.48550/arXiv.0905.3486", Year = 2009, Authors = "Michalis K. Titsias")]
-public class VariationalGaussianProcess<T> : IGaussianProcess<T>
+public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The kernel function that determines similarity between data points.
@@ -209,7 +209,7 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
     /// For other likelihoods, we use gradient-based optimization.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> X, Vector<T> y)
+    public override void Fit(Matrix<T> X, Vector<T> y)
     {
         _X = X;
         _y = y;
@@ -535,7 +535,7 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
     }
 
     /// <inheritdoc/>
-    public (T mean, T variance) Predict(Vector<T> x)
+    public override (T mean, T variance) Predict(Vector<T> x)
     {
         if (_X.IsEmpty || _variationalMean.IsEmpty)
         {
@@ -585,7 +585,7 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
     }
 
     /// <inheritdoc/>
-    public void UpdateKernel(IKernelFunction<T> kernel)
+    public override void UpdateKernel(IKernelFunction<T> kernel)
     {
         _kernel = kernel;
         if (!_X.IsEmpty && !_y.IsEmpty)

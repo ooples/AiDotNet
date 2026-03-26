@@ -33,7 +33,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Gaussian Processes for Machine Learning", "https://doi.org/10.7551/mitpress/3206.001.0001", Year = 2006, Authors = "Carl Edward Rasmussen, Christopher K. I. Williams")]
-public class StandardGaussianProcess<T> : IGaussianProcess<T>
+public class StandardGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The kernel function that determines how similarity between data points is calculated.
@@ -109,7 +109,7 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// but it also means they can become slow with very large datasets.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> X, Vector<T> y)
+    public override void Fit(Matrix<T> X, Vector<T> y)
     {
         _X = X;
         _y = y;
@@ -156,7 +156,7 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// compared to many other machine learning methods.
     /// </para>
     /// </remarks>
-    public (T mean, T variance) Predict(Vector<T> x)
+    public override (T mean, T variance) Predict(Vector<T> x)
     {
         var k = CalculateKernelVector(_X, x);
 
@@ -227,7 +227,7 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     /// everything needed with the new kernel so your model stays up-to-date.
     /// </para>
     /// </remarks>
-    public void UpdateKernel(IKernelFunction<T> kernel)
+    public override void UpdateKernel(IKernelFunction<T> kernel)
     {
         _kernel = kernel;
         if (_X != null && _y != null)

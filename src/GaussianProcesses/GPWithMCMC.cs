@@ -30,7 +30,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("MCMC Methods for Gaussian Process Models", "https://doi.org/10.1007/978-3-540-28650-9_6", Year = 2003, Authors = "Mark N. Gibbs")]
-public class GPWithMCMC<T> : IGaussianProcess<T>
+public class GPWithMCMC<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The base kernel function.
@@ -227,7 +227,7 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// Slice sampling automatically adapts step sizes, making it robust.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> X, Vector<T> y)
+    public override void Fit(Matrix<T> X, Vector<T> y)
     {
         Guard.NotNull(X);
         _X = X;
@@ -300,7 +300,7 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// This properly accounts for uncertainty in both the function AND hyperparameters.
     /// </para>
     /// </remarks>
-    public (T mean, T variance) Predict(Vector<T> x)
+    public override (T mean, T variance) Predict(Vector<T> x)
     {
         if (!_isTrained || _X is null || _y is null || _samples is null ||
             _choleskyFactors is null || _alphaVectors is null)
@@ -391,7 +391,7 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// </summary>
     /// <param name="newKernel">New kernel function.</param>
     /// <exception cref="NotSupportedException">Always thrown as kernel is fixed after initialization.</exception>
-    public void UpdateKernel(IKernelFunction<T> newKernel)
+    public override void UpdateKernel(IKernelFunction<T> newKernel)
     {
         throw new NotSupportedException(
             "GPWithMCMC does not support kernel updates after initialization. " +

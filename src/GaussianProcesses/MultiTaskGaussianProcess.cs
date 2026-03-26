@@ -41,7 +41,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ModelPaper("Multi-task Gaussian Process Prediction", "https://doi.org/10.5555/2981562.2981672", Year = 2008, Authors = "Edwin V. Bonilla, Kian Ming A. Chai, Christopher K. I. Williams")]
-public class MultiTaskGaussianProcess<T>
+public class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The base kernel for input similarity.
@@ -381,7 +381,7 @@ public class MultiTaskGaussianProcess<T>
     /// has more data, it can help improve predictions for related tasks.
     /// </para>
     /// </remarks>
-    public (Vector<T> means, Vector<T> variances) Predict(Vector<T> x)
+    public (Vector<T> means, Vector<T> variances) PredictMultiTask(Vector<T> x)
     {
         if (_X.IsEmpty || _alpha.IsEmpty)
         {
@@ -472,7 +472,7 @@ public class MultiTaskGaussianProcess<T>
     /// Updates the kernel for this multi-task GP.
     /// </summary>
     /// <param name="kernel">The new kernel function.</param>
-    public void UpdateKernel(IKernelFunction<T> kernel)
+    public override void UpdateKernel(IKernelFunction<T> kernel)
     {
         Guard.NotNull(kernel);
         _kernel = kernel;
@@ -491,5 +491,26 @@ public class MultiTaskGaussianProcess<T>
             matrix[i, i] = _numOps.One;
         }
         return matrix;
+    }
+
+    /// <summary>
+    /// IFullModel compliance: Fit with single-output vector (uses first task only).
+    /// For multi-task, prefer Fit(Matrix, Matrix) directly.
+    /// </summary>
+    public override void Fit(Matrix<T> X, Vector<T> y)
+    {
+        var yMatrix = new Matrix<T>(y.Length, 1);
+        for (int i = 0; i < y.Length; i++)
+            yMatrix[i, 0] = y[i];
+        Fit(X, yMatrix);
+    }
+
+    /// <summary>
+    /// IFullModel compliance: Predict single point returning first task's mean.
+    /// </summary>
+    public override (T mean, T variance) Predict(Vector<T> x)
+    {
+        var (means, variances) = PredictMultiTask(x);
+        return (means[0], variances[0]);
     }
 }

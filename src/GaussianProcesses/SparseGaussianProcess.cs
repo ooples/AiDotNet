@@ -29,7 +29,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("A Unifying View of Sparse Approximate Gaussian Process Regression", "https://doi.org/10.1162/jmlr.2005.6.65.1939", Year = 2005, Authors = "Joaquin Quiñonero-Candela, Carl Edward Rasmussen")]
-public class SparseGaussianProcess<T> : IGaussianProcess<T>
+public class SparseGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The kernel function that defines the similarity between data points.
@@ -143,7 +143,7 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
     /// After calling this method, your model is ready to make predictions on new data points.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> X, Vector<T> y)
+    public override void Fit(Matrix<T> X, Vector<T> y)
     {
         _X = X;
         _y = y;
@@ -246,7 +246,7 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
     /// like in scientific experiments, medical diagnoses, or financial forecasting.
     /// </para>
     /// </remarks>
-    public (T mean, T variance) Predict(Vector<T> x)
+    public override (T mean, T variance) Predict(Vector<T> x)
     {
         var Kus = CalculateKernelVector(_inducingPoints, x);
         var Kss = _kernel.Calculate(x, x);
@@ -285,7 +285,7 @@ public class SparseGaussianProcess<T> : IGaussianProcess<T>
     /// provided training data.
     /// </para>
     /// </remarks>
-    public void UpdateKernel(IKernelFunction<T> kernel)
+    public override void UpdateKernel(IKernelFunction<T> kernel)
     {
         _kernel = kernel;
         if (!_X.IsEmpty && !_y.IsEmpty)
