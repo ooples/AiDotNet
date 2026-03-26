@@ -871,13 +871,18 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
             new Vector<T>(_readRouterWeightsGradient!.ToArray()),
             new Vector<T>(_readRouterBiasGradient!.ToArray()),
             new Vector<T>(_gateRouterWeightsGradient!.ToArray()),
-            new Vector<T>(_gateRouterBiasGradient!.ToArray()));
+            new Vector<T>(_gateRouterBiasGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null; _writeRouterWeightsGradient = null; _writeRouterBiasGradient = null; _readRouterWeightsGradient = null; _readRouterBiasGradient = null; _gateRouterWeightsGradient = null; _gateRouterBiasGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

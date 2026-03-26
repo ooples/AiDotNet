@@ -772,13 +772,18 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
             new Vector<T>(_bImagGradient!.ToArray()),
             new Vector<T>(_cRealGradient!.ToArray()),
             new Vector<T>(_cImagGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()));
+            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? new T[_inputProjectionWeights.Length]),
+            new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? new T[_inputProjectionBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _nuGradient = null; _thetaGradient = null; _bRealGradient = null; _bImagGradient = null; _cRealGradient = null; _cImagGradient = null; _dParamGradient = null;
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

@@ -1166,13 +1166,16 @@ public class BASEDLayer<T> : LayerBase<T>
             new Vector<T>(_windowValueWeightsGradient!.ToArray()),
             new Vector<T>(_featureMapScaleGradient!.ToArray()),
             new Vector<T>(_mixingGateWeightsGradient!.ToArray()),
-            new Vector<T>(_mixingGateBiasGradient!.ToArray()));
+            new Vector<T>(_mixingGateBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
         _linearQueryWeightsGradient = null; _linearKeyWeightsGradient = null; _linearValueWeightsGradient = null; _windowQueryWeightsGradient = null; _windowKeyWeightsGradient = null; _windowValueWeightsGradient = null; _featureMapScaleGradient = null; _mixingGateWeightsGradient = null; _mixingGateBiasGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

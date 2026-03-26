@@ -28,7 +28,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class DecoderLayer<T> : LayerBase<T>
 {
 
@@ -151,7 +151,7 @@ public class DecoderLayer<T> : LayerBase<T>
     public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null)
         : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
     {
-        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
+        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, (IVectorActivationFunction<T>?)null);
         _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
 
         // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
@@ -176,7 +176,7 @@ public class DecoderLayer<T> : LayerBase<T>
     public DecoderLayer(int inputSize, int attentionSize, int feedForwardSize, IVectorActivationFunction<T>? activation = null)
         : base([inputSize], [inputSize], activation ?? new ReLUActivation<T>())
     {
-        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
+        _selfAttention = new AttentionLayer<T>(inputSize, attentionSize, (IVectorActivationFunction<T>?)null);
         _crossAttention = new AttentionLayer<T>(inputSize, attentionSize, activation);
 
         // Standard transformer FFN: Linear(input -> ff) + activation + Linear(ff -> input)
@@ -607,12 +607,9 @@ public class DecoderLayer<T> : LayerBase<T>
         var dSelfAttention = _selfAttention.Backward(dNorm1);
         var dInput = dSelfAttention.Add(dNorm1);
 
-        // Encoder output gradient: the cross-attention context path contributes to encoder gradient
+        // Encoder output gradient: use the cross-attention gradient (same as dCrossAttention)
+        // since cross-attention outputs depend on both query (from self-attention) and context (encoder)
         var dEncoderOutput = dCrossAttention;
-
-        // In single-input mode (decoder-only), encoder output = input,
-        // so encoder gradient must be added to input gradient
-        dInput = dInput.Add(dEncoderOutput);
 
         // If input was originally 2D, reshape gradients back to 2D
         if (gradWas2D)

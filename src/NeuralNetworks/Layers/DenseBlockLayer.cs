@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 8, 8")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4, 4, 4, 4")]
 internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
@@ -91,8 +91,11 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     {
         _lastInput = input;
 
-        // BN-ReLU-Conv1x1
-        _bn1Out = _bn1.Forward(input);
+        // BN/Conv expect [N, C, H, W] format. Add batch dim if 3D [C, H, W].
+        var x = input.Shape.Length == 3 ? input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input;
+
+        // BN-ReLU-Conv1x1 (DenseNet paper: pre-activation bottleneck)
+        _bn1Out = _bn1.Forward(x);
         _relu1Out = _relu.Activate(_bn1Out);
         _conv1Out = _conv1x1.Forward(_relu1Out);
 
@@ -100,6 +103,10 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         _bn2Out = _bn2.Forward(_conv1Out);
         _relu2Out = _relu.Activate(_bn2Out);
         var output = _conv3x3.Forward(_relu2Out);
+
+        // Remove batch dim if we added it
+        if (input.Shape.Length == 3 && output.Shape.Length == 4 && output.Shape[0] == 1)
+            output = output.Reshape([output.Shape[1], output.Shape[2], output.Shape[3]]);
 
         return output;
     }
@@ -234,8 +241,13 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             _conv1Out is null || _bn2Out is null || _relu2Out is null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Add batch dim if needed (matches Forward's reshape)
+        var grad = outputGradient.Shape.Length == 3
+            ? outputGradient.Reshape([1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]])
+            : outputGradient;
+
         // Backward through conv3x3
-        var grad = _conv3x3.Backward(outputGradient);
+        grad = _conv3x3.Backward(grad);
 
         // Backward through ReLU2
         grad = ApplyReluDerivative(_bn2Out, grad);
@@ -251,6 +263,10 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         // Backward through BN1
         grad = _bn1.Backward(grad);
+
+        // Remove batch dim if we added it
+        if (_lastInput.Shape.Length == 3 && grad.Shape.Length == 4 && grad.Shape[0] == 1)
+            grad = grad.Reshape([grad.Shape[1], grad.Shape[2], grad.Shape[3]]);
 
         return grad;
     }

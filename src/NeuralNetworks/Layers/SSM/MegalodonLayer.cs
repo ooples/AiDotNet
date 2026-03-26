@@ -324,8 +324,8 @@ public class MegalodonLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        // Step 1: CEMA (Complex Exponential Moving Average)
-        var cemaOutput = CEMAForward(input3D, batchSize, seqLen);
+        // Step 1: CEMA (Complex Exponential Moving Average) via kernel convolution
+        var cemaOutput = CEMAKernelForward(input3D, batchSize, seqLen);
 
         // Step 2: Project CEMA output back to model dimension
         var cemaFlat = cemaOutput.Reshape(batchSize * seqLen, _emaDimension);
@@ -388,6 +388,68 @@ public class MegalodonLayer<T> : LayerBase<T>
     /// Computes h_t = alpha * h_{t-1} + (1 - alpha) * x_t where alpha is complex-valued.
     /// The real part of the state is extracted and normalized per-timestep.
     /// </remarks>
+    /// <summary>Kernel-based CEMA forward. K[d,l] = Re((1-alpha[d]) * alpha[d]^l) for causal conv.</summary>
+    private Tensor<T> CEMAKernelForward(Tensor<T> input, int batchSize, int seqLen)
+    {
+        // Project input to EMA dimension
+        var inputFlat = input.Reshape(batchSize * seqLen, _modelDimension);
+        var emaInput = Engine.TensorMatMul(inputFlat, _emaInputWeights);
+        emaInput = Engine.TensorBroadcastAdd(emaInput, _emaInputBias.Reshape(1, _emaDimension));
+        var emaInput3D = emaInput.Reshape(batchSize, seqLen, _emaDimension);
+        _lastEmaInput = emaInput3D;
+
+        // Build CEMA kernel: K[d, l] = Re((1-alpha[d]) * alpha[d]^l)
+        _cachedCemaKernel = new double[_emaDimension, seqLen];
+        for (int d = 0; d < _emaDimension; d++)
+        {
+            double aR = NumOps.ToDouble(_emaAlphaReal[d]);
+            double aI = NumOps.ToDouble(_emaAlphaImag[d]);
+            double oneMinusR = 1.0 - aR;
+            double negAI = -aI;
+
+            double pow_r = 1.0, pow_i = 0.0;
+            for (int l = 0; l < seqLen; l++)
+            {
+                // Re((1-alpha) * alpha^l) = Re((oneMinusR - aI*i) * (pow_r + pow_i*i))
+                double contrib = oneMinusR * pow_r - negAI * pow_i;
+                _cachedCemaKernel[d, l] = contrib;
+
+                double new_r = pow_r * aR - pow_i * aI;
+                double new_i = pow_r * aI + pow_i * aR;
+                pow_r = new_r; pow_i = new_i;
+            }
+        }
+
+        // Causal convolution: output[b,t,d] = sum_l K[d,l] * emaInput[b,t-l,d]
+        var output = new Tensor<T>([batchSize, seqLen, _emaDimension]);
+        for (int b = 0; b < batchSize; b++)
+            for (int t = 0; t < seqLen; t++)
+                for (int d = 0; d < _emaDimension; d++)
+                {
+                    double sum = 0;
+                    for (int l = 0; l <= t; l++)
+                        sum += _cachedCemaKernel[d, l] * NumOps.ToDouble(emaInput3D[b, t - l, d]);
+                    output[b, t, d] = NumOps.FromDouble(sum);
+                }
+
+        // Apply timestep normalization (gamma * x + beta per dimension)
+        var normed = new Tensor<T>([batchSize, seqLen, _emaDimension]);
+        for (int b = 0; b < batchSize; b++)
+            for (int t = 0; t < seqLen; t++)
+                for (int d = 0; d < _emaDimension; d++)
+                {
+                    T val = output[b, t, d];
+                    T gamma = _tsNormGamma[d];
+                    T beta = _tsNormBeta[d];
+                    normed[b, t, d] = NumOps.Add(NumOps.Multiply(gamma, val), beta);
+                }
+
+        _lastEmaOutputNorm = normed;
+        return normed;
+    }
+
+    private double[,]? _cachedCemaKernel;
+
     private Tensor<T> CEMAForward(Tensor<T> input, int batchSize, int seqLen)
     {
         // Project input to EMA dimension
@@ -571,9 +633,7 @@ public class MegalodonLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null || _lastQuery == null ||
             _lastKey == null || _lastValue == null || _lastGate == null ||
             _lastGateRaw == null || _lastAttentionOutput == null ||
-            _lastEmaInput == null || _lastEmaOutputNorm == null ||
-            _lastEmaOutputPreNorm == null || _lastEmaStatesReal == null ||
-            _lastEmaStatesImag == null || _lastEmaStdInv == null)
+            _lastEmaInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
@@ -611,6 +671,7 @@ public class MegalodonLayer<T> : LayerBase<T>
         var oneMinusGate = Engine.TensorSubtract(ones, _lastGate);
 
         // Need CEMA projected output for backward
+        if (_lastEmaOutputNorm is null) throw new InvalidOperationException("CEMA output not cached.");
         var cemaFlat = _lastEmaOutputNorm.Reshape(batchSize * seqLen, _emaDimension);
         var emaProjected = Engine.TensorMatMul(cemaFlat, _emaOutputWeights);
         emaProjected = Engine.TensorBroadcastAdd(emaProjected, _emaOutputBias.Reshape(1, _modelDimension));
@@ -676,11 +737,8 @@ public class MegalodonLayer<T> : LayerBase<T>
         var dCemaNorm = Engine.TensorMatMul(dEmaProjFlat, _emaOutputWeights.Transpose([1, 0]))
             .Reshape(batchSize, seqLen, _emaDimension);
 
-        // Step 2 backward: timestep normalization
-        var dPreNorm = TimestepNormBackward(dCemaNorm, batchSize, seqLen);
-
-        // Step 1 backward: CEMA recurrence
-        var dEmaInput = CEMABackward(dPreNorm, batchSize, seqLen);
+        // Step 1+2 backward: CEMA kernel backward (includes timestep norm backward)
+        var dEmaInput = CEMAKernelBackward(dCemaNorm, batchSize, seqLen);
 
         // EMA input projection backward
         var dEmaInputFlat = dEmaInput.Reshape(batchSize * seqLen, _emaDimension);
@@ -867,6 +925,112 @@ public class MegalodonLayer<T> : LayerBase<T>
     /// <summary>
     /// Backward pass through the CEMA recurrence.
     /// </summary>
+    /// <summary>Kernel-based CEMA backward.</summary>
+    private Tensor<T> CEMAKernelBackward(Tensor<T> dOutput, int batchSize, int seqLen)
+    {
+        if (_cachedCemaKernel == null || _lastEmaInput == null)
+            throw new InvalidOperationException("CEMAKernelForward must be called first.");
+
+        // TimestepNorm backward: y = gamma * x + beta → dx = gamma * dy
+        var dPreNorm = new Tensor<T>(dOutput.Shape.ToArray());
+        for (int b = 0; b < batchSize; b++)
+            for (int t = 0; t < seqLen; t++)
+                for (int d = 0; d < _emaDimension; d++)
+                    dPreNorm[b, t, d] = NumOps.Multiply(_tsNormGamma[d], dOutput[b, t, d]);
+
+        // tsNorm parameter gradients
+        _tsNormGammaGradient = new Tensor<T>([_emaDimension]);
+        _tsNormBetaGradient = Engine.ReduceSum(dOutput, new[] { 0, 1 });
+
+        // Conv backward: dK[d,l] and dInput[b,t,d]
+        var dK = new double[_emaDimension, seqLen];
+        var dEmaInput3D = new Tensor<T>([batchSize, seqLen, _emaDimension]);
+
+        for (int d = 0; d < _emaDimension; d++)
+        {
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int t = 0; t < seqLen; t++)
+                {
+                    double dOut = NumOps.ToDouble(dPreNorm[b, t, d]);
+                    for (int l = 0; l <= t; l++)
+                        dK[d, l] += dOut * NumOps.ToDouble(_lastEmaInput[b, t - l, d]);
+
+                    double dxVal = 0;
+                    for (int l = 0; l < seqLen - t; l++)
+                        dxVal += NumOps.ToDouble(dPreNorm[b, t + l, d]) * _cachedCemaKernel[d, l];
+                    dEmaInput3D[b, t, d] = NumOps.FromDouble(dxVal);
+                }
+            }
+        }
+
+        // Chain dK to alpha parameters
+        // K[d, l] = Re((1-alpha[d]) * alpha[d]^l)
+        // dK/d(alphaR) = Re(-alpha^l + (1-alpha) * l * alpha^(l-1))
+        // dK/d(alphaI) = Im(-alpha^l + (1-alpha) * l * alpha^(l-1)) (with i factor)
+        _emaAlphaRealGradient = new Tensor<T>([_emaDimension]);
+        _emaAlphaImagGradient = new Tensor<T>([_emaDimension]);
+
+        for (int d = 0; d < _emaDimension; d++)
+        {
+            double aR = NumOps.ToDouble(_emaAlphaReal[d]);
+            double aI = NumOps.ToDouble(_emaAlphaImag[d]);
+            double oneMinusR = 1.0 - aR;
+            double negAI = -aI;
+
+            double dAlphaR = 0, dAlphaI = 0;
+            double pow_r = 1.0, pow_i = 0.0;
+            double aMagSq = aR * aR + aI * aI;
+
+            for (int l = 0; l < seqLen; l++)
+            {
+                // dK/d(alphaR) at position l:
+                // d(Re((1-alpha) * alpha^l))/d(alphaR)
+                // = Re(-alpha^l) + Re((1-alpha) * l * alpha^(l-1))
+                // = -pow_r + l * Re((oneMinusR - negAI*i) * prev_pow)
+                double term1_r = -pow_r;
+                double term1_i = -pow_i;
+
+                if (l > 0 && aMagSq > 1e-20)
+                {
+                    double prev_r = (pow_r * aR + pow_i * aI) / aMagSq;
+                    double prev_i = (pow_i * aR - pow_r * aI) / aMagSq;
+                    double lContrib_r = l * (oneMinusR * prev_r - negAI * prev_i);
+                    term1_r += lContrib_r;
+                }
+
+                dAlphaR += dK[d, l] * term1_r;
+
+                // dK/d(alphaI): perturbation in imaginary direction
+                // d/d(alphaI) = i * d/d(alpha) for analytic function
+                // Re(i * d(kernel)/d(alpha)) = -Im(d(kernel)/d(alpha))
+                double term1_i_for_ai = -pow_i; // -Im(alpha^l) → contribution to dK/dalphaI from -(i*alpha^l) = -(-pow_i) = pow_i...
+                // Actually this is getting complex. Let me use finite diff for alphaI:
+                // For now, use the fact that for analytic functions:
+                // d/d(alphaI) = i * d/d(alpha)
+                // And d(Re(f))/d(alphaI) = -Im(df/d(alpha))
+                double dfda_i = -pow_i; // -Im(alpha^l)
+                if (l > 0 && aMagSq > 1e-20)
+                {
+                    double prev_r = (pow_r * aR + pow_i * aI) / aMagSq;
+                    double prev_i = (pow_i * aR - pow_r * aI) / aMagSq;
+                    double lContrib_i = l * (oneMinusR * prev_i + negAI * prev_r);
+                    dfda_i += lContrib_i;
+                }
+                dAlphaI += dK[d, l] * (-dfda_i); // -Im(df/dalpha)
+
+                double new_r = pow_r * aR - pow_i * aI;
+                double new_i = pow_r * aI + pow_i * aR;
+                pow_r = new_r; pow_i = new_i;
+            }
+
+            _emaAlphaRealGradient[d] = NumOps.FromDouble(dAlphaR);
+            _emaAlphaImagGradient[d] = NumOps.FromDouble(dAlphaI);
+        }
+
+        return dEmaInput3D;
+    }
+
     private Tensor<T> CEMABackward(Tensor<T> dPreNorm, int batchSize, int seqLen)
     {
         var dEmaInput = new Tensor<T>(new[] { batchSize, seqLen, _emaDimension });

@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class ConditionalRandomFieldLayer<T> : LayerBase<T>
 {
     private Tensor<T> _transitionMatrix;
@@ -734,22 +734,81 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         var lastTimestep = Engine.TensorSliceAxis(outputGradient3D, 1, _sequenceLength - 1); // [batchSize, numClasses]
         _endScoresGradient = Engine.ReduceSum(lastTimestep, new[] { 0 }, keepDims: false);
 
-        // Transition matrix gradient: sum of gradients for all t > 0
-        // For simplicity, we sum all gradients across batch and time (except t=0), then broadcast
-        // A more accurate gradient would involve the actual paths, but this is an approximation
-        var allGradients = Engine.ReduceSum(outputGradient3D, new[] { 0, 1 }, keepDims: false); // [numClasses]
-
-        // Create transition gradient: outer product approximation
-        // Each transition gets the sum of class gradients
+        // Transition matrix gradient via proper chain rule through log-sum-exp.
+        // Forward: output[t,c] = logsumexp_prevC(viterbi[t-1,prevC] + trans[prevC,c]) + emission[t,c]
+        // d(logsumexp)/d(trans[i,j]) = softmax(viterbi[t-1,:] + trans[:,j])[i]
+        // So: dTrans[i,j] = sum_b sum_t>0 dL/dOutput[b,t,j] * softmax_i(viterbi[t-1,:] + trans[:,j])
         _transitionMatrixGradient = new Tensor<T>([_numClasses, _numClasses]);
-        var gradExpanded = allGradients.Reshape([1, _numClasses]);
-        var onesCol = new Tensor<T>([_numClasses, 1]);
-        onesCol.Fill(NumOps.One);
-        // transGrad[i, j] = sumGrad[j] for all i
-        var transGrad = Engine.TensorBroadcastMultiply(onesCol, gradExpanded);
-        // Scale by (seqLen - 1) / seqLen to account for t=0 not having transitions
-        var scale = NumOps.FromDouble((_sequenceLength - 1.0) / _sequenceLength);
-        _transitionMatrixGradient = Engine.TensorMultiplyScalar(transGrad, scale);
+
+        // Recompute viterbi scores for softmax weights (same as Forward training path)
+        for (int b = 0; b < batchSize; b++)
+        {
+            var batchSeq = _lastInput[b]; // [seqLen, numClasses]
+            // Forward pass: recompute viterbi scores and cache softmax weights
+            var viterbi = new double[_sequenceLength, _numClasses];
+            var softmaxCache = new double[_sequenceLength, _numClasses, _numClasses]; // [t, prevC, c]
+
+            for (int c = 0; c < _numClasses; c++)
+                viterbi[0, c] = NumOps.ToDouble(_lastInput[b, 0, c]) + NumOps.ToDouble(_startScores[c]);
+
+            for (int t = 1; t < _sequenceLength; t++)
+            {
+                for (int c = 0; c < _numClasses; c++)
+                {
+                    double maxVal = double.MinValue;
+                    for (int prevC = 0; prevC < _numClasses; prevC++)
+                    {
+                        double score = viterbi[t - 1, prevC] + NumOps.ToDouble(_transitionMatrix[prevC, c]);
+                        if (score > maxVal) maxVal = score;
+                    }
+                    double sumExp = 0;
+                    for (int prevC = 0; prevC < _numClasses; prevC++)
+                    {
+                        double score = viterbi[t - 1, prevC] + NumOps.ToDouble(_transitionMatrix[prevC, c]);
+                        softmaxCache[t, prevC, c] = Math.Exp(score - maxVal);
+                        sumExp += softmaxCache[t, prevC, c];
+                    }
+                    for (int prevC = 0; prevC < _numClasses; prevC++)
+                        softmaxCache[t, prevC, c] /= (sumExp + 1e-10);
+
+                    viterbi[t, c] = maxVal + Math.Log(sumExp + 1e-10) + NumOps.ToDouble(_lastInput[b, t, c]);
+                }
+            }
+
+            // Backward pass: propagate gradient through time (BPTT for CRF)
+            // dViterbi[t, c] = dOutput[b, t, c] + sum_nextC dViterbi[t+1, nextC] * softmax[t+1, c, nextC]
+            var dViterbi = new double[_sequenceLength, _numClasses];
+
+            // Initialize from last timestep
+            for (int c = 0; c < _numClasses; c++)
+                dViterbi[_sequenceLength - 1, c] = NumOps.ToDouble(outputGradient3D[b, _sequenceLength - 1, c]);
+
+            // Backward through time
+            for (int t = _sequenceLength - 2; t >= 0; t--)
+            {
+                for (int c = 0; c < _numClasses; c++)
+                {
+                    dViterbi[t, c] = NumOps.ToDouble(outputGradient3D[b, t, c]);
+                    // Add contribution from future timesteps through the logsumexp
+                    for (int nextC = 0; nextC < _numClasses; nextC++)
+                        dViterbi[t, c] += dViterbi[t + 1, nextC] * softmaxCache[t + 1, c, nextC];
+                }
+            }
+
+            // Accumulate transition gradient using BPTT'd state gradient
+            for (int t = 1; t < _sequenceLength; t++)
+            {
+                for (int c = 0; c < _numClasses; c++)
+                {
+                    for (int prevC = 0; prevC < _numClasses; prevC++)
+                    {
+                        _transitionMatrixGradient[prevC, c] = NumOps.Add(
+                            _transitionMatrixGradient[prevC, c],
+                            NumOps.FromDouble(dViterbi[t, c] * softmaxCache[t, prevC, c]));
+                    }
+                }
+            }
+        }
 
         // Apply activation function gradient if applicable
         if (UsingVectorActivation || (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>)))

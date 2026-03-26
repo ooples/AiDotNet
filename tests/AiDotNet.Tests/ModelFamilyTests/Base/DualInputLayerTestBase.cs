@@ -39,6 +39,10 @@ public abstract class DualInputLayerTestBase
     /// <summary>Whether Backward produces non-zero weight gradients. Default: true.</summary>
     protected virtual bool ExpectsNonZeroGradients => true;
 
+    /// <summary>Whether constant primary inputs should produce different outputs.
+    /// False for attention-based memory layers where constant keys produce uniform attention.</summary>
+    protected virtual bool ExpectsDifferentOutputForConstantInputs => true;
+
     // =========================================================================
     // Helpers
     // =========================================================================
@@ -126,6 +130,8 @@ public abstract class DualInputLayerTestBase
     [Fact]
     public void Forward_DifferentPrimaryInputs_ShouldProduceDifferentOutputs()
     {
+        if (!ExpectsDifferentOutputForConstantInputs) return;
+
         var layer = CreateLayer();
         layer.SetTrainingMode(false);
         var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);

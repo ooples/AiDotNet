@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.StateSpaceModel)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4, 2")]
 public class Mamba2Block<T> : LayerBase<T>
 {
     // Configuration
@@ -371,6 +371,9 @@ public class Mamba2Block<T> : LayerBase<T>
         var zBranch = SliceTensor(projected3D, 2, _innerDimension, _innerDimension);
         _lastXBranch = xBranch;
         _lastZBranch = zBranch;
+        // Debug: verify xBranch values
+        var _dbgFwd = Path.Combine(Path.GetTempPath(), "mamba2_debug.log");
+        File.AppendAllText(_dbgFwd, $"FWD: xBranch[0,0,0..2]=[{Convert.ToDouble(xBranch[new[]{0,0,0}]):G6},{Convert.ToDouble(xBranch[new[]{0,0,1}]):G6},{Convert.ToDouble(xBranch[new[]{0,0,2}]):G6}] projected3D[0,0,0..2]=[{Convert.ToDouble(projected3D[new[]{0,0,0}]):G6},{Convert.ToDouble(projected3D[new[]{0,0,1}]):G6},{Convert.ToDouble(projected3D[new[]{0,0,2}]):G6}]{Environment.NewLine}");
 
         // Step 2: Conv1D on x branch
         var convOutput = DepthwiseConv1DForward(xBranch, batchSize, seqLen);
@@ -597,11 +600,18 @@ public class Mamba2Block<T> : LayerBase<T>
             ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
             : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
 
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
+        var activationGrad = ApplyActivationDerivativeFromOutput(_lastOutput, grad3D);
+
+        // Debug logging
+        static double GN(Tensor<T> t) { double s = 0; for (int i = 0; i < t.Length; i++) { double v = Convert.ToDouble(t[i]); s += v * v; } return Math.Sqrt(s); }
+        var _dbgPath = Path.Combine(Path.GetTempPath(), "mamba2_debug.log");
+        void Log(string m) { File.AppendAllText(_dbgPath, m + Environment.NewLine); }
+        Log($"=== Backward start: grad={GN(grad3D):G6} activGrad={GN(activationGrad):G6}");
 
         // Step 8 backward: output projection
         var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
+        _outputProjectionBiasGradient = ReduceSumAxes01(activationGrad, batchSize, seqLen, _modelDimension);
+        Log($"  outBias grads first4: {Convert.ToDouble(_outputProjectionBiasGradient[0]):G6}, {Convert.ToDouble(_outputProjectionBiasGradient[1]):G6}, {Convert.ToDouble(_outputProjectionBiasGradient[2]):G6}, {Convert.ToDouble(_outputProjectionBiasGradient[3]):G6}");
 
         var gatedFlat = _lastGatedOutput.Reshape(batchSize * seqLen, _innerDimension);
         _outputProjectionWeightsGradient = Engine.TensorMatMul(
@@ -609,6 +619,7 @@ public class Mamba2Block<T> : LayerBase<T>
 
         var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
             .Reshape(batchSize, seqLen, _innerDimension);
+        Log($"  S8: dGated={GN(dGated):G6}");
 
         // Step 7 backward: output gating
         var zGate = Engine.Swish(_lastZBranch);
@@ -616,6 +627,7 @@ public class Mamba2Block<T> : LayerBase<T>
         var dNormed = Engine.TensorMultiply(dGated, zGate);
         var dZGate = Engine.TensorMultiply(dGated, normedOutput);
         var dZBranch = Engine.TensorMultiply(dZGate, ComputeSiLUDerivative(_lastZBranch));
+        Log($"  S7: dNormed={GN(dNormed):G6} dZBranch={GN(dZBranch):G6}");
 
         // Step 6 backward: RMS norm (full derivative, not approximate)
         // Forward: normalized = x / rms, output = gamma * normalized + beta
@@ -674,16 +686,19 @@ public class Mamba2Block<T> : LayerBase<T>
             }
         }
 
+        Log($"  S6: dSsd={GN(dSsd):G6}");
+
         // Step 5 backward: SSD backward (multi-head selective scan backward)
         var dSiluOutput = SSDBackward(dSsd, _lastSiluOutput, _lastDelta, _lastB, _lastC,
             _lastHiddenStates, batchSize, seqLen, out var dDelta, out var dB, out var dC);
+        Log($"  S5: dSilu={GN(dSiluOutput):G6} dDelta={GN(dDelta):G6} dB={GN(dB):G6} dC={GN(dC):G6}");
 
         // Step 4 backward: parameter projection gradients
         var softplusDerivative = Engine.Sigmoid(_lastDeltaPreSoftplus);
         var dDeltaSoftplus = Engine.TensorMultiply(dDelta, softplusDerivative);
 
         var dDeltaFlat = dDeltaSoftplus.Reshape(batchSize * seqLen, _numHeads);
-        _dtProjectionBiasGradient = Engine.ReduceSum(dDeltaSoftplus, new int[] { 0, 1 });
+        _dtProjectionBiasGradient = ReduceSumAxes01(dDeltaSoftplus, batchSize, seqLen, _numHeads);
 
         var siluFlat = _lastSiluOutput.Reshape(batchSize * seqLen, _innerDimension);
         _dtProjectionWeightsGradient = Engine.TensorMatMul(
@@ -707,21 +722,40 @@ public class Mamba2Block<T> : LayerBase<T>
             Engine.TensorAdd(dSiluFromDt, Engine.TensorAdd(dSiluFromB, dSiluFromC)));
         dSiluTotal = dSiluTotal.Reshape(batchSize, seqLen, _innerDimension);
 
+        Log($"  S4: dSiluTotal={GN(dSiluTotal):G6}");
+
         // Step 3 backward: SiLU derivative
         var dConvOutput = Engine.TensorMultiply(dSiluTotal, ComputeSiLUDerivative(_lastConvOutput));
 
         // Step 2 backward: Conv1D
         var dXBranch = DepthwiseConv1DBackward(dConvOutput, _lastXBranch, batchSize, seqLen);
+        Log($"  S3-2: dConv={GN(dConvOutput):G6} dXBranch={GN(dXBranch):G6} dZBranch={GN(dZBranch):G6}");
 
         // Step 1 backward: input projection
         var dProjected = ConcatenateTensors(dXBranch, dZBranch, 2);
         var dProjectedFlat = dProjected.Reshape(batchSize * seqLen, _innerDimension * 2);
 
-        _inputProjectionBiasGradient = Engine.ReduceSum(dProjected, new int[] { 0, 1 });
+        _inputProjectionBiasGradient = ReduceSumAxes01(dProjected, batchSize, seqLen, _innerDimension * 2);
 
         var input2D = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
         _inputProjectionWeightsGradient = Engine.TensorMatMul(
             input2D.Transpose([1, 0]), dProjectedFlat);
+        Log($"  S1: dProjected={GN(dProjected):G6}");
+        Log($"  S1: dXBranch[0,0,0..2]=[{Convert.ToDouble(dXBranch[new[]{0,0,0}]):G4},{Convert.ToDouble(dXBranch[new[]{0,0,1}]):G4},{Convert.ToDouble(dXBranch[new[]{0,0,2}]):G4}]");
+        Log($"  S1: dZBranch[0,0,0..2]=[{Convert.ToDouble(dZBranch[new[]{0,0,0}]):G4},{Convert.ToDouble(dZBranch[new[]{0,0,1}]):G4},{Convert.ToDouble(dZBranch[new[]{0,0,2}]):G4}]");
+        Log($"  S1: dProjected[0,0,0..2]=[{Convert.ToDouble(dProjected[new[]{0,0,0}]):G4},{Convert.ToDouble(dProjected[new[]{0,0,1}]):G4},{Convert.ToDouble(dProjected[new[]{0,0,2}]):G4}]");
+        Log($"  S1: dProjected[0,0,{_innerDimension}..{_innerDimension+2}]=[{Convert.ToDouble(dProjected[new[]{0,0,_innerDimension}]):G4},{Convert.ToDouble(dProjected[new[]{0,0,_innerDimension+1}]):G4},{Convert.ToDouble(dProjected[new[]{0,0,_innerDimension+2}]):G4}]");
+        Log($"  S1: input2D[0,0..2]=[{Convert.ToDouble(input2D[new[]{0,0}]):G4},{Convert.ToDouble(input2D[new[]{0,1}]):G4},{Convert.ToDouble(input2D[new[]{0,2}]):G4}]");
+        // Manual verification: dW[0,0] = sum_t(input[t,0] * dProjected[t,0])
+        T manualDW00 = NumOps.Zero;
+        for (int t = 0; t < batchSize * seqLen; t++)
+        {
+            T iv = input2D[new[] { t, 0 }];
+            T dv = dProjectedFlat[new[] { t, 0 }];
+            manualDW00 = NumOps.Add(manualDW00, NumOps.Multiply(iv, dv));
+            Log($"  manual: input2D[{t},0]={Convert.ToDouble(iv):G6} dProj[{t},0]={Convert.ToDouble(dv):G6} running={Convert.ToDouble(manualDW00):G6}");
+        }
+        Log($"  S1: matmul dW[0,0]={Convert.ToDouble(_inputProjectionWeightsGradient[0]):G6} manual dW[0,0]={Convert.ToDouble(manualDW00):G6}");
 
         var inputGradFlat = Engine.TensorMatMul(
             dProjectedFlat, _inputProjectionWeights.Transpose([1, 0]));
@@ -756,6 +790,55 @@ public class Mamba2Block<T> : LayerBase<T>
         for (int h = 0; h < _numHeads; h++)
             negAPerHead[h] = NumOps.Negate(NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_aLog[h]))));
 
+        // Per Mamba paper: recompute states during backward for numerical consistency
+        var recomputedStates = new Tensor<T>[seqLen + 1];
+        var h_recomp = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
+        recomputedStates[0] = h_recomp.Clone();
+        for (int t = 0; t < seqLen; t++)
+        {
+            var x_fwd = x.GetSliceAlongDimension(t, 1);
+            var delta_fwd = delta.GetSliceAlongDimension(t, 1);
+            var B_fwd = b.GetSliceAlongDimension(t, 1);
+            for (int hi = 0; hi < _numHeads; hi++)
+            {
+                int dimStart = hi * _headDimension;
+                T negA = negAPerHead[hi];
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    T dt = delta_fwd[new[] { bi, hi }];
+                    T aBar = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Multiply(dt, negA))));
+                    for (int di = 0; di < _headDimension; di++)
+                    {
+                        int flatD = dimStart + di;
+                        T xv = x_fwd[new[] { bi, flatD }];
+                        for (int n = 0; n < _stateDimension; n++)
+                        {
+                            T bv = B_fwd[new[] { bi, n }];
+                            h_recomp[new[] { bi, flatD, n }] = NumOps.Add(
+                                NumOps.Multiply(aBar, h_recomp[new[] { bi, flatD, n }]),
+                                NumOps.Multiply(NumOps.Multiply(dt, bv), xv));
+                        }
+                    }
+                }
+            }
+            recomputedStates[t + 1] = h_recomp.Clone();
+        }
+
+        // Verify recomputed states match cached states
+        var _dbgSsd = Path.Combine(Path.GetTempPath(), "mamba2_debug.log");
+        for (int t = 0; t < seqLen; t++)
+        {
+            var cached = hiddenStates.GetSliceAlongDimension(t + 1, 1);
+            var recomp = recomputedStates[t + 1];
+            double maxDiff = 0;
+            for (int i = 0; i < recomp.Length; i++)
+            {
+                double d2 = Math.Abs(Convert.ToDouble(cached[i]) - Convert.ToDouble(recomp[i]));
+                if (d2 > maxDiff) maxDiff = d2;
+            }
+            File.AppendAllText(_dbgSsd, $"  SSD State[{t + 1}] maxDiff={maxDiff:G6}{Environment.NewLine}");
+        }
+
         // Running dh: [batch, innerDim, stateDim]
         var dh = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
 
@@ -766,8 +849,8 @@ public class Mamba2Block<T> : LayerBase<T>
             var B_t = b.GetSliceAlongDimension(t, 1);
             var C_t = c.GetSliceAlongDimension(t, 1);
             var dOut_t = dOutput.GetSliceAlongDimension(t, 1);
-            var h_t = hiddenStates.GetSliceAlongDimension(t + 1, 1);
-            var h_prev = hiddenStates.GetSliceAlongDimension(t, 1);
+            var h_t = recomputedStates[t + 1];
+            var h_prev = recomputedStates[t];
 
             for (int hi = 0; hi < _numHeads; hi++)
             {
@@ -853,84 +936,74 @@ public class Mamba2Block<T> : LayerBase<T>
 
     #region Engine-Accelerated Conv1D
 
+    /// <summary>
+    /// Depthwise causal Conv1D forward using explicit per-element computation.
+    /// </summary>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
         var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
-        var bias2D = _convBias.Reshape(1, _innerDimension);
 
-        var weightSlices = new Tensor<T>[_convKernelSize];
-        for (int k = 0; k < _convKernelSize; k++)
+        for (int bi = 0; bi < batchSize; bi++)
         {
-            weightSlices[k] = _convWeights.GetSliceAlongDimension(k, 1)
-                .Reshape(1, _innerDimension);
-        }
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var result_t = Engine.TensorBroadcastAdd(
-                new Tensor<T>(new[] { batchSize, _innerDimension }), bias2D);
-
-            for (int k = 0; k < _convKernelSize; k++)
+            for (int t = 0; t < seqLen; t++)
             {
-                int srcT = t - k;
-                if (srcT >= 0)
+                for (int d = 0; d < _innerDimension; d++)
                 {
-                    var x_src = input.GetSliceAlongDimension(srcT, 1);
-                    result_t = Engine.TensorAdd(result_t,
-                        Engine.TensorBroadcastMultiply(x_src, weightSlices[k]));
+                    T sum = _convBias[d];
+                    for (int k = 0; k < _convKernelSize; k++)
+                    {
+                        int srcT = t - k;
+                        if (srcT >= 0)
+                        {
+                            sum = NumOps.Add(sum,
+                                NumOps.Multiply(_convWeights[new[] { d, k }], input[new[] { bi, srcT, d }]));
+                        }
+                    }
+                    output[new[] { bi, t, d }] = sum;
                 }
             }
-
-            output.SetSlice(1, t, result_t);
         }
 
         return output;
     }
 
+    /// <summary>
+    /// Backward pass for depthwise causal Conv1D using explicit per-element computation.
+    /// </summary>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
         var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
+        _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
 
-        var weightGradSlices = new Tensor<T>[_convKernelSize];
-        for (int k = 0; k < _convKernelSize; k++)
-            weightGradSlices[k] = new Tensor<T>(new[] { _innerDimension });
-
-        var weightSlices = new Tensor<T>[_convKernelSize];
-        for (int k = 0; k < _convKernelSize; k++)
+        for (int bi = 0; bi < batchSize; bi++)
         {
-            weightSlices[k] = _convWeights.GetSliceAlongDimension(k, 1)
-                .Reshape(1, _innerDimension);
-        }
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var dOut_t = dOutput.GetSliceAlongDimension(t, 1);
-            var biasGradContrib = Engine.ReduceSum(dOut_t, new int[] { 0 });
-            _convBiasGradient = Engine.TensorAdd(_convBiasGradient, biasGradContrib);
-
-            for (int k = 0; k < _convKernelSize; k++)
+            for (int t = 0; t < seqLen; t++)
             {
-                int srcT = t - k;
-                if (srcT >= 0)
+                for (int d = 0; d < _innerDimension; d++)
                 {
-                    var x_src = input.GetSliceAlongDimension(srcT, 1);
-                    var wGradContrib = Engine.ReduceSum(
-                        Engine.TensorMultiply(x_src, dOut_t), new int[] { 0 });
-                    weightGradSlices[k] = Engine.TensorAdd(weightGradSlices[k], wGradContrib);
+                    T dOutVal = dOutput[new[] { bi, t, d }];
+                    _convBiasGradient[d] = NumOps.Add(_convBiasGradient[d], dOutVal);
 
-                    var dInputContrib = Engine.TensorBroadcastMultiply(dOut_t, weightSlices[k]);
-                    var dInput_srcT = dInput.GetSliceAlongDimension(srcT, 1);
-                    dInput_srcT = Engine.TensorAdd(dInput_srcT, dInputContrib);
-                    dInput.SetSlice(1, srcT, dInput_srcT);
+                    for (int k = 0; k < _convKernelSize; k++)
+                    {
+                        int srcT = t - k;
+                        if (srcT >= 0)
+                        {
+                            T w = _convWeights[new[] { d, k }];
+                            T xVal = input[new[] { bi, srcT, d }];
+                            dInput[new[] { bi, srcT, d }] = NumOps.Add(
+                                dInput[new[] { bi, srcT, d }],
+                                NumOps.Multiply(w, dOutVal));
+                            _convWeightsGradient[new[] { d, k }] = NumOps.Add(
+                                _convWeightsGradient[new[] { d, k }],
+                                NumOps.Multiply(xVal, dOutVal));
+                        }
+                    }
                 }
             }
         }
-
-        _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
-        for (int k = 0; k < _convKernelSize; k++)
-            _convWeightsGradient.SetSlice(1, k, weightGradSlices[k]);
 
         return dInput;
     }
@@ -938,6 +1011,19 @@ public class Mamba2Block<T> : LayerBase<T>
     #endregion
 
     #region Helpers
+
+    /// <summary>
+    /// Workaround for Engine.ReduceSum multi-axis [0,1] bug (AiDotNet.Tensors PR #62).
+    /// </summary>
+    private Tensor<T> ReduceSumAxes01(Tensor<T> tensor, int batch, int seq, int features)
+    {
+        var result = new Tensor<T>(new[] { features });
+        for (int bi = 0; bi < batch; bi++)
+            for (int t = 0; t < seq; t++)
+                for (int d = 0; d < features; d++)
+                    result[d] = NumOps.Add(result[d], tensor[new[] { bi, t, d }]);
+        return result;
+    }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> input)
     {
