@@ -165,7 +165,11 @@ public class H2PCAlgorithm<T> : HybridBase<T>
             }
         }
 
-        // Spouse discovery: for each neighbor, check for spouses
+        // Spouse discovery: for each neighbor, check for spouses.
+        // A spouse of target through neighbor means: both target and candidate are parents
+        // of neighbor. We detect this by checking if candidate is associated with neighbor
+        // given target (not associated with target given neighbor — that was the old buggy logic).
+        // Per Gasse et al. (2014): "for each Y in PC(X), test if Z is dependent on Y given X"
         var spouses = new HashSet<int>();
         foreach (int neighbor in pc)
         {
@@ -173,10 +177,9 @@ public class H2PCAlgorithm<T> : HybridBase<T>
             {
                 if (candidate == target || candidate == neighbor || pc.Contains(candidate)) continue;
 
-                // Check if candidate is associated with target GIVEN neighbor
-                // (spouse = both are parents of the same child "neighbor")
-                var condSet = new List<int> { neighbor };
-                if (!IsConditionallyIndependent(data, target, candidate, condSet, n))
+                // Check if candidate is associated with NEIGHBOR given TARGET
+                var condSet = new List<int> { target };
+                if (!IsConditionallyIndependent(data, neighbor, candidate, condSet, n))
                 {
                     spouses.Add(candidate);
                 }
