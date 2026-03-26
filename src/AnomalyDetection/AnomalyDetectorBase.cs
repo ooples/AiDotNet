@@ -213,10 +213,14 @@ public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>
     public override void SetParameters(Vector<T> parameters) { }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Default implementation creates a shallow copy via MemberwiseClone.
+    /// Concrete detectors with deep mutable state should override this
+    /// to properly clone their algorithm-specific internal state.
+    /// </remarks>
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        throw new NotSupportedException(
-            $"DeepCopy is not implemented for {GetType().Name}. Override to provide an implementation.");
+        return (AnomalyDetectorBase<T>)MemberwiseClone();
     }
 
     /// <inheritdoc/>

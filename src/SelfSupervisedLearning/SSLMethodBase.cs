@@ -592,8 +592,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        throw new NotSupportedException(
-            $"DeepCopy is not implemented for {GetType().Name}. Override to provide an implementation.");
+        return (SSLMethodBase<T>)MemberwiseClone();
     }
 
     /// <inheritdoc/>

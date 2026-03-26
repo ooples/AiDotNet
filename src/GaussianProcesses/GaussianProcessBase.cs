@@ -58,8 +58,7 @@ public abstract class GaussianProcessBase<T> : ModelBase<T, Matrix<T>, Vector<T>
     /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        throw new NotSupportedException(
-            $"DeepCopy is not implemented for {GetType().Name}. Override to provide an implementation.");
+        return (GaussianProcessBase<T>)MemberwiseClone();
     }
 
     /// <inheritdoc/>

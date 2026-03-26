@@ -770,8 +770,13 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// <inheritdoc/>
         public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
         {
-            throw new NotSupportedException(
-                $"DeepCopy is not implemented for {GetType().Name}.");
+            var clone = new SymbolicPhysicsLearner<T>();
+            if (_discoveredEquation is not null)
+            {
+                // Re-discover would be expensive — just share the immutable expression tree
+                clone._discoveredEquation = _discoveredEquation;
+            }
+            return clone;
         }
 
         /// <inheritdoc/>
